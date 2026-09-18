@@ -1,0 +1,26 @@
+import type { ExtensionMessage } from '@repo/shared-types';
+
+export const EXTENSION_MESSAGE_TYPES = {
+  GET_FEED: 'GET_FEED',
+  FEED_UPDATE: 'FEED_UPDATE',
+  SET_MODE: 'SET_MODE',
+  OPEN_OPTIONS: 'OPEN_OPTIONS',
+  FEEDBACK: 'FEEDBACK',
+} as const;
+
+export type ExtensionMessageType = (typeof EXTENSION_MESSAGE_TYPES)[keyof typeof EXTENSION_MESSAGE_TYPES];
+
+export type MessagePayloadMap = {
+  [EXTENSION_MESSAGE_TYPES.GET_FEED]: { algorithmId?: string };
+  [EXTENSION_MESSAGE_TYPES.FEED_UPDATE]: { feed: unknown[] };
+  [EXTENSION_MESSAGE_TYPES.SET_MODE]: { mode: string };
+  [EXTENSION_MESSAGE_TYPES.OPEN_OPTIONS]: undefined;
+  [EXTENSION_MESSAGE_TYPES.FEEDBACK]: { contentItemId: string; eventType: string };
+};
+
+export function createMessage<T extends ExtensionMessageType>(
+  type: T,
+  payload?: MessagePayloadMap[T],
+): ExtensionMessage<MessagePayloadMap[T]> {
+  return { type, payload };
+}

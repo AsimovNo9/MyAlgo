@@ -1,0 +1,11 @@
+{
+  "name": "@repo/db",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "echo \"DB package has no build step\"",
+    "lint": "echo \"DB package has no lint step\"",
+    "typecheck": "echo \"DB package has no typecheck step\"",
+    "test": "echo \"No db tests yet\""
+  }
+}

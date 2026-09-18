@@ -1,0 +1,169 @@
+import type { Algorithm, Rule, TopicWeight } from '@repo/shared-types';
+import { createSupabaseServerClient } from './supabase/server';
+
+const demoAlgorithms: Algorithm[] = [
+  {
+    id: 'alg-demo-1',
+    name: 'Work',
+    is_active: true,
+    goal_text: 'Learn AI agents and shipping decisions.',
+    topic_weights: [
+      { topic: 'AI', weight: 90 },
+      { topic: 'Productivity', weight: 75 },
+      { topic: 'Business', weight: 60 },
+    ],
+    rules: [
+      { id: 'rule-demo-1', type: 'always_show', condition_text: 'AI agent tutorials' },
+      { id: 'rule-demo-2', type: 'never_show', condition_text: 'celebrity gossip' },
+    ],
+  },
+];
+
+const demoRules: Rule[] = [
+  { id: 'rule-demo-1', type: 'always_show', condition_text: 'AI agent tutorials' },
+  { id: 'rule-demo-2', type: 'never_show', condition_text: 'celebrity gossip' },
+  { id: 'rule-demo-3', type: 'priority', condition_text: 'engineering breakdowns' },
+];
+
+export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
+  const client = createSupabaseServerClient();
+  if (!client) {
+    return demoAlgorithms;
+  }
+
+  const { data, error } = await client
+    .from('algorithms')
+    .select('*, topic_weights(*), rules(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    console.error('Failed to fetch algorithms', error);
+    return demoAlgorithms;
+  }
+
+  return data.map((row) => ({
+    id: row.id,
+    name: row.name,
+    is_active: row.is_active,
+    goal_text: row.goal_text,
+    created_at: row.created_at,
+    topic_weights: (row.topic_weights ?? []) as TopicWeight[],
+    rules: (row.rules ?? []) as Rule[],
+  }));
+}
+
+export async function createAlgorithm(userId: string, input: Partial<Algorithm>): Promise<Algorithm> {
+  const client = createSupabaseServerClient();
+  if (!client) {
+    return {
+      id: 'alg-demo-created',
+      name: input.name ?? 'Work',
+      is_active: input.is_active ?? true,
+      goal_text: input.goal_text ?? null,
+      topic_weights: input.topic_weights ?? [],
+      rules: input.rules ?? [],
+    };
+  }
+
+  const { data, error } = await client
+    .from('algorithms')
+    .insert({
+      user_id: userId,
+      name: input.name ?? 'Work',
+      is_active: input.is_active ?? false,
+      goal_text: input.goal_text ?? null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Failed to create algorithm', error);
+    return {
+      id: 'alg-demo-created',
+      name: input.name ?? 'Work',
+      is_active: input.is_active ?? true,
+      goal_text: input.goal_text ?? null,
+      topic_weights: input.topic_weights ?? [],
+      rules: input.rules ?? [],
+    };
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    is_active: data.is_active,
+    goal_text: data.goal_text,
+    created_at: data.created_at,
+    topic_weights: input.topic_weights ?? [],
+    rules: input.rules ?? [],
+  };
+}
+
+export async function listRules(userId: string, algorithmId?: string): Promise<Rule[]> {
+  const client = createSupabaseServerClient();
+  if (!client) {
+    return demoRules;
+  }
+
+  let algorithmQuery = client.from('algorithms').select('id').eq('user_id', userId);
+  if (algorithmId) {
+    algorithmQuery = algorithmQuery.eq('id', algorithmId);
+  }
+
+  const { data: algorithmRows, error: algorithmError } = await algorithmQuery;
+  if (algorithmError || !algorithmRows) {
+    console.error('Failed to fetch algorithm ids for rules', algorithmError);
+    return demoRules;
+  }
+
+  const algorithmIds = algorithmRows.map((row) => row.id);
+  if (algorithmIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from('rules')
+    .select('*')
+    .in('algorithm_id', algorithmIds)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    console.error('Failed to fetch rules', error);
+    return demoRules;
+  }
+
+  return data as Rule[];
+}
+
+export async function createRule(userId: string, algorithmId: string, input: Partial<Rule>): Promise<Rule> {
+  const client = createSupabaseServerClient();
+  if (!client) {
+    return {
+      id: 'rule-demo-created',
+      type: input.type ?? 'always_show',
+      condition_text: input.condition_text ?? 'new rule',
+    };
+  }
+
+  const { data, error } = await client
+    .from('rules')
+    .insert({
+      algorithm_id: algorithmId,
+      type: input.type ?? 'always_show',
+      condition_text: input.condition_text ?? 'new rule',
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('Failed to create rule', error);
+    return {
+      id: 'rule-demo-created',
+      type: input.type ?? 'always_show',
+      condition_text: input.condition_text ?? 'new rule',
+    };
+  }
+
+  return data as Rule;
+}

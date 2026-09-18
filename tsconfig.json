@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@repo/shared-types": ["packages/shared-types/src/index.ts"],
+      "@repo/shared-types/*": ["packages/shared-types/src/*"]
+    }
+  },
+  "include": ["packages/shared-types/src/**/*.ts"]
+}
