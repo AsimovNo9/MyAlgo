@@ -1,4 +1,5 @@
 import React from 'react';
+import { getApiBaseUrl, setApiBaseUrl } from '../lib/api-client';
 
 const initialWeights = [
   { topic: 'AI', weight: 80 },
@@ -8,6 +9,15 @@ const initialWeights = [
 
 export function Options() {
   const [weights, setWeights] = React.useState(initialWeights);
+  const [apiBaseUrl, setApiBaseUrlValue] = React.useState('https://my-algo-web.vercel.app');
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    void (async () => {
+      const baseUrl = await getApiBaseUrl();
+      setApiBaseUrlValue(baseUrl);
+    })();
+  }, []);
 
   const adjustWeight = (topic: string, delta: number) => {
     setWeights((current) =>
@@ -17,9 +27,29 @@ export function Options() {
     );
   };
 
+  const handleSaveApiBaseUrl = async () => {
+    await setApiBaseUrl(apiBaseUrl);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2000);
+  };
+
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'sans-serif' }}>
       <h1>Algorithm settings</h1>
+
+      <section style={{ marginBottom: 24 }}>
+        <h2>Web app URL</h2>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            value={apiBaseUrl}
+            onChange={(event) => setApiBaseUrlValue(event.target.value)}
+            style={{ flex: 1, padding: 8 }}
+          />
+          <button onClick={() => void handleSaveApiBaseUrl()}>Save</button>
+        </div>
+        {saved ? <p style={{ color: 'green' }}>Saved.</p> : null}
+      </section>
+
       <section>
         <h2>Topic weights</h2>
         {weights.map((item) => (

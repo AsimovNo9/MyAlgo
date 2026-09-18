@@ -89,14 +89,42 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
     };
   }
 
+  const topicWeights = input.topic_weights ?? [];
+  if (topicWeights.length > 0) {
+    const weightRows = topicWeights.map((item) => ({
+      algorithm_id: data.id,
+      topic: item.topic,
+      weight: item.weight,
+    }));
+
+    const { error: weightsError } = await client.from('topic_weights').insert(weightRows);
+    if (weightsError) {
+      console.error('Failed to create topic weights', weightsError);
+    }
+  }
+
+  const rules = input.rules ?? [];
+  if (rules.length > 0) {
+    const ruleRows = rules.map((rule) => ({
+      algorithm_id: data.id,
+      type: rule.type,
+      condition_text: rule.condition_text,
+    }));
+
+    const { error: rulesError } = await client.from('rules').insert(ruleRows);
+    if (rulesError) {
+      console.error('Failed to create rules', rulesError);
+    }
+  }
+
   return {
     id: data.id,
     name: data.name,
     is_active: data.is_active,
     goal_text: data.goal_text,
     created_at: data.created_at,
-    topic_weights: input.topic_weights ?? [],
-    rules: input.rules ?? [],
+    topic_weights: topicWeights,
+    rules,
   };
 }
 

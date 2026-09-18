@@ -29,6 +29,10 @@ export default function AuthCallbackPage() {
         }
 
         if (session) {
+          await fetch('/api/oauth/youtube/connect', {
+            method: 'POST',
+            credentials: 'include',
+          });
           router.replace('/');
           return;
         }
@@ -45,6 +49,15 @@ export default function AuthCallbackPage() {
 
           if (setSessionError) {
             console.error('Failed to set OAuth session:', setSessionError);
+          }
+
+          try {
+            await fetch('/api/oauth/youtube/connect', {
+              method: 'POST',
+              credentials: 'include',
+            });
+          } catch (connectError) {
+            console.error('Failed to store YouTube OAuth connection:', connectError);
           }
         }
       } finally {

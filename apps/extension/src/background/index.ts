@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import { fetchFeed } from '../lib/api-client';
+import { fetchFeed, getApiBaseUrl } from '../lib/api-client';
 import { normalizeFeed } from '../lib/extension-helpers';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -42,6 +42,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.FEEDBACK) {
+    void (async () => {
+      try {
+        const response = await fetch(`${(await getApiBaseUrl()).replace(/\/$/, '')}/api/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contentItemId: payload?.contentItemId,
+            eventType: payload?.eventType,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Feedback request failed: ${response.status}`);
+        }
+      } catch (error) {
+        console.error('Failed to send feedback event', error);
+      }
+    })();
+
     void setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
     sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
     return true;

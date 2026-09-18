@@ -1,15 +1,25 @@
 import { NextResponse } from 'next/server';
 import type { Algorithm, AlgorithmPayload } from '@repo/shared-types';
 import { createAlgorithm, listAlgorithms } from '@/lib/data';
+import { getCurrentUserIdFromServer } from '@/lib/server-user';
 
 export async function GET() {
-  const algorithms = await listAlgorithms('demo-user');
+  const userId = (await getCurrentUserIdFromServer()) ?? 'demo-user';
+  const algorithms = await listAlgorithms(userId);
+
+  if (userId !== 'demo-user' && algorithms.length === 0) {
+    const { createDefaultAlgorithmForUser } = await import('@/lib/bootstrap');
+    await createDefaultAlgorithmForUser(userId);
+    return NextResponse.json(await listAlgorithms(userId));
+  }
+
   return NextResponse.json(algorithms);
 }
 
 export async function POST(request: Request) {
+  const userId = (await getCurrentUserIdFromServer()) ?? 'demo-user';
   const payload = (await request.json()) as Partial<AlgorithmPayload>;
-  const algorithm = await createAlgorithm('demo-user', {
+  const algorithm = await createAlgorithm(userId, {
     name: payload.name ?? 'Work',
     is_active: payload.is_active ?? true,
     goal_text: payload.goal_text ?? null,

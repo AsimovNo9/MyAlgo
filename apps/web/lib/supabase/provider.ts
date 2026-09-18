@@ -8,6 +8,6 @@ export function getProviderConfig(provider: ProviderName) {
   return {
     provider: 'google' as const,
     redirectTo: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
-    scopes: 'openid email profile',
+    scopes: 'openid email profile https://www.googleapis.com/auth/youtube.readonly',
   };
 }

@@ -1,17 +1,29 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getCurrentSession, signInWithGoogle, signOut } from '@/lib/auth';
+import { ensureProfileForSession, getCurrentSession, signInWithGoogle, signOut } from '@/lib/auth';
+
+type SessionLike = {
+  user?: {
+    email?: string | null;
+  } | null;
+} | null;
 
 export function AuthPanel() {
-  const [session, setSession] = useState<unknown>(null);
+  const [session, setSession] = useState<SessionLike>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void getCurrentSession().then((currentSession) => {
+    void (async () => {
+      const currentSession = await getCurrentSession();
+
+      if (currentSession) {
+        await ensureProfileForSession(currentSession);
+      }
+
       setSession(currentSession);
       setLoading(false);
-    });
+    })();
   }, []);
 
   const handleSignIn = async () => {
@@ -29,6 +41,8 @@ export function AuthPanel() {
     setSession(null);
   };
 
+  const userEmail = session?.user?.email ?? null;
+
   if (loading) {
     return <div>Loading session…</div>;
   }
@@ -38,12 +52,12 @@ export function AuthPanel() {
       <h3 style={{ marginTop: 0 }}>Authentication</h3>
       {session ? (
         <>
-          <p>Signed in via Supabase Auth.</p>
+          <p>Signed in via Supabase Auth{userEmail ? ` as ${userEmail}` : ''}.</p>
           <button onClick={() => void handleSignOut()}>Sign out</button>
         </>
       ) : (
         <>
-          <p>Supabase is not configured yet, so this is a stubbed auth placeholder.</p>
+          <p>Continue with Google to create your profile.</p>
           <button onClick={() => void handleSignIn()}>Continue with Google</button>
         </>
       )}
