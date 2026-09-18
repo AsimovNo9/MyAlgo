@@ -7,7 +7,7 @@ export async function getCurrentUserIdFromServer() {
     return null;
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {
       getAll() {
@@ -22,6 +22,15 @@ export async function getCurrentUserIdFromServer() {
       },
     },
   });
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    console.error('Failed to read Supabase session on server', sessionError);
+  }
+
+  if (sessionData.session?.user) {
+    return sessionData.session.user.id;
+  }
 
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {

@@ -87,7 +87,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const { classifyContent } = await import('./classifier');
 
   const result = await fetchYoutubeSubscriptionFeed(userId);
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
 
   if (!client || result.source === 'fixture') {
     return { ok: true, source: result.source, synced: 0, classified: 0, items: result.items };
@@ -151,7 +151,7 @@ export async function fetchYoutubeSubscriptionFeed(userId?: string): Promise<{ i
   }
 
   const { createSupabaseServerClient } = await import('./supabase/server');
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return { source: 'fixture', items: fixtureItems };
   }

@@ -3,12 +3,12 @@ import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../env';
 
-export function createSupabaseServerClient() {
+export async function createSupabaseServerClient() {
   if (!env.supabaseUrl || !env.supabaseAnonKey || env.supabaseUrl === 'https://example.supabase.co') {
     return null;
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   return createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {

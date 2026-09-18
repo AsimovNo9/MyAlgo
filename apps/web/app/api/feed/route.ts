@@ -5,7 +5,7 @@ import { getCurrentUserId } from '@/lib/auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 async function fetchFeedbackSignalsForUser(userId: string): Promise<FeedFeedbackSignal[]> {
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client || userId === 'demo-user') {
     return [];
   }

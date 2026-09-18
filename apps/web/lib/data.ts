@@ -26,7 +26,7 @@ const demoRules: Rule[] = [
 ];
 
 export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return demoAlgorithms;
   }
@@ -54,7 +54,7 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
 }
 
 export async function createAlgorithm(userId: string, input: Partial<Algorithm>): Promise<Algorithm> {
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return {
       id: 'alg-demo-created',
@@ -129,7 +129,7 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
 }
 
 export async function listRules(userId: string, algorithmId?: string): Promise<Rule[]> {
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return demoRules;
   }
@@ -165,7 +165,7 @@ export async function listRules(userId: string, algorithmId?: string): Promise<R
 }
 
 export async function createRule(userId: string, algorithmId: string, input: Partial<Rule>): Promise<Rule> {
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return {
       id: 'rule-demo-created',

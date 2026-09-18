@@ -9,7 +9,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
 
-  const client = createSupabaseServerClient();
+  const client = await createSupabaseServerClient();
   if (!client) {
     return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
   }
