@@ -43,7 +43,10 @@ Example values:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+CORS_ALLOWED_ORIGINS=chrome-extension://your-extension-id
 ```
+
+For production live-page ranking, set `CORS_ALLOWED_ORIGINS` in Vercel to the published extension origin. Multiple origins may be separated with commas. The `/api/rank` endpoint also accepts `http://localhost:3000` for local testing and requires the extension's Supabase bearer token.
 
 ## Supabase setup
 
