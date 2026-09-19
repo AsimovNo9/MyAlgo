@@ -2,6 +2,7 @@ import type { Algorithm, FeedItem, FeedResponse, Rule } from '@repo/shared-types
 
 export type FeedFeedbackSignal = {
   external_id: string;
+  channel_id?: string | null;
   eventType: 'not_interested' | 'more_like_this' | 'never_show_channel';
 };
 
@@ -10,7 +11,10 @@ export type FeedCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  thumbnail_url?: string | null;
   channel_id?: string | null;
+  channel_description?: string | null;
+  channel_subscriber_count?: number | null;
   published_at?: string | null;
   base_score?: number;
   topics?: string[];
@@ -79,7 +83,7 @@ export function normalizeClassificationRecord(classification: unknown): { topics
 function inferTopicsFromTitle(title: string): string[] {
   const normalizedTitle = title.toLowerCase();
   const topicRules = [
-    { pattern: /(ai|llm|gpt|agent|automation|machine learning)/i, topic: 'AI' },
+    { pattern: /\b(ai|llm|gpt|agent|automation|machine learning|computer vision|vision model)\b/i, topic: 'AI' },
     { pattern: /(productivity|deep work|workflow|focus|systems|habits)/i, topic: 'Productivity' },
     { pattern: /(engineering|software|code|architecture|build)/i, topic: 'Engineering' },
     { pattern: /(business|startup|strategy|marketing|founder|product)/i, topic: 'Business' },
@@ -107,33 +111,45 @@ function getFreshnessBoost(publishedAt?: string | null): number {
   return 0;
 }
 
-function getChannelQualityBoost(channelName?: string | null, matchedTopics: string[] = []): number {
+function getChannelQualityBoost(
+  channelName?: string | null,
+  channelDescription?: string | null,
+  subscriberCount?: number | null,
+  matchedTopics: string[] = [],
+): number {
   const normalizedName = (channelName ?? '').toLowerCase();
-  if (!normalizedName) {
+  const normalizedDescription = (channelDescription ?? '').toLowerCase();
+  if (!normalizedName && !normalizedDescription) {
     return 0;
   }
 
   let boost = 0;
   const qualitySignals = ['lab', 'studio', 'research', 'systems', 'daily', 'insights', 'build', 'product', 'academy', 'engineering', 'ops'];
-  const lowQualitySignals = ['gossip', 'celebrity', 'tabloid', 'tv', 'news', 'buzz', 'hot', 'daily entertainment'];
+  const lowQualitySignals = ['gossip', 'celebrity', 'tabloid', 'tv', 'news', 'buzz', 'hot'];
 
-  if (qualitySignals.some((signal) => normalizedName.includes(signal))) {
+  const combinedText = `${normalizedName} ${normalizedDescription}`;
+
+  if (qualitySignals.some((signal) => combinedText.includes(signal))) {
     boost += 10;
   }
 
-  if (lowQualitySignals.some((signal) => normalizedName.includes(signal))) {
+  if (lowQualitySignals.some((signal) => combinedText.includes(signal))) {
     boost -= 12;
   }
 
-  if (matchedTopics.includes('AI') && /(ai|lab|systems|research|build|engineering)/i.test(normalizedName)) {
-    boost += 8;
-  }
-
-  if (matchedTopics.includes('Productivity') && /(focus|daily|systems|habit|work)/i.test(normalizedName)) {
+  if (typeof subscriberCount === 'number' && subscriberCount > 100000) {
     boost += 6;
   }
 
-  if (matchedTopics.includes('Entertainment') && /(celebrity|gossip|tabloid|tv|entertainment)/i.test(normalizedName)) {
+  if (matchedTopics.includes('AI') && /(ai|lab|systems|research|build|engineering)/i.test(combinedText)) {
+    boost += 8;
+  }
+
+  if (matchedTopics.includes('Productivity') && /(focus|daily|systems|habit|work|productivity)/i.test(combinedText)) {
+    boost += 6;
+  }
+
+  if (matchedTopics.includes('Entertainment') && /(celebrity|gossip|tabloid|tv|entertainment)/i.test(combinedText)) {
     boost += 8;
   }
 
@@ -148,11 +164,15 @@ export function buildFeedResponse(
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
   const rules = algorithm?.rules ?? [];
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
+  const blockedChannelIds = new Set<string>();
 
   for (const signal of feedbackSignals) {
     const existing = signalMap.get(signal.external_id) ?? [];
     existing.push(signal);
     signalMap.set(signal.external_id, existing);
+    if (signal.eventType === 'never_show_channel' && signal.channel_id) {
+      blockedChannelIds.add(signal.channel_id);
+    }
   }
 
   const feedItems: FeedItem[] = candidateItems.map((video) => {
@@ -165,6 +185,11 @@ export function buildFeedResponse(
     const ruleSummary: string[] = [];
     const feedbackSummary: string[] = [];
 
+    if (video.channel_id && blockedChannelIds.has(video.channel_id)) {
+      visible = false;
+      feedbackSummary.push('never_show_channel rule');
+    }
+
     for (const topic of matchedTopics) {
       const weightValue = Number(weights.get(topic.toLowerCase()) ?? 0);
       const topicBoost = weightValue / 9;
@@ -173,7 +198,12 @@ export function buildFeedResponse(
     }
 
     const freshnessBoost = getFreshnessBoost(video.published_at);
-    const channelBoost = getChannelQualityBoost(video.channel_name, matchedTopics);
+    const channelBoost = getChannelQualityBoost(
+      video.channel_name,
+      video.channel_description,
+      video.channel_subscriber_count,
+      matchedTopics,
+    );
     score += freshnessBoost + channelBoost;
     if (freshnessBoost > 0) {
       scoreContributors.push(`freshness (${freshnessBoost})`);
@@ -237,6 +267,7 @@ export function buildFeedResponse(
       external_id: video.external_id,
       title: video.title,
       channel_name: video.channel_name,
+      thumbnail_url: video.thumbnail_url,
       score: Math.min(100, Math.max(0, Math.round(score))),
       visible,
       reason,

@@ -1,43 +1,8 @@
 import { NextResponse } from 'next/server';
-import { buildFeedResponse, normalizeClassificationRecord, type FeedCandidate, type FeedFeedbackSignal } from '@/lib/feed';
-import { listAlgorithms } from '@/lib/data';
+import { buildFeedResponse, normalizeClassificationRecord, type FeedCandidate } from '@/lib/feed';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-async function fetchFeedbackSignalsForUser(userId: string): Promise<FeedFeedbackSignal[]> {
-  const client = await createSupabaseServerClient();
-  if (!client || userId === 'demo-user') {
-    return [];
-  }
-
-  const { data, error } = await client
-    .from('feedback_events')
-    .select('event_type, content_items(external_id)')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error || !data) {
-    console.error('Failed to fetch user feedback signals', error);
-    return [];
-  }
-
-  return data
-    .map((row) => {
-      const externalId = typeof row.content_items === 'object' && row.content_items !== null && 'external_id' in row.content_items
-        ? String((row.content_items as { external_id?: string }).external_id ?? '')
-        : '';
-
-      if (!externalId) {
-        return null;
-      }
-
-      return {
-        external_id: externalId,
-        eventType: row.event_type as FeedFeedbackSignal['eventType'],
-      };
-    })
-    .filter((item): item is FeedFeedbackSignal => Boolean(item));
-}
+import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 
 async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
   const client = await createSupabaseServerClient();
@@ -47,7 +12,7 @@ async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
 
   const { data, error } = await client
     .from('content_items')
-    .select('id, external_id, title, channel_name, channel_id, published_at, classifications(topics, quality_score)')
+    .select('id, external_id, title, channel_name, channel_id, channel_description, channel_subscriber_count, published_at, classifications(topics, quality_score)')
     .order('fetched_at', { ascending: false })
     .limit(50);
 
@@ -65,7 +30,10 @@ async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
       external_id: row.external_id,
       title: row.title,
       channel_name: row.channel_name,
+      thumbnail_url: `https://i.ytimg.com/vi/${row.external_id}/hqdefault.jpg`,
       channel_id: row.channel_id,
+      channel_description: row.channel_description,
+      channel_subscriber_count: row.channel_subscriber_count,
       published_at: row.published_at,
       base_score: Number.isFinite(baseScore) ? baseScore : 50,
       topics: Array.isArray(classification?.topics) ? classification.topics : [],
@@ -137,15 +105,19 @@ async function persistFeedCacheForUser(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const userId = await getCurrentUserIdFromServer();
 
   if (!userId) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
 
-  const algorithms = await listAlgorithms(userId);
-  const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
+  const { ensureDefaultAlgorithmsForUser } = await import('@/lib/bootstrap');
+  const algorithms = await ensureDefaultAlgorithmsForUser(userId);
+  const requestedMode = new URL(request.url).searchParams.get('mode')?.trim().toLowerCase();
+  const activeAlgorithm = (requestedMode
+    ? algorithms.find((algorithm) => algorithm.name.trim().toLowerCase() === requestedMode)
+    : null) ?? algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
   const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined);

@@ -6,7 +6,7 @@ export type ClassificationResult = {
 };
 
 const topicRules: Array<{ match: RegExp; topic: string }> = [
-  { match: /(ai|llm|gpt|agent|machine learning|automation|prompt)/i, topic: 'AI' },
+  { match: /\b(ai|llm|gpt|agent|machine learning|automation|prompt)\b/i, topic: 'AI' },
   { match: /(productivity|deep work|workflow|focus|systems|habits)/i, topic: 'Productivity' },
   { match: /(engineering|software|code|architecture|systems|build)/i, topic: 'Engineering' },
   { match: /(startup|business|strategy|marketing|founder|product)/i, topic: 'Business' },

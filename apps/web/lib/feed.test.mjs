@@ -152,3 +152,33 @@ test('buildFeedResponse differentiates items using channel relevance and freshne
   assert.ok(Math.abs(feed.items[0].score - feed.items[1].score) > 3);
   assert.ok(feed.items[0].score > feed.items[1].score);
 });
+
+test('buildFeedResponse hides every item from a channel after never-show feedback', () => {
+  const algorithm = {
+    id: 'alg-4',
+    name: 'Work',
+    topic_weights: [{ topic: 'AI', weight: 90 }],
+    rules: [],
+  };
+
+  const feed = buildFeedResponse(
+    algorithm,
+    [{ external_id: 'yt-feedback', channel_id: 'channel-hidden', eventType: 'never_show_channel' }],
+    [
+      { id: 'hidden-1', external_id: 'yt-feedback', channel_id: 'channel-hidden', title: 'AI systems episode one', channel_name: 'Systems Lab', topics: ['AI'] },
+      { id: 'hidden-2', external_id: 'yt-other', channel_id: 'channel-hidden', title: 'AI systems episode two', channel_name: 'Systems Lab', topics: ['AI'] },
+    ],
+  );
+
+  assert.equal(feed.items.every((item) => item.visible === false), true);
+});
+
+test('buildFeedResponse does not infer AI from words containing ai as a substring', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-5', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [{ id: 'real-5', external_id: 'yt-documentary', title: 'Un opéra pour un empire | Documentaire | ARTE', topics: [] }],
+  );
+
+  assert.deepEqual(feed.items[0].matched_topics, []);
+});

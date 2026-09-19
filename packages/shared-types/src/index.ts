@@ -30,6 +30,7 @@ export interface FeedItem {
   id: string;
   title: string;
   channel_name?: string | null;
+  thumbnail_url?: string | null;
   external_id: string;
   score: number;
   visible: boolean;

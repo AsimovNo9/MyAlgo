@@ -128,6 +128,61 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
   };
 }
 
+export async function deleteAlgorithm(userId: string, algorithmId: string): Promise<{ ok: boolean; error?: string }> {
+  const client = await createSupabaseServerClient();
+  if (!client) {
+    return { ok: false, error: 'Supabase is not configured.' };
+  }
+
+  const { data: algorithms, error: listError } = await client
+    .from('algorithms')
+    .select('id, is_active')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (listError) {
+    console.error('Failed to check algorithms before deletion', listError);
+    return { ok: false, error: 'Unable to load algorithms.' };
+  }
+
+  const target = algorithms?.find((algorithm) => algorithm.id === algorithmId);
+  if (!target) {
+    return { ok: false, error: 'Algorithm not found.' };
+  }
+
+  if ((algorithms ?? []).length <= 1) {
+    return { ok: false, error: 'Keep at least one algorithm.' };
+  }
+
+  const { error: deleteError } = await client
+    .from('algorithms')
+    .delete()
+    .eq('id', algorithmId)
+    .eq('user_id', userId);
+
+  if (deleteError) {
+    console.error('Failed to delete algorithm', deleteError);
+    return { ok: false, error: 'Unable to delete algorithm.' };
+  }
+
+  if (target.is_active) {
+    const replacement = algorithms?.find((algorithm) => algorithm.id !== algorithmId);
+    if (replacement) {
+      const { error: activateError } = await client
+        .from('algorithms')
+        .update({ is_active: true })
+        .eq('id', replacement.id)
+        .eq('user_id', userId);
+
+      if (activateError) {
+        console.error('Failed to activate replacement algorithm', activateError);
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
 export async function listRules(userId: string, algorithmId?: string): Promise<Rule[]> {
   const client = await createSupabaseServerClient();
   if (!client) {

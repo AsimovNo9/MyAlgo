@@ -1,7 +1,8 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import { fetchFeed, getApiBaseUrl } from '../lib/api-client';
+import { fetchFeed, getApiBaseUrl, rankPageCandidates, type PageCandidate } from '../lib/api-client';
 import { normalizeFeed } from '../lib/extension-helpers';
+import { getExtensionAccessToken, signInWithGoogle, signOutExtension } from '../lib/auth';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
@@ -11,9 +12,10 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-const refreshFeed = async () => {
+const refreshFeed = async (mode?: string) => {
   try {
-    const feedResponse = await fetchFeed();
+    const selectedMode = mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
+    const feedResponse = await fetchFeed(selectedMode);
     const normalizedFeed = normalizeFeed(feedResponse);
     await setStorage(STORAGE_KEYS.FEED_CACHE, normalizedFeed);
     await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
@@ -34,9 +36,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (type === 'RANK_PAGE') {
+    void (async () => {
+      try {
+        const mode = await getStorage(STORAGE_KEYS.MODE, 'Work');
+        const ranked = await rankPageCandidates(mode, (payload as { candidates?: PageCandidate[] }).candidates ?? []);
+        await setStorage('personal-algorithm-last-error', null);
+        sendResponse({ ok: true, feed: normalizeFeed(ranked) });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to rank page.';
+        await setStorage('personal-algorithm-last-error', message);
+        console.error('Failed to rank current YouTube page', message);
+        sendResponse({ ok: false, error: message });
+      }
+    })();
+    return true;
+  }
+
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
-    void setStorage(STORAGE_KEYS.MODE, payload?.mode ?? 'Work');
-    void refreshFeed();
+    const nextMode = payload?.mode ?? 'Work';
+    void setStorage(STORAGE_KEYS.MODE, nextMode);
+    void refreshFeed(nextMode);
     sendResponse({ ok: true });
     return true;
   }
@@ -44,9 +64,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === EXTENSION_MESSAGE_TYPES.FEEDBACK) {
     void (async () => {
       try {
+        const accessToken = await getExtensionAccessToken();
         const response = await fetch(`${(await getApiBaseUrl()).replace(/\/$/, '')}/api/feedback`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
           body: JSON.stringify({
             contentItemId: payload?.contentItemId,
             eventType: payload?.eventType,
@@ -72,6 +97,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (type === 'SIGN_IN') {
+    void signInWithGoogle().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Sign-in failed.' }));
+    return true;
+  }
+
+  if (type === 'SIGN_OUT') {
+    void signOutExtension().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
   sendResponse({ ok: false });
   return true;
 });
@@ -84,9 +119,9 @@ chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) =
 const backgroundBootstrap = async () => {
   const mode = await getStorage(STORAGE_KEYS.MODE, 'Work');
   const feed = await getStorage(STORAGE_KEYS.FEED_CACHE, []);
-  await refreshFeed();
+  await refreshFeed(mode);
 
-  console.info('Personal Algorithm background ready', { mode, count: feed.length });
+  console.info('Personal Algorithm background ready', { mode, count: feed.length, apiBaseUrl: await getApiBaseUrl() });
 };
 
 void backgroundBootstrap();

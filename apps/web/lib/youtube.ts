@@ -2,6 +2,9 @@ export type YoutubeSubscriptionItem = {
   id: string;
   title: string;
   channel_name: string;
+  channel_id?: string | null;
+  channel_description?: string | null;
+  channel_subscriber_count?: number | null;
   external_id: string;
   published_at?: string;
   topics?: string[];
@@ -59,10 +62,10 @@ export function mapYoutubeSubscriptionItems(rawItems: unknown[]): YoutubeSubscri
       };
     };
 
-    const channelId = record?.snippet?.resourceId?.channelId ?? record?.id?.channelId ?? record?.snippet?.channelTitle ?? 'unknown-channel';
-    const title = record?.snippet?.title ?? 'Untitled subscription';
-    const channelName = record?.snippet?.channelTitle ?? 'Unknown channel';
-    const externalId = record?.snippet?.resourceId?.channelId ?? record?.id?.channelId ?? channelId;
+    const channelId = record?.snippet?.resourceId?.channelId ?? record?.id?.channelId ?? null;
+    const title = record?.snippet?.title ?? record?.snippet?.channelTitle ?? 'Untitled subscription';
+    const channelName = record?.snippet?.channelTitle ?? record?.snippet?.title ?? 'Unknown channel';
+    const externalId = channelId ?? title;
     const publishedAt = record?.snippet?.publishedAt ?? new Date().toISOString();
 
     if (!externalId || !title) {
@@ -73,6 +76,7 @@ export function mapYoutubeSubscriptionItems(rawItems: unknown[]): YoutubeSubscri
       id: externalId,
       title,
       channel_name: channelName,
+      channel_id: channelId,
       external_id: externalId,
       published_at: publishedAt,
       topics: [],
@@ -80,6 +84,119 @@ export function mapYoutubeSubscriptionItems(rawItems: unknown[]): YoutubeSubscri
   }
 
   return mapped;
+}
+
+type YoutubeChannelMetadata = {
+  channel_name: string;
+  channel_description: string | null;
+  channel_subscriber_count: number | null;
+  uploads_playlist_id: string | null;
+};
+
+async function fetchYoutubeChannelMetadata(userId: string, channelIds: string[]) {
+  const uniqueChannelIds = [...new Set(channelIds.filter(Boolean))];
+  if (uniqueChannelIds.length === 0) {
+    return new Map<string, YoutubeChannelMetadata>();
+  }
+
+  const { createSupabaseServerClient } = await import('./supabase/server');
+  const client = await createSupabaseServerClient();
+  if (!client) {
+    return new Map<string, YoutubeChannelMetadata>();
+  }
+
+  const accessToken = await getValidYoutubeAccessToken(userId);
+  if (!accessToken) {
+    return new Map<string, YoutubeChannelMetadata>();
+  }
+
+  const metadataByChannelId = new Map<string, YoutubeChannelMetadata>();
+
+  for (let index = 0; index < uniqueChannelIds.length; index += 50) {
+    const chunk = uniqueChannelIds.slice(index, index + 50);
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(chunk.join(','))}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch YouTube channel metadata', response.status, await response.text());
+      continue;
+    }
+
+    const payload = (await response.json()) as { items?: Array<{ id?: string; snippet?: { title?: string; description?: string }; statistics?: { subscriberCount?: string }; contentDetails?: { relatedPlaylists?: { uploads?: string } } }> };
+
+    for (const channel of payload.items ?? []) {
+      if (!channel.id) {
+        continue;
+      }
+
+      metadataByChannelId.set(channel.id, {
+        channel_name: channel.snippet?.title ?? 'Unknown channel',
+        channel_description: channel.snippet?.description ?? null,
+        channel_subscriber_count: channel.statistics?.subscriberCount ? Number(channel.statistics.subscriberCount) : null,
+        uploads_playlist_id: channel.contentDetails?.relatedPlaylists?.uploads ?? null,
+      });
+    }
+  }
+
+  return metadataByChannelId;
+}
+
+async function fetchYoutubeRecentUploads(
+  accessToken: string,
+  metadataByChannelId: Map<string, YoutubeChannelMetadata>,
+): Promise<YoutubeSubscriptionItem[]> {
+  const uploads: YoutubeSubscriptionItem[] = [];
+
+  for (const [channelId, metadata] of metadataByChannelId) {
+    if (!metadata.uploads_playlist_id) {
+      continue;
+    }
+
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(metadata.uploads_playlist_id)}&maxResults=3`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch YouTube channel uploads', channelId, response.status, await response.text());
+      continue;
+    }
+
+    const payload = (await response.json()) as {
+      items?: Array<{
+        snippet?: { title?: string; publishedAt?: string };
+        contentDetails?: { videoId?: string };
+      }>;
+    };
+
+    for (const video of payload.items ?? []) {
+      const videoId = video.contentDetails?.videoId;
+      const title = video.snippet?.title;
+      if (!videoId || !title) {
+        continue;
+      }
+
+      uploads.push({
+        id: videoId,
+        title,
+        channel_name: metadata.channel_name,
+        channel_id: channelId,
+        channel_description: metadata.channel_description,
+        channel_subscriber_count: metadata.channel_subscriber_count,
+        external_id: videoId,
+        published_at: video.snippet?.publishedAt ?? new Date().toISOString(),
+        topics: [],
+      });
+    }
+  }
+
+  return uploads;
 }
 
 async function getValidYoutubeAccessToken(userId: string): Promise<string | null> {
@@ -212,7 +329,14 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   let synced = 0;
   let classified = 0;
 
+  const channelMetadata = await fetchYoutubeChannelMetadata(userId, result.items.map((item) => item.channel_id ?? '').filter(Boolean));
+
   for (const item of result.items) {
+    const channelMeta = item.channel_id ? channelMetadata.get(item.channel_id) : undefined;
+    const channelName = channelMeta?.channel_name ?? item.channel_name ?? 'Unknown channel';
+    const channelDescription = channelMeta?.channel_description ?? null;
+    const channelSubscriberCount = channelMeta?.channel_subscriber_count ?? null;
+
     const { data: contentRow, error: upsertError } = await client
       .from('content_items')
       .upsert(
@@ -220,7 +344,10 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
           source: 'youtube',
           external_id: item.external_id,
           title: item.title,
-          channel_name: item.channel_name,
+          channel_name: channelName,
+          channel_id: item.channel_id ?? null,
+          channel_description: channelDescription,
+          channel_subscriber_count: channelSubscriberCount,
           published_at: item.published_at ? new Date(item.published_at) : new Date(),
         },
         { onConflict: 'source,external_id' },
@@ -302,12 +429,26 @@ export async function fetchYoutubeSubscriptionFeed(userId?: string): Promise<{ i
     const payload = (await response.json()) as { items?: unknown[]; pageInfo?: { totalResults?: number }; error?: { code?: number; message?: string } };
     const rawItems = payload.items ?? [];
     const items = mapYoutubeSubscriptionItems(rawItems);
+    const channelMetadata = await fetchYoutubeChannelMetadata(userId, items.map((item) => item.channel_id ?? '').filter(Boolean));
+    const recentUploads = await fetchYoutubeRecentUploads(accessToken, channelMetadata);
+
+    const enrichedSubscriptions = items.map((item) => {
+      const channelMeta = item.channel_id ? channelMetadata.get(item.channel_id) : undefined;
+      return {
+        ...item,
+        channel_name: channelMeta?.channel_name ?? item.channel_name,
+        channel_description: channelMeta?.channel_description ?? null,
+        channel_subscriber_count: channelMeta?.channel_subscriber_count ?? null,
+      };
+    });
+    const enrichedItems = recentUploads.length > 0 ? recentUploads : enrichedSubscriptions;
 
     console.log('YouTube subscriptions payload debug', {
       userId,
       totalResults: payload.pageInfo?.totalResults ?? rawItems.length,
       returnedItems: rawItems.length,
       mappedItems: items.length,
+      recentUploads: recentUploads.length,
       sampleIds: rawItems.slice(0, 3).map((entry) => {
         const record = entry as { id?: { channelId?: string; videoId?: string }; snippet?: { resourceId?: { channelId?: string } } };
         return record?.snippet?.resourceId?.channelId ?? record?.id?.channelId ?? record?.id?.videoId ?? null;
@@ -316,8 +457,8 @@ export async function fetchYoutubeSubscriptionFeed(userId?: string): Promise<{ i
     });
 
     return {
-      source: items.length > 0 ? 'youtube_api' : 'youtube_api_empty',
-      items,
+      source: enrichedItems.length > 0 ? 'youtube_api' : 'youtube_api_empty',
+      items: enrichedItems,
     };
   } catch (error) {
     console.error('Failed to fetch YouTube subscriptions', error);

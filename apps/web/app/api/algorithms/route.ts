@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { Algorithm, AlgorithmPayload } from '@repo/shared-types';
-import { createAlgorithm, listAlgorithms } from '@/lib/data';
+import { createAlgorithm, deleteAlgorithm } from '@/lib/data';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 
 export async function GET() {
@@ -10,15 +10,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
 
-  const algorithms = await listAlgorithms(userId);
-
-  if (algorithms.length === 0) {
-    const { createDefaultAlgorithmForUser } = await import('@/lib/bootstrap');
-    await createDefaultAlgorithmForUser(userId);
-    return NextResponse.json(await listAlgorithms(userId));
-  }
-
-  return NextResponse.json(algorithms);
+  const { ensureDefaultAlgorithmsForUser } = await import('@/lib/bootstrap');
+  return NextResponse.json(await ensureDefaultAlgorithmsForUser(userId));
 }
 
 export async function POST(request: Request) {
@@ -38,4 +31,25 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json(algorithm, { status: 201 });
+}
+
+export async function DELETE(request: Request) {
+  const userId = await getCurrentUserIdFromServer();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  }
+
+  const payload = (await request.json()) as { id?: string };
+  const algorithmId = payload.id?.trim();
+  if (!algorithmId) {
+    return NextResponse.json({ error: 'Algorithm id is required.' }, { status: 400 });
+  }
+
+  const result = await deleteAlgorithm(userId, algorithmId);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.error === 'Algorithm not found.' ? 404 : 400 });
+  }
+
+  return NextResponse.json({ ok: true, deletedId: algorithmId });
 }

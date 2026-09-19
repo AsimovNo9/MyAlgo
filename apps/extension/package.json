@@ -11,9 +11,10 @@
     "test": "echo \"No extension tests yet\""
   },
   "dependencies": {
+    "@repo/shared-types": "workspace:*",
+    "@supabase/supabase-js": "^2.49.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@repo/shared-types": "workspace:*"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",

@@ -147,6 +147,8 @@ export default function AlgorithmsPage() {
   const [algorithms, setAlgorithms] = useState<Algorithm[]>([]);
   const [form, setForm] = useState(emptyPayload);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedPresetName, setSelectedPresetName] = useState('AI Work');
   const [hoveredPreset, setHoveredPreset] = useState<string | null>(null);
   const [hoveredRule, setHoveredRule] = useState<string | null>(null);
@@ -298,6 +300,31 @@ export default function AlgorithmsPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (algorithm: Algorithm) => {
+    if (!algorithm.id || !window.confirm(`Delete "${algorithm.name}"?`)) return;
+
+    setDeletingId(algorithm.id);
+    setDeleteError(null);
+
+    try {
+      const response = await fetch('/api/algorithms', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: algorithm.id }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Unable to delete algorithm.');
+      }
+
+      await fetchAlgorithms();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Unable to delete algorithm.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -709,6 +736,7 @@ export default function AlgorithmsPage() {
       <section style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(248,250,252,0.74) 100%)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRadius: 24, padding: 20, border: '1px solid rgba(148,163,184,0.2)', boxShadow: '0 10px 28px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.9)' }}>
         <h2 style={{ marginTop: 0, color: '#0f172a', letterSpacing: '-0.04em' }}>Saved algorithms</h2>
         {activeAlgorithm ? <p style={{ color: '#334155' }}>Active mode: {activeAlgorithm.name}</p> : <p style={{ color: '#334155' }}>No algorithms yet.</p>}
+        {deleteError ? <p style={{ color: '#b91c1c' }}>{deleteError}</p> : null}
         <div style={{ display: 'grid', gap: 12 }}>
           {algorithms.map((algorithm) => (
             <div key={algorithm.id ?? algorithm.name} style={{ border: '1px solid rgba(148,163,184,0.28)', borderRadius: 16, padding: 14, background: 'rgba(255,255,255,0.75)' }}>
@@ -728,6 +756,14 @@ export default function AlgorithmsPage() {
                   </span>
                 ))}
               </div>
+              <button
+                type="button"
+                onClick={() => void handleDelete(algorithm)}
+                disabled={deletingId !== null}
+                style={{ marginTop: 14, border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', borderRadius: 10, padding: '8px 12px', cursor: deletingId !== null ? 'wait' : 'pointer', fontWeight: 700 }}
+              >
+                {deletingId === algorithm.id ? 'Deleting…' : 'Delete algorithm'}
+              </button>
             </div>
           ))}
         </div>

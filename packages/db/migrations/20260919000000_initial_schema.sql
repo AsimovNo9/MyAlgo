@@ -1,4 +1,7 @@
--- Supabase manages auth.users; this extends it with app-specific fields
+-- Initial application schema for Personal Algorithm.
+-- Keep this migration in sync with packages/db/schema.sql.
+
+-- Supabase manages auth.users; this extends it with app-specific fields.
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
