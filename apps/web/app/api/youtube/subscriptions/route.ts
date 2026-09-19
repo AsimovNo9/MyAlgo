@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { fetchYoutubeSubscriptionFeed } from '@/lib/youtube';
 
 export async function GET() {
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentUserIdFromServer();
 
   if (!userId) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });

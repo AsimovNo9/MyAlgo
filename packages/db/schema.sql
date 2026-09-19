@@ -62,7 +62,8 @@ create table public.classifications (
   content_type text,
   quality_score numeric,
   reasoning text,
-  classified_at timestamptz not null default now()
+  classified_at timestamptz not null default now(),
+  unique (content_item_id)
 );
 
 create table public.feed_cache (

@@ -28,14 +28,47 @@ export async function getCurrentUserIdFromServer() {
     console.error('Failed to read Supabase session on server', sessionError);
   }
 
+  const cookieNames = cookieStore.getAll().map((cookie) => cookie.name);
+  console.log('Supabase cookie names on server request', cookieNames);
+
   if (sessionData.session?.user) {
-    return sessionData.session.user.id;
+    const user = sessionData.session.user;
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        email: user.email ?? '',
+        plan: 'free',
+      },
+      { onConflict: 'id' },
+    );
+
+    if (profileError) {
+      console.error('Failed to ensure profile for server session user', profileError);
+    }
+
+    console.log('Server session user found', user.id);
+    return user.id;
   }
 
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
+    console.log('No server user found; auth error:', error);
     return null;
   }
 
+  const { error: profileError } = await supabase.from('profiles').upsert(
+    {
+      id: data.user.id,
+      email: data.user.email ?? '',
+      plan: 'free',
+    },
+    { onConflict: 'id' },
+  );
+
+  if (profileError) {
+    console.error('Failed to ensure profile for resolved user', profileError);
+  }
+
+  console.log('Server user found via getUser', data.user.id);
   return data.user.id;
 }

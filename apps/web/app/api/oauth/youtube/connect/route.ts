@@ -14,14 +14,27 @@ export async function POST() {
     return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
   }
 
-  const { data: userData, error: userError } = await client.auth.getUser();
-  if (userError || !userData.user) {
-    return NextResponse.json({ error: 'Unable to resolve the current user.' }, { status: 401 });
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError || !sessionData.session) {
+    console.error('Missing Supabase session during YouTube connect', sessionError);
+    return NextResponse.json({ error: 'Unable to resolve the current session.' }, { status: 401 });
   }
 
-  const identity = userData.user.identities?.find((item) => item.provider === 'google');
-  const accessToken = identity?.identity_data?.access_token;
-  const refreshToken = identity?.identity_data?.refresh_token;
+  const googleIdentity = sessionData.session.user?.identities?.find((item) => item.provider === 'google');
+  const accessToken = sessionData.session.provider_token ?? googleIdentity?.identity_data?.access_token;
+  const refreshToken = sessionData.session.provider_refresh_token ?? googleIdentity?.identity_data?.refresh_token;
+
+  console.log('YouTube connect session debug', {
+    hasProviderToken: !!sessionData.session.provider_token,
+    hasProviderRefreshToken: !!sessionData.session.provider_refresh_token,
+    hasGoogleIdentity: !!googleIdentity,
+    identityProvider: googleIdentity?.provider ?? null,
+    identityDataKeys: googleIdentity?.identity_data ? Object.keys(googleIdentity.identity_data) : [],
+    userId: sessionData.session.user?.id ?? null,
+    email: sessionData.session.user?.email ?? null,
+    accessTokenPresent: !!accessToken,
+    refreshTokenPresent: !!refreshToken,
+  });
 
   if (!accessToken || !refreshToken) {
     return NextResponse.json({ error: 'Google OAuth tokens were not returned for this session.' }, { status: 400 });

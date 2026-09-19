@@ -53,6 +53,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Review empty-state and fallback feed behavior
 - [ ] Confirm classification quality for live content and tune heuristics if needed
 - [ ] Add observability around scoring decisions and feed generation
+- [ ] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
 
 ## Extension and browser experience
 - [ ] Package the Chrome extension for production release

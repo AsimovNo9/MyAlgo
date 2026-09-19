@@ -9,6 +9,10 @@ export function getUserIdFromSession(session: Session | null | undefined): strin
 }
 
 export async function getCurrentUserId() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
   const client = createSupabaseClient();
 
   if (!client) {

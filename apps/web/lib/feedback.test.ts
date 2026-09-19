@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeFeedbackRequest } from './feedback.ts';
+import { normalizeFeedbackRequest } from './feedback';
 
 test('normalizeFeedbackRequest trims values and accepts valid feedback types', () => {
   const result = normalizeFeedbackRequest({

@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { DashboardOverviewPageContent } from './(dashboard)/page';
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default function OverviewPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#eef2ff' }}>
       <nav style={{
@@ -34,7 +34,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <a href="/algorithms" style={{ color: '#e2e8f0', textDecoration: 'none', fontSize: 14 }}>Algorithms</a>
         </div>
       </nav>
-      {children}
+
+      <div style={{ padding: '24px' }}>
+        <DashboardOverviewPageContent />
+      </div>
     </div>
   );
 }

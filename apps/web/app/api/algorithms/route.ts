@@ -4,10 +4,15 @@ import { createAlgorithm, listAlgorithms } from '@/lib/data';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 
 export async function GET() {
-  const userId = (await getCurrentUserIdFromServer()) ?? 'demo-user';
+  const userId = await getCurrentUserIdFromServer();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  }
+
   const algorithms = await listAlgorithms(userId);
 
-  if (userId !== 'demo-user' && algorithms.length === 0) {
+  if (algorithms.length === 0) {
     const { createDefaultAlgorithmForUser } = await import('@/lib/bootstrap');
     await createDefaultAlgorithmForUser(userId);
     return NextResponse.json(await listAlgorithms(userId));
@@ -17,7 +22,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const userId = (await getCurrentUserIdFromServer()) ?? 'demo-user';
+  const userId = await getCurrentUserIdFromServer();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  }
+
   const payload = (await request.json()) as Partial<AlgorithmPayload>;
   const algorithm = await createAlgorithm(userId, {
     name: payload.name ?? 'Work',

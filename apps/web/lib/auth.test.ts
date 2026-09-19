@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getUserIdFromSession } from './auth.ts';
+import { getUserIdFromSession } from './auth';
 
 test('getUserIdFromSession returns the auth user id when present', () => {
   const session = {

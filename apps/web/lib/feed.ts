@@ -5,7 +5,18 @@ export type FeedFeedbackSignal = {
   eventType: 'not_interested' | 'more_like_this' | 'never_show_channel';
 };
 
-const baseVideos = [
+export type FeedCandidate = {
+  id?: string;
+  external_id: string;
+  title: string;
+  channel_name?: string | null;
+  channel_id?: string | null;
+  published_at?: string | null;
+  base_score?: number;
+  topics?: string[];
+};
+
+const demoVideos: FeedCandidate[] = [
   {
     id: 'content-1',
     external_id: 'yt-1',
@@ -44,9 +55,95 @@ function getRuleMatches(rule: Rule, title: string) {
   return rule.condition_text.toLowerCase().includes(title.toLowerCase()) || title.toLowerCase().includes(rule.condition_text.toLowerCase());
 }
 
+function normalizeTopics(topics?: string[] | null): string[] {
+  return (topics ?? [])
+    .filter((topic): topic is string => typeof topic === 'string' && topic.trim().length > 0)
+    .map((topic) => topic.trim());
+}
+
+export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number } | null {
+  const candidate = Array.isArray(classification) ? classification[0] : classification;
+
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  const record = candidate as { topics?: string[] | null; quality_score?: number | null };
+
+  return {
+    topics: Array.isArray(record.topics) ? record.topics : [],
+    quality_score: typeof record.quality_score === 'number' ? record.quality_score : undefined,
+  };
+}
+
+function inferTopicsFromTitle(title: string): string[] {
+  const normalizedTitle = title.toLowerCase();
+  const topicRules = [
+    { pattern: /(ai|llm|gpt|agent|automation|machine learning)/i, topic: 'AI' },
+    { pattern: /(productivity|deep work|workflow|focus|systems|habits)/i, topic: 'Productivity' },
+    { pattern: /(engineering|software|code|architecture|build)/i, topic: 'Engineering' },
+    { pattern: /(business|startup|strategy|marketing|founder|product)/i, topic: 'Business' },
+    { pattern: /(tutorial|how to|guide|walkthrough|demo)/i, topic: 'Tutorial' },
+    { pattern: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
+  ];
+
+  return Array.from(new Set(topicRules.filter(({ pattern }) => pattern.test(normalizedTitle)).map(({ topic }) => topic)));
+}
+
+function getFreshnessBoost(publishedAt?: string | null): number {
+  if (!publishedAt) {
+    return 0;
+  }
+
+  const ageHours = (Date.now() - new Date(publishedAt).getTime()) / (1000 * 60 * 60);
+  if (!Number.isFinite(ageHours)) {
+    return 0;
+  }
+
+  if (ageHours <= 6) return 18;
+  if (ageHours <= 24) return 12;
+  if (ageHours <= 48) return 8;
+  if (ageHours <= 120) return 4;
+  return 0;
+}
+
+function getChannelQualityBoost(channelName?: string | null, matchedTopics: string[] = []): number {
+  const normalizedName = (channelName ?? '').toLowerCase();
+  if (!normalizedName) {
+    return 0;
+  }
+
+  let boost = 0;
+  const qualitySignals = ['lab', 'studio', 'research', 'systems', 'daily', 'insights', 'build', 'product', 'academy', 'engineering', 'ops'];
+  const lowQualitySignals = ['gossip', 'celebrity', 'tabloid', 'tv', 'news', 'buzz', 'hot', 'daily entertainment'];
+
+  if (qualitySignals.some((signal) => normalizedName.includes(signal))) {
+    boost += 10;
+  }
+
+  if (lowQualitySignals.some((signal) => normalizedName.includes(signal))) {
+    boost -= 12;
+  }
+
+  if (matchedTopics.includes('AI') && /(ai|lab|systems|research|build|engineering)/i.test(normalizedName)) {
+    boost += 8;
+  }
+
+  if (matchedTopics.includes('Productivity') && /(focus|daily|systems|habit|work)/i.test(normalizedName)) {
+    boost += 6;
+  }
+
+  if (matchedTopics.includes('Entertainment') && /(celebrity|gossip|tabloid|tv|entertainment)/i.test(normalizedName)) {
+    boost += 8;
+  }
+
+  return boost;
+}
+
 export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
+  candidateItems: FeedCandidate[] = demoVideos,
 ): FeedResponse {
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
   const rules = algorithm?.rules ?? [];
@@ -58,27 +155,48 @@ export function buildFeedResponse(
     signalMap.set(signal.external_id, existing);
   }
 
-  const feedItems: FeedItem[] = baseVideos.map((video) => {
-    const matchedTopics = video.topics.filter((topic) => weights.has(topic.toLowerCase()));
-    let score = video.base_score;
+  const feedItems: FeedItem[] = candidateItems.map((video) => {
+    const normalizedTopics = normalizeTopics(video.topics);
+    const titleDerivedTopics = inferTopicsFromTitle(video.title);
+    const matchedTopics = [...new Set([...normalizedTopics, ...titleDerivedTopics])].filter((topic) => weights.has(topic.toLowerCase()));
+    let score = Number.isFinite(Number(video.base_score)) ? Number(video.base_score) * 0.5 : 25;
     let visible = true;
+    const scoreContributors: string[] = [];
+    const ruleSummary: string[] = [];
+    const feedbackSummary: string[] = [];
 
     for (const topic of matchedTopics) {
-      score += Number(weights.get(topic.toLowerCase()) ?? 0) / 3;
+      const weightValue = Number(weights.get(topic.toLowerCase()) ?? 0);
+      const topicBoost = weightValue / 9;
+      score += topicBoost;
+      scoreContributors.push(`${topic} (${weightValue} weight)`);
+    }
+
+    const freshnessBoost = getFreshnessBoost(video.published_at);
+    const channelBoost = getChannelQualityBoost(video.channel_name, matchedTopics);
+    score += freshnessBoost + channelBoost;
+    if (freshnessBoost > 0) {
+      scoreContributors.push(`freshness (${freshnessBoost})`);
+    }
+    if (channelBoost !== 0) {
+      scoreContributors.push(`channel fit (${channelBoost})`);
     }
 
     for (const signal of signalMap.get(video.external_id) ?? []) {
       if (signal.eventType === 'more_like_this') {
         score += 18;
+        feedbackSummary.push('more_like_this feedback (+18)');
       }
 
       if (signal.eventType === 'not_interested') {
         score -= 35;
         visible = false;
+        feedbackSummary.push('not_interested feedback (-35)');
       }
 
       if (signal.eventType === 'never_show_channel') {
         visible = false;
+        feedbackSummary.push('never_show_channel rule');
       }
     }
 
@@ -89,27 +207,39 @@ export function buildFeedResponse(
 
       if (rule.type === 'never_show') {
         visible = false;
+        ruleSummary.push(`never-show rule: ${rule.condition_text}`);
       }
 
       if (rule.type === 'always_show') {
         score += 20;
+        ruleSummary.push(`always-show rule: ${rule.condition_text} (+20)`);
       }
 
       if (rule.type === 'priority') {
         score += 18;
+        ruleSummary.push(`priority rule: ${rule.condition_text} (+18)`);
       }
     }
 
+    const reasonBits = [
+      matchedTopics.length > 0 ? `Matched ${matchedTopics.join(', ')} topics.` : 'No strong topic match.',
+      ruleSummary.length > 0 ? `Rules boosted it: ${ruleSummary.join('; ')}.` : 'No matching rule adjustments.',
+      feedbackSummary.length > 0 ? `Feedback: ${feedbackSummary.join('; ')}.` : 'No explicit user feedback yet.',
+      scoreContributors.length > 0 ? `Weight contributions: ${scoreContributors.join('; ')}.` : 'No weight contributions.',
+    ];
+
+    const reason = visible
+      ? `Ranked because ${reasonBits.join(' ')}`
+      : `Filtered because ${[...feedbackSummary, ...ruleSummary].join('; ') || 'no explicit override was matched.'}`;
+
     return {
-      id: video.id,
+      id: video.id ?? video.external_id,
       external_id: video.external_id,
       title: video.title,
       channel_name: video.channel_name,
       score: Math.min(100, Math.max(0, Math.round(score))),
       visible,
-      reason: visible
-        ? 'Matched user weighting, feedback, and rules.'
-        : 'Filtered by a user feedback or never-show rule.',
+      reason,
       matched_topics: matchedTopics,
     };
   });

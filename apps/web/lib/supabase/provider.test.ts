@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getProviderConfig } from './provider.ts';
+import { getProviderConfig } from './provider';
 
 test('google provider includes YouTube readonly scope', () => {
   const config = getProviderConfig('google');
