@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data: algorithms, error } = await client
     .from('algorithms')
-    .select('id, name, goal_text, topic_weights(topic, weight), rules(type, condition_text)')
+    .select('id, name, goal_text, topic_weights(topic, weight), rules(type, condition_text), algorithm_intent_profiles(semantic_terms)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -32,7 +32,12 @@ export async function GET() {
     const candidate = algorithm as unknown as Algorithm & {
       topic_weights?: Array<{ topic: string; weight: number }>;
       rules?: Array<{ type: string; condition_text: string }>;
+      algorithm_intent_profiles?: Array<{ semantic_terms?: string[] | null }> | null;
     };
+
+    const semanticTerms = Array.isArray(candidate.algorithm_intent_profiles)
+      ? candidate.algorithm_intent_profiles.flatMap((profile) => Array.isArray(profile?.semantic_terms) ? profile.semantic_terms : [])
+      : [];
 
     return {
       algorithmId: candidate.id,
@@ -43,6 +48,7 @@ export async function GET() {
         goal_text: candidate.goal_text ?? null,
         topic_weights: (candidate.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
         rules: (candidate.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
+        semantic_terms: semanticTerms,
       }),
     };
   });

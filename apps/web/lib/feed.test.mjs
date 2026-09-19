@@ -249,3 +249,26 @@ test('buildFeedResponse matches gaming concept aliases from title text and boost
   assert.ok(feed.items[0].matched_topics.includes('Gaming'));
   assert.ok(feed.items[0].reason?.toLowerCase().includes('gaming'));
 });
+
+test('buildFeedResponse uses persisted semantic terms from the algorithm profile', () => {
+  const algorithm = {
+    id: 'alg-10',
+    name: 'Indie Game Strategy',
+    topic_weights: [{ topic: 'Strategy', weight: 88 }],
+    semantic_terms: ['game design', 'gameplay systems', 'indie games'],
+    rules: [],
+  };
+
+  const feed = buildFeedResponse(
+    algorithm,
+    [],
+    [
+      { id: 'persisted-match', external_id: 'persisted-match', title: 'Indie game design breakdown for gameplay systems', topics: [], base_score: 60 },
+      { id: 'other-match', external_id: 'other-match', title: 'Startup business podcast', topics: [], base_score: 40 },
+    ],
+  );
+
+  assert.equal(feed.items[0].external_id, 'persisted-match');
+  assert.ok(feed.items[0].matched_topics.includes('Strategy'));
+  assert.ok(feed.items[0].reason?.toLowerCase().includes('strategy'));
+});

@@ -70,6 +70,20 @@ function normalizeTopics(topics?: string[] | null): string[] {
     .map((topic) => topic.trim());
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesSemanticTerm(title: string, term: string): boolean {
+  const normalizedTitle = title.toLowerCase();
+  const normalizedTerm = term.trim().toLowerCase();
+  if (!normalizedTerm) {
+    return false;
+  }
+
+  return normalizedTitle.includes(normalizedTerm) || new RegExp(`\\b${escapeRegex(normalizedTerm)}\\b`, 'i').test(normalizedTitle);
+}
+
 export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number } | null {
   const candidate = Array.isArray(classification) ? classification[0] : classification;
 
@@ -97,26 +111,27 @@ function inferTopicsFromTitle(title: string, algorithm?: Algorithm | null): stri
   ];
 
   const inferredTopics = Array.from(new Set(topicRules.filter(({ pattern }) => pattern.test(normalizedTitle)).map(({ topic }) => topic)));
-  const conceptMatches = (algorithm?.topic_weights ?? []).flatMap((item) => {
+  const algorithmTopicMatches = (algorithm?.topic_weights ?? []).flatMap((item) => {
     const topic = item.topic.trim();
     if (!topic) {
       return [];
     }
 
     const conceptTerms = resolveTopicConceptTerms(topic, algorithm?.goal_text ?? '').map((term) => term.toLowerCase());
+    const semanticTerms = (algorithm?.semantic_terms ?? []).map((term) => term.toLowerCase());
     const canon = topic.toLowerCase();
-    const hasMatch = conceptTerms.some((term) => {
+    const hasMatch = [...conceptTerms, ...semanticTerms].some((term) => {
       const target = term.toLowerCase();
       if (target === canon) {
-        return new RegExp(`\\b${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(normalizedTitle);
+        return new RegExp(`\\b${escapeRegex(target)}\\b`, 'i').test(normalizedTitle);
       }
-      return normalizedTitle.includes(target);
+      return matchesSemanticTerm(normalizedTitle, target);
     });
 
     return hasMatch ? [topic] : [];
   });
 
-  return Array.from(new Set([...inferredTopics, ...conceptMatches]));
+  return Array.from(new Set([...inferredTopics, ...algorithmTopicMatches]));
 }
 
 function getFreshnessBoost(publishedAt?: string | null): number {
