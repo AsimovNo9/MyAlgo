@@ -430,6 +430,29 @@ test('buildFeedResponse filters unmatched candidates while preserving always-sho
   assert.equal(feed.items.some((item) => item.external_id === 'hidden'), false);
 });
 
+test('buildFeedResponse suppresses gossip by content_type regardless of the channel', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-content-type', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [{ type: 'never_show', condition_text: 'gossip' }] },
+    [],
+    [{ id: 'trusted', external_id: 'trusted', title: 'Weekly AI research recap', channel_name: 'Trusted AI Lab', content_type: 'gossip', topics: ['AI'] }],
+    { includeHidden: true },
+  );
+
+  assert.equal(feed.items[0].visible, false);
+  assert.match(feed.items[0].reason ?? '', /never-show rule: gossip/);
+});
+
+test('buildFeedResponse pins a channel via an always-show rule naming it', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-channel-pin', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'Nuclear Engineering Institute' }] },
+    [],
+    [{ id: 'pinned', external_id: 'pinned', title: 'Reactor safety systems overview', channel_name: 'Nuclear Engineering Institute', topics: [] }],
+  );
+
+  assert.equal(feed.items[0].visible, true);
+  assert.match(feed.items[0].reason ?? '', /always-show rule: Nuclear Engineering Institute/);
+});
+
 test('buildFeedResponse hides unrelated content from topic-scoped feeds', () => {
   const feed = buildFeedResponse(
     { id: 'alg-relevance', name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },

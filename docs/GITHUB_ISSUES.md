@@ -154,3 +154,24 @@ The product priority has shifted from adding semantic breadth to making the visi
 - Users can choose subscribed-only, hide Shorts, and allow/disallow discovery content.
 - Ranking applies a configurable relevance threshold, channel diversity limit, and duplicate suppression.
 - Feedback and source filters are covered by regression tests and reflected in the extension UI.
+
+## 15. Niche-topic sourcing: RSS seed channels and shared discovery search
+
+**Labels:** `priority:high`, `area:ranking`, `area:infra`
+
+Subscriptions-only sourcing has a real gap: a niche "Work" algorithm (e.g. nuclear engineering, semiconductor research) produces nothing to rank if the user isn't already subscribed to relevant channels — rules cannot invent content that was never fetched. `search.list` discovery closes part of this gap but is quota-expensive (100 units/call) and the YouTube Data API quota (10,000 units/day) is shared across the whole project, not per user, so per-user recurring search cannot scale past a handful of active users.
+
+**Recommended approach (cheapest to most involved)**
+1. **Curated seed channels + RSS polling** — every channel exposes a free `youtube.com/feeds/videos.xml?channel_id=...` feed with no API quota cost. Add a `topic_seed_channels` table (`topic`, `channel_id`, `source: 'curated' | 'discovered_via_search'`) and poll RSS on a cron to ingest uploads into `content_items`. This becomes the primary ingestion path for topics a user cares about but isn't personally subscribed to.
+2. **Periodic, shared `search.list` for channel discovery only** — run search rarely (weekly/monthly) and shared across all users interested in a topic to find new candidate channels, then promote good ones into `topic_seed_channels`. Search finds channels; RSS does the ongoing work.
+3. **User-pinned channels** — already partially supported: `always_show`/`never_show` rules now match a channel name directly (see feed.ts `ruleConditionMatches`), so a user can already pin/exclude a channel via the existing rules UI without a schema change. A dedicated "pin this channel" UI and channel_id-based matching (instead of name-based) would still be an improvement.
+
+**Already implemented**
+- `never_show` now filters by classifier `content_type` (e.g. `gossip`) independent of which channel posted it, so a trusted channel's off-topic content is still caught.
+- Rule matching checks channel name in addition to title, enabling channel pinning today.
+
+**Still needed**
+- `topic_seed_channels` migration and RLS policy.
+- An RSS polling job (Vercel Cron or Supabase scheduled function) and XML parsing.
+- A periodic, shared (not per-user) `search.list` job for channel discovery, replacing the current per-user background alarm as the primary discovery mechanism.
+- Dedicated "pin this channel" UI using `channel_id` instead of name matching.

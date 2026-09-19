@@ -64,6 +64,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Add a configurable relevance threshold and explain why borderline items are shown
 - [x] Add source controls for subscriptions, discovery, Shorts, and live content
 - [x] Discover content from every strong topic in a multi-topic algorithm, not just the top one
+- [x] Make never_show filter by classifier content_type, independent of the source channel
+- [x] Let always_show/never_show rules pin or exclude a channel by name (no schema change)
 - [ ] Add channel diversity and duplicate suppression to improve perceived feed quality
 - [ ] Validate ranking logic against real user subscriptions and content
 - [x] Add regression coverage for positive feedback and rule precedence

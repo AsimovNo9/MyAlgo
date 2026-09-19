@@ -20,6 +20,7 @@ export type FeedCandidate = {
   source_kind?: 'subscription' | 'discovery' | null;
   is_short?: boolean;
   is_live?: boolean;
+  content_type?: string | null;
   subscription_affinity?: number;
   candidate_relevance?: 'matched' | 'unmatched';
   published_at?: string | null;
@@ -62,8 +63,27 @@ const demoVideos: FeedCandidate[] = [
   },
 ];
 
-function getRuleMatches(rule: Rule, title: string) {
-  return rule.condition_text.toLowerCase().includes(title.toLowerCase()) || title.toLowerCase().includes(rule.condition_text.toLowerCase());
+// A never-show rule for "gossip" must catch it regardless of channel, and a rule
+// naming a channel should pin/exclude it directly — so match title, channel, and
+// classifier content_type, not just the title.
+function ruleConditionMatches(rule: Rule, video: { title: string; channel_name?: string | null; content_type?: string | null }): boolean {
+  const condition = rule.condition_text.trim().toLowerCase();
+  if (!condition) {
+    return false;
+  }
+
+  const title = video.title.toLowerCase();
+  if (condition.includes(title) || title.includes(condition)) {
+    return true;
+  }
+
+  const channelName = (video.channel_name ?? '').trim().toLowerCase();
+  if (channelName && (channelName === condition || channelName.includes(condition) || condition.includes(channelName))) {
+    return true;
+  }
+
+  const contentType = (video.content_type ?? '').trim().toLowerCase();
+  return contentType.length > 0 && contentType === condition;
 }
 
 function normalizeTopics(topics?: string[] | null): string[] {
@@ -86,18 +106,19 @@ function matchesSemanticTerm(title: string, term: string): boolean {
   return new RegExp(`(^|\\s|[^a-z0-9])${escapeRegex(normalizedTerm)}($|\\s|[^a-z0-9])`, 'i').test(normalizedTitle);
 }
 
-export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number } | null {
+export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number; content_type?: string } | null {
   const candidate = Array.isArray(classification) ? classification[0] : classification;
 
   if (!candidate || typeof candidate !== 'object') {
     return null;
   }
 
-  const record = candidate as { topics?: string[] | null; quality_score?: number | null };
+  const record = candidate as { topics?: string[] | null; quality_score?: number | null; content_type?: string | null };
 
   return {
     topics: Array.isArray(record.topics) ? record.topics : [],
     quality_score: typeof record.quality_score === 'number' ? record.quality_score : undefined,
+    content_type: typeof record.content_type === 'string' && record.content_type.trim().length > 0 ? record.content_type.trim() : undefined,
   };
 }
 
@@ -308,7 +329,7 @@ export function buildFeedResponse(
     }
 
     for (const rule of rules) {
-      const matched = getRuleMatches(rule, video.title);
+      const matched = ruleConditionMatches(rule, video);
 
       if (!matched) continue;
 
