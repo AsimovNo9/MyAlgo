@@ -259,11 +259,7 @@ export function buildConceptsApiResponse({
     profiles: algorithms.map((algorithm) => ({
       algorithmId: algorithm.id,
       name: algorithm.name,
-      profile: buildStoredOrDerivedAlgorithmIntentProfile({
-        ...algorithm,
-        goal_text: algorithm.goal_text ?? null,
-        topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
-      }),
+      profile: buildStoredOrDerivedAlgorithmIntentProfile(algorithm),
     })),
   };
 }
