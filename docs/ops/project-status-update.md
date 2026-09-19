@@ -31,3 +31,6 @@ This is the phase we should move into now to turn the working feature into a lau
 - Extension logout clears OAuth tokens, cached feed data, sync state, and errors while preserving user preferences.
 - MV3 permissions are limited to `storage` and `identity`, with representative YouTube surface fixtures in the extension test suite.
 - OAuth token encryption at rest, real-user production OAuth/sync validation, monitoring, and store submission remain open.
+
+## Priority pivot
+The next product phase is quality-first feed relevance. The immediate acceptance bar is that a selected algorithm must not surface unrelated content merely because the database has available items. Source controls such as subscribed-only, hide Shorts, and discovery toggles follow the relevance fix; broader semantic expansion remains secondary until the feed earns user trust.

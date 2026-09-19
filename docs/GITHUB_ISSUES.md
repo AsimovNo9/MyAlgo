@@ -143,3 +143,14 @@ See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next
 ## 13. Persist semantic concept catalogs and algorithm intent profiles
 
 The tracked Supabase migration creates the canonical concept catalog and per-algorithm intent profiles with RLS. `GET /api/concepts` now exposes both persisted catalog entries and user-scoped profiles; future work is low-confidence AI disambiguation and production validation of the API path.
+
+## 14. Quality-first feed relevance and source controls
+
+The product priority has shifted from adding semantic breadth to making the visible feed reliably match the selected algorithm. The normal feed path must hide unrelated content instead of surfacing it as a fallback, then give users explicit control over subscriptions, discovery, Shorts, and live content.
+
+**Acceptance criteria**
+- Unmatched content is hidden by default when an algorithm has topic weights.
+- A no-match feed returns a clear empty state with an explanation and recovery action.
+- Users can choose subscribed-only, hide Shorts, and allow/disallow discovery content.
+- Ranking applies a configurable relevance threshold, channel diversity limit, and duplicate suppression.
+- Feedback and source filters are covered by regression tests and reflected in the extension UI.

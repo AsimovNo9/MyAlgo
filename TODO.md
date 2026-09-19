@@ -3,6 +3,9 @@
 This file tracks launch-blocking work, production hardening, and follow-up tasks for Personal Algorithm.
 
 ## Current focus
+- [ ] Quality-first feed relevance: unrelated items must be hidden or explained as fallback content
+- [ ] Add purchaser-facing source controls: subscribed-only, hide Shorts, and discovery toggle
+- [ ] Add feed quality signals: relevance threshold, empty state, diversity limits, and feedback loop
 - [x] Resolve the extension ranking loop and stabilize the page-trigger behavior
 - [x] Add a clearer enabled/paused state in the popup and on the YouTube page
 - [x] Validate the extension locally with typecheck, tests, and a production build
@@ -56,6 +59,10 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add retry and timeout handling for downstream API calls
 
 ## Feed ranking and scoring
+- [ ] Enforce strict topic relevance in the normal feed path and return a useful empty state when nothing matches
+- [ ] Add a configurable relevance threshold and explain why borderline items are shown
+- [ ] Add source controls for subscriptions, discovery, Shorts, and live content
+- [ ] Add channel diversity and duplicate suppression to improve perceived feed quality
 - [ ] Validate ranking logic against real user subscriptions and content
 - [x] Add regression coverage for positive feedback and rule precedence
 - [ ] Check rule precedence and feedback weighting in production conditions
@@ -76,6 +83,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a visible enabled/paused status in the popup and content script UI
 - [x] Verify MV3 extension permissions and storage requirements in the production deployment context
 - [ ] Test the extension flow against the live API and deployed app
+- [ ] Expose subscribed-only, hide Shorts, and discovery controls in the extension
 - [x] Review YouTube DOM compatibility and fallback behavior against production content
 - [x] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
 - [ ] Prepare Chrome Web Store submission requirements and assets
