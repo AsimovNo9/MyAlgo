@@ -266,6 +266,34 @@ export function resolveYoutubeAccessTokenCandidate(
   return null;
 }
 
+export function buildYoutubeProviderSessionStateLog(
+  userId: string,
+  tokenSummary: ReturnType<typeof summarizeGoogleProviderTokens>,
+  sessionError: string | null,
+) {
+  return {
+    userId,
+    tokenSource: tokenSummary.source,
+    hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
+    hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
+    hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
+    hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
+    hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
+    hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
+    sessionError,
+  };
+}
+
+export function buildYoutubeTokenCheckLog(userId: string, accessToken: string | null, refreshToken: string | null, expiresAt: number) {
+  return {
+    userId,
+    hasAccessToken: !!accessToken,
+    hasRefreshToken: !!refreshToken,
+    expiresAt,
+    expiredSoon: expiresAt <= Date.now() + 60 * 1000,
+  };
+}
+
 async function getValidYoutubeAccessToken(userId: string): Promise<string | null> {
   const { createSupabaseServerClient } = await import('./supabase/server');
   const client = await createSupabaseServerClient();
@@ -278,17 +306,10 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
   const providerTokens = extractGoogleProviderTokens(sessionData.session);
   const tokenSummary = summarizeGoogleProviderTokens(sessionData.session);
 
-  console.log('YouTube provider session state', {
-    userId,
-    tokenSource: tokenSummary.source,
-    hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
-    hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
-    hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
-    hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
-    hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
-    hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
-    sessionError: sessionError?.message ?? null,
-  });
+  console.log(
+    'YouTube provider session state',
+    buildYoutubeProviderSessionStateLog(userId, tokenSummary, sessionError?.message ?? null),
+  );
 
   const providerTokenCandidate = resolveYoutubeAccessTokenCandidate(providerTokens, true);
   if (providerTokenCandidate) {
@@ -311,13 +332,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
   const refreshToken = data.refresh_token_encrypted;
   const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : 0;
 
-  console.log('YouTube token check', {
-    userId,
-    hasAccessToken: !!accessToken,
-    hasRefreshToken: !!refreshToken,
-    expiresAt,
-    expiredSoon: expiresAt <= Date.now() + 60 * 1000,
-  });
+  console.log('YouTube token check', buildYoutubeTokenCheckLog(userId, accessToken, refreshToken, expiresAt));
 
   if (accessToken && expiresAt > Date.now() + 60 * 1000) {
     return accessToken;

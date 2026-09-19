@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
+import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
   const record = normalizeClassificationRecord([{ topics: ['AI', 'Productivity'], quality_score: 91 }]);
@@ -398,21 +399,36 @@ test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never
   };
 
   try {
-    console.log('YouTube provider session state', summarizeGoogleProviderTokens(session));
-    const summary = capturedArgs[0]?.[1];
+    const tokenSummary = summarizeGoogleProviderTokens(session);
+    console.log('YouTube provider session state', buildYoutubeProviderSessionStateLog('user-123', tokenSummary, null));
+    console.log(
+      'YouTube token check',
+      buildYoutubeTokenCheckLog('user-123', 'stored-access-token', 'stored-refresh-token', Date.now() + 5 * 60 * 1000),
+    );
 
-    assert.deepEqual(summary, {
-      source: 'session_provider_token',
+    const providerSessionState = capturedArgs[0]?.[1];
+    const tokenCheckState = capturedArgs[1]?.[1];
+
+    assert.deepEqual(providerSessionState, {
+      userId: 'user-123',
+      tokenSource: 'session_provider_token',
       hasSessionProviderToken: true,
       hasSessionProviderRefreshToken: true,
       hasGoogleIdentityToken: true,
       hasGoogleIdentityRefreshToken: true,
       hasAnyAccessToken: true,
       hasAnyRefreshToken: true,
+      sessionError: null,
     });
 
+    assert.equal(tokenCheckState.userId, 'user-123');
+    assert.equal(tokenCheckState.hasAccessToken, true);
+    assert.equal(tokenCheckState.hasRefreshToken, true);
+    assert.equal(tokenCheckState.expiredSoon, false);
     assert.equal(JSON.stringify(capturedArgs).includes('provider-access-token'), false);
     assert.equal(JSON.stringify(capturedArgs).includes('identity-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('stored-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('stored-refresh-token'), false);
   } finally {
     console.log = originalLog;
   }
