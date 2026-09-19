@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
+import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
@@ -11,6 +12,147 @@ test('normalizeClassificationRecord unwraps Supabase nested relation arrays', ()
 
   assert.deepEqual(record?.topics, ['AI', 'Productivity']);
   assert.equal(record?.quality_score, 91);
+});
+
+test('buildConceptCatalog exposes persisted concept metadata in the API shape', () => {
+  const catalog = buildConceptCatalog([
+    {
+      id: 'concept-ai',
+      canonical_name: 'AI',
+      aliases: ['LLM', 'machine learning'],
+      intents: ['model training'],
+    },
+    {
+      id: 'concept-empty',
+      canonical_name: 'Unknown',
+      aliases: null,
+      intents: null,
+    },
+  ]);
+
+  assert.deepEqual(catalog, [
+    {
+      id: 'concept-ai',
+      canonicalName: 'AI',
+      aliases: ['LLM', 'machine learning'],
+      intents: ['model training'],
+    },
+    {
+      id: 'concept-empty',
+      canonicalName: 'Unknown',
+      aliases: [],
+      intents: [],
+    },
+  ]);
+});
+
+test('buildStoredOrDerivedAlgorithmIntentProfile preserves persisted user-scoped profile fields', () => {
+  const profile = buildStoredOrDerivedAlgorithmIntentProfile({
+    id: 'alg-1',
+    name: 'Creative Strategy',
+    goal_text: 'derive profile only when needed',
+    topic_weights: [{ topic: 'Game Design', weight: 88 }],
+    rules: [],
+    algorithm_intent_profiles: [
+      {
+        canonical_topics: ['Custom Topic'],
+        aliases: ['custom alias'],
+        intents: ['custom intent'],
+        semantic_terms: ['custom semantic phrase'],
+      },
+    ],
+  });
+
+  assert.deepEqual(profile, {
+    canonicalTopics: ['Custom Topic'],
+    aliases: ['custom alias'],
+    intents: ['custom intent'],
+    semanticTerms: ['custom semantic phrase'],
+  });
+});
+
+test('buildStoredOrDerivedAlgorithmIntentProfile merges all returned persisted profile rows', () => {
+  const profile = buildStoredOrDerivedAlgorithmIntentProfile({
+    id: 'alg-1',
+    name: 'Creative Strategy',
+    goal_text: 'derive profile only when needed',
+    topic_weights: [{ topic: 'Game Design', weight: 88 }],
+    rules: [],
+    algorithm_intent_profiles: [
+      {
+        canonical_topics: ['Custom Topic'],
+        aliases: ['custom alias'],
+        intents: ['custom intent'],
+        semantic_terms: ['custom semantic phrase'],
+      },
+      {
+        canonical_topics: ['Second Topic'],
+        aliases: ['second alias'],
+        intents: ['second intent'],
+        semantic_terms: ['second semantic phrase'],
+      },
+    ],
+  });
+
+  assert.deepEqual(profile, {
+    canonicalTopics: ['Custom Topic', 'Second Topic'],
+    aliases: ['custom alias', 'second alias'],
+    intents: ['custom intent', 'second intent'],
+    semanticTerms: ['custom semantic phrase', 'second semantic phrase'],
+  });
+});
+
+test('buildConceptsApiResponse keeps concept catalog and persisted profile fields in GET response shape', () => {
+  const response = buildConceptsApiResponse({
+    conceptEntries: [
+      {
+        id: 'concept-ai',
+        canonical_name: 'AI',
+        aliases: ['LLM'],
+        intents: ['model training'],
+      },
+    ],
+    algorithms: [
+      {
+        id: 'alg-1',
+        name: 'Creative Strategy',
+        goal_text: 'derive profile only when needed',
+        topic_weights: [{ topic: 'Game Design', weight: 88 }],
+        rules: [],
+        algorithm_intent_profiles: [
+          {
+            canonical_topics: ['Custom Topic'],
+            aliases: ['custom alias'],
+            intents: ['custom intent'],
+            semantic_terms: ['custom semantic phrase'],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(response, {
+    concepts: [
+      {
+        id: 'concept-ai',
+        canonicalName: 'AI',
+        aliases: ['LLM'],
+        intents: ['model training'],
+      },
+    ],
+    profiles: [
+      {
+        algorithmId: 'alg-1',
+        name: 'Creative Strategy',
+        profile: {
+          canonicalTopics: ['Custom Topic'],
+          aliases: ['custom alias'],
+          intents: ['custom intent'],
+          semanticTerms: ['custom semantic phrase'],
+        },
+      },
+    ],
+  });
 });
 
 test('buildFeedResponse ranks real synchronized items instead of demo fixtures', () => {

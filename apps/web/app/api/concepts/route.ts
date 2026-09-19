@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 
-import { buildAlgorithmIntentProfile } from '@/lib/concepts';
+import type { AlgorithmIntentProfile } from '@/lib/concepts';
+import { buildConceptsApiResponse } from '@/lib/concepts';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { Algorithm } from '@repo/shared-types';
 
 export async function GET() {
   const userId = await getCurrentUserIdFromServer();
@@ -17,9 +17,19 @@ export async function GET() {
     return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
   }
 
+  const { data: conceptEntries, error: conceptError } = await client
+    .from('concept_entries')
+    .select('id, canonical_name, aliases, intents')
+    .order('canonical_name', { ascending: true });
+
+  if (conceptError || !conceptEntries) {
+    console.error('Failed to load concept catalog', conceptError);
+    return NextResponse.json({ error: 'Unable to load the concept catalog.' }, { status: 500 });
+  }
+
   const { data: algorithms, error } = await client
     .from('algorithms')
-    .select('id, name, goal_text, topic_weights(topic, weight), rules(type, condition_text), algorithm_intent_profiles(semantic_terms)')
+    .select('id, name, goal_text, topic_weights(topic, weight), rules(type, condition_text), algorithm_intent_profiles(canonical_topics, aliases, intents, semantic_terms)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -28,32 +38,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unable to load algorithm concept profiles.' }, { status: 500 });
   }
 
-  const profiles = algorithms.map((algorithm) => {
-    const candidate = algorithm as unknown as Algorithm & {
-      topic_weights?: Array<{ topic: string; weight: number }>;
-      rules?: Array<{ type: string; condition_text: string }>;
-      algorithm_intent_profiles?: Array<{ semantic_terms?: string[] | null }> | null;
-    };
-
-    const semanticTerms = Array.isArray(candidate.algorithm_intent_profiles)
-      ? candidate.algorithm_intent_profiles.flatMap((profile) => Array.isArray(profile?.semantic_terms) ? profile.semantic_terms : [])
-      : [];
-
-    return {
-      algorithmId: candidate.id,
-      name: candidate.name,
-      profile: buildAlgorithmIntentProfile({
-        id: candidate.id,
-        name: candidate.name,
-        goal_text: candidate.goal_text ?? null,
-        topic_weights: (candidate.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
-        rules: (candidate.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
-        semantic_terms: semanticTerms,
-      }),
-    };
-  });
-
-  return NextResponse.json({ profiles });
+  return NextResponse.json(buildConceptsApiResponse({ conceptEntries, algorithms }));
 }
 
 export async function POST(request: Request) {
@@ -65,7 +50,7 @@ export async function POST(request: Request) {
 
   const payload = (await request.json()) as {
     algorithmId?: string;
-    profile?: ReturnType<typeof buildAlgorithmIntentProfile>;
+    profile?: AlgorithmIntentProfile;
   };
 
   const algorithmId = payload.algorithmId?.trim();

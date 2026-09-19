@@ -13,6 +13,79 @@ export interface AlgorithmIntentProfile {
   semanticTerms: string[];
 }
 
+export interface PersistedAlgorithmIntentProfile {
+  canonical_topics?: string[] | null;
+  aliases?: string[] | null;
+  intents?: string[] | null;
+  semantic_terms?: string[] | null;
+}
+
+export interface ConceptsApiAlgorithmRecord {
+  id: string;
+  name: string;
+  goal_text?: string | null;
+  topic_weights?: Array<{ topic: string; weight: number }>;
+  algorithm_intent_profiles?: PersistedAlgorithmIntentProfile[] | null;
+}
+
+export interface ConceptCatalogEntry {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  intents: string[];
+}
+
+export function buildConceptCatalog(
+  entries: Array<{
+    id: string;
+    canonical_name: string;
+    aliases?: string[] | null;
+    intents?: string[] | null;
+  }>,
+): ConceptCatalogEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    canonicalName: entry.canonical_name,
+    aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
+    intents: Array.isArray(entry.intents) ? entry.intents : [],
+  }));
+}
+
+function normalizeStringList(values?: string[] | null): string[] {
+  return Array.isArray(values) ? values : [];
+}
+
+export function normalizeAlgorithmIntentProfile(profile?: PersistedAlgorithmIntentProfile | null): AlgorithmIntentProfile {
+  return {
+    canonicalTopics: normalizeStringList(profile?.canonical_topics),
+    aliases: normalizeStringList(profile?.aliases),
+    intents: normalizeStringList(profile?.intents),
+    semanticTerms: normalizeStringList(profile?.semantic_terms),
+  };
+}
+
+function mergePersistedAlgorithmIntentProfiles(profiles: PersistedAlgorithmIntentProfile[]): AlgorithmIntentProfile {
+  const canonicalTopics = new Set<string>();
+  const aliases = new Set<string>();
+  const intents = new Set<string>();
+  const semanticTerms = new Set<string>();
+
+  for (const profile of profiles) {
+    const normalized = normalizeAlgorithmIntentProfile(profile);
+    normalized.canonicalTopics.forEach((topic) => canonicalTopics.add(topic));
+    normalized.aliases.forEach((alias) => aliases.add(alias));
+    normalized.intents.forEach((intent) => intents.add(intent));
+    normalized.semanticTerms.forEach((term) => semanticTerms.add(term));
+  }
+
+  return {
+    canonicalTopics: [...canonicalTopics],
+    aliases: [...aliases],
+    intents: [...intents],
+    semanticTerms: [...semanticTerms],
+  };
+}
+
 const conceptMap: Record<string, { aliases: string[]; intents: string[] }> = {
   gaming: {
     aliases: ['game design', 'game development', 'gameplay', 'indie games', 'esports'],
@@ -145,5 +218,48 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): Algor
     aliases: [...aliases],
     intents: [...intents],
     semanticTerms: [...semanticTerms],
+  };
+}
+
+export function buildStoredOrDerivedAlgorithmIntentProfile(
+  algorithm?: ConceptsApiAlgorithmRecord | null,
+): AlgorithmIntentProfile {
+  const persistedProfiles = Array.isArray(algorithm?.algorithm_intent_profiles)
+    ? algorithm.algorithm_intent_profiles.filter(Boolean)
+    : [];
+
+  if (!algorithm) {
+    return buildAlgorithmIntentProfile(null);
+  }
+
+  return persistedProfiles.length > 0
+    ? mergePersistedAlgorithmIntentProfiles(persistedProfiles)
+    : buildAlgorithmIntentProfile({
+      id: algorithm.id,
+      name: algorithm.name,
+      goal_text: algorithm.goal_text ?? null,
+      topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
+    });
+}
+
+export function buildConceptsApiResponse({
+  conceptEntries,
+  algorithms,
+}: {
+  conceptEntries: Array<{
+    id: string;
+    canonical_name: string;
+    aliases?: string[] | null;
+    intents?: string[] | null;
+  }>;
+  algorithms: ConceptsApiAlgorithmRecord[];
+}) {
+  return {
+    concepts: buildConceptCatalog(conceptEntries),
+    profiles: algorithms.map((algorithm) => ({
+      algorithmId: algorithm.id,
+      name: algorithm.name,
+      profile: buildStoredOrDerivedAlgorithmIntentProfile(algorithm),
+    })),
   };
 }
