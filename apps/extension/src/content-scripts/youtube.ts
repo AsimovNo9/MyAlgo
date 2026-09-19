@@ -105,7 +105,7 @@ const getVideoTitle = (element: HTMLElement) => {
 };
 
 const getVideoId = (element: HTMLElement) => {
-  const links = Array.from(element.querySelectorAll<HTMLAnchorElement>('a#thumbnail[href], a#video-title-link[href], a[href*="/watch"], a[href*="/shorts/"]'));
+  const links = Array.from(element.querySelectorAll<HTMLAnchorElement>(`a#thumbnail[href], a#video-title-link[href], ${videoLinkSelector}`));
   const videoId = links
     .map((link) => extractYouTubeVideoId(link.href))
     .find(Boolean);
