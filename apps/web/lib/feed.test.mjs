@@ -444,13 +444,13 @@ test('redactSensitiveValues strips tokens and secrets from structured log payloa
   const payload = {
     access_token: 'secret-access-token',
     refresh_token: 'secret-refresh-token',
-    accessToken: 'camel-secret-access-token',
-    refreshToken: 'camel-secret-refresh-token',
+    accessToken: 'camel-access-token',
+    refreshToken: 'camel-refresh-token',
     nested: {
       client_secret: 'secret-client-secret',
-      clientSecret: 'camel-secret-client-secret',
+      clientSecret: 'camel-client-secret',
       headers: {
-        Authorization: 'Bearer super-secret-token',
+        Authorization: 'Bearer secret-header-token',
       },
       url: 'https://example.com',
     },

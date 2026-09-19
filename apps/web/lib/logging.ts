@@ -1,14 +1,14 @@
 const SENSITIVE_KEYS = new Set([
   'access_token',
-  'refresh_token',
   'accessToken',
+  'refresh_token',
   'refreshToken',
   'client_secret',
   'clientSecret',
-  'authorization',
-  'Authorization',
   'token',
   'secret',
+  'authorization',
+  'Authorization',
   'api_key',
   'apiKey',
 ]);
@@ -26,7 +26,8 @@ export function redactSensitiveValues<T>(value: T): T {
     const next: Record<string, unknown> = {};
 
     for (const [key, childValue] of Object.entries(value)) {
-      if (SENSITIVE_KEYS.has(key)) {
+      const normalizedKey = key.toLowerCase();
+      if (SENSITIVE_KEYS.has(key) || SENSITIVE_KEYS.has(normalizedKey)) {
         next[key] = '[REDACTED]';
         continue;
       }
