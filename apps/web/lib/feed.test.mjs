@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractGoogleProviderTokens } from './auth.ts';
+import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
+import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
   const record = normalizeClassificationRecord([{ topics: ['AI', 'Productivity'], quality_score: 91 }]);
@@ -380,4 +381,60 @@ test('extractGoogleProviderTokens reads tokens from the session or the Google id
     refreshToken: 'identity-refresh-token',
     source: 'google_identity_data',
   });
+});
+
+test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never raw token values', () => {
+  const session = {
+    provider_token: 'provider-access-token',
+    provider_refresh_token: 'provider-refresh-token',
+    user: {
+      identities: [{ provider: 'google', identity_data: { access_token: 'identity-access-token', refresh_token: 'identity-refresh-token' } }],
+    },
+  };
+
+  const originalLog = console.log;
+  const capturedArgs = [];
+  console.log = (...args) => {
+    capturedArgs.push(args);
+  };
+
+  try {
+    const tokenSummary = summarizeGoogleProviderTokens(session);
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+    console.log('YouTube provider session state', buildYoutubeProviderSessionStateLog('user-123', tokenSummary, null));
+    console.log('YouTube token check', buildYoutubeTokenCheckLog('user-123', 'stored-access-token', 'stored-refresh-token', expiresAt));
+    console.log(
+      'YouTube token check',
+      buildYoutubeTokenCheckLog('user-123', 'stored-access-token', 'stored-refresh-token', Date.now() + 30 * 1000),
+    );
+
+    const providerSessionState = capturedArgs[0]?.[1];
+    const tokenCheckState = capturedArgs[1]?.[1];
+    const expiringTokenCheckState = capturedArgs[2]?.[1];
+
+    assert.deepEqual(providerSessionState, {
+      userId: 'user-123',
+      tokenSource: 'session_provider_token',
+      hasSessionProviderToken: true,
+      hasSessionProviderRefreshToken: true,
+      hasGoogleIdentityToken: true,
+      hasGoogleIdentityRefreshToken: true,
+      hasAnyAccessToken: true,
+      hasAnyRefreshToken: true,
+      sessionError: null,
+    });
+
+    assert.equal(tokenCheckState.userId, 'user-123');
+    assert.equal(tokenCheckState.hasAccessToken, true);
+    assert.equal(tokenCheckState.hasRefreshToken, true);
+    assert.equal(tokenCheckState.expiresAt, expiresAt);
+    assert.equal(tokenCheckState.expiredSoon, false);
+    assert.equal(expiringTokenCheckState.expiredSoon, true);
+    assert.equal(JSON.stringify(capturedArgs).includes('provider-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('identity-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('stored-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('stored-refresh-token'), false);
+  } finally {
+    console.log = originalLog;
+  }
 });

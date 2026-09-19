@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { extractGoogleProviderTokens } from '@/lib/auth';
+import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from '@/lib/auth';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -25,18 +25,20 @@ export async function POST() {
   const providerTokens = extractGoogleProviderTokens(sessionData.session);
   const accessToken = providerTokens.accessToken;
   const refreshToken = providerTokens.refreshToken;
+  const tokenSummary = summarizeGoogleProviderTokens(sessionData.session);
 
   console.log('YouTube connect session debug', {
-    tokenSource: providerTokens.source,
-    hasProviderToken: !!sessionData.session.provider_token,
-    hasProviderRefreshToken: !!sessionData.session.provider_refresh_token,
-    hasGoogleIdentity: !!googleIdentity,
-    identityProvider: googleIdentity?.provider ?? null,
-    identityDataKeys: googleIdentity?.identity_data ? Object.keys(googleIdentity.identity_data) : [],
     userId: sessionData.session.user?.id ?? null,
     email: sessionData.session.user?.email ?? null,
-    accessTokenPresent: !!accessToken,
-    refreshTokenPresent: !!refreshToken,
+    tokenSource: tokenSummary.source,
+    hasGoogleIdentity: !!googleIdentity,
+    identityProvider: googleIdentity?.provider ?? null,
+    hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
+    hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
+    hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
+    hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
+    hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
+    hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
   });
 
   if (!accessToken || !refreshToken) {
