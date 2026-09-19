@@ -391,19 +391,29 @@ test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never
     },
   };
 
-  const summary = summarizeGoogleProviderTokens(session);
-  assert.deepEqual(summary, {
-    source: 'session_provider_token',
-    hasSessionProviderToken: true,
-    hasSessionProviderRefreshToken: true,
-    hasGoogleIdentityToken: true,
-    hasGoogleIdentityRefreshToken: true,
-    hasAnyAccessToken: true,
-    hasAnyRefreshToken: true,
-  });
+  const originalLog = console.log;
+  const capturedArgs = [];
+  console.log = (...args) => {
+    capturedArgs.push(args);
+  };
 
-  assert.equal(summary.hasAnyAccessToken, true);
-  assert.equal(summary.hasAnyRefreshToken, true);
-  assert.equal(JSON.stringify(summary).includes('provider-access-token'), false);
-  assert.equal(JSON.stringify(summary).includes('identity-access-token'), false);
+  try {
+    console.log('YouTube provider session state', summarizeGoogleProviderTokens(session));
+    const summary = capturedArgs[0]?.[1];
+
+    assert.deepEqual(summary, {
+      source: 'session_provider_token',
+      hasSessionProviderToken: true,
+      hasSessionProviderRefreshToken: true,
+      hasGoogleIdentityToken: true,
+      hasGoogleIdentityRefreshToken: true,
+      hasAnyAccessToken: true,
+      hasAnyRefreshToken: true,
+    });
+
+    assert.equal(JSON.stringify(capturedArgs).includes('provider-access-token'), false);
+    assert.equal(JSON.stringify(capturedArgs).includes('identity-access-token'), false);
+  } finally {
+    console.log = originalLog;
+  }
 });

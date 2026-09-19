@@ -276,8 +276,6 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
 
   const { data: sessionData, error: sessionError } = await client.auth.getSession();
   const providerTokens = extractGoogleProviderTokens(sessionData.session);
-  const providerToken = providerTokens.accessToken;
-  const providerRefreshToken = providerTokens.refreshToken;
   const tokenSummary = summarizeGoogleProviderTokens(sessionData.session);
 
   console.log('YouTube provider session state', {
