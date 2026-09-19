@@ -6,6 +6,6 @@
     "build": "echo \"DB package has no build step\"",
     "lint": "echo \"DB package has no lint step\"",
     "typecheck": "echo \"DB package has no typecheck step\"",
-    "test": "echo \"No db tests yet\""
+    "test": "node --test schema.test.mjs"
   }
 }
