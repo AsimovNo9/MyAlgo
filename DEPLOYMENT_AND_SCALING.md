@@ -111,6 +111,8 @@ Current stack as-is. No changes needed.
 - Move classification off the request path into a queue (Upstash QStash, or Supabase `pg_cron` + an edge function) so `/api/feed` isn't blocked waiting on the Anthropic API.
 - Add a quota-tracking table for the YouTube Data API (shared 10,000 units/day free quota) and request a quota increase from Google once usage approaches it.
 
+Discovery search is deliberately bounded at MVP scale: each sync derives at most three queries and requests at most five videos per query. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search.
+
 ### Stage 3 — Scale (20k–200k users)
 - Split classification into its own long-running worker (Fly.io or Railway) if serverless cold-starts or per-invocation cost become an issue.
 - Move to a dedicated Postgres tier / add read replicas on Supabase.

@@ -1,3 +1,6 @@
+import type { Algorithm } from '@repo/shared-types';
+import { buildDiscoveryQueries, discoveryLimits } from './discovery';
+
 export type YoutubeSubscriptionItem = {
   id: string;
   title: string;
@@ -8,6 +11,7 @@ export type YoutubeSubscriptionItem = {
   external_id: string;
   published_at?: string;
   topics?: string[];
+  source_kind?: 'subscription' | 'discovery';
 };
 
 const fixtureItems: YoutubeSubscriptionItem[] = [
@@ -199,6 +203,51 @@ async function fetchYoutubeRecentUploads(
   return uploads;
 }
 
+async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null): Promise<YoutubeSubscriptionItem[]> {
+  const discoveryItems: YoutubeSubscriptionItem[] = [];
+
+  for (const query of buildDiscoveryQueries(algorithm)) {
+    const params = new URLSearchParams({
+      part: 'snippet',
+      type: 'video',
+      maxResults: String(discoveryLimits.maxResultsPerQuery),
+      order: 'date',
+      q: query,
+    });
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch YouTube discovery results', response.status, await response.text());
+      continue;
+    }
+
+    const payload = (await response.json()) as {
+      items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; channelId?: string; channelTitle?: string; publishedAt?: string } }>;
+    };
+
+    for (const item of payload.items ?? []) {
+      const videoId = item.id?.videoId;
+      const title = item.snippet?.title;
+      if (!videoId || !title) continue;
+
+      discoveryItems.push({
+        id: videoId,
+        external_id: videoId,
+        title,
+        channel_name: item.snippet?.channelTitle ?? 'Unknown channel',
+        channel_id: item.snippet?.channelId ?? null,
+        published_at: item.snippet?.publishedAt ?? new Date().toISOString(),
+        topics: [],
+        source_kind: 'discovery',
+      });
+    }
+  }
+
+  return [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
+}
+
 async function getValidYoutubeAccessToken(userId: string): Promise<string | null> {
   const { createSupabaseServerClient } = await import('./supabase/server');
   const client = await createSupabaseServerClient();
@@ -309,6 +358,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
 export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const { createSupabaseServerClient } = await import('./supabase/server');
   const { classifyContent } = await import('./classifier');
+  const { listAlgorithms } = await import('./data');
 
   const result = await fetchYoutubeSubscriptionFeed(userId);
   const client = await createSupabaseServerClient();
@@ -326,12 +376,18 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     return { ok: false, source: result.source, synced: 0, classified: 0, items: [], error: reason };
   }
 
+  const algorithms = await listAlgorithms(userId);
+  const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
+  const accessToken = await getValidYoutubeAccessToken(userId);
+  const discoveryItems = accessToken ? await fetchYoutubeDiscoveryItems(accessToken, activeAlgorithm) : [];
+  const items = [...result.items, ...discoveryItems];
+
   let synced = 0;
   let classified = 0;
 
-  const channelMetadata = await fetchYoutubeChannelMetadata(userId, result.items.map((item) => item.channel_id ?? '').filter(Boolean));
+  const channelMetadata = await fetchYoutubeChannelMetadata(userId, items.map((item) => item.channel_id ?? '').filter(Boolean));
 
-  for (const item of result.items) {
+  for (const item of items) {
     const channelMeta = item.channel_id ? channelMetadata.get(item.channel_id) : undefined;
     const channelName = channelMeta?.channel_name ?? item.channel_name ?? 'Unknown channel';
     const channelDescription = channelMeta?.channel_description ?? null;
@@ -348,6 +404,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
           channel_id: item.channel_id ?? null,
           channel_description: channelDescription,
           channel_subscriber_count: channelSubscriberCount,
+          source_kind: item.source_kind ?? 'subscription',
           published_at: item.published_at ? new Date(item.published_at) : new Date(),
         },
         { onConflict: 'source,external_id' },
@@ -384,7 +441,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     source: result.source,
     synced,
     classified,
-    items: result.items,
+    items,
   };
 }
 

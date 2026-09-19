@@ -12,7 +12,7 @@ async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
 
   const { data, error } = await client
     .from('content_items')
-    .select('id, external_id, title, channel_name, channel_id, channel_description, channel_subscriber_count, published_at, classifications(topics, quality_score)')
+    .select('id, external_id, title, channel_name, channel_id, channel_description, channel_subscriber_count, source_kind, published_at, classifications(topics, quality_score)')
     .order('fetched_at', { ascending: false })
     .limit(50);
 
@@ -34,6 +34,8 @@ async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
       channel_id: row.channel_id,
       channel_description: row.channel_description,
       channel_subscriber_count: row.channel_subscriber_count,
+      source_kind: row.source_kind,
+      subscription_affinity: row.source_kind === 'subscription' ? 25 : 0,
       published_at: row.published_at,
       base_score: Number.isFinite(baseScore) ? baseScore : 50,
       topics: Array.isArray(classification?.topics) ? classification.topics : [],

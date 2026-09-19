@@ -15,6 +15,8 @@ export type FeedCandidate = {
   channel_id?: string | null;
   channel_description?: string | null;
   channel_subscriber_count?: number | null;
+  source_kind?: 'subscription' | 'discovery' | null;
+  subscription_affinity?: number;
   published_at?: string | null;
   base_score?: number;
   topics?: string[];
@@ -198,18 +200,22 @@ export function buildFeedResponse(
     }
 
     const freshnessBoost = getFreshnessBoost(video.published_at);
+    const subscriptionBoost = Math.max(0, Math.min(35, Number(video.subscription_affinity ?? 0)));
     const channelBoost = getChannelQualityBoost(
       video.channel_name,
       video.channel_description,
       video.channel_subscriber_count,
       matchedTopics,
     );
-    score += freshnessBoost + channelBoost;
+    score += freshnessBoost + channelBoost + subscriptionBoost;
     if (freshnessBoost > 0) {
       scoreContributors.push(`freshness (${freshnessBoost})`);
     }
     if (channelBoost !== 0) {
       scoreContributors.push(`channel fit (${channelBoost})`);
+    }
+    if (subscriptionBoost > 0) {
+      scoreContributors.push(`subscription affinity (${subscriptionBoost})`);
     }
 
     for (const signal of signalMap.get(video.external_id) ?? []) {

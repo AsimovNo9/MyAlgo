@@ -182,3 +182,19 @@ test('buildFeedResponse does not infer AI from words containing ai as a substrin
 
   assert.deepEqual(feed.items[0].matched_topics, []);
 });
+
+test('buildFeedResponse keeps a relevant subscribed video above discovery content', () => {
+  const algorithm = {
+    id: 'alg-6',
+    name: 'Work',
+    topic_weights: [{ topic: 'AI', weight: 90 }],
+    rules: [],
+  };
+
+  const feed = buildFeedResponse(algorithm, [], [
+    { id: 'discovery', external_id: 'discovery', title: 'AI computer vision agents', source_kind: 'discovery', subscription_affinity: 0, topics: ['AI'] },
+    { id: 'subscribed', external_id: 'subscribed', title: 'AI computer vision agents', source_kind: 'subscription', subscription_affinity: 25, topics: ['AI'] },
+  ]);
+
+  assert.equal(feed.items[0].external_id, 'subscribed');
+});
