@@ -13,6 +13,29 @@ export interface AlgorithmIntentProfile {
   semanticTerms: string[];
 }
 
+export interface ConceptCatalogEntry {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  intents: string[];
+}
+
+export function buildConceptCatalog(
+  entries: Array<{
+    id: string;
+    canonical_name: string;
+    aliases?: string[] | null;
+    intents?: string[] | null;
+  }>,
+): ConceptCatalogEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    canonicalName: entry.canonical_name,
+    aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
+    intents: Array.isArray(entry.intents) ? entry.intents : [],
+  }));
+}
+
 const conceptMap: Record<string, { aliases: string[]; intents: string[] }> = {
   gaming: {
     aliases: ['game design', 'game development', 'gameplay', 'indie games', 'esports'],

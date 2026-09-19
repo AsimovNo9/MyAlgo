@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
+import { buildConceptCatalog } from './concepts.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
@@ -11,6 +12,38 @@ test('normalizeClassificationRecord unwraps Supabase nested relation arrays', ()
 
   assert.deepEqual(record?.topics, ['AI', 'Productivity']);
   assert.equal(record?.quality_score, 91);
+});
+
+test('buildConceptCatalog exposes persisted concept metadata in the API shape', () => {
+  const catalog = buildConceptCatalog([
+    {
+      id: 'concept-ai',
+      canonical_name: 'AI',
+      aliases: ['LLM', 'machine learning'],
+      intents: ['model training'],
+    },
+    {
+      id: 'concept-empty',
+      canonical_name: 'Unknown',
+      aliases: null,
+      intents: null,
+    },
+  ]);
+
+  assert.deepEqual(catalog, [
+    {
+      id: 'concept-ai',
+      canonicalName: 'AI',
+      aliases: ['LLM', 'machine learning'],
+      intents: ['model training'],
+    },
+    {
+      id: 'concept-empty',
+      canonicalName: 'Unknown',
+      aliases: [],
+      intents: [],
+    },
+  ]);
 });
 
 test('buildFeedResponse ranks real synchronized items instead of demo fixtures', () => {

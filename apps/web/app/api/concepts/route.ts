@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { buildAlgorithmIntentProfile } from '@/lib/concepts';
+import { buildAlgorithmIntentProfile, buildConceptCatalog } from '@/lib/concepts';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { Algorithm } from '@repo/shared-types';
@@ -15,6 +15,16 @@ export async function GET() {
   const client = await createSupabaseServerClient();
   if (!client) {
     return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
+  }
+
+  const { data: conceptEntries, error: conceptError } = await client
+    .from('concept_entries')
+    .select('id, canonical_name, aliases, intents')
+    .order('canonical_name', { ascending: true });
+
+  if (conceptError || !conceptEntries) {
+    console.error('Failed to load concept catalog', conceptError);
+    return NextResponse.json({ error: 'Unable to load the concept catalog.' }, { status: 500 });
   }
 
   const { data: algorithms, error } = await client
@@ -53,7 +63,10 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ profiles });
+  return NextResponse.json({
+    concepts: buildConceptCatalog(conceptEntries),
+    profiles,
+  });
 }
 
 export async function POST(request: Request) {
