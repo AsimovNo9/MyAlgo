@@ -1,6 +1,7 @@
 import type { Algorithm } from '@repo/shared-types';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
 import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
+import { redactSensitiveValues } from './logging.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -308,7 +309,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
 
   console.log(
     'YouTube provider session state',
-    buildYoutubeProviderSessionStateLog(userId, tokenSummary, sessionError?.message ?? null),
+    redactSensitiveValues(buildYoutubeProviderSessionStateLog(userId, tokenSummary, sessionError?.message ?? null)),
   );
 
   const providerTokenCandidate = resolveYoutubeAccessTokenCandidate(providerTokens, true);
@@ -332,7 +333,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
   const refreshToken = data.refresh_token_encrypted;
   const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : 0;
 
-  console.log('YouTube token check', buildYoutubeTokenCheckLog(userId, accessToken, refreshToken, expiresAt));
+  console.log('YouTube token check', redactSensitiveValues(buildYoutubeTokenCheckLog(userId, accessToken, refreshToken, expiresAt)));
 
   if (accessToken && expiresAt > Date.now() + 60 * 1000) {
     return accessToken;

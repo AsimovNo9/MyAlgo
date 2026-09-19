@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
+import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
@@ -437,4 +438,40 @@ test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never
   } finally {
     console.log = originalLog;
   }
+});
+
+test('redactSensitiveValues strips tokens and secrets from structured log payloads', () => {
+  const payload = {
+    access_token: 'secret-access-token',
+    refresh_token: 'secret-refresh-token',
+    accessToken: 'camel-access-token',
+    refreshToken: 'camel-refresh-token',
+    nested: {
+      client_secret: 'secret-client-secret',
+      clientSecret: 'camel-client-secret',
+      headers: {
+        Authorization: 'Bearer secret-header-token',
+      },
+      url: 'https://example.com',
+    },
+    okay: 'visible-value',
+  };
+
+  const redacted = redactSensitiveValues(payload);
+
+  assert.deepEqual(redacted, {
+    access_token: '[REDACTED]',
+    refresh_token: '[REDACTED]',
+    accessToken: '[REDACTED]',
+    refreshToken: '[REDACTED]',
+    nested: {
+      client_secret: '[REDACTED]',
+      clientSecret: '[REDACTED]',
+      headers: {
+        Authorization: '[REDACTED]',
+      },
+      url: 'https://example.com',
+    },
+    okay: 'visible-value',
+  });
 });
