@@ -1,4 +1,4 @@
-import type { Algorithm, FeedItem, FeedResponse, Rule } from '@repo/shared-types';
+import type { Algorithm, FeedItem, FeedResponse, FeedSourceFilters, Rule } from '@repo/shared-types';
 
 import { resolveTopicConceptTerms } from './concepts.ts';
 
@@ -18,6 +18,8 @@ export type FeedCandidate = {
   channel_description?: string | null;
   channel_subscriber_count?: number | null;
   source_kind?: 'subscription' | 'discovery' | null;
+  is_short?: boolean;
+  is_live?: boolean;
   subscription_affinity?: number;
   candidate_relevance?: 'matched' | 'unmatched';
   published_at?: string | null;
@@ -200,11 +202,12 @@ export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters } = {},
 ): FeedResponse {
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
   const rules = algorithm?.rules ?? [];
+  const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
 
@@ -232,6 +235,26 @@ export function buildFeedResponse(
     if (video.candidate_relevance === 'unmatched') {
       visible = false;
       ruleSummary.push('outside selected algorithm topics');
+    }
+
+    if (sourceFilters.subscribedOnly && video.source_kind && video.source_kind !== 'subscription') {
+      visible = false;
+      ruleSummary.push('subscription-only filter');
+    }
+
+    if (sourceFilters.includeDiscovery === false && video.source_kind === 'discovery') {
+      visible = false;
+      ruleSummary.push('discovery disabled');
+    }
+
+    if (sourceFilters.includeShorts === false && video.is_short) {
+      visible = false;
+      ruleSummary.push('Shorts disabled');
+    }
+
+    if (sourceFilters.includeLive === false && video.is_live) {
+      visible = false;
+      ruleSummary.push('live content disabled');
     }
 
     if (video.channel_id && blockedChannelIds.has(video.channel_id)) {

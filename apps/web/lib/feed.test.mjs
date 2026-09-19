@@ -441,6 +441,28 @@ test('buildFeedResponse returns an empty result when no topic-scoped candidates 
   assert.deepEqual(feed.items, []);
 });
 
+test('buildFeedResponse applies source controls without hiding unknown page provenance', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-sources', name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { id: 'subscribed', external_id: 'subscribed', title: 'AI subscribed upload', source_kind: 'subscription', topics: ['AI'] },
+      { id: 'discovery', external_id: 'discovery', title: 'AI discovery upload', source_kind: 'discovery', topics: ['AI'] },
+      { id: 'short', external_id: 'short', title: 'AI short', source_kind: 'subscription', is_short: true, topics: ['AI'] },
+      { id: 'unknown', external_id: 'unknown', title: 'AI page candidate', topics: ['AI'] },
+    ],
+    {
+      sourceFilters: {
+        subscribedOnly: true,
+        includeDiscovery: false,
+        includeShorts: false,
+      },
+    },
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['subscribed', 'unknown']);
+});
+
 test('buildFeedResponse still orders unmatched candidates by score', () => {
   const feed = buildFeedResponse(
     { id: 'alg-unmatched', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },

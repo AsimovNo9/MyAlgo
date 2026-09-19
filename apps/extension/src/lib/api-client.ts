@@ -1,10 +1,12 @@
-import type { Algorithm, FeedResponse } from '@repo/shared-types';
+import type { Algorithm, FeedResponse, FeedSourceFilters } from '@repo/shared-types';
 import { getExtensionAccessToken, signOutExtension } from './auth';
 
 export type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  is_short?: boolean;
+  is_live?: boolean;
 };
 
 const API_BASE_URL_KEY = 'personal-algorithm-api-base-url';
@@ -45,10 +47,16 @@ export async function fetchAlgorithms(): Promise<Algorithm[]> {
   return (await response.json()) as Algorithm[];
 }
 
-export async function fetchFeed(mode?: string): Promise<FeedResponse> {
+export async function fetchFeed(mode?: string, sourceFilters?: FeedSourceFilters): Promise<FeedResponse> {
   const baseUrl = await getApiBaseUrl();
   const accessToken = await getExtensionAccessToken();
-  const query = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+  const params = new URLSearchParams();
+  if (mode) params.set('mode', mode);
+  if (sourceFilters?.subscribedOnly) params.set('subscribedOnly', 'true');
+  if (sourceFilters?.includeDiscovery === false) params.set('includeDiscovery', 'false');
+  if (sourceFilters?.includeShorts === false) params.set('includeShorts', 'false');
+  if (sourceFilters?.includeLive === false) params.set('includeLive', 'false');
+  const query = params.toString() ? `?${params.toString()}` : '';
   const endpoints = [baseUrl];
 
   let lastStatus = 0;
@@ -87,7 +95,7 @@ export async function fetchFeed(mode?: string): Promise<FeedResponse> {
   throw new Error(`Failed to fetch feed: ${lastStatus}`);
 }
 
-export async function rankPageCandidates(mode: string, candidates: PageCandidate[]): Promise<FeedResponse> {
+export async function rankPageCandidates(mode: string, candidates: PageCandidate[], sourceFilters?: FeedSourceFilters): Promise<FeedResponse> {
   const baseUrl = await getApiBaseUrl();
   const accessToken = await getExtensionAccessToken();
   const endpoints = [baseUrl];
@@ -101,7 +109,7 @@ export async function rankPageCandidates(mode: string, candidates: PageCandidate
         'Content-Type': 'application/json',
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: JSON.stringify({ mode, candidates }),
+      body: JSON.stringify({ mode, candidates, sourceFilters }),
     });
 
     if (response.ok) {

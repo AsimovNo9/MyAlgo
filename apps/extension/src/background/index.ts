@@ -1,5 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
+import type { FeedSourceFilters } from '@repo/shared-types';
 import { fetchFeed, getApiBaseUrl, rankPageCandidates, type PageCandidate } from '../lib/api-client';
 import { normalizeFeed } from '../lib/extension-helpers';
 import { getExtensionAccessToken, signInWithGoogle, signOutExtension } from '../lib/auth';
@@ -10,13 +11,20 @@ chrome.runtime.onInstalled.addListener(() => {
     [STORAGE_KEYS.ENABLED]: true,
     [STORAGE_KEYS.FEED_CACHE]: [],
     [STORAGE_KEYS.LAST_SYNC]: null,
+    [STORAGE_KEYS.SOURCE_FILTERS]: {
+      subscribedOnly: false,
+      includeDiscovery: true,
+      includeShorts: true,
+      includeLive: true,
+    },
   });
 });
 
 const refreshFeed = async (mode?: string) => {
   try {
     const selectedMode = mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
-    const feedResponse = await fetchFeed(selectedMode);
+    const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
+    const feedResponse = await fetchFeed(selectedMode, sourceFilters);
     const normalizedFeed = normalizeFeed(feedResponse);
     await setStorage(STORAGE_KEYS.FEED_CACHE, normalizedFeed);
     await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
@@ -31,7 +39,7 @@ const refreshFeed = async (mode?: string) => {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, payload } = message as { type: string; payload?: { mode?: string; enabled?: boolean; contentItemId?: string; eventType?: string } };
+  const { type, payload } = message as { type: string; payload?: { mode?: string; enabled?: boolean; contentItemId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
@@ -44,7 +52,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       try {
         const mode = payload?.mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
-        const ranked = await rankPageCandidates(mode, (payload as { candidates?: PageCandidate[] }).candidates ?? []);
+        const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
+        const ranked = await rankPageCandidates(mode, (payload as { candidates?: PageCandidate[] }).candidates ?? [], sourceFilters);
         await setStorage('personal-algorithm-last-error', null);
         sendResponse({ ok: true, feed: normalizeFeed(ranked) });
       } catch (error) {
@@ -84,6 +93,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     })();
     sendResponse({ ok: true, enabled });
+    return true;
+  }
+
+  if (type === 'SET_SOURCE_FILTERS') {
+    void (async () => {
+      await setStorage(STORAGE_KEYS.SOURCE_FILTERS, payload?.sourceFilters ?? {});
+      await refreshFeed();
+      sendResponse({ ok: true });
+    })();
     return true;
   }
 

@@ -45,6 +45,13 @@ export interface FeedResponse {
   generatedAt: string;
 }
 
+export interface FeedSourceFilters {
+  subscribedOnly?: boolean;
+  includeDiscovery?: boolean;
+  includeShorts?: boolean;
+  includeLive?: boolean;
+}
+
 export interface AlgorithmPayload {
   id?: string;
   name: string;

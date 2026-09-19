@@ -2,6 +2,14 @@ import React from 'react';
 import { getExtensionAccessToken } from '../lib/auth';
 import { fetchAlgorithms } from '../lib/api-client';
 import type { Algorithm } from '@repo/shared-types';
+import type { FeedSourceFilters } from '@repo/shared-types';
+
+const defaultSourceFilters: FeedSourceFilters = {
+  subscribedOnly: false,
+  includeDiscovery: true,
+  includeShorts: true,
+  includeLive: true,
+};
 
 export function Popup() {
   const [mode, setMode] = React.useState('Work');
@@ -11,6 +19,7 @@ export function Popup() {
   const [lastError, setLastError] = React.useState<string | null>(null);
   const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
   const [enabled, setEnabled] = React.useState(true);
+  const [sourceFilters, setSourceFilters] = React.useState<FeedSourceFilters>(defaultSourceFilters);
 
   const refreshAlgorithms = async () => {
     try {
@@ -23,10 +32,11 @@ export function Popup() {
   };
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled']).then(async (result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters']).then(async (result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
       setEnabled(result['personal-algorithm-enabled'] !== false);
+      setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
       const hasSession = Boolean(await getExtensionAccessToken());
       setSignedIn(hasSession);
       setLastError((await chrome.storage.local.get(['personal-algorithm-last-error']))['personal-algorithm-last-error'] as string | null);
@@ -78,6 +88,12 @@ export function Popup() {
     }
   };
 
+  const handleFilterChange = async (key: keyof FeedSourceFilters, value: boolean) => {
+    const nextFilters = { ...sourceFilters, [key]: value };
+    setSourceFilters(nextFilters);
+    await chrome.runtime.sendMessage({ type: 'SET_SOURCE_FILTERS', payload: { sourceFilters: nextFilters } });
+  };
+
   return (
     <main style={{ minWidth: 260, padding: 16, fontFamily: 'sans-serif' }}>
       <h2 style={{ marginTop: 0 }}>Personal Algorithm</h2>
@@ -100,6 +116,13 @@ export function Popup() {
       <p>Account: <strong>{signedIn ? 'Connected' : 'Not connected'}</strong></p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
+      <fieldset>
+        <legend>Feed controls</legend>
+        <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>
+        <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
+        <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
+        <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
+      </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       {signedIn ? (
         <button onClick={() => void handleSignOut()}>Sign out</button>
