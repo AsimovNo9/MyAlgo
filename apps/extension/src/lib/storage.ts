@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   MODE: 'personal-algorithm-mode',
+  ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
   LAST_SYNC: 'personal-algorithm-last-sync',
 } as const;

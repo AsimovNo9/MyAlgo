@@ -1,4 +1,5 @@
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom';
+import { STORAGE_KEYS } from '../lib/storage';
 
 const videoSelectors = [
   'ytd-rich-item-renderer',
@@ -23,6 +24,9 @@ let rankingInFlight = false;
 let activeMode = 'Work';
 let observer: MutationObserver | null = null;
 let rankGeneration = 0;
+let extensionEnabled = true;
+let lastCandidateSignature = '';
+let lastRankMode = '';
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
 document.documentElement.setAttribute(instanceAttribute, instanceId);
@@ -43,6 +47,20 @@ const showStatus = (message: string, error = false) => {
 };
 
 const normalizeText = (value: string) => normalizeYouTubeText(value).toLowerCase();
+
+const clearExtensionPresentation = () => {
+  observer?.disconnect();
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
+    element.style.display = '';
+    element.style.outline = '';
+    element.style.outlineOffset = '';
+    element.style.order = '';
+    delete element.dataset.personalAlgorithmScore;
+    delete element.dataset.personalAlgorithmRank;
+    element.querySelector('[data-personal-algorithm-badge]')?.remove();
+  });
+  document.querySelector('[data-personal-algorithm-status]')?.remove();
+};
 
 const getVideoTitle = (element: HTMLElement) => {
   const titleNode = element.querySelector<HTMLElement>([
@@ -231,7 +249,7 @@ const applyRankedFeed = () => {
 };
 
 const rankCurrentPage = async () => {
-  if (!isCurrentInstance() || rankingInFlight) return;
+  if (!isCurrentInstance() || !extensionEnabled || rankingInFlight) return;
   const candidates = collectCandidates();
   if (candidates.length === 0) {
     showStatus(`Personal Algorithm: no cards on ${location.hostname}`, true);
@@ -243,6 +261,11 @@ const rankCurrentPage = async () => {
   const result = await chrome.storage.local.get(['personal-algorithm-mode']);
   if (!isCurrentInstance()) return;
   activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
+  const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
+  if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
+    rankingInFlight = false;
+    return;
+  }
   const requestGeneration = rankGeneration;
   const requestMode = activeMode;
   chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
@@ -253,6 +276,8 @@ const rankCurrentPage = async () => {
     }
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
+      lastCandidateSignature = candidateSignature;
+      lastRankMode = requestMode;
       applyRankedFeed();
       showStatus(`${requestMode}: ranked ${response.feed.length} videos`);
     } else {
@@ -271,10 +296,33 @@ const scheduleRank = () => {
 };
 
 observer = new MutationObserver(scheduleRank);
-observer.observe(document.body, { childList: true, subtree: true });
+chrome.storage.local.get([STORAGE_KEYS.ENABLED]).then((result) => {
+  extensionEnabled = result[STORAGE_KEYS.ENABLED] !== false;
+  if (!extensionEnabled) {
+    clearExtensionPresentation();
+    return;
+  }
+  observer?.observe(document.body, { childList: true, subtree: true });
+  rankCurrentPage();
+});
 
 chrome.runtime.onMessage.addListener((message) => {
   if (!isCurrentInstance()) return;
+  if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
+    extensionEnabled = message.payload.enabled;
+    rankGeneration += 1;
+    rankingInFlight = false;
+    cachedFeed = [];
+    lastCandidateSignature = '';
+    lastRankMode = '';
+    if (extensionEnabled) {
+      observer?.observe(document.body, { childList: true, subtree: true });
+      scheduleRank();
+    } else {
+      clearExtensionPresentation();
+    }
+    return;
+  }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
   rankGeneration += 1;
   rankingInFlight = false;
@@ -282,8 +330,6 @@ chrome.runtime.onMessage.addListener((message) => {
   cachedFeed = [];
   scheduleRank();
 });
-
-rankCurrentPage();
 
 const registerFeedbackHandlers = () => {
   const buttons = Array.from(document.querySelectorAll('button, ytd-menu-service-item-renderer')) as HTMLElement[];
