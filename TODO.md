@@ -85,7 +85,9 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a visible enabled/paused status in the popup and content script UI
 - [x] Verify MV3 extension permissions and storage requirements in the production deployment context
 - [ ] Test the extension flow against the live API and deployed app
-- [ ] Expose subscribed-only, hide Shorts, and discovery controls in the extension
+- [x] Expose subscribed-only, hide Shorts, and discovery controls in the extension
+- [x] Trigger background YouTube subscription + discovery sync from the extension so matching videos are actually persisted
+- [x] Show which topics and sources are driving the visible feed in the popup
 - [x] Review YouTube DOM compatibility and fallback behavior against production content
 - [x] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
 - [ ] Prepare Chrome Web Store submission requirements and assets

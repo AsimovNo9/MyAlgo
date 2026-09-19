@@ -1,7 +1,8 @@
 import React from 'react';
 import { getExtensionAccessToken } from '../lib/auth';
 import { fetchAlgorithms } from '../lib/api-client';
-import type { Algorithm } from '@repo/shared-types';
+import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
+import type { Algorithm, FeedItem } from '@repo/shared-types';
 import type { FeedSourceFilters } from '@repo/shared-types';
 
 const defaultSourceFilters: FeedSourceFilters = {
@@ -10,6 +11,8 @@ const defaultSourceFilters: FeedSourceFilters = {
   includeShorts: true,
   includeLive: true,
 };
+
+const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [] };
 
 export function Popup() {
   const [mode, setMode] = React.useState('Work');
@@ -20,6 +23,7 @@ export function Popup() {
   const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
   const [enabled, setEnabled] = React.useState(true);
   const [sourceFilters, setSourceFilters] = React.useState<FeedSourceFilters>(defaultSourceFilters);
+  const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   const refreshAlgorithms = async () => {
     try {
@@ -34,7 +38,9 @@ export function Popup() {
   React.useEffect(() => {
     chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters']).then(async (result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
-      setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
+      const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
+      setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
+      setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
       setEnabled(result['personal-algorithm-enabled'] !== false);
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
       const hasSession = Boolean(await getExtensionAccessToken());
@@ -77,7 +83,9 @@ export function Popup() {
     setMode(nextMode);
     await chrome.runtime.sendMessage({ type: 'SET_MODE', payload: { mode: nextMode } });
     const result = await chrome.storage.local.get(['personal-algorithm-feed-cache']);
-    setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
+    const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
+    setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
+    setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
   };
 
   const handleToggleEnabled = async () => {
@@ -116,6 +124,10 @@ export function Popup() {
       <p>Account: <strong>{signedIn ? 'Connected' : 'Not connected'}</strong></p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
+      <p>Feed mix: <strong>{feedSummary.subscribedCount} subscribed</strong> · <strong>{feedSummary.discoveredCount} discovered</strong></p>
+      {feedSummary.topTopics.length > 0 ? (
+        <p>Top topics: {feedSummary.topTopics.map((entry) => `${entry.topic} (${entry.count})`).join(', ')}</p>
+      ) : null}
       <fieldset>
         <legend>Feed controls</legend>
         <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>

@@ -18,6 +18,53 @@ chrome.runtime.onInstalled.addListener(() => {
       includeLive: true,
     },
   });
+  ensureYoutubeSyncAlarm();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureYoutubeSyncAlarm();
+});
+
+const YOUTUBE_SYNC_ALARM = 'personal-algorithm-youtube-sync';
+
+function ensureYoutubeSyncAlarm() {
+  chrome.alarms.get(YOUTUBE_SYNC_ALARM, (existing) => {
+    if (!existing) {
+      chrome.alarms.create(YOUTUBE_SYNC_ALARM, { periodInMinutes: 30, delayInMinutes: 1 });
+    }
+  });
+}
+
+// Runs the server-side subscription + discovery search for the active algorithm and
+// persists matching videos, so the cached feed reflects more than whatever is already synced.
+const syncYoutubeContent = async () => {
+  const accessToken = await getExtensionAccessToken();
+  if (!accessToken) {
+    return;
+  }
+
+  try {
+    const baseUrl = await getApiBaseUrl();
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/youtube/sync`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      throw new Error(`YouTube sync failed: ${response.status}`);
+    }
+
+    await refreshFeed();
+  } catch (error) {
+    console.error('Failed to sync YouTube content in the background', error);
+  }
+};
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === YOUTUBE_SYNC_ALARM) {
+    void syncYoutubeContent();
+  }
 });
 
 const refreshFeed = async (mode?: string) => {
@@ -146,7 +193,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'SIGN_IN') {
-    void signInWithGoogle().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Sign-in failed.' }));
+    void signInWithGoogle().then(async () => {
+      ensureYoutubeSyncAlarm();
+      await syncYoutubeContent();
+      sendResponse({ ok: true });
+    }).catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Sign-in failed.' }));
     return true;
   }
 
@@ -167,6 +218,8 @@ chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) =
 const backgroundBootstrap = async () => {
   const mode = await getStorage(STORAGE_KEYS.MODE, 'Work');
   const feed = await getStorage(STORAGE_KEYS.FEED_CACHE, []);
+  ensureYoutubeSyncAlarm();
+  void syncYoutubeContent();
   await refreshFeed(mode);
 
   console.info('Personal Algorithm background ready', { mode, count: feed.length, apiBaseUrl: await getApiBaseUrl() });
