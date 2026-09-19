@@ -218,6 +218,20 @@ test('buildFeedResponse filters unmatched candidates while preserving always-sho
   assert.equal(feed.items.some((item) => item.external_id === 'hidden'), false);
 });
 
+test('buildFeedResponse still orders unmatched candidates by score', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-unmatched', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
+    [],
+    [
+      { id: 'low', external_id: 'low', title: 'Unrelated low score', base_score: 20, candidate_relevance: 'unmatched', topics: [] },
+      { id: 'high', external_id: 'high', title: 'Unrelated high score', base_score: 90, candidate_relevance: 'unmatched', topics: [] },
+    ],
+  );
+
+  assert.equal(feed.items[0].external_id, 'high');
+  assert.equal(feed.items[1].external_id, 'low');
+});
+
 test('buildFeedResponse keeps explicit not-interested feedback suppressed', () => {
   const feed = buildFeedResponse(
     { id: 'alg-8', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'speedrun' }] },
