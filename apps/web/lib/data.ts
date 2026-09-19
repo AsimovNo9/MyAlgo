@@ -76,16 +76,15 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
     };
   });
 
-  const seededNames = new Set<string>();
+  // Rows are ordered newest-first; keep one row per name (case-insensitive) so the
+  // popup, dashboard, and ranking always agree on the same algorithm for a given name.
+  const seenNames = new Set<string>();
   return algorithms.filter((algorithm) => {
     const normalizedName = algorithm.name.trim().toLowerCase();
-    if (!['work', 'learning', 'relax'].includes(normalizedName)) {
-      return true;
-    }
-    if (seededNames.has(normalizedName)) {
+    if (seenNames.has(normalizedName)) {
       return false;
     }
-    seededNames.add(normalizedName);
+    seenNames.add(normalizedName);
     return true;
   });
 }

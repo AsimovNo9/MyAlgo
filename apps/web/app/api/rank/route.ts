@@ -23,6 +23,7 @@ const modeTopicDefaults: Record<string, string[]> = {
   work: ['AI', 'Engineering', 'Business', 'Productivity'],
   learning: ['Tutorial', 'Engineering', 'AI', 'Science', 'Education'],
   relax: ['Entertainment', 'Nature', 'Lifestyle', 'Travel'],
+  gaming: ['Gaming'],
 };
 
 const topicAliases: Record<string, RegExp> = {
