@@ -1,3 +1,5 @@
+import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom';
+
 const videoSelectors = [
   'ytd-rich-item-renderer',
   'ytd-rich-grid-media',
@@ -7,8 +9,6 @@ const videoSelectors = [
   'ytd-reel-item-renderer',
   'ytd-rich-section-renderer',
 ];
-
-const videoLinkSelector = 'a[href*="/watch"], a[href*="/shorts/"]';
 
 type RankedFeedItem = {
   title?: string;
@@ -34,20 +34,7 @@ const showStatus = (message: string, error = false) => {
   status.textContent = message;
 };
 
-const normalizeText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
-
-const getVideoIdFromHref = (href: string) => {
-  try {
-    const url = new URL(href, location.origin);
-    const fromQuery = url.searchParams.get('v');
-    if (fromQuery) return fromQuery;
-    const fromShorts = url.pathname.match(/\/shorts\/([^/?]+)/)?.[1];
-    if (fromShorts) return fromShorts;
-    return undefined;
-  } catch {
-    return undefined;
-  }
-};
+const normalizeText = (value: string) => normalizeYouTubeText(value).toLowerCase();
 
 const getVideoTitle = (element: HTMLElement) => {
   const titleNode = element.querySelector<HTMLElement>([
@@ -74,8 +61,12 @@ const getVideoTitle = (element: HTMLElement) => {
   }
 
   const linkedTitle = Array.from(element.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
-    .map((link) => link.getAttribute('title') ?? link.getAttribute('aria-label') ?? link.textContent ?? '')
-    .map(normalizeText)
+    .map((link) => extractYouTubeLinkTitle({
+      title: link.getAttribute('title'),
+      ariaLabel: link.getAttribute('aria-label'),
+      textContent: link.textContent,
+    }))
+    .map((value) => normalizeText(value))
     .find(Boolean);
 
   if (linkedTitle) {
@@ -89,7 +80,7 @@ const getVideoTitle = (element: HTMLElement) => {
 const getVideoId = (element: HTMLElement) => {
   const links = Array.from(element.querySelectorAll<HTMLAnchorElement>('a#thumbnail[href], a#video-title-link[href], a[href*="/watch"], a[href*="/shorts/"]'));
   const videoId = links
-    .map((link) => getVideoIdFromHref(link.href))
+    .map((link) => extractYouTubeVideoId(link.href))
     .find(Boolean);
   return videoId ?? `title:${getVideoTitle(element)}`;
 };
@@ -125,12 +116,28 @@ const getVideoElements = () => {
 
 const collectCandidates = () => {
   const seen = new Set<string>();
-  const candidates = getVideoElements()
+  const cardCandidates = getVideoElements()
     .map((element) => ({
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
     }))
+    .filter((candidate) => candidate.title)
+    .slice(0, 80);
+
+  const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
+    .map((link) => ({
+      external_id: extractYouTubeVideoId(link.href) ?? '',
+      title: normalizeText(extractYouTubeLinkTitle({
+        title: link.getAttribute('title'),
+        ariaLabel: link.getAttribute('aria-label'),
+        textContent: link.textContent,
+      })),
+      channel_name: '',
+    }))
+    .filter((candidate) => candidate.external_id && candidate.title);
+
+  const candidates = [...cardCandidates, ...anchorCandidates]
     .filter((candidate) => {
       if (!candidate.title || seen.has(candidate.external_id)) return false;
       seen.add(candidate.external_id);
@@ -237,3 +244,6 @@ const registerFeedbackHandlers = () => {
 };
 
 registerFeedbackHandlers();
+
+window.addEventListener('yt-navigate-finish', scheduleRank);
+window.addEventListener('popstate', scheduleRank);

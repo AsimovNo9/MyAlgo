@@ -53,7 +53,16 @@ if (accessToken) {
     throw new Error(`/api/rank POST returned ${rank.response.status}: ${rank.body.slice(0, 240)}`);
   }
 
-  const payload = JSON.parse(rank.body);
+  let payload;
+  try {
+    payload = JSON.parse(rank.body);
+  } catch (error) {
+    throw new Error(
+      `/api/rank POST returned ${rank.response.status} with invalid JSON: ${rank.body.slice(0, 240)}`,
+      { cause: error }
+    );
+  }
+
   if (!Array.isArray(payload.items) || payload.items.length !== 1) {
     throw new Error('Rank response did not contain exactly one feed item.');
   }

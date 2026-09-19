@@ -3,7 +3,7 @@
 This document covers the local workflow for the Personal Algorithm MVP.
 
 ## Prerequisites
-- Node.js 20+
+- Node.js 22+
 - pnpm 9+
 - A local or remote Supabase project for database work
 - A Chrome browser for extension loading
@@ -48,9 +48,11 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Apply the schema in `packages/db/schema.sql`.
-3. Enable Row Level Security policies as defined in the schema.
-4. Add the project URL and anon key to the local environment.
+2. Authenticate the CLI with `npx supabase login`.
+3. Apply tracked migrations with `npx supabase db push --project-ref YOUR_PROJECT_REF`.
+4. Keep `packages/db/schema.sql` aligned with the migrations for reference and tests.
+5. Enable Row Level Security policies as defined in the schema.
+6. Add the project URL and anon key to the local environment.
 
 ## Extension setup
 
@@ -67,4 +69,5 @@ pnpm --filter extension build
 ## Notes
 - The extension never ships secrets. All external API calls are proxied through the app layer.
 - The content script is intentionally scoped to `youtube.com` and uses typed runtime messaging.
-- The current build is an MVP scaffold with stubbed external integrations, matching the architecture spec's deferred complexity plan.
+- YouTube OAuth, subscription upload sync, channel metadata enrichment, Supabase persistence, feedback, and live-page ranking are implemented; production deployment and DOM compatibility remain active work.
+- See [docs/ONBOARDING.md](docs/ONBOARDING.md) and [docs/GITHUB_ISSUES.md](docs/GITHUB_ISSUES.md) before picking up a task.
