@@ -31,11 +31,25 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
     return demoAlgorithms;
   }
 
-  const { data, error } = await client
+  const profileQuery = await client
     .from('algorithms')
     .select('*, topic_weights(*), rules(*), algorithm_intent_profiles(semantic_terms)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
+
+  let data = profileQuery.data;
+  let error = profileQuery.error;
+
+  if (error) {
+    console.warn('Falling back to algorithms query without semantic profiles', error.message);
+    const fallbackQuery = await client
+      .from('algorithms')
+      .select('*, topic_weights(*), rules(*)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    data = fallbackQuery.data;
+    error = fallbackQuery.error;
+  }
 
   if (error || !data) {
     console.error('Failed to fetch algorithms', error);

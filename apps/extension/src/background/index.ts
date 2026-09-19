@@ -19,9 +19,12 @@ const refreshFeed = async (mode?: string) => {
     const normalizedFeed = normalizeFeed(feedResponse);
     await setStorage(STORAGE_KEYS.FEED_CACHE, normalizedFeed);
     await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+    await setStorage('personal-algorithm-last-error', null);
     return normalizedFeed;
   } catch (error) {
-    console.error('Failed to refresh extension feed', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch feed.';
+    await setStorage('personal-algorithm-last-error', message);
+    console.error('Failed to refresh extension feed', message);
     return [];
   }
 };

@@ -29,11 +29,17 @@ export async function fetchAlgorithms(): Promise<Algorithm[]> {
   const accessToken = await getExtensionAccessToken();
   const response = await fetch(`${baseUrl}/api/algorithms`, {
     credentials: 'include',
+    cache: 'no-store',
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch algorithms: ${response.status}`);
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    if (response.status === 401) {
+      await signOutExtension();
+      throw new Error('Extension session expired. Sign in again from the popup.');
+    }
+    throw new Error(body?.error ? `Failed to fetch algorithms: ${body.error}` : `Failed to fetch algorithms: ${response.status}`);
   }
 
   return (await response.json()) as Algorithm[];
