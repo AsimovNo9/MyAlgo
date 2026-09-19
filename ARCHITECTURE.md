@@ -23,7 +23,8 @@ A Chrome extension (MV3) + lightweight web dashboard that lets a user define "al
 | Web app + API | Next.js (App Router), deployed on Vercel | Serverless API routes, same repo as dashboard, zero ops |
 | Database | Supabase (managed Postgres) | Postgres + Auth + Row Level Security, generous free tier |
 | Auth | Supabase Auth + Google OAuth | Same OAuth flow doubles as YouTube API authorization |
-| Classification | Anthropic API (Claude Haiku-class model) | Cheap per-item classification, no ML infra to run |
+| Classification | Deterministic metadata classifier first; optional AI resolver later | Cheap fallback path with room for semantic disambiguation |
+| Semantic retrieval (next stage) | Supabase Postgres + pgvector | Canonical concepts, aliases, embeddings, and semantic topic matching |
 | Cache (later, Stage 2+) | Upstash Redis | Serverless, pay-per-request, add only when Postgres read load justifies it |
 | Error tracking | Sentry | Free tier covers extension + backend |
 | Extension distribution | Chrome Web Store | Required for public MV3 distribution |
@@ -52,6 +53,7 @@ flowchart LR
   subgraph External[External APIs]
     YT[YouTube Data API v3]
     CLAUDE[Anthropic API]
+    EMB[Embedding model<br/>optional]
   end
 
   POPUP <-->|preferences, rules| API
@@ -62,6 +64,7 @@ flowchart LR
   API <--> AUTH
   API --> YT
   API --> CLAUDE
+  API --> EMB
 ```
 
 ## 5. Folder Structure
@@ -157,6 +160,7 @@ personal-algorithm/
 | YouTube OAuth tokens | Postgres: `oauth_connections`, encrypted at rest | Never stored in the browser |
 | Raw fetched content metadata | Postgres: `content_items` | Reusable across users with overlapping subscriptions — avoids refetching |
 | Classification scores | Postgres: `classifications` | Cached per item, avoids re-calling the classifier every load |
+| Topic concepts and intent | Postgres + pgvector: concept table and intent cache | Maps custom terms, slang, aliases, and goals to canonical concepts |
 | Current visible feed / rank | Postgres: `feed_cache` (short TTL), mirrored into `chrome.storage.local` | DB is the source of truth; local storage is a fast read cache for the content script |
 | "Hidden this session" video IDs | `chrome.storage.local` only | Ephemeral UI state, no reason to sync to the server |
 

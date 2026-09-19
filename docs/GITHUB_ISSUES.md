@@ -128,3 +128,11 @@ The extension currently builds successfully as an unpacked MV3 artifact, but rel
 - A release build command is documented.
 - Extension ID and Supabase redirect setup are documented.
 - Chrome Web Store / Edge Add-ons submission requirements are tracked separately.
+
+## 11. Make discovery intent-driven with format-aware queries
+
+See [Issue #20](https://github.com/AsimovNo9/MyAlgo/issues/20). The first implementation generates bounded tutorial, lecture, course, and explainer queries from user goals and strong topics, and classifies richer YouTube metadata.
+
+## 12. Add semantic topic concepts and intent resolution
+
+See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next semantic layer: Supabase pgvector concepts, aliases, embeddings, structured intent, and low-confidence AI disambiguation with deterministic fallback.

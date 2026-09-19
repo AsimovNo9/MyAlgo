@@ -18,6 +18,7 @@
 | Web app + API | Vercel (Next.js) | 100GB bandwidth/mo, generous serverless invocations |
 | Database + Auth | Supabase | 500MB DB, 50k MAU auth, Row Level Security |
 | Classification | Anthropic API | Pay-per-token, no minimum spend |
+| Semantic retrieval | Supabase pgvector + embedding provider | Canonical concepts and aliases without a new vector service |
 | Extension hosting | Chrome Web Store | One-time $5 developer registration fee |
 | Error tracking | Sentry | 5k events/month free |
 | Domain / DNS | Cloudflare | Free |
@@ -112,6 +113,8 @@ Current stack as-is. No changes needed.
 - Add a quota-tracking table for the YouTube Data API (shared 10,000 units/day free quota) and request a quota increase from Google once usage approaches it.
 
 Discovery search is deliberately bounded at MVP scale: each sync derives at most three queries and requests at most five videos per query. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search.
+
+Semantic retrieval adds a second budget: embedding and resolver calls. Embed canonical concepts and algorithm intent, not every page mutation. Cache by content hash and algorithm revision; use deterministic aliases as the outage and cost fallback. Do not add a separate vector database before Supabase `pgvector` volume proves it necessary.
 
 ### Stage 3 — Scale (20k–200k users)
 - Split classification into its own long-running worker (Fly.io or Railway) if serverless cold-starts or per-invocation cost become an issue.

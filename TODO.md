@@ -55,6 +55,9 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Confirm classification quality for live content and tune heuristics if needed
 - [ ] Add observability around scoring decisions and feed generation
 - [x] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
+- [x] Add bounded format-aware discovery queries for user-defined algorithm goals
+- [ ] Add canonical topic concepts, aliases, embeddings, and semantic intent resolution
+- [ ] Add AI disambiguation only for low-confidence semantic matches
 
 ## Extension and browser experience
 - [x] Package the Chrome extension for local Edge testing
