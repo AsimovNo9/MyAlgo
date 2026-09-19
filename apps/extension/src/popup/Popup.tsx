@@ -1,5 +1,7 @@
 import React from 'react';
 import { getExtensionAccessToken } from '../lib/auth';
+import { fetchAlgorithms } from '../lib/api-client';
+import type { Algorithm } from '@repo/shared-types';
 
 export function Popup() {
   const [mode, setMode] = React.useState('Work');
@@ -7,13 +9,28 @@ export function Popup() {
   const [signedIn, setSignedIn] = React.useState(false);
   const [authError, setAuthError] = React.useState<string | null>(null);
   const [lastError, setLastError] = React.useState<string | null>(null);
+  const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
 
   React.useEffect(() => {
     chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache']).then(async (result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
-      setSignedIn(Boolean(await getExtensionAccessToken()));
+      const hasSession = Boolean(await getExtensionAccessToken());
+      setSignedIn(hasSession);
       setLastError((await chrome.storage.local.get(['personal-algorithm-last-error']))['personal-algorithm-last-error'] as string | null);
+      if (hasSession) {
+        try {
+          const availableAlgorithms = await fetchAlgorithms();
+          setAlgorithms(availableAlgorithms);
+          const storedMode = (result['personal-algorithm-mode'] as string) ?? '';
+          if (!availableAlgorithms.some((algorithm) => algorithm.name === storedMode) && availableAlgorithms[0]) {
+            setMode(availableAlgorithms[0].name);
+            await chrome.storage.local.set({ 'personal-algorithm-mode': availableAlgorithms[0].name });
+          }
+        } catch (error) {
+          setLastError(error instanceof Error ? error.message : 'Unable to load algorithms.');
+        }
+      }
     });
   }, []);
 
@@ -25,6 +42,11 @@ export function Popup() {
       return;
     }
     setSignedIn(true);
+    try {
+      setAlgorithms(await fetchAlgorithms());
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to load algorithms.');
+    }
   };
 
   const handleSignOut = async () => {
@@ -54,7 +76,7 @@ export function Popup() {
       )}
       {authError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>{authError}</p> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {['Work', 'Learning', 'Relax'].map((option) => (
+        {(algorithms.length > 0 ? algorithms.map((algorithm) => algorithm.name) : ['Work', 'Learning', 'Relax']).map((option) => (
           <button key={option} onClick={() => void handleSetMode(option)}>
             {option}
           </button>
