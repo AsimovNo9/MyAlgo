@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import type { AlgorithmIntentProfile } from '@/lib/concepts';
-import { buildConceptCatalog, buildStoredOrDerivedAlgorithmIntentProfile } from '@/lib/concepts';
+import { buildConceptsApiResponse } from '@/lib/concepts';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { Algorithm } from '@repo/shared-types';
 
 export async function GET() {
   const userId = await getCurrentUserIdFromServer();
@@ -39,34 +38,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unable to load algorithm concept profiles.' }, { status: 500 });
   }
 
-  const profiles = algorithms.map((algorithm) => {
-    const candidate = algorithm as unknown as Algorithm & {
-      topic_weights?: Array<{ topic: string; weight: number }>;
-      rules?: Array<{ type: string; condition_text: string }>;
-      algorithm_intent_profiles?: Array<{
-        canonical_topics?: string[] | null;
-        aliases?: string[] | null;
-        intents?: string[] | null;
-        semantic_terms?: string[] | null;
-      }> | null;
-    };
-
-    return {
-      algorithmId: candidate.id,
-      name: candidate.name,
-      profile: buildStoredOrDerivedAlgorithmIntentProfile({
-        ...candidate,
-        goal_text: candidate.goal_text ?? null,
-        topic_weights: (candidate.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
-        rules: (candidate.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
-      }),
-    };
-  });
-
-  return NextResponse.json({
-    concepts: buildConceptCatalog(conceptEntries),
-    profiles,
-  });
+  return NextResponse.json(buildConceptsApiResponse({ conceptEntries, algorithms }));
 }
 
 export async function POST(request: Request) {

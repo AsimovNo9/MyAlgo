@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
-import { buildConceptCatalog, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
+import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
@@ -68,6 +68,59 @@ test('buildStoredOrDerivedAlgorithmIntentProfile preserves persisted user-scoped
     aliases: ['custom alias'],
     intents: ['custom intent'],
     semanticTerms: ['custom semantic phrase'],
+  });
+});
+
+test('buildConceptsApiResponse keeps concept catalog and persisted profile fields in GET response shape', () => {
+  const response = buildConceptsApiResponse({
+    conceptEntries: [
+      {
+        id: 'concept-ai',
+        canonical_name: 'AI',
+        aliases: ['LLM'],
+        intents: ['model training'],
+      },
+    ],
+    algorithms: [
+      {
+        id: 'alg-1',
+        name: 'Creative Strategy',
+        goal_text: 'derive profile only when needed',
+        topic_weights: [{ topic: 'Game Design', weight: 88 }],
+        rules: [],
+        algorithm_intent_profiles: [
+          {
+            canonical_topics: ['Custom Topic'],
+            aliases: ['custom alias'],
+            intents: ['custom intent'],
+            semantic_terms: ['custom semantic phrase'],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(response, {
+    concepts: [
+      {
+        id: 'concept-ai',
+        canonicalName: 'AI',
+        aliases: ['LLM'],
+        intents: ['model training'],
+      },
+    ],
+    profiles: [
+      {
+        algorithmId: 'alg-1',
+        name: 'Creative Strategy',
+        profile: {
+          canonicalTopics: ['Custom Topic'],
+          aliases: ['custom alias'],
+          intents: ['custom intent'],
+          semanticTerms: ['custom semantic phrase'],
+        },
+      },
+    ],
   });
 });
 

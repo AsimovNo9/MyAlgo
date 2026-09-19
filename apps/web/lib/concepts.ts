@@ -20,6 +20,15 @@ export interface PersistedAlgorithmIntentProfile {
   semantic_terms?: string[] | null;
 }
 
+export interface ConceptsApiAlgorithmRecord {
+  id: string;
+  name: string;
+  goal_text?: string | null;
+  topic_weights?: Array<{ topic: string; weight: number }>;
+  rules?: Array<{ type: string; condition_text: string }>;
+  algorithm_intent_profiles?: PersistedAlgorithmIntentProfile[] | null;
+}
+
 export interface ConceptCatalogEntry {
   id: string;
   canonicalName: string;
@@ -192,13 +201,50 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): Algor
 }
 
 export function buildStoredOrDerivedAlgorithmIntentProfile(
-  algorithm?: (Algorithm & { algorithm_intent_profiles?: PersistedAlgorithmIntentProfile[] | null }) | null,
+  algorithm?: ConceptsApiAlgorithmRecord | null,
 ): AlgorithmIntentProfile {
   const persistedProfile = Array.isArray(algorithm?.algorithm_intent_profiles)
     ? algorithm.algorithm_intent_profiles[0] ?? null
     : null;
 
+  if (!algorithm) {
+    return buildAlgorithmIntentProfile(null);
+  }
+
   return persistedProfile
     ? normalizeAlgorithmIntentProfile(persistedProfile)
-    : buildAlgorithmIntentProfile(algorithm);
+    : buildAlgorithmIntentProfile({
+      id: algorithm.id,
+      name: algorithm.name,
+      goal_text: algorithm.goal_text ?? null,
+      topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
+      rules: (algorithm.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
+    });
+}
+
+export function buildConceptsApiResponse({
+  conceptEntries,
+  algorithms,
+}: {
+  conceptEntries: Array<{
+    id: string;
+    canonical_name: string;
+    aliases?: string[] | null;
+    intents?: string[] | null;
+  }>;
+  algorithms: ConceptsApiAlgorithmRecord[];
+}) {
+  return {
+    concepts: buildConceptCatalog(conceptEntries),
+    profiles: algorithms.map((algorithm) => ({
+      algorithmId: algorithm.id,
+      name: algorithm.name,
+      profile: buildStoredOrDerivedAlgorithmIntentProfile({
+        ...algorithm,
+        goal_text: algorithm.goal_text ?? null,
+        topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
+        rules: (algorithm.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
+      }),
+    })),
+  };
 }
