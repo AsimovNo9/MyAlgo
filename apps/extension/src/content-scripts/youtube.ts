@@ -19,10 +19,8 @@ type RankedFeedItem = {
 };
 
 let cachedFeed: RankedFeedItem[] = [];
-let rankTimer: number | null = null;
 let rankingInFlight = false;
 let activeMode = 'Work';
-let observer: MutationObserver | null = null;
 let rankGeneration = 0;
 let extensionEnabled = true;
 let lastCandidateSignature = '';
@@ -33,23 +31,26 @@ document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 
-const showStatus = (message: string, error = false) => {
+const showStatus = (message: string, error = false, paused = false) => {
   if (!isCurrentInstance()) return;
   let status = document.querySelector<HTMLElement>('[data-personal-algorithm-status]');
   if (!status) {
     status = document.createElement('div');
     status.dataset.personalAlgorithmStatus = 'true';
-    status.style.cssText = 'position:fixed;z-index:2147483647;right:16px;bottom:16px;padding:8px 11px;border-radius:999px;background:#0f172a;color:#fff;font:600 12px/1.2 sans-serif;box-shadow:0 3px 14px rgba(0,0,0,.3);';
+    status.style.cssText = 'position:fixed;z-index:2147483647;right:16px;bottom:16px;max-width:min(320px,calc(100vw - 24px));padding:10px 14px;border-radius:14px;border:1px solid rgba(148,163,184,0.35);font:700 12px/1.3 sans-serif;letter-spacing:0.02em;box-shadow:0 10px 26px rgba(15,23,42,0.38);';
     document.body.appendChild(status);
   }
-  status.style.background = error ? '#991b1b' : '#0f172a';
+
+  const isError = error || (!paused && message.toLowerCase().includes('failed'));
+  status.style.background = isError ? '#7f1d1d' : paused ? '#374151' : '#14532d';
+  status.style.color = '#f8fafc';
+  status.style.borderColor = isError ? 'rgba(248,113,113,0.7)' : paused ? 'rgba(148,163,184,0.7)' : 'rgba(52,211,153,0.7)';
   status.textContent = message;
 };
 
 const normalizeText = (value: string) => normalizeYouTubeText(value).toLowerCase();
 
 const clearExtensionPresentation = () => {
-  observer?.disconnect();
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.display = '';
     element.style.outline = '';
@@ -59,7 +60,7 @@ const clearExtensionPresentation = () => {
     delete element.dataset.personalAlgorithmRank;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
   });
-  document.querySelector('[data-personal-algorithm-status]')?.remove();
+  showStatus('Personal Algorithm: Paused', false, true);
 };
 
 const getVideoTitle = (element: HTMLElement) => {
@@ -185,7 +186,6 @@ const collectCandidates = () => {
 
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
-  observer?.disconnect();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
   const rankedElements: Array<{ element: HTMLElement; rank: number }> = [];
@@ -244,8 +244,6 @@ const applyRankedFeed = () => {
       parent.appendChild(element);
     }
   }
-
-  observer?.observe(document.body, { childList: true, subtree: true });
 };
 
 const rankCurrentPage = async () => {
@@ -271,7 +269,7 @@ const rankCurrentPage = async () => {
   chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
     rankingInFlight = false;
     if (!isCurrentInstance() || requestGeneration !== rankGeneration) {
-      if (isCurrentInstance()) scheduleRank();
+      if (isCurrentInstance()) triggerRank('manual');
       return;
     }
     if (response?.ok && Array.isArray(response.feed)) {
@@ -286,24 +284,42 @@ const rankCurrentPage = async () => {
   });
 };
 
-const scheduleRank = () => {
-  if (!isCurrentInstance()) return;
-  if (rankTimer !== null) window.clearTimeout(rankTimer);
-  rankTimer = window.setTimeout(() => {
-    rankTimer = null;
-    rankCurrentPage();
-  }, 650);
+const triggerRank = (reason: 'navigation' | 'mode' | 'manual' = 'manual') => {
+  if (!isCurrentInstance() || !extensionEnabled || rankingInFlight) return;
+
+  const currentCandidates = collectCandidates();
+  const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
+  const hasMeaningfulCards = currentCandidates.length >= 2;
+  if (reason !== 'manual' && hasMeaningfulCards && candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
+    return;
+  }
+
+  if (!hasMeaningfulCards && reason !== 'manual') {
+    return;
+  }
+
+  void rankCurrentPage();
 };
 
-observer = new MutationObserver(scheduleRank);
+const scheduleInitialRank = () => {
+  if (!extensionEnabled || !isCurrentInstance()) return;
+  window.setTimeout(() => {
+    if (!extensionEnabled || !isCurrentInstance()) return;
+    const currentCandidates = collectCandidates();
+    if (currentCandidates.length > 0) {
+      void rankCurrentPage();
+    }
+  }, 1500);
+};
+
 chrome.storage.local.get([STORAGE_KEYS.ENABLED]).then((result) => {
   extensionEnabled = result[STORAGE_KEYS.ENABLED] !== false;
   if (!extensionEnabled) {
     clearExtensionPresentation();
     return;
   }
-  observer?.observe(document.body, { childList: true, subtree: true });
-  rankCurrentPage();
+  showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+  scheduleInitialRank();
 });
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -316,8 +332,8 @@ chrome.runtime.onMessage.addListener((message) => {
     lastCandidateSignature = '';
     lastRankMode = '';
     if (extensionEnabled) {
-      observer?.observe(document.body, { childList: true, subtree: true });
-      scheduleRank();
+      showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+      triggerRank('mode');
     } else {
       clearExtensionPresentation();
     }
@@ -328,7 +344,7 @@ chrome.runtime.onMessage.addListener((message) => {
   rankingInFlight = false;
   activeMode = message.payload.mode;
   cachedFeed = [];
-  scheduleRank();
+  triggerRank('mode');
 });
 
 const registerFeedbackHandlers = () => {
@@ -353,5 +369,15 @@ const registerFeedbackHandlers = () => {
 
 registerFeedbackHandlers();
 
-window.addEventListener('yt-navigate-finish', scheduleRank);
-window.addEventListener('popstate', scheduleRank);
+window.addEventListener('load', () => {
+  scheduleInitialRank();
+});
+window.addEventListener('yt-navigate-finish', () => {
+  triggerRank('navigation');
+});
+window.addEventListener('yt-page-data-updated', () => {
+  triggerRank('navigation');
+});
+window.addEventListener('popstate', () => {
+  triggerRank('navigation');
+});
