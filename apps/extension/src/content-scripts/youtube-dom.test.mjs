@@ -12,6 +12,12 @@ test('extractYouTubeVideoId handles Shorts URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/shorts/short123?feature=share'), 'short123');
 });
 
+test('extractYouTubeVideoId handles live, embed, and short-host URLs', () => {
+  assert.equal(extractYouTubeVideoId('https://www.youtube.com/live/live123'), 'live123');
+  assert.equal(extractYouTubeVideoId('https://www.youtube.com/embed/embed123'), 'embed123');
+  assert.equal(extractYouTubeVideoId('https://youtu.be/short-host123?t=10'), 'short-host123');
+});
+
 test('extractYouTubeVideoId ignores unrelated URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/@channel'), undefined);
   assert.equal(extractYouTubeVideoId('not a url'), undefined);
@@ -20,5 +26,6 @@ test('extractYouTubeVideoId ignores unrelated URLs', () => {
 test('extractYouTubeLinkTitle prefers accessible title attributes', () => {
   assert.equal(extractYouTubeLinkTitle({ title: '  A video  ', ariaLabel: 'Other', textContent: 'Fallback' }), 'A video');
   assert.equal(extractYouTubeLinkTitle({ title: null, ariaLabel: 'Accessible title', textContent: 'Fallback' }), 'Accessible title');
+  assert.equal(extractYouTubeLinkTitle({ title: '', ariaLabel: 'Accessible title', textContent: 'Fallback' }), 'Accessible title');
   assert.equal(normalizeYouTubeText('  spaced\n title '), 'spaced title');
 });

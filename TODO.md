@@ -66,9 +66,11 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Verify MV3 extension permissions and storage requirements
 - [ ] Test the extension flow against the live API and deployed app
 - [ ] Review YouTube DOM compatibility and fallback behavior
+- [ ] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
 - [ ] Prepare Chrome Web Store submission requirements and assets
 
 ## Security and compliance
+- [ ] Rotate the exposed Supabase service-role, Anthropic, and Google OAuth secrets; update Vercel/local environments and redeploy
 - [ ] Confirm secrets are never included in the browser extension bundle
 - [ ] Review access patterns for service-role usage and server-only code
 - [ ] Add basic error monitoring and alerts for API failures
