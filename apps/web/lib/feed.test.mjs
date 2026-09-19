@@ -276,22 +276,32 @@ test('buildFeedResponse keeps explicit not-interested feedback suppressed', () =
 });
 
 test('buildFeedResponse keeps never-show rules stronger than always-show rules', () => {
-  const feed = buildFeedResponse(
-    {
-      id: 'alg-rule-precedence',
-      name: 'Work',
-      topic_weights: [],
-      rules: [
-        { type: 'always_show', condition_text: 'important' },
-        { type: 'never_show', condition_text: 'important' },
-      ],
-    },
-    [],
-    [{ id: 'blocked', external_id: 'blocked', title: 'Important update', base_score: 80 }],
-  );
+  const rulesByOrder = [
+    [
+      { type: 'always_show', condition_text: 'important' },
+      { type: 'never_show', condition_text: 'important' },
+    ],
+    [
+      { type: 'never_show', condition_text: 'important' },
+      { type: 'always_show', condition_text: 'important' },
+    ],
+  ];
 
-  assert.equal(feed.items[0].visible, false);
-  assert.match(feed.items[0].reason ?? '', /never-show rule/);
+  for (const rules of rulesByOrder) {
+    const feed = buildFeedResponse(
+      {
+        id: 'alg-rule-precedence',
+        name: 'Work',
+        topic_weights: [],
+        rules,
+      },
+      [],
+      [{ id: 'blocked', external_id: 'blocked', title: 'Important update', base_score: 80 }],
+    );
+
+    assert.equal(feed.items[0].visible, false);
+    assert.match(feed.items[0].reason ?? '', /never-show rule/);
+  }
 });
 
 test('buildFeedResponse matches gaming concept aliases from title text and boosts the ranking', () => {
