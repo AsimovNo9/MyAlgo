@@ -18,6 +18,17 @@ if (!health.response.ok) {
   throw new Error(`/api/health returned ${health.response.status}: ${health.body.slice(0, 240)}`);
 }
 
+let healthPayload;
+try {
+  healthPayload = JSON.parse(health.body);
+} catch (error) {
+  throw new Error(`/api/health returned invalid JSON: ${health.body.slice(0, 240)}`, { cause: error });
+}
+
+if (healthPayload.ok !== true) {
+  throw new Error('/api/health did not report ok: true.');
+}
+
 const cors = await request('/api/rank', {
   method: 'OPTIONS',
   headers: {
