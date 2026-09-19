@@ -83,7 +83,7 @@ function matchesSemanticTerm(title: string, term: string): boolean {
     return false;
   }
 
-  return normalizedTitle.includes(normalizedTerm) || new RegExp(`\\b${escapeRegex(normalizedTerm)}\\b`, 'i').test(normalizedTitle);
+  return new RegExp(`(^|\\s|[^a-z0-9])${escapeRegex(normalizedTerm)}($|\\s|[^a-z0-9])`, 'i').test(normalizedTitle);
 }
 
 export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number } | null {
