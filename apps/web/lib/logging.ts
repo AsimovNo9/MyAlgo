@@ -1,11 +1,14 @@
 const SENSITIVE_KEYS = new Set([
   'access_token',
   'refresh_token',
+  'accessToken',
+  'refreshToken',
   'client_secret',
   'clientSecret',
+  'authorization',
+  'Authorization',
   'token',
   'secret',
-  'authorization',
   'api_key',
   'apiKey',
 ]);

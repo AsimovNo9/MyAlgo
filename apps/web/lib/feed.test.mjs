@@ -444,8 +444,14 @@ test('redactSensitiveValues strips tokens and secrets from structured log payloa
   const payload = {
     access_token: 'secret-access-token',
     refresh_token: 'secret-refresh-token',
+    accessToken: 'camel-secret-access-token',
+    refreshToken: 'camel-secret-refresh-token',
     nested: {
       client_secret: 'secret-client-secret',
+      clientSecret: 'camel-secret-client-secret',
+      headers: {
+        Authorization: 'Bearer super-secret-token',
+      },
       url: 'https://example.com',
     },
     okay: 'visible-value',
@@ -456,8 +462,14 @@ test('redactSensitiveValues strips tokens and secrets from structured log payloa
   assert.deepEqual(redacted, {
     access_token: '[REDACTED]',
     refresh_token: '[REDACTED]',
+    accessToken: '[REDACTED]',
+    refreshToken: '[REDACTED]',
     nested: {
       client_secret: '[REDACTED]',
+      clientSecret: '[REDACTED]',
+      headers: {
+        Authorization: '[REDACTED]',
+      },
       url: 'https://example.com',
     },
     okay: 'visible-value',
