@@ -52,3 +52,19 @@ test('buildDiscoveryQueries creates format-aware queries for a learning topic', 
     'Computer Vision university course',
   ]);
 });
+
+test('buildDiscoveryQueries expands concept aliases for arbitrary user-defined topics', () => {
+  const queries = buildDiscoveryQueries({
+    name: 'Gaming',
+    goal_text: 'Build a deeper understanding of game design and gameplay systems',
+    topic_weights: [{ topic: 'Gaming', weight: 93 }],
+    rules: [{ type: 'priority', condition_text: 'indie games' }],
+  });
+
+  assert.equal(queries[0], 'Build a deeper understanding of game design and gameplay systems');
+  assert.equal(queries.includes('Gaming'), true);
+  assert.equal(queries.includes('game design'), true);
+  assert.equal(queries.includes('game development'), true);
+  assert.equal(queries.includes('indie games'), true);
+  assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
+});

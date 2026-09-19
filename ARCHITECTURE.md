@@ -160,7 +160,7 @@ personal-algorithm/
 | YouTube OAuth tokens | Postgres: `oauth_connections`, encrypted at rest | Never stored in the browser |
 | Raw fetched content metadata | Postgres: `content_items` | Reusable across users with overlapping subscriptions — avoids refetching |
 | Classification scores | Postgres: `classifications` | Cached per item, avoids re-calling the classifier every load |
-| Topic concepts and intent | Postgres + pgvector: concept table and intent cache | Maps custom terms, slang, aliases, and goals to canonical concepts |
+| Topic concepts and intent | Postgres + pgvector: concept table and intent cache | Maps custom terms, slang, aliases, and goals to canonical concepts; persists algorithm intent profiles per user algorithm |
 | Current visible feed / rank | Postgres: `feed_cache` (short TTL), mirrored into `chrome.storage.local` | DB is the source of truth; local storage is a fast read cache for the content script |
 | "Hidden this session" video IDs | `chrome.storage.local` only | Ephemeral UI state, no reason to sync to the server |
 

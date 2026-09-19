@@ -1,5 +1,7 @@
 import type { Algorithm, FeedItem, FeedResponse, Rule } from '@repo/shared-types';
 
+import { resolveTopicConceptTerms } from './concepts.ts';
+
 export type FeedFeedbackSignal = {
   external_id: string;
   channel_id?: string | null;
@@ -83,7 +85,7 @@ export function normalizeClassificationRecord(classification: unknown): { topics
   };
 }
 
-function inferTopicsFromTitle(title: string): string[] {
+function inferTopicsFromTitle(title: string, algorithm?: Algorithm | null): string[] {
   const normalizedTitle = title.toLowerCase();
   const topicRules = [
     { pattern: /\b(ai|llm|gpt|agent|automation|machine learning|computer vision|vision model)\b/i, topic: 'AI' },
@@ -94,7 +96,27 @@ function inferTopicsFromTitle(title: string): string[] {
     { pattern: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
   ];
 
-  return Array.from(new Set(topicRules.filter(({ pattern }) => pattern.test(normalizedTitle)).map(({ topic }) => topic)));
+  const inferredTopics = Array.from(new Set(topicRules.filter(({ pattern }) => pattern.test(normalizedTitle)).map(({ topic }) => topic)));
+  const conceptMatches = (algorithm?.topic_weights ?? []).flatMap((item) => {
+    const topic = item.topic.trim();
+    if (!topic) {
+      return [];
+    }
+
+    const conceptTerms = resolveTopicConceptTerms(topic, algorithm?.goal_text ?? '').map((term) => term.toLowerCase());
+    const canon = topic.toLowerCase();
+    const hasMatch = conceptTerms.some((term) => {
+      const target = term.toLowerCase();
+      if (target === canon) {
+        return new RegExp(`\\b${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(normalizedTitle);
+      }
+      return normalizedTitle.includes(target);
+    });
+
+    return hasMatch ? [topic] : [];
+  });
+
+  return Array.from(new Set([...inferredTopics, ...conceptMatches]));
 }
 
 function getFreshnessBoost(publishedAt?: string | null): number {
@@ -180,7 +202,7 @@ export function buildFeedResponse(
 
   const feedItems: FeedItem[] = candidateItems.map((video) => {
     const normalizedTopics = normalizeTopics(video.topics);
-    const titleDerivedTopics = inferTopicsFromTitle(video.title);
+    const titleDerivedTopics = inferTopicsFromTitle(video.title, algorithm);
     const matchedTopics = [...new Set([...normalizedTopics, ...titleDerivedTopics])].filter((topic) => weights.has(topic.toLowerCase()));
     let score = Number.isFinite(Number(video.base_score)) ? Number(video.base_score) * 0.5 : 25;
     let visible = true;
