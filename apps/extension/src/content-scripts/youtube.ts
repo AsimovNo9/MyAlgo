@@ -22,8 +22,15 @@ let rankTimer: number | null = null;
 let rankingInFlight = false;
 let activeMode = 'Work';
 let observer: MutationObserver | null = null;
+let rankGeneration = 0;
+const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const instanceAttribute = 'data-personal-algorithm-instance';
+document.documentElement.setAttribute(instanceAttribute, instanceId);
+
+const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 
 const showStatus = (message: string, error = false) => {
+  if (!isCurrentInstance()) return;
   let status = document.querySelector<HTMLElement>('[data-personal-algorithm-status]');
   if (!status) {
     status = document.createElement('div');
@@ -159,6 +166,7 @@ const collectCandidates = () => {
 };
 
 const applyRankedFeed = () => {
+  if (!isCurrentInstance()) return;
   observer?.disconnect();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
@@ -189,7 +197,7 @@ const applyRankedFeed = () => {
 };
 
 const rankCurrentPage = async () => {
-  if (rankingInFlight) return;
+  if (!isCurrentInstance() || rankingInFlight) return;
   const candidates = collectCandidates();
   if (candidates.length === 0) {
     showStatus(`Personal Algorithm: no cards on ${location.hostname}`, true);
@@ -199,13 +207,20 @@ const rankCurrentPage = async () => {
   rankingInFlight = true;
   showStatus(`Personal Algorithm: ranking ${candidates.length} videos`);
   const result = await chrome.storage.local.get(['personal-algorithm-mode']);
+  if (!isCurrentInstance()) return;
   activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
-  chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: activeMode, candidates } }, (response) => {
+  const requestGeneration = rankGeneration;
+  const requestMode = activeMode;
+  chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
     rankingInFlight = false;
+    if (!isCurrentInstance() || requestGeneration !== rankGeneration) {
+      if (isCurrentInstance()) scheduleRank();
+      return;
+    }
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
       applyRankedFeed();
-      showStatus(`${activeMode}: ranked ${response.feed.length} videos`);
+      showStatus(`${requestMode}: ranked ${response.feed.length} videos`);
     } else {
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
     }
@@ -213,6 +228,7 @@ const rankCurrentPage = async () => {
 };
 
 const scheduleRank = () => {
+  if (!isCurrentInstance()) return;
   if (rankTimer !== null) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
     rankTimer = null;
@@ -224,7 +240,10 @@ observer = new MutationObserver(scheduleRank);
 observer.observe(document.body, { childList: true, subtree: true });
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (!isCurrentInstance()) return;
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
+  rankGeneration += 1;
+  rankingInFlight = false;
   activeMode = message.payload.mode;
   cachedFeed = [];
   scheduleRank();
