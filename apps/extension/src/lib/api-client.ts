@@ -1,4 +1,4 @@
-import type { FeedResponse } from '@repo/shared-types';
+import type { Algorithm, FeedResponse } from '@repo/shared-types';
 import { getExtensionAccessToken } from './auth';
 
 export type PageCandidate = {
@@ -22,6 +22,21 @@ export async function getApiBaseUrl(): Promise<string> {
 
 export async function setApiBaseUrl(baseUrl: string): Promise<void> {
   await chrome.storage.local.set({ [API_BASE_URL_KEY]: normalizeApiBaseUrl(baseUrl) });
+}
+
+export async function fetchAlgorithms(): Promise<Algorithm[]> {
+  const baseUrl = await getApiBaseUrl();
+  const accessToken = await getExtensionAccessToken();
+  const response = await fetch(`${baseUrl}/api/algorithms`, {
+    credentials: 'include',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch algorithms: ${response.status}`);
+  }
+
+  return (await response.json()) as Algorithm[];
 }
 
 export async function fetchFeed(mode?: string): Promise<FeedResponse> {
