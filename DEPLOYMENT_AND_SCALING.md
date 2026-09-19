@@ -79,6 +79,22 @@ jobs:
 6. **Extension (dev):** load unpacked via `chrome://extensions` → "Load unpacked" pointing at `apps/extension/dist`.
 7. **Extension (public):** package and submit through the Chrome Web Store developer dashboard once ready for outside users.
 
+### Deployment smoke check
+
+After a production deploy, verify the health route and extension CORS contract:
+
+```bash
+DEPLOYMENT_URL=https://your-app.vercel.app pnpm verify:deployment
+```
+
+To also exercise authenticated live-page ranking, provide a short-lived Supabase access token without printing it:
+
+```bash
+DEPLOYMENT_URL=https://your-app.vercel.app SUPABASE_ACCESS_TOKEN="$TOKEN" pnpm verify:deployment
+```
+
+The Vercel project must deploy the `apps/web` Next.js app using `pnpm --filter web build`. The deployed app must include `apps/web/app/api/rank/route.ts` and `apps/web/middleware.ts`; a `404` for `/api/rank` means the deployment is stale or pointed at the wrong project/root.
+
 ## 7. Secrets Management
 
 - The extension bundle is client-visible code — **never** put the Google OAuth client secret or Anthropic API key in it. The extension only ever talks to your own API; your API holds the secrets.
