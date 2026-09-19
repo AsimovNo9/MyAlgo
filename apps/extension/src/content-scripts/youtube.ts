@@ -112,6 +112,14 @@ const getVideoId = (element: HTMLElement) => {
   return videoId ?? `title:${getVideoTitle(element)}`;
 };
 
+const getVideoSourceFlags = (element: HTMLElement) => {
+  const href = Array.from(element.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))[0]?.href ?? '';
+  return {
+    is_short: /\/shorts\//i.test(href),
+    is_live: /\/live\//i.test(href),
+  };
+};
+
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
@@ -148,6 +156,7 @@ const collectCandidates = () => {
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
+      ...getVideoSourceFlags(element),
     }))
     .filter((candidate) => candidate.title)
     .slice(0, 80);
@@ -161,6 +170,8 @@ const collectCandidates = () => {
         textContent: link.textContent,
       })),
       channel_name: '',
+      is_short: /\/shorts\//i.test(link.href),
+      is_live: /\/live\//i.test(link.href),
     }))
     .filter((candidate) => candidate.external_id && candidate.title);
 

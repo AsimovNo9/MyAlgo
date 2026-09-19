@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
   LAST_SYNC: 'personal-algorithm-last-sync',
+  SOURCE_FILTERS: 'personal-algorithm-source-filters',
 } as const;
 
 export async function getStorage<T>(key: string, fallback: T): Promise<T> {

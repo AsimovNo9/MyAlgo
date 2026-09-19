@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { FeedSourceFilters } from '@repo/shared-types';
 import { buildFeedResponse, type FeedCandidate } from '@/lib/feed';
 import { ensureDefaultAlgorithmsForUser } from '@/lib/bootstrap';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
@@ -12,7 +13,10 @@ type RankRequest = {
     external_id?: string;
     title?: string;
     channel_name?: string | null;
+    is_short?: boolean;
+    is_live?: boolean;
   }>;
+  sourceFilters?: FeedSourceFilters;
 };
 
 const modeTopicDefaults: Record<string, string[]> = {
@@ -114,6 +118,8 @@ export async function POST(request: Request) {
       external_id: candidate.external_id ?? `page-${index}`,
       title,
       channel_name: candidate.channel_name ?? null,
+      is_short: candidate.is_short === true,
+      is_live: candidate.is_live === true,
       published_at: new Date().toISOString(),
       base_score: 50,
       topics,
@@ -121,5 +127,8 @@ export async function POST(request: Request) {
     }; });
 
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
-  return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates, { includeHidden: true }));
+  return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates, {
+    includeHidden: true,
+    sourceFilters: payload.sourceFilters,
+  }));
 }

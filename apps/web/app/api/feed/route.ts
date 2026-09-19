@@ -3,6 +3,7 @@ import { buildFeedResponse, normalizeClassificationRecord, type FeedCandidate } 
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
+import type { FeedSourceFilters } from '@repo/shared-types';
 
 async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
   const client = await createSupabaseServerClient();
@@ -117,12 +118,19 @@ export async function GET(request: Request) {
   const { ensureDefaultAlgorithmsForUser } = await import('@/lib/bootstrap');
   const algorithms = await ensureDefaultAlgorithmsForUser(userId);
   const requestedMode = new URL(request.url).searchParams.get('mode')?.trim().toLowerCase();
+  const searchParams = new URL(request.url).searchParams;
+  const sourceFilters: FeedSourceFilters = {
+    subscribedOnly: searchParams.get('subscribedOnly') === 'true',
+    includeDiscovery: searchParams.get('includeDiscovery') !== 'false',
+    includeShorts: searchParams.get('includeShorts') !== 'false',
+    includeLive: searchParams.get('includeLive') !== 'false',
+  };
   const activeAlgorithm = (requestedMode
     ? algorithms.find((algorithm) => algorithm.name.trim().toLowerCase() === requestedMode)
     : null) ?? algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
-  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined);
+  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters });
 
   if (activeAlgorithm?.id) {
     await persistFeedCacheForUser(userId, activeAlgorithm.id, response.items);
