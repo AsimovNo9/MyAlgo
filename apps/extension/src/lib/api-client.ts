@@ -50,9 +50,6 @@ export async function fetchFeed(mode?: string): Promise<FeedResponse> {
   const accessToken = await getExtensionAccessToken();
   const query = mode ? `?mode=${encodeURIComponent(mode)}` : '';
   const endpoints = [baseUrl];
-  if (baseUrl !== 'http://localhost:3000') {
-    endpoints.push('http://localhost:3000');
-  }
 
   let lastStatus = 0;
   let lastError: unknown = null;
@@ -76,6 +73,9 @@ export async function fetchFeed(mode?: string): Promise<FeedResponse> {
         break;
       }
     } catch (error) {
+      if (error instanceof Error && error.message === 'Extension session expired. Sign in again from the popup.') {
+        throw error;
+      }
       lastError = error;
     }
   }
@@ -91,9 +91,6 @@ export async function rankPageCandidates(mode: string, candidates: PageCandidate
   const baseUrl = await getApiBaseUrl();
   const accessToken = await getExtensionAccessToken();
   const endpoints = [baseUrl];
-  if (baseUrl !== 'http://localhost:3000') {
-    endpoints.push('http://localhost:3000');
-  }
 
   let lastStatus = 0;
   for (const endpoint of endpoints) {
