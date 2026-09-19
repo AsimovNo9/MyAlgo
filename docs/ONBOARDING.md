@@ -15,6 +15,7 @@ Personal Algorithm is a Next.js dashboard plus a Manifest V3 Edge extension. Use
 - YouTube ingestion: `apps/web/lib/youtube.ts`
 - Live page ranking endpoint: `apps/web/app/api/rank/route.ts`
 - Extension content script: `apps/extension/src/content-scripts/youtube.ts`
+- Discovery query generation: `apps/web/lib/discovery.ts`
 
 ## Local setup
 
@@ -47,6 +48,8 @@ Reload the extension after every build. The extension popup supports Google sign
 - The extension defaults to `https://my-algo-web.vercel.app` but can be pointed to `http://localhost:3000` from its options page.
 - The local web app must be running for the local API URL to work.
 - The deployed app must include `/api/rank` before the extension can use live-page ranking against production.
+- Discovery currently uses bounded YouTube Search queries and metadata classification. It is not yet a full semantic/RAG system.
+- The planned semantic layer uses Supabase `pgvector` for canonical concepts, aliases, embeddings, and cached algorithm intent. See GitHub issues #20 and #22.
 - The content script displays a temporary diagnostic pill on YouTube. It reports whether cards were found, ranked, or rejected by the API.
 - Supabase OAuth for the extension requires an allowed redirect URL in the form `https://EXTENSION_ID.chromiumapp.org/supabase-auth`.
 
