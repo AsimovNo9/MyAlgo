@@ -182,3 +182,18 @@ create policy "own rows only" on public.feed_cache
 alter table public.feedback_events enable row level security;
 create policy "own rows only" on public.feedback_events
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create table public.topic_seed_channels (
+  id uuid primary key default gen_random_uuid(),
+  topic text not null,
+  channel_id text not null,
+  source text not null default 'curated' check (source in ('curated', 'discovered_via_search')),
+  added_at timestamptz not null default now(),
+  unique (topic, channel_id)
+);
+
+alter table public.topic_seed_channels enable row level security;
+create policy "authenticated users can read seed channels" on public.topic_seed_channels
+  for select using (auth.uid() is not null);
+create policy "authenticated users can insert seed channels" on public.topic_seed_channels
+  for insert with check (auth.uid() is not null);

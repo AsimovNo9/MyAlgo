@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/seed-channels/sync",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}

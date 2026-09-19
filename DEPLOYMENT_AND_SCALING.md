@@ -75,7 +75,7 @@ jobs:
 1. **Create a Supabase project.** Note the project URL and anon/service-role keys.
 2. **Apply the schema:** `supabase db push` (runs `packages/db/schema.sql` + RLS policies).
 3. **Google Cloud setup:** create a project, enable the YouTube Data API v3, create an OAuth 2.0 client (web application type for the backend flow).
-4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ANTHROPIC_API_KEY`.
+4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, and `CRON_SECRET`.
 5. **Deploy:** `vercel link` then `vercel --prod`.
 6. **Extension (dev):** load unpacked via `chrome://extensions` → "Load unpacked" pointing at `apps/extension/dist`.
 7. **Extension (public):** package and submit through the Chrome Web Store developer dashboard once ready for outside users.
@@ -113,6 +113,8 @@ Current stack as-is. No changes needed.
 - Add a quota-tracking table for the YouTube Data API (shared 10,000 units/day free quota) and request a quota increase from Google once usage approaches it.
 
 Discovery search is deliberately bounded at MVP scale: each sync derives at most three queries and requests at most five videos per query. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search.
+
+Niche-topic content that no user is subscribed to is sourced separately via free RSS polling (`apps/web/lib/rss.ts`, `apps/web/lib/seed-channels.ts`), driven by a shared Vercel Cron job (`apps/web/vercel.json`, every 6 hours) hitting `/api/seed-channels/sync`. This ingestion path consumes no YouTube Data API quota and runs once for the whole project, not per user, which is why it is the primary mechanism for topics like niche engineering or research content rather than per-user `search.list` polling.
 
 Semantic retrieval adds a second budget: embedding and resolver calls. Embed canonical concepts and algorithm intent, not every page mutation. Cache by content hash and algorithm revision; use deterministic aliases as the outage and cost fallback. Do not add a separate vector database before Supabase `pgvector` volume proves it necessary.
 
