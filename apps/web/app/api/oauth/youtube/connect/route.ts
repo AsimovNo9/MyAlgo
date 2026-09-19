@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { extractGoogleProviderTokens } from '@/lib/auth';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -21,10 +22,12 @@ export async function POST() {
   }
 
   const googleIdentity = sessionData.session.user?.identities?.find((item) => item.provider === 'google');
-  const accessToken = sessionData.session.provider_token ?? googleIdentity?.identity_data?.access_token;
-  const refreshToken = sessionData.session.provider_refresh_token ?? googleIdentity?.identity_data?.refresh_token;
+  const providerTokens = extractGoogleProviderTokens(sessionData.session);
+  const accessToken = providerTokens.accessToken;
+  const refreshToken = providerTokens.refreshToken;
 
   console.log('YouTube connect session debug', {
+    tokenSource: providerTokens.source,
     hasProviderToken: !!sessionData.session.provider_token,
     hasProviderRefreshToken: !!sessionData.session.provider_refresh_token,
     hasGoogleIdentity: !!googleIdentity,
