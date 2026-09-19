@@ -39,7 +39,7 @@ The extension has Supabase PKCE code and token storage, but the deployed OAuth r
 - The extension signs in through Edge using Google.
 - The extension redirect URL is configured in Supabase.
 - `/api/feed`, `/api/rank`, and `/api/feedback` accept the extension bearer token.
-- The OAuth callback logs the provider-token and refresh-token state so a missing token is diagnosable in production.
+- The OAuth callback logs only non-secret provider-token/refresh-token state and callback outcome metadata so a missing token is diagnosable in production without exposing raw token values.
 - `oauth_connections` persists a valid YouTube access/refresh pair for the active user.
 - Token refresh works after access-token expiry.
 - Sign-out removes local tokens and cached personalized feed data.
