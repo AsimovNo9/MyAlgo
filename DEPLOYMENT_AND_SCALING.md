@@ -100,7 +100,7 @@ The Vercel project must deploy the `apps/web` Next.js app using `pnpm --filter w
 
 - The extension bundle is client-visible code — **never** put the Google OAuth client secret or Anthropic API key in it. The extension only ever talks to your own API; your API holds the secrets.
 - Vercel encrypted environment variables cover secrets at MVP scale.
-- Store YouTube refresh tokens encrypted at rest (Supabase Vault, or `pgcrypto` if Vault isn't available on your plan).
+- Store YouTube refresh tokens encrypted at rest before public launch (Supabase Vault, or `pgcrypto` if Vault isn't available on your plan). The current route keeps them server-side but still needs this encryption step.
 
 ## 8. Growth Pathway
 
@@ -150,5 +150,5 @@ flowchart LR
 ## 11. Security Notes
 
 - Row Level Security enforced on every table containing user data.
-- OAuth tokens encrypted at rest, never exposed to the client.
+- OAuth tokens are server-side and never exposed to the client; at-rest encryption remains a launch blocker and must be implemented before public access.
 - The extension never holds a secret capable of calling Google or Anthropic directly — all third-party calls are proxied through your own API.

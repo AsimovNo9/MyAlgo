@@ -83,6 +83,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 ## Security and compliance
 - [x] Rotate the exposed Supabase service-role, Anthropic, and Google OAuth secrets
 - [x] Verify rotated values are set in Vercel/local environments and redeploy
+- [ ] Encrypt YouTube OAuth tokens at rest before public launch
 - [ ] Confirm secrets are never included in the browser extension bundle
 - [ ] Review access patterns for service-role usage and server-only code
 - [ ] Add basic error monitoring and alerts for API failures
