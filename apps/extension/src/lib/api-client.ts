@@ -1,5 +1,5 @@
 import type { Algorithm, FeedResponse } from '@repo/shared-types';
-import { getExtensionAccessToken } from './auth';
+import { getExtensionAccessToken, signOutExtension } from './auth';
 
 export type PageCandidate = {
   external_id: string;
@@ -62,6 +62,10 @@ export async function fetchFeed(mode?: string): Promise<FeedResponse> {
       }
 
       lastStatus = response.status;
+      if (response.status === 401) {
+        await signOutExtension();
+        throw new Error('Extension session expired. Sign in again from the popup.');
+      }
       if (response.status !== 404) {
         break;
       }
@@ -102,6 +106,10 @@ export async function rankPageCandidates(mode: string, candidates: PageCandidate
     }
 
     lastStatus = response.status;
+    if (response.status === 401) {
+      await signOutExtension();
+      throw new Error('Extension session expired. Sign in again from the popup.');
+    }
     if (response.status !== 404) {
       break;
     }
