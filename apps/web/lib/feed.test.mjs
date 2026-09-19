@@ -83,6 +83,24 @@ test('buildFeedResponse explains why a ranked item was boosted', () => {
   assert.match(feed.items[0].reason ?? '', /more like this|feedback/i);
 });
 
+test('buildFeedResponse boosts more-like-this feedback without changing visibility', () => {
+  const algorithm = { id: 'alg-feedback-boost', name: 'Work', topic_weights: [], rules: [] };
+  const candidates = [
+    { id: 'boosted', external_id: 'boosted', title: 'Candidate with positive feedback', base_score: 60 },
+    { id: 'baseline', external_id: 'baseline', title: 'Candidate without feedback', base_score: 60 },
+  ];
+
+  const baseline = buildFeedResponse(algorithm, [], candidates);
+  const boosted = buildFeedResponse(algorithm, [{ external_id: 'boosted', eventType: 'more_like_this' }], candidates);
+
+  const baselineItem = baseline.items.find((item) => item.external_id === 'boosted');
+  const boostedItem = boosted.items.find((item) => item.external_id === 'boosted');
+  assert.ok(baselineItem && boostedItem);
+  assert.equal(boostedItem.visible, true);
+  assert.equal(boostedItem.score, baselineItem.score + 18);
+  assert.match(boostedItem.reason ?? '', /more_like_this feedback/);
+});
+
 test('buildFeedResponse falls back to title-derived topics when classifications are empty', () => {
   const algorithm = {
     id: 'alg-2',
@@ -255,6 +273,35 @@ test('buildFeedResponse keeps explicit not-interested feedback suppressed', () =
   );
 
   assert.equal(feed.items[0].visible, false);
+});
+
+test('buildFeedResponse keeps never-show rules stronger than always-show rules', () => {
+  const rulesByOrder = [
+    [
+      { type: 'always_show', condition_text: 'important' },
+      { type: 'never_show', condition_text: 'important' },
+    ],
+    [
+      { type: 'never_show', condition_text: 'important' },
+      { type: 'always_show', condition_text: 'important' },
+    ],
+  ];
+
+  for (const rules of rulesByOrder) {
+    const feed = buildFeedResponse(
+      {
+        id: 'alg-rule-precedence',
+        name: 'Work',
+        topic_weights: [],
+        rules,
+      },
+      [],
+      [{ id: 'blocked', external_id: 'blocked', title: 'Important update', base_score: 80 }],
+    );
+
+    assert.equal(feed.items[0].visible, false);
+    assert.match(feed.items[0].reason ?? '', /never-show rule/);
+  }
 });
 
 test('buildFeedResponse matches gaming concept aliases from title text and boosts the ranking', () => {

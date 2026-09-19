@@ -75,6 +75,7 @@ Dashboard feedback works, but the extension and API need broader behavioral cove
 
 **Acceptance criteria**
 - Tests cover `more_like_this`, `not_interested`, and `never_show_channel`.
+- Tests cover positive feedback scoring and never-show versus always-show precedence.
 - Channel-wide suppression is tested across multiple videos.
 - Rule precedence is explicit and tested.
 - Extension feedback sends YouTube video IDs rather than titles.
