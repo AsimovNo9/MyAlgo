@@ -40,7 +40,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Supabase and database
 - [x] Apply final schema and channel metadata migrations to the production Supabase project
-- [ ] Confirm RLS policies are active and tested for user isolation
+- [x] Add automated schema coverage for RLS enablement and policy presence
+- [ ] Confirm RLS policies are active and tested for user isolation in production
 - [x] Verify profile creation and OAuth persistence for the approved test user
 - [ ] Validate database backups and recovery expectations
 - [ ] Add migration workflow for future schema changes

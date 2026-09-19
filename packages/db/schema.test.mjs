@@ -19,3 +19,24 @@ test('semantic intent tables are present in the tracked migration', () => {
   assert.match(semanticMigration, /alter table public\.concept_entries enable row level security/i);
   assert.match(semanticMigration, /alter table public\.algorithm_intent_profiles enable row level security/i);
 });
+
+test('schema enables RLS and defines a policy for every application table', () => {
+  const applicationTables = [
+    'profiles',
+    'oauth_connections',
+    'algorithms',
+    'topic_weights',
+    'rules',
+    'concept_entries',
+    'algorithm_intent_profiles',
+    'content_items',
+    'classifications',
+    'feed_cache',
+    'feedback_events',
+  ];
+
+  for (const table of applicationTables) {
+    assert.match(schema, new RegExp(`alter table public\\.${table} enable row level security`, 'i'), `${table} must enable RLS`);
+    assert.match(schema, new RegExp(`create policy [^\\n]+ on public\\.${table}`, 'i'), `${table} must define a policy`);
+  }
+});

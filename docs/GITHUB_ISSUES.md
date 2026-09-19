@@ -113,7 +113,7 @@ Before sharing the extension, review token handling, CORS, RLS, and production c
 **Acceptance criteria**
 - No service-role key or third-party secret appears in extension output.
 - CORS is restricted to known origins.
-- RLS policies are verified for profiles, algorithms, feedback, and content writes.
+- RLS policy coverage is guarded by a schema test; production user-isolation behavior still needs verification with separate accounts.
 - Production and local environment variables are separated.
 - OAuth callback URLs are documented and verified.
 
