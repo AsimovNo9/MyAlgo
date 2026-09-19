@@ -10,6 +10,7 @@ test('CORS allows configured site and extension origins', () => {
   try {
     assert.equal(isAllowedOrigin('http://localhost:3000'), true);
     assert.equal(isAllowedOrigin('chrome-extension://test-extension'), true);
+    assert.equal(isAllowedOrigin('chrome-extension://abcdefghijklmnopabcdefghijklmnop'), true);
     assert.equal(isAllowedOrigin('https://untrusted.example'), false);
   } finally {
     if (previous === undefined) {

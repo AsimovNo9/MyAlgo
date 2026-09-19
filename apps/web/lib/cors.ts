@@ -16,7 +16,12 @@ export function isAllowedOrigin(origin: string | null): boolean {
     return true;
   }
 
-  return configuredAllowedOrigins().includes(origin.replace(/\/$/, ''));
+  const normalizedOrigin = origin.replace(/\/$/, '');
+  if (/^chrome-extension:\/\/[a-p]{32}$/i.test(normalizedOrigin)) {
+    return true;
+  }
+
+  return configuredAllowedOrigins().includes(normalizedOrigin);
 }
 
 export function applyCorsHeaders(headers: Headers, origin: string | null): void {

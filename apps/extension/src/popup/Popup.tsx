@@ -11,6 +11,16 @@ export function Popup() {
   const [lastError, setLastError] = React.useState<string | null>(null);
   const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
 
+  const refreshAlgorithms = async () => {
+    try {
+      const availableAlgorithms = await fetchAlgorithms();
+      setAlgorithms(availableAlgorithms);
+      setAuthError(null);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to load algorithms.');
+    }
+  };
+
   React.useEffect(() => {
     chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache']).then(async (result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
@@ -42,11 +52,7 @@ export function Popup() {
       return;
     }
     setSignedIn(true);
-    try {
-      setAlgorithms(await fetchAlgorithms());
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Unable to load algorithms.');
-    }
+    await refreshAlgorithms();
   };
 
   const handleSignOut = async () => {
@@ -75,6 +81,7 @@ export function Popup() {
         <button onClick={() => void handleSignIn()}>Sign in with Google</button>
       )}
       {authError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>{authError}</p> : null}
+      {signedIn ? <button onClick={() => void refreshAlgorithms()}>Refresh algorithms</button> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {(algorithms.length > 0 ? algorithms.map((algorithm) => algorithm.name) : ['Work', 'Learning', 'Relax']).map((option) => (
           <button key={option} onClick={() => void handleSetMode(option)}>
