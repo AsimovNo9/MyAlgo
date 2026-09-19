@@ -92,7 +92,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 ## Launch readiness
 - [ ] Run a full end-to-end sign-in and feed flow in production
 - [ ] Validate a real user can sync subscriptions and view ranked results
-- [ ] Confirm logout and session reset behavior works correctly
+- [x] Confirm logout and session reset behavior works correctly
 - [ ] Add final QA checklist before open access launch
 - [ ] Publish launch notes and support/contact path for testers
 
