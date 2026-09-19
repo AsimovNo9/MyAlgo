@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { createSupabaseClient } from '../../../lib/supabase/client';
 
 export default function AuthCallbackPage() {
-  const router = useRouter();
-
   useEffect(() => {
+    const redirectToOverview = () => {
+      window.location.assign('/');
+    };
+
     const finalizeAuth = async () => {
       const client = createSupabaseClient();
 
       if (!client) {
-        router.replace('/');
+        redirectToOverview();
         return;
       }
 
@@ -24,7 +25,7 @@ export default function AuthCallbackPage() {
 
         if (error) {
           console.error('Auth callback session error:', error);
-          router.replace('/');
+          redirectToOverview();
           return;
         }
 
@@ -33,7 +34,7 @@ export default function AuthCallbackPage() {
             method: 'POST',
             credentials: 'include',
           });
-          router.replace('/');
+          redirectToOverview();
           return;
         }
 
@@ -61,12 +62,12 @@ export default function AuthCallbackPage() {
           }
         }
       } finally {
-        router.replace('/');
+        redirectToOverview();
       }
     };
 
     void finalizeAuth();
-  }, [router]);
+  }, []);
 
   return (
     <main style={{ padding: 24 }}>
