@@ -62,7 +62,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add bounded format-aware discovery queries for user-defined algorithm goals
 - [x] Add canonical topic concepts, aliases, and semantic intent resolution for user-defined topics
 - [x] Add a generic algorithm intent profile for arbitrary concepts beyond hand-coded defaults
-- [ ] Persist concept catalog + algorithm intent profiles in Supabase and expose them through the API layer
+- [x] Add tracked Supabase migration for concept catalog and algorithm intent profiles with RLS
+- [ ] Expose persisted concept catalog + algorithm intent profiles through the API layer
 - [ ] Add AI disambiguation only for low-confidence semantic matches
 
 ## Extension and browser experience

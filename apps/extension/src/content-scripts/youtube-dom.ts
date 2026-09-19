@@ -7,6 +7,12 @@ export function normalizeYouTubeText(value: string): string {
 export function extractYouTubeVideoId(href: string): string | undefined {
   try {
     const url = new URL(href, 'https://www.youtube.com');
+    const hostname = url.hostname.toLowerCase();
+    const isYouTubeHost = hostname === 'youtube.com'
+      || hostname.endsWith('.youtube.com')
+      || hostname === 'youtu.be';
+    if (!isYouTubeHost) return undefined;
+
     const fromQuery = url.searchParams.get('v');
     if (fromQuery && ['/watch', '/live'].includes(url.pathname)) return fromQuery;
 

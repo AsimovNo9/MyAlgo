@@ -139,4 +139,4 @@ See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next
 
 ## 13. Persist semantic concept catalogs and algorithm intent profiles
 
-This follows Issue #22 and completes the runtime path: persist the canonical concept catalog, store per-algorithm intent profiles, and surface the resolved concept metadata through the API so ranking, discovery, and future LLM-assisted disambiguation can all read the same source of truth.
+The tracked Supabase migration now creates the canonical concept catalog and per-algorithm intent profiles with RLS. The remaining runtime work is to expose the persisted concept metadata through the API so ranking, discovery, and future LLM-assisted disambiguation can all read the same source of truth.
