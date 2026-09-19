@@ -136,3 +136,7 @@ See [Issue #20](https://github.com/AsimovNo9/MyAlgo/issues/20). The first implem
 ## 12. Add semantic topic concepts and intent resolution
 
 See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next semantic layer: Supabase pgvector concepts, aliases, embeddings, structured intent, and low-confidence AI disambiguation with deterministic fallback.
+
+## 13. Persist semantic concept catalogs and algorithm intent profiles
+
+This follows Issue #22 and completes the runtime path: persist the canonical concept catalog, store per-algorithm intent profiles, and surface the resolved concept metadata through the API so ranking, discovery, and future LLM-assisted disambiguation can all read the same source of truth.

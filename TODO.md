@@ -56,7 +56,9 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Add observability around scoring decisions and feed generation
 - [x] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
 - [x] Add bounded format-aware discovery queries for user-defined algorithm goals
-- [ ] Add canonical topic concepts, aliases, embeddings, and semantic intent resolution
+- [x] Add canonical topic concepts, aliases, and semantic intent resolution for user-defined topics
+- [x] Add a generic algorithm intent profile for arbitrary concepts beyond hand-coded defaults
+- [ ] Persist concept catalog + algorithm intent profiles in Supabase and expose them through the API layer
 - [ ] Add AI disambiguation only for low-confidence semantic matches
 
 ## Extension and browser experience

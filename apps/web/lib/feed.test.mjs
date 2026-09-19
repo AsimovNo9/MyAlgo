@@ -227,3 +227,25 @@ test('buildFeedResponse keeps explicit not-interested feedback suppressed', () =
 
   assert.equal(feed.items[0].visible, false);
 });
+
+test('buildFeedResponse matches gaming concept aliases from title text and boosts the ranking', () => {
+  const algorithm = {
+    id: 'alg-9',
+    name: 'Gaming',
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [],
+  };
+
+  const feed = buildFeedResponse(
+    algorithm,
+    [],
+    [
+      { id: 'gaming-match', external_id: 'gaming-match', title: 'Indie game design breakdown for gameplay systems', topics: [], base_score: 55 },
+      { id: 'gaming-miss', external_id: 'gaming-miss', title: 'Celebrity gossip weekly recap', topics: [], base_score: 50 },
+    ],
+  );
+
+  assert.equal(feed.items[0].external_id, 'gaming-match');
+  assert.ok(feed.items[0].matched_topics.includes('Gaming'));
+  assert.ok(feed.items[0].reason?.toLowerCase().includes('gaming'));
+});
