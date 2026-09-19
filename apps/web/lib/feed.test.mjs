@@ -71,6 +71,37 @@ test('buildStoredOrDerivedAlgorithmIntentProfile preserves persisted user-scoped
   });
 });
 
+test('buildStoredOrDerivedAlgorithmIntentProfile merges all returned persisted profile rows', () => {
+  const profile = buildStoredOrDerivedAlgorithmIntentProfile({
+    id: 'alg-1',
+    name: 'Creative Strategy',
+    goal_text: 'derive profile only when needed',
+    topic_weights: [{ topic: 'Game Design', weight: 88 }],
+    rules: [],
+    algorithm_intent_profiles: [
+      {
+        canonical_topics: ['Custom Topic'],
+        aliases: ['custom alias'],
+        intents: ['custom intent'],
+        semantic_terms: ['custom semantic phrase'],
+      },
+      {
+        canonical_topics: ['Second Topic'],
+        aliases: ['second alias'],
+        intents: ['second intent'],
+        semantic_terms: ['second semantic phrase'],
+      },
+    ],
+  });
+
+  assert.deepEqual(profile, {
+    canonicalTopics: ['Custom Topic', 'Second Topic'],
+    aliases: ['custom alias', 'second alias'],
+    intents: ['custom intent', 'second intent'],
+    semanticTerms: ['custom semantic phrase', 'second semantic phrase'],
+  });
+});
+
 test('buildConceptsApiResponse keeps concept catalog and persisted profile fields in GET response shape', () => {
   const response = buildConceptsApiResponse({
     conceptEntries: [

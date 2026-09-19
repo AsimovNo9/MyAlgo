@@ -65,6 +65,28 @@ export function normalizeAlgorithmIntentProfile(profile?: PersistedAlgorithmInte
   };
 }
 
+function mergePersistedAlgorithmIntentProfiles(profiles: PersistedAlgorithmIntentProfile[]): AlgorithmIntentProfile {
+  const canonicalTopics = new Set<string>();
+  const aliases = new Set<string>();
+  const intents = new Set<string>();
+  const semanticTerms = new Set<string>();
+
+  for (const profile of profiles) {
+    const normalized = normalizeAlgorithmIntentProfile(profile);
+    normalized.canonicalTopics.forEach((topic) => canonicalTopics.add(topic));
+    normalized.aliases.forEach((alias) => aliases.add(alias));
+    normalized.intents.forEach((intent) => intents.add(intent));
+    normalized.semanticTerms.forEach((term) => semanticTerms.add(term));
+  }
+
+  return {
+    canonicalTopics: [...canonicalTopics],
+    aliases: [...aliases],
+    intents: [...intents],
+    semanticTerms: [...semanticTerms],
+  };
+}
+
 const conceptMap: Record<string, { aliases: string[]; intents: string[] }> = {
   gaming: {
     aliases: ['game design', 'game development', 'gameplay', 'indie games', 'esports'],
@@ -203,16 +225,16 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): Algor
 export function buildStoredOrDerivedAlgorithmIntentProfile(
   algorithm?: ConceptsApiAlgorithmRecord | null,
 ): AlgorithmIntentProfile {
-  const persistedProfile = Array.isArray(algorithm?.algorithm_intent_profiles)
-    ? algorithm.algorithm_intent_profiles[0] ?? null
-    : null;
+  const persistedProfiles = Array.isArray(algorithm?.algorithm_intent_profiles)
+    ? algorithm.algorithm_intent_profiles.filter(Boolean)
+    : [];
 
   if (!algorithm) {
     return buildAlgorithmIntentProfile(null);
   }
 
-  return persistedProfile
-    ? normalizeAlgorithmIntentProfile(persistedProfile)
+  return persistedProfiles.length > 0
+    ? mergePersistedAlgorithmIntentProfiles(persistedProfiles)
     : buildAlgorithmIntentProfile({
       id: algorithm.id,
       name: algorithm.name,
