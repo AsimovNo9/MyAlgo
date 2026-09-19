@@ -20,18 +20,19 @@ const modeTopicDefaults: Record<string, string[]> = {
 };
 
 const topicAliases: Record<string, RegExp> = {
-  gaming: /\b(game|gaming|gameplay|walkthrough|speedrun|esports|rpg|fps|xbox|playstation|nintendo|steam)\b/i,
+  gaming: /\b(game|games|gaming|gameplay|playthrough|walkthrough|speedrun|esports|rpg|fps|boss|devlog|xbox|playstation|nintendo|steam|minecraft|fortnite|valorant|elden ring)\b/i,
   sports: /\b(sport|sports|football|soccer|basketball|tennis|nba|nfl|formula 1|f1)\b/i,
   travel: /\b(travel|trip|vacation|tourism|destination|flight|hotel)\b/i,
   nature: /\b(nature|wildlife|animals|landscape|ocean|forest|climate)\b/i,
   science: /\b(science|physics|biology|chemistry|space|astronomy)\b/i,
 };
 
-function inferCandidateTopics(title: string, algorithmTopics: string[]): string[] {
+function inferCandidateTopics(title: string, channelName: string, algorithmTopics: string[]): string[] {
+  const searchableText = `${title} ${channelName}`;
   return algorithmTopics.filter((topic) => {
     const normalizedTopic = topic.trim().toLowerCase();
     const pattern = topicAliases[normalizedTopic] ?? new RegExp(`\\b${normalizedTopic.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i');
-    return pattern.test(title);
+    return pattern.test(searchableText);
   });
 }
 
@@ -61,7 +62,8 @@ export async function POST(request: Request) {
     .slice(0, 100)
     .map((candidate, index) => {
       const title = candidate.title!.trim();
-      const topics = inferCandidateTopics(title, algorithmTopics);
+      const channelName = candidate.channel_name ?? '';
+      const topics = inferCandidateTopics(title, channelName, algorithmTopics);
       const matchingRule = algorithm?.rules?.some((rule) => matchesRule(title, rule.condition_text));
       return {
       id: candidate.external_id ?? `page-${index}`,

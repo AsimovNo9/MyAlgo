@@ -14,6 +14,8 @@ const supabase = supabaseUrl && supabaseAnonKey
     })
   : null;
 
+let signInInFlight: Promise<void> | null = null;
+
 async function storeSession(session: Session | null) {
   if (!session) {
     return;
@@ -60,7 +62,7 @@ async function refreshExtensionSession(): Promise<string | null> {
   return data.session.access_token;
 }
 
-export async function signInWithGoogle(): Promise<void> {
+async function startGoogleSignIn(): Promise<void> {
   if (!supabase) {
     throw new Error('Extension Supabase configuration is missing.');
   }
@@ -113,6 +115,16 @@ export async function signInWithGoogle(): Promise<void> {
     setStorage(REFRESH_TOKEN_KEY, refreshToken),
     setStorage(EXPIRES_AT_KEY, Number(hash.get('expires_at') ?? 0)),
   ]);
+}
+
+export function signInWithGoogle(): Promise<void> {
+  if (!signInInFlight) {
+    signInInFlight = startGoogleSignIn().finally(() => {
+      signInInFlight = null;
+    });
+  }
+
+  return signInInFlight;
 }
 
 export async function signOutExtension(): Promise<void> {
