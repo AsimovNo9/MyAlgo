@@ -223,6 +223,7 @@ export function buildFeedResponse(
     let score = Number.isFinite(Number(video.base_score)) ? Number(video.base_score) * 0.5 : 25;
     let visible = true;
     let feedbackSuppressed = false;
+    let neverShowRuleMatched = false;
     const scoreContributors: string[] = [];
     const ruleSummary: string[] = [];
     const feedbackSummary: string[] = [];
@@ -288,12 +289,13 @@ export function buildFeedResponse(
       if (!matched) continue;
 
       if (rule.type === 'never_show') {
+        neverShowRuleMatched = true;
         visible = false;
         ruleSummary.push(`never-show rule: ${rule.condition_text}`);
       }
 
       if (rule.type === 'always_show') {
-        if (!feedbackSuppressed) {
+        if (!feedbackSuppressed && !neverShowRuleMatched) {
           visible = true;
         }
         score += 20;
