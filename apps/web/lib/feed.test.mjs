@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
+import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
@@ -12,6 +13,42 @@ test('normalizeClassificationRecord unwraps Supabase nested relation arrays', ()
 
   assert.deepEqual(record?.topics, ['AI', 'Productivity']);
   assert.equal(record?.quality_score, 91);
+});
+
+test('fetchWithRetry retries transient responses and returns the recovered response', async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts += 1;
+    return new Response(attempts === 3 ? '{"ok":true}' : 'busy', { status: attempts === 3 ? 200 : 503 });
+  };
+
+  try {
+    const response = await fetchWithRetry('https://example.com', undefined, { backoffMs: 0 });
+    assert.equal(response.status, 200);
+    assert.equal(attempts, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchWithRetry aborts a hung request after the configured attempts', async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = (_input, init) => new Promise((_resolve, reject) => {
+    attempts += 1;
+    init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+  });
+
+  try {
+    await assert.rejects(
+      fetchWithRetry('https://example.com', undefined, { maxAttempts: 2, timeoutMs: 1, backoffMs: 0 }),
+      { name: 'AbortError' },
+    );
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('buildConceptCatalog exposes persisted concept metadata in the API shape', () => {

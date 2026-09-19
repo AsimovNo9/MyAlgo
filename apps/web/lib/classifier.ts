@@ -1,3 +1,5 @@
+import { fetchWithRetry } from './http.ts';
+
 export type ClassificationResult = {
   topics: string[];
   content_type: string;
@@ -105,7 +107,7 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -122,8 +124,7 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
           content: `Classify this title:\n${title.slice(0, 500)}`,
         }],
       }),
-      signal: AbortSignal.timeout(4000),
-    });
+    }, { timeoutMs: 4000 });
 
     if (!response.ok) {
       return null;

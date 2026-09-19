@@ -1,6 +1,7 @@
 import type { Algorithm } from '@repo/shared-types';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
 import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
+import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 
 export type YoutubeSubscriptionItem = {
@@ -121,7 +122,7 @@ async function fetchYoutubeChannelMetadata(userId: string, channelIds: string[])
 
   for (let index = 0; index < uniqueChannelIds.length; index += 50) {
     const chunk = uniqueChannelIds.slice(index, index + 50);
-    const response = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(chunk.join(','))}`, {
+    const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(chunk.join(','))}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
@@ -163,7 +164,7 @@ async function fetchYoutubeRecentUploads(
       continue;
     }
 
-    const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(metadata.uploads_playlist_id)}&maxResults=3`, {
+    const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(metadata.uploads_playlist_id)}&maxResults=3`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
@@ -217,7 +218,7 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
       order: 'date',
       q: query,
     });
-    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, {
+    const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
     });
 
@@ -344,7 +345,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
   }
 
   try {
-    const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const refreshResponse = await fetchWithRetry('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -503,7 +504,7 @@ export async function fetchYoutubeSubscriptionFeed(userId?: string): Promise<{ i
   }
 
   try {
-    const response = await fetch('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=25', {
+    const response = await fetchWithRetry('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=25', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',

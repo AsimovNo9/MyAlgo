@@ -53,7 +53,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Validate subscription sync for a real account with live data
 - [ ] Confirm API quota usage and failure handling for YouTube requests
 - [ ] Review fallback behavior when no Google/YouTube token is available
-- [ ] Add retry and timeout handling for downstream API calls
+- [x] Add retry and timeout handling for downstream API calls
 
 ## Feed ranking and scoring
 - [ ] Validate ranking logic against real user subscriptions and content
