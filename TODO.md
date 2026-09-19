@@ -35,7 +35,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Confirm the deployed production URL responds from the expected Vercel app
 - [ ] Confirm the Vercel project is deployed from the correct root directory
 - [ ] Validate the production app domain and callback URLs match the live deployment
-- [ ] Add a health check endpoint to monitor uptime and deployment health
+- [x] Add a health check endpoint to monitor uptime and deployment health
 - [ ] Review environment segregation between local, preview, and production
 
 ## Supabase and database

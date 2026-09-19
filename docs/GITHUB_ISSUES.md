@@ -96,7 +96,7 @@ The repository workflow now covers the monorepo checks and uploads the built ext
 
 **Labels:** `priority:medium`, `area:infra`, `area:backend`
 
-The app has a basic health route, but feed generation and downstream API failures are difficult to diagnose.
+The app has a health route with a server-side Supabase connectivity check; feed generation and downstream API failures still need richer structured observability.
 
 **Acceptance criteria**
 - Health check reports Supabase connectivity without exposing secrets.
