@@ -81,6 +81,21 @@ export function Popup() {
   return (
     <main style={{ minWidth: 260, padding: 16, fontFamily: 'sans-serif' }}>
       <h2 style={{ marginTop: 0 }}>Personal Algorithm</h2>
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 12px',
+        borderRadius: 999,
+        background: enabled ? '#dcfce7' : '#e5e7eb',
+        color: enabled ? '#166534' : '#374151',
+        border: `1px solid ${enabled ? '#86efac' : '#cbd5e1'}`,
+        fontWeight: 700,
+        marginBottom: 12,
+      }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: enabled ? '#22c55e' : '#9ca3af', display: 'inline-block' }} />
+        {enabled ? 'Enabled' : 'Paused'}
+      </div>
       <p>Current mode: <strong>{mode}</strong></p>
       <p>Account: <strong>{signedIn ? 'Connected' : 'Not connected'}</strong></p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
