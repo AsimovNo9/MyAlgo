@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === 'RANK_PAGE') {
     void (async () => {
       try {
-        const mode = await getStorage(STORAGE_KEYS.MODE, 'Work');
+        const mode = payload?.mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
         const ranked = await rankPageCandidates(mode, (payload as { candidates?: PageCandidate[] }).candidates ?? []);
         await setStorage('personal-algorithm-last-error', null);
         sendResponse({ ok: true, feed: normalizeFeed(ranked) });
@@ -58,8 +58,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     const nextMode = payload?.mode ?? 'Work';
-    void setStorage(STORAGE_KEYS.MODE, nextMode);
-    void refreshFeed(nextMode);
+    void (async () => {
+      await setStorage(STORAGE_KEYS.MODE, nextMode);
+      await refreshFeed(nextMode);
+      const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
+        : undefined));
+    })();
     sendResponse({ ok: true });
     return true;
   }

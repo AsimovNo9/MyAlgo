@@ -21,6 +21,7 @@ let cachedFeed: RankedFeedItem[] = [];
 let rankTimer: number | null = null;
 let rankingInFlight = false;
 let activeMode = 'Work';
+let observer: MutationObserver | null = null;
 
 const showStatus = (message: string, error = false) => {
   let status = document.querySelector<HTMLElement>('[data-personal-algorithm-status]');
@@ -158,6 +159,7 @@ const collectCandidates = () => {
 };
 
 const applyRankedFeed = () => {
+  observer?.disconnect();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
 
@@ -183,9 +185,10 @@ const applyRankedFeed = () => {
     }
     badge.textContent = `${activeMode} · ${score}`;
   });
+  observer?.observe(document.body, { childList: true, subtree: true });
 };
 
-const rankCurrentPage = () => {
+const rankCurrentPage = async () => {
   if (rankingInFlight) return;
   const candidates = collectCandidates();
   if (candidates.length === 0) {
@@ -195,10 +198,9 @@ const rankCurrentPage = () => {
 
   rankingInFlight = true;
   showStatus(`Personal Algorithm: ranking ${candidates.length} videos`);
-  chrome.storage.local.get(['personal-algorithm-mode']).then((result) => {
-    activeMode = (result['personal-algorithm-mode'] as string) ?? 'Work';
-  });
-  chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { candidates } }, (response) => {
+  const result = await chrome.storage.local.get(['personal-algorithm-mode']);
+  activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
+  chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: activeMode, candidates } }, (response) => {
     rankingInFlight = false;
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
@@ -218,8 +220,15 @@ const scheduleRank = () => {
   }, 650);
 };
 
-const observer = new MutationObserver(scheduleRank);
+observer = new MutationObserver(scheduleRank);
 observer.observe(document.body, { childList: true, subtree: true });
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
+  activeMode = message.payload.mode;
+  cachedFeed = [];
+  scheduleRank();
+});
 
 rankCurrentPage();
 
