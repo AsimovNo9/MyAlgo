@@ -276,7 +276,7 @@ test('buildFeedResponse keeps explicit not-interested feedback suppressed', () =
 });
 
 test('buildFeedResponse keeps never-show rules stronger than always-show rules', () => {
-  const rulesByOrder = [
+  const ruleOrders = [
     [
       { type: 'always_show', condition_text: 'important' },
       { type: 'never_show', condition_text: 'important' },
@@ -287,7 +287,7 @@ test('buildFeedResponse keeps never-show rules stronger than always-show rules',
     ],
   ];
 
-  for (const rules of rulesByOrder) {
+  for (const rules of ruleOrders) {
     const feed = buildFeedResponse(
       {
         id: 'alg-rule-precedence',

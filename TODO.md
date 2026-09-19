@@ -8,6 +8,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Validate the extension locally with typecheck, tests, and a production build
 - [ ] Repeat the full sign-in → profile creation → YouTube sync flow in production
 - [ ] Run production validation and launch hardening for the live app and extension
+- [ ] Complete the production OAuth/session validation pass for the Google + YouTube provider tokens
 
 ## Immediate next actions
 - [x] Stabilize the YouTube ranking trigger flow and remove the re-trigger refresh loop
@@ -17,6 +18,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Re-test the full OAuth and YouTube authorization flow after environment verification
 - [ ] Validate the Vercel deployment against the real Supabase production project
 - [ ] Rotate exposed secrets and confirm they are not embedded in the browser bundle
+- [ ] Run the focused Google + YouTube production auth validation pass and capture non-secret provider-token diagnostics without logging raw token values
 
 ## Current environment state
 - [x] The app-local config in [apps/web/.env.local](apps/web/.env.local) is aligned with the production Vercel domain for live deployment testing

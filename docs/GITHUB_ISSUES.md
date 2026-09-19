@@ -33,12 +33,14 @@ The content script loads, but some YouTube surfaces report `no cards`. YouTube D
 
 **Labels:** `priority:high`, `area:auth`, `area:extension`
 
-The extension has Supabase PKCE code and token storage, but the deployed OAuth redirect and bearer-session flow need a complete production test.
+The extension has Supabase PKCE code and token storage, but the deployed OAuth redirect and bearer-session flow need a complete production test. The next pass should focus on confirming the live session state, the YouTube provider tokens, and whether the authentication callback reaches the backend with enough token data for `oauth_connections` persistence.
 
 **Acceptance criteria**
 - The extension signs in through Edge using Google.
 - The extension redirect URL is configured in Supabase.
 - `/api/feed`, `/api/rank`, and `/api/feedback` accept the extension bearer token.
+- The OAuth callback logs only non-secret provider-token/refresh-token state and callback outcome metadata so a missing token is diagnosable in production without exposing raw token values.
+- `oauth_connections` persists a valid YouTube access/refresh pair for the active user.
 - Token refresh works after access-token expiry.
 - Sign-out removes local tokens and cached personalized feed data.
 
