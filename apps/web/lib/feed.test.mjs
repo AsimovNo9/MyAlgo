@@ -403,9 +403,14 @@ test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never
     const expiresAt = Date.now() + 5 * 60 * 1000;
     console.log('YouTube provider session state', buildYoutubeProviderSessionStateLog('user-123', tokenSummary, null));
     console.log('YouTube token check', buildYoutubeTokenCheckLog('user-123', 'stored-access-token', 'stored-refresh-token', expiresAt));
+    console.log(
+      'YouTube token check',
+      buildYoutubeTokenCheckLog('user-123', 'stored-access-token', 'stored-refresh-token', Date.now() + 30 * 1000),
+    );
 
     const providerSessionState = capturedArgs[0]?.[1];
     const tokenCheckState = capturedArgs[1]?.[1];
+    const expiringTokenCheckState = capturedArgs[2]?.[1];
 
     assert.deepEqual(providerSessionState, {
       userId: 'user-123',
@@ -424,6 +429,7 @@ test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never
     assert.equal(tokenCheckState.hasRefreshToken, true);
     assert.equal(tokenCheckState.expiresAt, expiresAt);
     assert.equal(tokenCheckState.expiredSoon, false);
+    assert.equal(expiringTokenCheckState.expiredSoon, true);
     assert.equal(JSON.stringify(capturedArgs).includes('provider-access-token'), false);
     assert.equal(JSON.stringify(capturedArgs).includes('identity-access-token'), false);
     assert.equal(JSON.stringify(capturedArgs).includes('stored-access-token'), false);
