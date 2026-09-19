@@ -6,7 +6,7 @@
 
 ## 1. Product Summary
 
-A Chrome extension (MV3) + lightweight web dashboard that lets a user define "algorithms" (topic weights + always/never-show rules), then reshapes what they see on youtube.com to match — sourced from their own subscriptions/uploads via the official YouTube Data API, scored by an LLM classifier, and applied client-side.
+A Chrome extension (MV3) + lightweight web dashboard that lets a user define "algorithms" (topic weights + always/never-show rules), then reshapes what they see on youtube.com to match — sourced from their own subscriptions/uploads via the official YouTube Data API, scored by deterministic metadata rules with optional AI fallback, and applied client-side.
 
 ## 2. Guiding Principles
 
@@ -157,7 +157,7 @@ personal-algorithm/
 |---|---|---|
 | Auth session | Supabase Auth JWT (extension: `chrome.storage.local`; web: cookie) | Standard, secure, shared across both surfaces |
 | Rules/weights (source of truth) | Postgres: `algorithms`, `topic_weights`, `rules` | Durable, queryable, portable across devices |
-| YouTube OAuth tokens | Postgres: `oauth_connections`, encrypted at rest | Never stored in the browser |
+| YouTube OAuth tokens | Postgres: `oauth_connections`, server-side only; encryption at rest is a launch blocker | Never stored in the browser |
 | Raw fetched content metadata | Postgres: `content_items` | Reusable across users with overlapping subscriptions — avoids refetching |
 | Classification scores | Postgres: `classifications` | Cached per item, avoids re-calling the classifier every load |
 | Topic concepts and intent | Postgres + pgvector: concept table and intent cache | Maps custom terms, slang, aliases, and goals to canonical concepts; persists algorithm intent profiles per user algorithm |

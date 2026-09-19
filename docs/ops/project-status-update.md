@@ -3,7 +3,7 @@ The extension stability issue has been resolved in the current branch: we remove
 
 The technical work is now in a stable state and validated locally with the project checks:
 - `pnpm --filter extension typecheck` passed
-- `pnpm --filter extension test` passed (5/5 tests)
+- `pnpm --filter extension test` passed (8/8 tests)
 - `pnpm --filter extension build` passed
 
 The next phase is not another core ranking rewrite; it is production validation and launch hardening. The main priorities are:
@@ -24,3 +24,13 @@ This is the phase we should move into now to turn the working feature into a lau
 - Repository deployment verifier passed without an authenticated rank token
 - Web typecheck and production build passed
 - Production credentials have been rotated, applied to the environments, and used by the deployment
+
+## Current implementation status
+- Persisted concept catalog and algorithm intent profiles are exposed through `GET /api/concepts`.
+- Downstream YouTube and classification requests have bounded retry and timeout handling.
+- Extension logout clears OAuth tokens, cached feed data, sync state, and errors while preserving user preferences.
+- MV3 permissions are limited to `storage` and `identity`, with representative YouTube surface fixtures in the extension test suite.
+- OAuth token encryption at rest, real-user production OAuth/sync validation, monitoring, and store submission remain open.
+
+## Priority pivot
+The next product phase is quality-first feed relevance. The immediate acceptance bar is that a selected algorithm must not surface unrelated content merely because the database has available items. Source controls such as subscribed-only, hide Shorts, and discovery toggles follow the relevance fix; broader semantic expansion remains secondary until the feed earns user trust.

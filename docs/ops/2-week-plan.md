@@ -1,17 +1,17 @@
 # 2-week plan: Production validation and launch hardening
 
-## Week 1: Production validation
-1. Validate the production deployment and environment wiring
-2. Test Google OAuth and Supabase auth in the live app
-3. Validate YouTube token exchange and live sync for a real account
-4. Confirm feed ranking works on real content from the live environment
-5. Review risk areas: quota handling, token refresh, error states, and empty feeds
+## Week 1: Feed quality pivot
+1. Enforce strict relevance gating and a truthful no-match empty state
+2. Add subscribed-only, hide Shorts, discovery, and live-content controls
+3. Add relevance thresholds, duplicate suppression, and channel diversity limits
+4. Test the same candidate set across algorithms and source-control combinations
+5. Validate the improved feed against real production content
 
-## Week 2: Launch hardening
-1. Rotate and re-verify secrets and service credentials
-2. Add production monitoring and health checks
-3. Finalize extension packaging and MV3 review
-4. Run end-to-end QA for pause/resume, mode switching, and page ranking
+## Week 2: Production and launch hardening
+1. Complete Google OAuth, YouTube sync, and token refresh validation
+2. Encrypt OAuth tokens at rest and verify extension bundle secret hygiene
+3. Add production monitoring and health checks
+4. Run end-to-end QA for pause/resume, mode switching, and source controls
 5. Prepare launch notes and Chrome Web Store submission materials
 
 ## Definition of done
