@@ -1,0 +1,65 @@
+# Developer Onboarding
+
+## Product
+
+Personal Algorithm is a Next.js dashboard plus a Manifest V3 Edge extension. Users define algorithms made of topic weights and rules. The extension ranks videos currently visible on YouTube and hides or emphasizes them without requiring a page refresh.
+
+## Current architecture
+
+- Web app: `apps/web` (Next.js App Router)
+- Extension: `apps/extension` (Vite + CRXJS + React)
+- Shared types: `packages/shared-types`
+- Canonical schema: `packages/db/schema.sql`
+- Supabase CLI migrations: `supabase/migrations`
+- Ranking logic: `apps/web/lib/feed.ts`
+- YouTube ingestion: `apps/web/lib/youtube.ts`
+- Live page ranking endpoint: `apps/web/app/api/rank/route.ts`
+- Extension content script: `apps/extension/src/content-scripts/youtube.ts`
+
+## Local setup
+
+```bash
+node --version # Node 22+
+pnpm install
+cd apps/web
+npx next dev -p 3000
+```
+
+The `pnpm --filter web dev -- --port 3000` form is not reliable in this repository because the extra separator is passed to Next as a project path. Use `npx next dev -p 3000` when a fixed port is needed.
+
+## Extension build in WSL + Edge
+
+```bash
+pnpm --filter extension typecheck
+pnpm --filter extension build
+```
+
+In Edge, open `edge://extensions`, enable Developer mode, and load:
+
+```text
+\\wsl.localhost\Ubuntu-26.04\home\damola\myalgo\apps\extension\dist
+```
+
+Reload the extension after every build. The extension popup supports Google sign-in, mode selection, and API URL configuration.
+
+## Important runtime details
+
+- The extension defaults to `https://my-algo-web.vercel.app` but can be pointed to `http://localhost:3000` from its options page.
+- The local web app must be running for the local API URL to work.
+- The deployed app must include `/api/rank` before the extension can use live-page ranking against production.
+- The content script displays a temporary diagnostic pill on YouTube. It reports whether cards were found, ranked, or rejected by the API.
+- Supabase OAuth for the extension requires an allowed redirect URL in the form `https://EXTENSION_ID.chromiumapp.org/supabase-auth`.
+
+## Validation commands
+
+```bash
+pnpm --filter web typecheck
+pnpm --filter extension typecheck
+pnpm --filter extension build
+node --experimental-strip-types --test apps/web/lib/feed.test.mjs
+node --test packages/db/schema.test.mjs
+```
+
+## First task for a new developer
+
+Start with issue 1 in [GITHUB_ISSUES.md](GITHUB_ISSUES.md): deploy and smoke-test `/api/rank`. Until that is deployed, the extension can build locally but production YouTube pages will continue using the stale API.
