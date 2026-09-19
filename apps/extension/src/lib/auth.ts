@@ -1,9 +1,17 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { getStorage, setStorage } from './storage';
+import { getStorage, removeStorage, setStorage } from './storage';
 
 const ACCESS_TOKEN_KEY = 'personal-algorithm-access-token';
 const REFRESH_TOKEN_KEY = 'personal-algorithm-refresh-token';
 const EXPIRES_AT_KEY = 'personal-algorithm-access-token-expires-at';
+const SESSION_CACHE_KEYS = [
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  EXPIRES_AT_KEY,
+  'personal-algorithm-feed-cache',
+  'personal-algorithm-last-sync',
+  'personal-algorithm-last-error',
+];
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -128,9 +136,5 @@ export function signInWithGoogle(): Promise<void> {
 }
 
 export async function signOutExtension(): Promise<void> {
-  await Promise.all([
-    setStorage(ACCESS_TOKEN_KEY, null),
-    setStorage(REFRESH_TOKEN_KEY, null),
-    setStorage(EXPIRES_AT_KEY, 0),
-  ]);
+  await removeStorage(SESSION_CACHE_KEYS);
 }

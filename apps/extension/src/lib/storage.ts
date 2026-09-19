@@ -13,3 +13,7 @@ export async function getStorage<T>(key: string, fallback: T): Promise<T> {
 export async function setStorage<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
 }
+
+export async function removeStorage(keys: string[]): Promise<void> {
+  await chrome.storage.local.remove(keys);
+}
