@@ -170,11 +170,21 @@ const applyRankedFeed = () => {
   observer?.disconnect();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
+  const rankedElements: Array<{ element: HTMLElement; rank: number }> = [];
+  const knownElements = getVideoElements();
 
-  getVideoElements().forEach((element) => {
+  knownElements.forEach((element) => {
+    element.style.display = '';
+    element.style.outline = '';
+    element.style.outlineOffset = '';
+    delete element.dataset.personalAlgorithmScore;
+
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
-    if (!item) return;
+    if (!item) {
+      element.querySelector('[data-personal-algorithm-badge]')?.remove();
+      return;
+    }
 
     const score = item.score ?? 0;
     const shouldHide = item.visible === false || score < 52;
@@ -192,7 +202,26 @@ const applyRankedFeed = () => {
       element.appendChild(badge);
     }
     badge.textContent = `${activeMode} · ${score}`;
+    rankedElements.push({ element, rank: cachedFeed.indexOf(item) });
   });
+
+  const elementsByParent = new Map<HTMLElement, Array<{ element: HTMLElement; rank: number }>>();
+  for (const rankedElement of rankedElements) {
+    const parent = rankedElement.element.parentElement;
+    if (!parent) continue;
+    const group = elementsByParent.get(parent) ?? [];
+    group.push(rankedElement);
+    elementsByParent.set(parent, group);
+  }
+
+  for (const [parent, group] of elementsByParent) {
+    if (group.length < 2) continue;
+    group.sort((left, right) => left.rank - right.rank);
+    for (const { element } of group) {
+      parent.appendChild(element);
+    }
+  }
+
   observer?.observe(document.body, { childList: true, subtree: true });
 };
 
