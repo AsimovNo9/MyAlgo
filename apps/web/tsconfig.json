@@ -3,6 +3,7 @@
   "compilerOptions": {
     "jsx": "preserve",
     "allowJs": false,
+    "allowImportingTsExtensions": true,
     "plugins": [
       {
         "name": "next"
