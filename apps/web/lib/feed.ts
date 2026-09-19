@@ -17,6 +17,7 @@ export type FeedCandidate = {
   channel_subscriber_count?: number | null;
   source_kind?: 'subscription' | 'discovery' | null;
   subscription_affinity?: number;
+  candidate_relevance?: 'matched' | 'unmatched';
   published_at?: string | null;
   base_score?: number;
   topics?: string[];
@@ -183,9 +184,15 @@ export function buildFeedResponse(
     const matchedTopics = [...new Set([...normalizedTopics, ...titleDerivedTopics])].filter((topic) => weights.has(topic.toLowerCase()));
     let score = Number.isFinite(Number(video.base_score)) ? Number(video.base_score) * 0.5 : 25;
     let visible = true;
+    let feedbackSuppressed = false;
     const scoreContributors: string[] = [];
     const ruleSummary: string[] = [];
     const feedbackSummary: string[] = [];
+
+    if (video.candidate_relevance === 'unmatched') {
+      visible = false;
+      ruleSummary.push('outside selected algorithm topics');
+    }
 
     if (video.channel_id && blockedChannelIds.has(video.channel_id)) {
       visible = false;
@@ -227,6 +234,7 @@ export function buildFeedResponse(
       if (signal.eventType === 'not_interested') {
         score -= 35;
         visible = false;
+        feedbackSuppressed = true;
         feedbackSummary.push('not_interested feedback (-35)');
       }
 
@@ -247,6 +255,9 @@ export function buildFeedResponse(
       }
 
       if (rule.type === 'always_show') {
+        if (!feedbackSuppressed) {
+          visible = true;
+        }
         score += 20;
         ruleSummary.push(`always-show rule: ${rule.condition_text} (+20)`);
       }

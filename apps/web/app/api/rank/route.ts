@@ -35,6 +35,12 @@ function inferCandidateTopics(title: string, algorithmTopics: string[]): string[
   });
 }
 
+function matchesRule(title: string, condition: string): boolean {
+  const normalizedTitle = title.toLowerCase();
+  const normalizedCondition = condition.toLowerCase().trim();
+  return normalizedCondition.length > 0 && normalizedTitle.includes(normalizedCondition);
+}
+
 export async function POST(request: Request) {
   const userId = await getCurrentUserIdFromServer();
   if (!userId) {
@@ -53,15 +59,20 @@ export async function POST(request: Request) {
   const candidates: FeedCandidate[] = (payload.candidates ?? [])
     .filter((candidate) => typeof candidate.title === 'string' && candidate.title.trim().length > 0)
     .slice(0, 100)
-    .map((candidate, index) => ({
+    .map((candidate, index) => {
+      const title = candidate.title!.trim();
+      const topics = inferCandidateTopics(title, algorithmTopics);
+      const matchingRule = algorithm?.rules?.some((rule) => matchesRule(title, rule.condition_text));
+      return {
       id: candidate.external_id ?? `page-${index}`,
       external_id: candidate.external_id ?? `page-${index}`,
-      title: candidate.title!.trim(),
+      title,
       channel_name: candidate.channel_name ?? null,
       published_at: new Date().toISOString(),
       base_score: 50,
-      topics: inferCandidateTopics(candidate.title!, algorithmTopics),
-    }));
+      topics,
+      candidate_relevance: topics.length > 0 || matchingRule ? 'matched' : 'unmatched',
+    }; });
 
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
   return NextResponse.json(buildFeedResponse(algorithm, feedbackSignals, candidates));
