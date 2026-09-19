@@ -76,8 +76,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a visible enabled/paused status in the popup and content script UI
 - [x] Verify MV3 extension permissions and storage requirements in the production deployment context
 - [ ] Test the extension flow against the live API and deployed app
-- [ ] Review YouTube DOM compatibility and fallback behavior against production content
-- [ ] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
+- [x] Review YouTube DOM compatibility and fallback behavior against production content
+- [x] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
 - [ ] Prepare Chrome Web Store submission requirements and assets
 
 ## Security and compliance

@@ -1,4 +1,4 @@
-export const videoLinkSelector = 'a[href*="/watch"], a[href*="/shorts/"]';
+export const videoLinkSelector = 'a[href*="/watch"], a[href*="/shorts/"], a[href*="/live/"]';
 
 export function normalizeYouTubeText(value: string): string {
   return value.trim().replace(/\s+/g, ' ');

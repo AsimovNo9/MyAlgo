@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { youtubePageFixtures } from './youtube-fixtures.ts';
 
 test('extractYouTubeVideoId handles watch URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/watch?v=abc123'), 'abc123');
@@ -17,6 +18,13 @@ test('extractYouTubeVideoId handles live, embed, and short-host URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/live/live123'), 'live123');
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/embed/embed123'), 'embed123');
   assert.equal(extractYouTubeVideoId('https://youtu.be/short-host123?t=10'), 'short-host123');
+});
+
+test('representative YouTube surfaces expose stable video IDs and titles', () => {
+  for (const fixture of youtubePageFixtures) {
+    assert.equal(extractYouTubeVideoId(fixture.href), fixture.expectedId);
+    assert.equal(extractYouTubeLinkTitle({ title: fixture.title }), fixture.title);
+  }
 });
 
 test('extractYouTubeVideoId ignores unrelated URLs', () => {
