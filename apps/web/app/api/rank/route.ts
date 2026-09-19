@@ -121,5 +121,5 @@ export async function POST(request: Request) {
     }; });
 
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
-  return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates));
+  return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates, { includeHidden: true }));
 }

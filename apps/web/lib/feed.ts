@@ -200,6 +200,7 @@ export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
+  options: { includeHidden?: boolean } = {},
 ): FeedResponse {
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
   const rules = algorithm?.rules ?? [];
@@ -337,6 +338,6 @@ export function buildFeedResponse(
   return {
     generatedAt: new Date().toISOString(),
     algorithmId: algorithm?.id,
-    items: ranked.length > 0 ? ranked : fallbackRanked,
+    items: options.includeHidden ? fallbackRanked : ranked.length > 0 ? ranked : fallbackRanked,
   };
 }
