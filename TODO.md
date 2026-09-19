@@ -5,7 +5,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 ## Current focus
 - [x] Resolve Google OAuth general-access gating for the live app
 - [x] Verify the production Vercel deployment and callback URLs match the live Supabase project
-- [ ] Test the full sign-in → profile creation → YouTube sync flow in production
+- [x] Test the full sign-in → profile creation → YouTube sync flow locally against the live Supabase project
+- [ ] Repeat the full sign-in → profile creation → YouTube sync flow in production
 
 ## Immediate next actions
 - [x] Add approved Google test users or complete Google app verification for general access
@@ -34,15 +35,15 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Review environment segregation between local, preview, and production
 
 ## Supabase and database
-- [ ] Apply final schema to the production Supabase project
+- [x] Apply final schema and channel metadata migrations to the production Supabase project
 - [ ] Confirm RLS policies are active and tested for user isolation
-- [ ] Verify profile creation and OAuth persistence for real users
+- [x] Verify profile creation and OAuth persistence for the approved test user
 - [ ] Validate database backups and recovery expectations
 - [ ] Add migration workflow for future schema changes
 
 ## YouTube and data pipeline
 - [ ] Test YouTube OAuth token refresh flow in production
-- [ ] Validate subscription sync for a real account with live data
+- [x] Validate subscription sync for a real account with live data
 - [ ] Confirm API quota usage and failure handling for YouTube requests
 - [ ] Review fallback behavior when no Google/YouTube token is available
 - [ ] Add retry and timeout handling for downstream API calls
@@ -53,10 +54,10 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Review empty-state and fallback feed behavior
 - [ ] Confirm classification quality for live content and tune heuristics if needed
 - [ ] Add observability around scoring decisions and feed generation
-- [ ] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
+- [x] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
 
 ## Extension and browser experience
-- [ ] Package the Chrome extension for production release
+- [x] Package the Chrome extension for local Edge testing
 - [ ] Verify MV3 extension permissions and storage requirements
 - [ ] Test the extension flow against the live API and deployed app
 - [ ] Review YouTube DOM compatibility and fallback behavior
