@@ -177,7 +177,9 @@ const applyRankedFeed = () => {
     element.style.display = '';
     element.style.outline = '';
     element.style.outlineOffset = '';
+    element.style.order = '';
     delete element.dataset.personalAlgorithmScore;
+    delete element.dataset.personalAlgorithmRank;
 
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
@@ -192,6 +194,9 @@ const applyRankedFeed = () => {
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
     element.dataset.personalAlgorithmScore = String(score);
+    const rank = cachedFeed.indexOf(item);
+    element.dataset.personalAlgorithmRank = String(rank);
+    element.style.order = String(rank);
 
     let badge = element.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
     if (!badge) {
@@ -202,7 +207,7 @@ const applyRankedFeed = () => {
       element.appendChild(badge);
     }
     badge.textContent = `${activeMode} · ${score}`;
-    rankedElements.push({ element, rank: cachedFeed.indexOf(item) });
+    rankedElements.push({ element, rank });
   });
 
   const elementsByParent = new Map<HTMLElement, Array<{ element: HTMLElement; rank: number }>>();
