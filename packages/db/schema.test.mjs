@@ -10,6 +10,10 @@ const semanticMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260919011000_add_semantic_intent_tables.sql'),
   'utf8',
 );
+const seedChannelsMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920000000_add_topic_seed_channels.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -20,6 +24,12 @@ test('semantic intent tables are present in the tracked migration', () => {
   assert.match(semanticMigration, /create table if not exists public\.algorithm_intent_profiles/i);
   assert.match(semanticMigration, /alter table public\.concept_entries enable row level security/i);
   assert.match(semanticMigration, /alter table public\.algorithm_intent_profiles enable row level security/i);
+});
+
+test('topic seed channels table is present in the tracked migration with a unique topic+channel constraint', () => {
+  assert.match(seedChannelsMigration, /create table if not exists public\.topic_seed_channels/i);
+  assert.match(seedChannelsMigration, /alter table public\.topic_seed_channels enable row level security/i);
+  assert.match(seedChannelsMigration, /unique \(topic, channel_id\)/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

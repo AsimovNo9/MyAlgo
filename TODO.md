@@ -58,6 +58,10 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Confirm API quota usage and failure handling for YouTube requests
 - [ ] Review fallback behavior when no Google/YouTube token is available
 - [x] Add retry and timeout handling for downstream API calls
+- [x] Add RSS-based seed-channel ingestion for niche topics with no shared per-user quota cost
+- [x] Add a shared Vercel Cron job to poll seed channels, replacing per-user background discovery search
+- [ ] Add a periodic shared search job to discover new candidate channels for the seed catalog
+- [ ] Set the CRON_SECRET production environment variable and verify the cron job runs
 
 ## Feed ranking and scoring
 - [x] Enforce strict topic relevance in the normal feed path and return a useful empty state when nothing matches

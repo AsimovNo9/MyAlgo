@@ -169,9 +169,12 @@ Subscriptions-only sourcing has a real gap: a niche "Work" algorithm (e.g. nucle
 **Already implemented**
 - `never_show` now filters by classifier `content_type` (e.g. `gossip`) independent of which channel posted it, so a trusted channel's off-topic content is still caught.
 - Rule matching checks channel name in addition to title, enabling channel pinning today.
+- `topic_seed_channels` migration and RLS policy (`supabase/migrations/20260920000000_add_topic_seed_channels.sql`, `packages/db/schema.sql`).
+- RSS polling (`apps/web/lib/rss.ts`) and orchestration (`apps/web/lib/seed-channels.ts`) that ingests curated channels into `content_items`/`classifications` and guarantees the seeded topic on each item.
+- A shared, project-wide Vercel Cron job (`apps/web/vercel.json`, every 6 hours) hitting `/api/seed-channels/sync`, replacing the per-user background alarm as the primary discovery mechanism and consuming no per-user YouTube API quota.
+- `GET`/`POST /api/seed-channels` to list and add curated channels.
 
 **Still needed**
-- `topic_seed_channels` migration and RLS policy.
-- An RSS polling job (Vercel Cron or Supabase scheduled function) and XML parsing.
-- A periodic, shared (not per-user) `search.list` job for channel discovery, replacing the current per-user background alarm as the primary discovery mechanism.
+- A periodic, shared `search.list` job for *discovering new* candidate channels (item 2 above) to promote into `topic_seed_channels`; channels are currently added manually via the API route.
 - Dedicated "pin this channel" UI using `channel_id` instead of name matching.
+- A UI for browsing/curating the seed-channel catalog (currently API-only).
