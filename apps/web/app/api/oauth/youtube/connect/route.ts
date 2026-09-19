@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from '@/lib/auth';
+import { redactSensitiveValues } from '@/lib/logging';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -27,19 +28,22 @@ export async function POST() {
   const refreshToken = providerTokens.refreshToken;
   const tokenSummary = summarizeGoogleProviderTokens(sessionData.session);
 
-  console.log('YouTube connect session debug', {
-    userId: sessionData.session.user?.id ?? null,
-    email: sessionData.session.user?.email ?? null,
-    tokenSource: tokenSummary.source,
-    hasGoogleIdentity: !!googleIdentity,
-    identityProvider: googleIdentity?.provider ?? null,
-    hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
-    hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
-    hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
-    hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
-    hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
-    hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
-  });
+  console.log(
+    'YouTube connect session debug',
+    redactSensitiveValues({
+      userId: sessionData.session.user?.id ?? null,
+      email: sessionData.session.user?.email ?? null,
+      tokenSource: tokenSummary.source,
+      hasGoogleIdentity: !!googleIdentity,
+      identityProvider: googleIdentity?.provider ?? null,
+      hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
+      hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
+      hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
+      hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
+      hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
+      hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
+    }),
+  );
 
   if (!accessToken || !refreshToken) {
     return NextResponse.json({ error: 'Google OAuth tokens were not returned for this session.' }, { status: 400 });
