@@ -358,6 +358,7 @@ export function buildFeedResponse(
       visible,
       reason,
       matched_topics: matchedTopics,
+      source_kind: video.source_kind ?? null,
     };
   });
 

@@ -37,6 +37,7 @@ export interface FeedItem {
   visible: boolean;
   reason?: string;
   matched_topics?: string[];
+  source_kind?: 'subscription' | 'discovery' | null;
 }
 
 export interface FeedResponse {
