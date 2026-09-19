@@ -232,6 +232,21 @@ test('buildFeedResponse still orders unmatched candidates by score', () => {
   assert.equal(feed.items[1].external_id, 'low');
 });
 
+test('buildFeedResponse can return hidden candidates for page-level ranking', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-page', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
+    [],
+    [
+      { id: 'match', external_id: 'match', title: 'Gaming speedrun', base_score: 60, candidate_relevance: 'matched', topics: ['Gaming'] },
+      { id: 'hidden', external_id: 'hidden', title: 'Unrelated news', base_score: 80, candidate_relevance: 'unmatched', topics: [] },
+    ],
+    { includeHidden: true },
+  );
+
+  assert.equal(feed.items.length, 2);
+  assert.equal(feed.items.some((item) => item.external_id === 'hidden' && item.visible === false), true);
+});
+
 test('buildFeedResponse keeps explicit not-interested feedback suppressed', () => {
   const feed = buildFeedResponse(
     { id: 'alg-8', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'speedrun' }] },
