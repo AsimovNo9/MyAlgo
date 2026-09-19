@@ -350,6 +350,15 @@ chrome.runtime.onMessage.addListener((message) => {
     }
     return;
   }
+  if (message?.type === 'SOURCE_FILTERS_CHANGED') {
+    rankGeneration += 1;
+    rankingInFlight = false;
+    cachedFeed = [];
+    lastCandidateSignature = '';
+    lastRankMode = '';
+    triggerRank('mode');
+    return;
+  }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
   rankGeneration += 1;
   rankingInFlight = false;

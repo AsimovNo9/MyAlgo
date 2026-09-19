@@ -54,6 +54,17 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const ignoredRelevanceTerms = new Set(['a', 'an', 'and', 'for', 'from', 'how', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+function matchesRelevanceTerm(searchableText: string, term: string): boolean {
+  const normalizedTerm = term.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalizedTerm || ignoredRelevanceTerms.has(normalizedTerm) || normalizedTerm.length < 2) {
+    return false;
+  }
+
+  return new RegExp(`(^|\\s|[^a-z0-9])${escapeRegex(normalizedTerm)}($|\\s|[^a-z0-9])`, 'i').test(searchableText);
+}
+
 function inferCandidateTopics(
   title: string,
   channelName: string,
@@ -73,7 +84,7 @@ function inferCandidateTopics(
         return false;
       }
 
-      return topicPattern.test(searchableText) || searchableText.toLowerCase().includes(normalizedTerm);
+      return topicPattern.test(searchableText) || matchesRelevanceTerm(searchableText, normalizedTerm);
     });
   });
 }

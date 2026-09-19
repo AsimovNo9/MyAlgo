@@ -59,7 +59,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add retry and timeout handling for downstream API calls
 
 ## Feed ranking and scoring
-- [ ] Enforce strict topic relevance in the normal feed path and return a useful empty state when nothing matches
+- [x] Enforce strict topic relevance in the normal feed path and return a useful empty state when nothing matches
 - [ ] Add a configurable relevance threshold and explain why borderline items are shown
 - [ ] Add source controls for subscriptions, discovery, Shorts, and live content
 - [ ] Add channel diversity and duplicate suppression to improve perceived feed quality

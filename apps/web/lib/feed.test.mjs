@@ -383,6 +383,18 @@ test('buildFeedResponse does not infer AI from words containing ai as a substrin
   assert.deepEqual(feed.items[0].matched_topics, []);
 });
 
+test('buildFeedResponse does not match short semantic terms inside unrelated words', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-semantic-boundary', name: 'Art', topic_weights: [{ topic: 'Art', weight: 90 }], semantic_terms: ['art'], rules: [] },
+    [],
+    [{ id: 'real-art', external_id: 'real-art', title: 'Party highlights and entertainment', topics: [] }],
+    { includeHidden: true },
+  );
+
+  assert.deepEqual(feed.items[0].matched_topics, []);
+  assert.equal(feed.items[0].visible, false);
+});
+
 test('buildFeedResponse keeps a relevant subscribed video above discovery content', () => {
   const algorithm = {
     id: 'alg-6',
