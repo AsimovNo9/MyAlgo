@@ -51,6 +51,7 @@ create table public.content_items (
   channel_id text,
   channel_description text,
   channel_subscriber_count bigint,
+  source_kind text not null default 'subscription' check (source_kind in ('subscription', 'discovery')),
   published_at timestamptz,
   raw_metadata jsonb,
   fetched_at timestamptz not null default now(),
@@ -89,6 +90,7 @@ create table public.feedback_events (
 create index on public.feed_cache (user_id, algorithm_id, rank);
 create index on public.classifications (content_item_id);
 create index on public.content_items (channel_id);
+create index on public.content_items (source_kind);
 create unique index classifications_content_item_id_key on public.classifications (content_item_id);
 
 alter table public.profiles enable row level security;
