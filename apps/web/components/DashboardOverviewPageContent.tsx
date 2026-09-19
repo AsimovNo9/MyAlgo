@@ -6,7 +6,7 @@ import { AuthPanel } from '@/components/AuthPanel';
 
 export default function DashboardOverviewPageContent() {
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ ok?: boolean; source?: string; synced?: number; classified?: number; error?: string } | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ ok?: boolean; source?: string; synced?: number; discovered?: number; classified?: number; error?: string } | null>(null);
   const [feed, setFeed] = useState<FeedResponse | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [feedbackPending, setFeedbackPending] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export default function DashboardOverviewPageContent() {
 
     try {
       const response = await fetch('/api/youtube/sync', { method: 'POST', credentials: 'include' });
-      const data = (await response.json()) as { ok?: boolean; source?: string; synced?: number; classified?: number; error?: string };
+      const data = (await response.json()) as { ok?: boolean; source?: string; synced?: number; discovered?: number; classified?: number; error?: string };
       setSyncStatus(data);
 
       if (data.ok) {
@@ -130,7 +130,7 @@ export default function DashboardOverviewPageContent() {
         </div>
 
         {syncStatus ? <div style={{ marginBottom: 18, padding: '10px 12px', borderRadius: 12, background: syncStatus.ok ? '#ecfeff' : '#fef2f2', border: `1px solid ${syncStatus.ok ? '#a5f3fc' : '#fecaca'}`, color: syncStatus.ok ? '#0f172a' : '#7f1d1d', fontSize: 14 }}>
-          {syncStatus.ok ? syncStatus.source === 'youtube_api_empty' ? 'No live YouTube subscriptions were available to sync.' : `Synced ${syncStatus.synced ?? 0} items and classified ${syncStatus.classified ?? 0} from ${syncStatus.source ?? 'live'} data.` : `Sync failed: ${syncStatus.error ?? `Live sync unavailable (${syncStatus.source ?? 'unknown source'})`}`}
+          {syncStatus.ok ? syncStatus.source === 'youtube_api_empty' ? 'No live YouTube subscriptions were available to sync.' : `Synced ${syncStatus.synced ?? 0} items (${syncStatus.discovered ?? 0} discovered) and classified ${syncStatus.classified ?? 0} from ${syncStatus.source ?? 'live'} data.` : `Sync failed: ${syncStatus.error ?? `Live sync unavailable (${syncStatus.source ?? 'unknown source'})`}`}
         </div> : null}
 
         {feedbackNotice ? <div style={{ marginBottom: 18, color: '#0f766e', fontSize: 14 }}>{feedbackNotice}</div> : null}
