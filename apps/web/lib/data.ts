@@ -56,7 +56,7 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
     return demoAlgorithms;
   }
 
-  return data.map((row) => {
+  const algorithms = data.map((row) => {
     const profileRows = Array.isArray(row.algorithm_intent_profiles)
       ? (row.algorithm_intent_profiles as Array<{ semantic_terms?: string[] | null }>)
       : [];
@@ -74,6 +74,19 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
       rules: (row.rules ?? []) as Rule[],
       semantic_terms: semanticTerms,
     };
+  });
+
+  const seededNames = new Set<string>();
+  return algorithms.filter((algorithm) => {
+    const normalizedName = algorithm.name.trim().toLowerCase();
+    if (!['work', 'learning', 'relax'].includes(normalizedName)) {
+      return true;
+    }
+    if (seededNames.has(normalizedName)) {
+      return false;
+    }
+    seededNames.add(normalizedName);
+    return true;
   });
 }
 
