@@ -3,7 +3,7 @@
   "name": "Personal Algorithm",
   "version": "0.1.0",
   "description": "Weighted topic preferences and always/never rules for your YouTube feed.",
-  "permissions": ["storage", "scripting", "identity"],
+  "permissions": ["storage", "identity"],
   "host_permissions": [
     "https://*.youtube.com/*",
     "https://youtube.com/*",

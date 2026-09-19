@@ -74,7 +74,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Package the Chrome extension for local Edge testing
 - [x] Stabilize the YouTube trigger flow and remove the refresh loop
 - [x] Add a visible enabled/paused status in the popup and content script UI
-- [ ] Verify MV3 extension permissions and storage requirements in the production deployment context
+- [x] Verify MV3 extension permissions and storage requirements in the production deployment context
 - [ ] Test the extension flow against the live API and deployed app
 - [ ] Review YouTube DOM compatibility and fallback behavior against production content
 - [ ] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
