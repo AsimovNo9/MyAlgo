@@ -13,6 +13,13 @@ export interface AlgorithmIntentProfile {
   semanticTerms: string[];
 }
 
+export interface PersistedAlgorithmIntentProfile {
+  canonical_topics?: string[] | null;
+  aliases?: string[] | null;
+  intents?: string[] | null;
+  semantic_terms?: string[] | null;
+}
+
 export interface ConceptCatalogEntry {
   id: string;
   canonicalName: string;
@@ -34,6 +41,19 @@ export function buildConceptCatalog(
     aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
     intents: Array.isArray(entry.intents) ? entry.intents : [],
   }));
+}
+
+function normalizeStringList(values?: string[] | null): string[] {
+  return Array.isArray(values) ? values : [];
+}
+
+export function normalizeAlgorithmIntentProfile(profile?: PersistedAlgorithmIntentProfile | null): AlgorithmIntentProfile {
+  return {
+    canonicalTopics: normalizeStringList(profile?.canonical_topics),
+    aliases: normalizeStringList(profile?.aliases),
+    intents: normalizeStringList(profile?.intents),
+    semanticTerms: normalizeStringList(profile?.semantic_terms),
+  };
 }
 
 const conceptMap: Record<string, { aliases: string[]; intents: string[] }> = {
@@ -169,4 +189,16 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): Algor
     intents: [...intents],
     semanticTerms: [...semanticTerms],
   };
+}
+
+export function buildStoredOrDerivedAlgorithmIntentProfile(
+  algorithm?: (Algorithm & { algorithm_intent_profiles?: PersistedAlgorithmIntentProfile[] | null }) | null,
+): AlgorithmIntentProfile {
+  const persistedProfile = Array.isArray(algorithm?.algorithm_intent_profiles)
+    ? algorithm.algorithm_intent_profiles[0] ?? null
+    : null;
+
+  return persistedProfile
+    ? normalizeAlgorithmIntentProfile(persistedProfile)
+    : buildAlgorithmIntentProfile(algorithm);
 }
