@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { extractGoogleProviderTokens } from './auth.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
@@ -347,4 +348,36 @@ test('buildFeedResponse uses persisted semantic terms from the algorithm profile
   assert.equal(feed.items[0].external_id, 'persisted-match');
   assert.ok(feed.items[0].matched_topics.includes('Strategy'));
   assert.ok(feed.items[0].reason?.toLowerCase().includes('strategy'));
+});
+
+test('extractGoogleProviderTokens reads tokens from the session or the Google identity payload', () => {
+  const providerSession = {
+    provider_token: 'provider-access-token',
+    provider_refresh_token: 'provider-refresh-token',
+    user: {
+      identities: [{ provider: 'google', identity_data: { access_token: 'identity-access-token', refresh_token: 'identity-refresh-token' } }],
+    },
+  };
+
+  const providerTokens = extractGoogleProviderTokens(providerSession);
+  assert.deepEqual(providerTokens, {
+    accessToken: 'provider-access-token',
+    refreshToken: 'provider-refresh-token',
+    source: 'session_provider_token',
+  });
+
+  const identitySession = {
+    provider_token: null,
+    provider_refresh_token: null,
+    user: {
+      identities: [{ provider: 'google', identity_data: { access_token: 'identity-access-token', refresh_token: 'identity-refresh-token' } }],
+    },
+  };
+
+  const identityTokens = extractGoogleProviderTokens(identitySession);
+  assert.deepEqual(identityTokens, {
+    accessToken: 'identity-access-token',
+    refreshToken: 'identity-refresh-token',
+    source: 'google_identity_data',
+  });
 });
