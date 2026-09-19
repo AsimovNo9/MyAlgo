@@ -4,6 +4,7 @@ import { ensureDefaultAlgorithmsForUser } from '@/lib/bootstrap';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { resolveTopicConceptTerms } from '@/lib/concepts';
+import { applyCorsHeaders, isAllowedOrigin } from '@/lib/cors';
 
 type RankRequest = {
   mode?: string;
@@ -27,6 +28,23 @@ const topicAliases: Record<string, RegExp> = {
   nature: /\b(nature|wildlife|animals|landscape|ocean|forest|climate)\b/i,
   science: /\b(science|physics|biology|chemistry|space|astronomy)\b/i,
 };
+
+function jsonResponse(request: Request, body: unknown, init?: ResponseInit): NextResponse {
+  const response = NextResponse.json(body, init);
+  applyCorsHeaders(response.headers, request.headers.get('origin'));
+  return response;
+}
+
+export function OPTIONS(request: Request) {
+  const origin = request.headers.get('origin');
+  if (!isAllowedOrigin(origin)) {
+    return jsonResponse(request, { error: 'Origin is not allowed.' }, { status: 403 });
+  }
+
+  const response = new NextResponse(null, { status: 204 });
+  applyCorsHeaders(response.headers, origin);
+  return response;
+}
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -63,9 +81,14 @@ function matchesRule(title: string, condition: string): boolean {
 }
 
 export async function POST(request: Request) {
+  const origin = request.headers.get('origin');
+  if (!isAllowedOrigin(origin)) {
+    return jsonResponse(request, { error: 'Origin is not allowed.' }, { status: 403 });
+  }
+
   const userId = await getCurrentUserIdFromServer();
   if (!userId) {
-    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    return jsonResponse(request, { error: 'Authentication required.' }, { status: 401 });
   }
 
   const payload = (await request.json()) as RankRequest;
@@ -98,5 +121,5 @@ export async function POST(request: Request) {
     }; });
 
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
-  return NextResponse.json(buildFeedResponse(algorithm, feedbackSignals, candidates));
+  return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates));
 }
