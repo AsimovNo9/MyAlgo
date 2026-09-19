@@ -1,6 +1,6 @@
 import type { Algorithm } from '@repo/shared-types';
-import { extractGoogleProviderTokens } from './auth.ts';
-import { buildDiscoveryQueries, discoveryLimits } from './discovery';
+import { extractGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
+import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -251,6 +251,21 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
   return [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
 }
 
+export function resolveYoutubeAccessTokenCandidate(
+  providerTokens: GoogleProviderTokenBundle,
+  hasStoredYoutubeConnection: boolean,
+): string | null {
+  if (providerTokens.source === 'session_provider_token') {
+    return providerTokens.accessToken;
+  }
+
+  if (!hasStoredYoutubeConnection && providerTokens.source === 'google_identity_data') {
+    return providerTokens.accessToken;
+  }
+
+  return null;
+}
+
 async function getValidYoutubeAccessToken(userId: string): Promise<string | null> {
   const { createSupabaseServerClient } = await import('./supabase/server');
   const client = await createSupabaseServerClient();
@@ -272,8 +287,9 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
     sessionError: sessionError?.message ?? null,
   });
 
-  if (providerToken) {
-    return providerToken;
+  const providerTokenCandidate = resolveYoutubeAccessTokenCandidate(providerTokens, true);
+  if (providerTokenCandidate) {
+    return providerTokenCandidate;
   }
 
   const { data, error } = await client
@@ -285,7 +301,7 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
 
   if (error || !data) {
     console.log('No stored YouTube OAuth row for user', { userId, error });
-    return null;
+    return resolveYoutubeAccessTokenCandidate(providerTokens, false);
   }
 
   const accessToken = data.access_token_encrypted;
