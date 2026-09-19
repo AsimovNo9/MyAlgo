@@ -10,6 +10,7 @@ export function Popup() {
   const [authError, setAuthError] = React.useState<string | null>(null);
   const [lastError, setLastError] = React.useState<string | null>(null);
   const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
+  const [enabled, setEnabled] = React.useState(true);
 
   const refreshAlgorithms = async () => {
     try {
@@ -22,9 +23,10 @@ export function Popup() {
   };
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache']).then(async (result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled']).then(async (result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
+      setEnabled(result['personal-algorithm-enabled'] !== false);
       const hasSession = Boolean(await getExtensionAccessToken());
       setSignedIn(hasSession);
       setLastError((await chrome.storage.local.get(['personal-algorithm-last-error']))['personal-algorithm-last-error'] as string | null);
@@ -68,11 +70,20 @@ export function Popup() {
     setFeedCount(Array.isArray(result['personal-algorithm-feed-cache']) ? result['personal-algorithm-feed-cache'].length : 0);
   };
 
+  const handleToggleEnabled = async () => {
+    const nextEnabled = !enabled;
+    const response = await chrome.runtime.sendMessage({ type: 'SET_ENABLED', payload: { enabled: nextEnabled } }) as { ok?: boolean; enabled?: boolean };
+    if (response?.ok) {
+      setEnabled(response.enabled !== false);
+    }
+  };
+
   return (
     <main style={{ minWidth: 260, padding: 16, fontFamily: 'sans-serif' }}>
       <h2 style={{ marginTop: 0 }}>Personal Algorithm</h2>
       <p>Current mode: <strong>{mode}</strong></p>
       <p>Account: <strong>{signedIn ? 'Connected' : 'Not connected'}</strong></p>
+      <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       {signedIn ? (
@@ -82,6 +93,7 @@ export function Popup() {
       )}
       {authError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>{authError}</p> : null}
       {signedIn ? <button onClick={() => void refreshAlgorithms()}>Refresh algorithms</button> : null}
+      <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {(algorithms.length > 0 ? algorithms.map((algorithm) => algorithm.name) : ['Work', 'Learning', 'Relax']).map((option) => (
           <button key={option} onClick={() => void handleSetMode(option)}>

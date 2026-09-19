@@ -7,6 +7,7 @@ import { getExtensionAccessToken, signInWithGoogle, signOutExtension } from '../
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
+    [STORAGE_KEYS.ENABLED]: true,
     [STORAGE_KEYS.FEED_CACHE]: [],
     [STORAGE_KEYS.LAST_SYNC]: null,
   });
@@ -30,7 +31,7 @@ const refreshFeed = async (mode?: string) => {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, payload } = message as { type: string; payload?: { mode?: string; contentItemId?: string; eventType?: string } };
+  const { type, payload } = message as { type: string; payload?: { mode?: string; enabled?: boolean; contentItemId?: string; eventType?: string } };
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
@@ -67,6 +68,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         : undefined));
     })();
     sendResponse({ ok: true });
+    return true;
+  }
+
+  if (type === 'SET_ENABLED') {
+    const enabled = payload?.enabled !== false;
+    void (async () => {
+      await setStorage(STORAGE_KEYS.ENABLED, enabled);
+      const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled } }).catch(() => undefined)
+        : undefined));
+      if (enabled) {
+        await refreshFeed();
+      }
+    })();
+    sendResponse({ ok: true, enabled });
     return true;
   }
 
