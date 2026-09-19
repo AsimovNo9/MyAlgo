@@ -198,3 +198,32 @@ test('buildFeedResponse keeps a relevant subscribed video above discovery conten
 
   assert.equal(feed.items[0].external_id, 'subscribed');
 });
+
+test('buildFeedResponse filters unmatched candidates while preserving always-show rules', () => {
+  const algorithm = {
+    id: 'alg-7',
+    name: 'Gaming',
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [{ id: 'rule-7', type: 'always_show', condition_text: 'speedrun' }],
+  };
+
+  const feed = buildFeedResponse(algorithm, [], [
+    { id: 'match', external_id: 'match', title: 'Gaming speedrun', candidate_relevance: 'matched', topics: ['Gaming'] },
+    { id: 'always', external_id: 'always', title: 'Speedrun documentary', candidate_relevance: 'unmatched', topics: [] },
+    { id: 'hidden', external_id: 'hidden', title: 'Celebrity skincare', candidate_relevance: 'unmatched', topics: [] },
+  ]);
+
+  assert.equal(feed.items.some((item) => item.external_id === 'match'), true);
+  assert.equal(feed.items.some((item) => item.external_id === 'always'), true);
+  assert.equal(feed.items.some((item) => item.external_id === 'hidden'), false);
+});
+
+test('buildFeedResponse keeps explicit not-interested feedback suppressed', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-8', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'speedrun' }] },
+    [{ external_id: 'suppressed', eventType: 'not_interested' }],
+    [{ id: 'suppressed', external_id: 'suppressed', title: 'Gaming speedrun', candidate_relevance: 'matched', topics: ['Gaming'] }],
+  );
+
+  assert.equal(feed.items[0].visible, false);
+});
