@@ -76,7 +76,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Prepare Chrome Web Store submission requirements and assets
 
 ## Security and compliance
-- [ ] Rotate the exposed Supabase service-role, Anthropic, and Google OAuth secrets; update Vercel/local environments and redeploy
+- [x] Rotate the exposed Supabase service-role, Anthropic, and Google OAuth secrets
+- [x] Verify rotated values are set in Vercel/local environments and redeploy
 - [ ] Confirm secrets are never included in the browser extension bundle
 - [ ] Review access patterns for service-role usage and server-only code
 - [ ] Add basic error monitoring and alerts for API failures

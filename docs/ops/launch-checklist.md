@@ -9,7 +9,8 @@
 - [ ] Validate YouTube subscription sync against a real account
 - [ ] Confirm ranked feed output is correct in production conditions
 - [x] Verify `/api/health`, `/api/rank` CORS preflight, and `/auth/callback` routes
-- [ ] Rotate exposed secrets and update all environments
+- [x] Rotate exposed secrets
+- [x] Verify rotated values are set in Vercel/local environments and redeploy
 - [ ] Verify the extension never ships secrets in the client bundle
 - [ ] Add uptime/health monitoring and Sentry tracking
 - [ ] Review MV3 permission requirements and final extension packaging

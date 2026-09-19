@@ -23,3 +23,4 @@ This is the phase we should move into now to turn the working feature into a lau
 - `/auth/callback` returned `200`
 - Repository deployment verifier passed without an authenticated rank token
 - Web typecheck and production build passed
+- Production credentials have been rotated, applied to the environments, and used by the deployment
