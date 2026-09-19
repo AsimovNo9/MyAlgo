@@ -25,7 +25,6 @@ export interface ConceptsApiAlgorithmRecord {
   name: string;
   goal_text?: string | null;
   topic_weights?: Array<{ topic: string; weight: number }>;
-  rules?: Array<{ type: string; condition_text: string }>;
   algorithm_intent_profiles?: PersistedAlgorithmIntentProfile[] | null;
 }
 
@@ -240,7 +239,6 @@ export function buildStoredOrDerivedAlgorithmIntentProfile(
       name: algorithm.name,
       goal_text: algorithm.goal_text ?? null,
       topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
-      rules: (algorithm.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
     });
 }
 
@@ -265,7 +263,6 @@ export function buildConceptsApiResponse({
         ...algorithm,
         goal_text: algorithm.goal_text ?? null,
         topic_weights: (algorithm.topic_weights ?? []).map((item) => ({ topic: item.topic, weight: item.weight })),
-        rules: (algorithm.rules ?? []).map((rule) => ({ type: rule.type as 'always_show' | 'never_show' | 'priority', condition_text: rule.condition_text })),
       }),
     })),
   };
