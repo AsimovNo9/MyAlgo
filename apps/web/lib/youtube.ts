@@ -1,5 +1,5 @@
 import type { Algorithm } from '@repo/shared-types';
-import { extractGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
+import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
 import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
 
 export type YoutubeSubscriptionItem = {
@@ -278,12 +278,17 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
   const providerTokens = extractGoogleProviderTokens(sessionData.session);
   const providerToken = providerTokens.accessToken;
   const providerRefreshToken = providerTokens.refreshToken;
+  const tokenSummary = summarizeGoogleProviderTokens(sessionData.session);
 
   console.log('YouTube provider session state', {
     userId,
-    tokenSource: providerTokens.source,
-    hasProviderToken: !!providerToken,
-    hasProviderRefreshToken: !!providerRefreshToken,
+    tokenSource: tokenSummary.source,
+    hasSessionProviderToken: tokenSummary.hasSessionProviderToken,
+    hasSessionProviderRefreshToken: tokenSummary.hasSessionProviderRefreshToken,
+    hasGoogleIdentityToken: tokenSummary.hasGoogleIdentityToken,
+    hasGoogleIdentityRefreshToken: tokenSummary.hasGoogleIdentityRefreshToken,
+    hasAnyAccessToken: tokenSummary.hasAnyAccessToken,
+    hasAnyRefreshToken: tokenSummary.hasAnyRefreshToken,
     sessionError: sessionError?.message ?? null,
   });
 

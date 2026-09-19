@@ -10,6 +10,40 @@ export type GoogleProviderTokenBundle = {
   source: 'session_provider_token' | 'google_identity_data' | 'missing';
 };
 
+export function summarizeGoogleProviderTokens(
+  session: {
+    provider_token?: string | null;
+    provider_refresh_token?: string | null;
+    user?: {
+      identities?: Array<{
+        provider?: string | null;
+        identity_data?: {
+          access_token?: string | null;
+          refresh_token?: string | null;
+        } | null;
+      }> | null;
+    } | null;
+  } | null | undefined,
+) {
+  const googleIdentity = session?.user?.identities?.find((item) => item.provider === 'google');
+  const hasSessionProviderToken = !!session?.provider_token;
+  const hasSessionProviderRefreshToken = !!session?.provider_refresh_token;
+  const hasGoogleIdentityToken = !!googleIdentity?.identity_data?.access_token;
+  const hasGoogleIdentityRefreshToken = !!googleIdentity?.identity_data?.refresh_token;
+  const hasAnyAccessToken = hasSessionProviderToken || hasGoogleIdentityToken;
+  const hasAnyRefreshToken = hasSessionProviderRefreshToken || hasGoogleIdentityRefreshToken;
+
+  return {
+    source: extractGoogleProviderTokens(session).source,
+    hasSessionProviderToken,
+    hasSessionProviderRefreshToken,
+    hasGoogleIdentityToken,
+    hasGoogleIdentityRefreshToken,
+    hasAnyAccessToken,
+    hasAnyRefreshToken,
+  };
+}
+
 export function extractGoogleProviderTokens(
   session: {
     provider_token?: string | null;

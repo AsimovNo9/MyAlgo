@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractGoogleProviderTokens } from './auth.ts';
+import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
@@ -380,4 +380,30 @@ test('extractGoogleProviderTokens reads tokens from the session or the Google id
     refreshToken: 'identity-refresh-token',
     source: 'google_identity_data',
   });
+});
+
+test('summarizeGoogleProviderTokens exposes only safe diagnostic flags and never raw token values', () => {
+  const session = {
+    provider_token: 'provider-access-token',
+    provider_refresh_token: 'provider-refresh-token',
+    user: {
+      identities: [{ provider: 'google', identity_data: { access_token: 'identity-access-token', refresh_token: 'identity-refresh-token' } }],
+    },
+  };
+
+  const summary = summarizeGoogleProviderTokens(session);
+  assert.deepEqual(summary, {
+    source: 'session_provider_token',
+    hasSessionProviderToken: true,
+    hasSessionProviderRefreshToken: true,
+    hasGoogleIdentityToken: true,
+    hasGoogleIdentityRefreshToken: true,
+    hasAnyAccessToken: true,
+    hasAnyRefreshToken: true,
+  });
+
+  assert.equal(summary.hasAnyAccessToken, true);
+  assert.equal(summary.hasAnyRefreshToken, true);
+  assert.equal(JSON.stringify(summary).includes('provider-access-token'), false);
+  assert.equal(JSON.stringify(summary).includes('identity-access-token'), false);
 });
