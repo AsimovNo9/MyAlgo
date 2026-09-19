@@ -27,10 +27,15 @@ chrome.runtime.onStartup.addListener(() => {
 
 const YOUTUBE_SYNC_ALARM = 'personal-algorithm-youtube-sync';
 
+// The YouTube Data API quota (10,000 units/day) is shared across the whole project, not
+// per user. Each sync can run up to 5 search.list calls (~500 units), so this must stay
+// infrequent (once daily) rather than every few minutes, or a handful of active users
+// would exhaust the shared quota. A cheaper ingestion path (e.g. RSS polling for known
+// channels) is the durable fix; this alarm is a bounded stopgap until that exists.
 function ensureYoutubeSyncAlarm() {
   chrome.alarms.get(YOUTUBE_SYNC_ALARM, (existing) => {
     if (!existing) {
-      chrome.alarms.create(YOUTUBE_SYNC_ALARM, { periodInMinutes: 30, delayInMinutes: 1 });
+      chrome.alarms.create(YOUTUBE_SYNC_ALARM, { periodInMinutes: 24 * 60, delayInMinutes: 1 });
     }
   });
 }
