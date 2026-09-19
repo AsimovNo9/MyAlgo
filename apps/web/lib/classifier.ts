@@ -6,11 +6,11 @@ export type ClassificationResult = {
 };
 
 const topicRules: Array<{ match: RegExp; topic: string }> = [
-  { match: /\b(ai|llm|gpt|agent|machine learning|automation|prompt)\b/i, topic: 'AI' },
+  { match: /\b(ai|llm|gpt|agent|machine learning|computer vision|vision model|automation|prompt)\b/i, topic: 'AI' },
   { match: /(productivity|deep work|workflow|focus|systems|habits)/i, topic: 'Productivity' },
   { match: /(engineering|software|code|architecture|systems|build)/i, topic: 'Engineering' },
   { match: /(startup|business|strategy|marketing|founder|product)/i, topic: 'Business' },
-  { match: /(tutorial|how to|guide|walkthrough|lesson|demo)/i, topic: 'Tutorial' },
+  { match: /(tutorial|how to|guide|walkthrough|lesson|demo|lecture|course|university|explainer)/i, topic: 'Tutorial' },
   { match: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
 ];
 

@@ -1,6 +1,6 @@
 import type { Algorithm } from '@repo/shared-types';
 
-const MAX_DISCOVERY_QUERIES = 3;
+const MAX_DISCOVERY_QUERIES = 5;
 
 export function buildDiscoveryQueries(algorithm?: Algorithm | null): string[] {
   if (!algorithm) {
@@ -16,9 +16,15 @@ export function buildDiscoveryQueries(algorithm?: Algorithm | null): string[] {
     .filter((rule) => rule.type !== 'never_show' && rule.condition_text.trim().length > 0)
     .map((rule) => rule.condition_text.trim());
 
+  const primaryTopic = topics[0] ?? '';
+  const learningIntent = /learn|course|lecture|tutorial|study|education|university|lesson/i.test(`${goal} ${ruleTerms.join(' ')}`);
+  const formatTerms = learningIntent
+    ? ['tutorial', 'lecture', 'university course', 'explainer']
+    : ['tutorial', 'guide', 'explainer'];
   const queries = [
     goal,
     topics.slice(0, 2).join(' '),
+    ...formatTerms.map((format) => primaryTopic ? `${primaryTopic} ${format}` : ''),
     ruleTerms[0] ?? '',
   ];
 

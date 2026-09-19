@@ -8,6 +8,7 @@ export type YoutubeSubscriptionItem = {
   channel_id?: string | null;
   channel_description?: string | null;
   channel_subscriber_count?: number | null;
+  description?: string | null;
   external_id: string;
   published_at?: string;
   topics?: string[];
@@ -224,7 +225,7 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
     }
 
     const payload = (await response.json()) as {
-      items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; channelId?: string; channelTitle?: string; publishedAt?: string } }>;
+      items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; publishedAt?: string } }>;
     };
 
     for (const item of payload.items ?? []) {
@@ -236,6 +237,7 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
         id: videoId,
         external_id: videoId,
         title,
+        description: item.snippet?.description ?? null,
         channel_name: item.snippet?.channelTitle ?? 'Unknown channel',
         channel_id: item.snippet?.channelId ?? null,
         published_at: item.snippet?.publishedAt ?? new Date().toISOString(),
@@ -419,7 +421,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
 
     synced += 1;
 
-    const classification = await classifyContent(item.title);
+    const classification = await classifyContent(`${item.title} ${item.description ?? ''} ${item.channel_name ?? ''}`);
     const { error: classificationError } = await client.from('classifications').upsert(
       {
         content_item_id: contentRow.id,

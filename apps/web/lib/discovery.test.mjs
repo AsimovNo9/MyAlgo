@@ -15,7 +15,13 @@ test('buildDiscoveryQueries derives bounded queries from goals, weights, and rul
     rules: [{ type: 'priority', condition_text: 'computer vision tutorials' }],
   });
 
-  assert.deepEqual(queries, ['Learn practical AI agents', 'AI Engineering', 'computer vision tutorials']);
+  assert.deepEqual(queries, [
+    'Learn practical AI agents',
+    'AI Engineering',
+    'AI tutorial',
+    'AI lecture',
+    'AI university course',
+  ]);
   assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
 });
 
@@ -28,4 +34,21 @@ test('buildDiscoveryQueries omits weak and never-show signals', () => {
   });
 
   assert.deepEqual(queries, []);
+});
+
+test('buildDiscoveryQueries creates format-aware queries for a learning topic', () => {
+  const queries = buildDiscoveryQueries({
+    name: 'Computer Vision',
+    goal_text: 'Learn computer vision from university-level material',
+    topic_weights: [{ topic: 'Computer Vision', weight: 95 }],
+    rules: [],
+  });
+
+  assert.deepEqual(queries, [
+    'Learn computer vision from university-level material',
+    'Computer Vision',
+    'Computer Vision tutorial',
+    'Computer Vision lecture',
+    'Computer Vision university course',
+  ]);
 });
