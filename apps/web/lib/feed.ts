@@ -332,10 +332,11 @@ export function buildFeedResponse(
   const ranked = feedItems
     .filter((item) => item.visible)
     .sort((a, b) => b.score - a.score);
+  const fallbackRanked = [...feedItems].sort((a, b) => b.score - a.score);
 
   return {
     generatedAt: new Date().toISOString(),
     algorithmId: algorithm?.id,
-    items: ranked.length > 0 ? ranked : feedItems,
+    items: ranked.length > 0 ? ranked : fallbackRanked,
   };
 }
