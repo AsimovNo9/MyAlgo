@@ -227,8 +227,7 @@ test('buildFeedResponse ranks real synchronized items instead of demo fixtures',
   );
 
   assert.equal(feed.items[0].external_id, 'yt-live-1');
-  assert.ok(feed.items[0].score >= feed.items[1].score);
-  assert.equal(feed.items[1].visible, true);
+  assert.equal(feed.items.length, 1);
   assert.ok(feed.items[0].matched_topics.includes('AI'));
 });
 
@@ -378,6 +377,7 @@ test('buildFeedResponse does not infer AI from words containing ai as a substrin
     { id: 'alg-5', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
     [],
     [{ id: 'real-5', external_id: 'yt-documentary', title: 'Un opéra pour un empire | Documentaire | ARTE', topics: [] }],
+    { includeHidden: true },
   );
 
   assert.deepEqual(feed.items[0].matched_topics, []);
@@ -418,6 +418,29 @@ test('buildFeedResponse filters unmatched candidates while preserving always-sho
   assert.equal(feed.items.some((item) => item.external_id === 'hidden'), false);
 });
 
+test('buildFeedResponse hides unrelated content from topic-scoped feeds', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-relevance', name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { id: 'match', external_id: 'match', title: 'AI systems overview', topics: ['AI'] },
+      { id: 'unrelated', external_id: 'unrelated', title: 'Celebrity gossip recap', topics: ['Entertainment'] },
+    ],
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['match']);
+});
+
+test('buildFeedResponse returns an empty result when no topic-scoped candidates match', () => {
+  const feed = buildFeedResponse(
+    { id: 'alg-no-match', name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [{ id: 'unrelated', external_id: 'unrelated', title: 'Celebrity gossip recap', topics: ['Entertainment'] }],
+  );
+
+  assert.deepEqual(feed.items, []);
+});
+
 test('buildFeedResponse still orders unmatched candidates by score', () => {
   const feed = buildFeedResponse(
     { id: 'alg-unmatched', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
@@ -426,6 +449,7 @@ test('buildFeedResponse still orders unmatched candidates by score', () => {
       { id: 'low', external_id: 'low', title: 'Unrelated low score', base_score: 20, candidate_relevance: 'unmatched', topics: [] },
       { id: 'high', external_id: 'high', title: 'Unrelated high score', base_score: 90, candidate_relevance: 'unmatched', topics: [] },
     ],
+    { includeHidden: true },
   );
 
   assert.equal(feed.items[0].external_id, 'high');
@@ -452,6 +476,7 @@ test('buildFeedResponse keeps explicit not-interested feedback suppressed', () =
     { id: 'alg-8', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'speedrun' }] },
     [{ external_id: 'suppressed', eventType: 'not_interested' }],
     [{ id: 'suppressed', external_id: 'suppressed', title: 'Gaming speedrun', candidate_relevance: 'matched', topics: ['Gaming'] }],
+    { includeHidden: true },
   );
 
   assert.equal(feed.items[0].visible, false);
