@@ -1,14 +1,10 @@
 import React from 'react';
-import { getApiBaseUrl, setApiBaseUrl } from '../lib/api-client';
-
-const initialWeights = [
-  { topic: 'AI', weight: 80 },
-  { topic: 'Productivity', weight: 70 },
-  { topic: 'Entertainment', weight: 40 },
-];
+import { fetchAlgorithms, getApiBaseUrl, setApiBaseUrl } from '../lib/api-client';
+import type { Algorithm } from '@repo/shared-types';
 
 export function Options() {
-  const [weights, setWeights] = React.useState(initialWeights);
+  const [algorithms, setAlgorithms] = React.useState<Algorithm[]>([]);
+  const [selectedAlgorithmName, setSelectedAlgorithmName] = React.useState('');
   const [apiBaseUrl, setApiBaseUrlValue] = React.useState('https://my-algo-web.vercel.app');
   const [saved, setSaved] = React.useState(false);
 
@@ -16,16 +12,15 @@ export function Options() {
     void (async () => {
       const baseUrl = await getApiBaseUrl();
       setApiBaseUrlValue(baseUrl);
+      try {
+        const availableAlgorithms = await fetchAlgorithms();
+        setAlgorithms(availableAlgorithms);
+        setSelectedAlgorithmName(availableAlgorithms[0]?.name ?? '');
+      } catch {
+        setAlgorithms([]);
+      }
     })();
   }, []);
-
-  const adjustWeight = (topic: string, delta: number) => {
-    setWeights((current) =>
-      current.map((item) =>
-        item.topic === topic ? { ...item, weight: Math.max(0, Math.min(100, item.weight + delta)) } : item,
-      ),
-    );
-  };
 
   const handleSaveApiBaseUrl = async () => {
     await setApiBaseUrl(apiBaseUrl);
@@ -51,28 +46,27 @@ export function Options() {
       </section>
 
       <section>
+        <h2>Algorithm</h2>
+        <select value={selectedAlgorithmName} onChange={(event) => setSelectedAlgorithmName(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
+          {algorithms.map((algorithm) => <option key={algorithm.id ?? algorithm.name} value={algorithm.name}>{algorithm.name}</option>)}
+        </select>
+      </section>
+
+      <section>
         <h2>Topic weights</h2>
-        {weights.map((item) => (
+        {(algorithms.find((algorithm) => algorithm.name === selectedAlgorithmName)?.topic_weights ?? []).map((item) => (
           <div key={item.topic} style={{ marginBottom: 12 }}>
             <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span>{item.topic}</span>
               <strong>{item.weight}</strong>
             </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => adjustWeight(item.topic, -10)}>-10</button>
-              <button onClick={() => adjustWeight(item.topic, 10)}>+10</button>
-            </div>
           </div>
         ))}
       </section>
 
       <section style={{ marginTop: 24 }}>
         <h2>Rules</h2>
-        <ul>
-          <li>Always show: tutorials about AI agents</li>
-          <li>Never show: celebrity gossip</li>
-          <li>Priority: engineering breakdowns</li>
-        </ul>
+        <ul>{(algorithms.find((algorithm) => algorithm.name === selectedAlgorithmName)?.rules ?? []).map((rule) => <li key={`${rule.type}-${rule.condition_text}`}>{rule.type}: {rule.condition_text}</li>)}</ul>
       </section>
     </main>
   );
