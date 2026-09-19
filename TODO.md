@@ -55,6 +55,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Feed ranking and scoring
 - [ ] Validate ranking logic against real user subscriptions and content
+- [x] Add regression coverage for positive feedback and rule precedence
 - [ ] Check rule precedence and feedback weighting in production conditions
 - [ ] Review empty-state and fallback feed behavior
 - [ ] Confirm classification quality for live content and tune heuristics if needed
