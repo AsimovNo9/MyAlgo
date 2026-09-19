@@ -8,7 +8,7 @@ This backlog is ordered by delivery risk. Each issue is intentionally scoped so 
 
 **Labels:** `priority:high`, `area:backend`, `area:extension`
 
-The extension now calls `POST /api/rank` to rank videos currently rendered on YouTube. The production Vercel deployment still returns `404` for this route, so the deployed extension cannot influence the live YouTube feed.
+The extension calls `POST /api/rank` to rank videos currently rendered on YouTube. The production route and its CORS preflight are now deployed and verified; the remaining work is authenticated live ranking validation.
 
 **Acceptance criteria**
 - `/api/rank` is available in production.
@@ -84,7 +84,7 @@ Dashboard feedback works, but the extension and API need broader behavioral cove
 
 **Labels:** `priority:medium`, `area:infra`
 
-The repository has documented CI expectations but no verified workflow covering the current web and extension behavior.
+The repository workflow now covers the monorepo checks and uploads the built extension artifact; keep this issue focused on maintaining that release gate as the project changes.
 
 **Acceptance criteria**
 - Pull requests run install, typecheck, tests, lint, and extension build.

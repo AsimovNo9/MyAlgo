@@ -30,6 +30,6 @@ Personal Algorithm is a Chrome extension + web dashboard that lets a user define
 ## Notes
 - The architecture and deployment specs in the repo root are binding requirements.
 - Supabase schema RLS is defined in `packages/db/schema.sql`; deployable migrations live in `supabase/migrations`.
-- YouTube OAuth, upload synchronization, channel metadata enrichment, ranking, feedback, thumbnails, and the Edge extension auth path are implemented. Production deployment and robust YouTube DOM support are still active work.
+- The extension ranking loop has been stabilized locally, and the active work is now production validation, live OAuth verification, and launch hardening rather than core extension bug fixing.
 - Start onboarding with [docs/ONBOARDING.md](docs/ONBOARDING.md) and the scoped backlog in [docs/GITHUB_ISSUES.md](docs/GITHUB_ISSUES.md).
 - Secrets are intentionally not embedded in the extension bundle.

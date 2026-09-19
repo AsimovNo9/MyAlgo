@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 function isAllowedExtensionOrigin(origin: string | null) {
-  return Boolean(origin && (origin.startsWith('chrome-extension://') || origin.startsWith('http://localhost:')));
+  return Boolean(origin && (
+    /^chrome-extension:\/\/[a-p]{32}$/i.test(origin)
+    || origin.startsWith('http://localhost:')
+  ));
 }
 
 export function middleware(request: NextRequest) {

@@ -3,17 +3,20 @@
 This file tracks launch-blocking work, production hardening, and follow-up tasks for Personal Algorithm.
 
 ## Current focus
-- [x] Resolve Google OAuth general-access gating for the live app
-- [x] Verify the production Vercel deployment and callback URLs match the live Supabase project
-- [x] Test the full sign-in → profile creation → YouTube sync flow locally against the live Supabase project
+- [x] Resolve the extension ranking loop and stabilize the page-trigger behavior
+- [x] Add a clearer enabled/paused state in the popup and on the YouTube page
+- [x] Validate the extension locally with typecheck, tests, and a production build
 - [ ] Repeat the full sign-in → profile creation → YouTube sync flow in production
+- [ ] Run production validation and launch hardening for the live app and extension
 
 ## Immediate next actions
-- [x] Add approved Google test users or complete Google app verification for general access
-- [x] Confirm the live Supabase project and the Vercel app are the correct production targets
-- [x] Validate all production environment variables are present and match the deployment domain
-- [x] Update the app config from localhost values to the production Vercel domain before final live testing
+- [x] Stabilize the YouTube ranking trigger flow and remove the re-trigger refresh loop
+- [x] Confirm the local extension build is green and the active/pause UI is understandable
+- [x] Point local web OAuth callbacks at `https://my-algo-web.vercel.app/auth/callback`
+- [x] Verify the production health route, rank CORS preflight, and auth callback route
 - [ ] Re-test the full OAuth and YouTube authorization flow after environment verification
+- [ ] Validate the Vercel deployment against the real Supabase production project
+- [ ] Rotate exposed secrets and confirm they are not embedded in the browser bundle
 
 ## Current environment state
 - [x] The app-local config in [apps/web/.env.local](apps/web/.env.local) is aligned with the production Vercel domain for live deployment testing
@@ -29,6 +32,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Production configuration
 - [ ] Set production Vercel environment variables for Supabase, Google, and Anthropic
+- [x] Confirm the deployed production URL responds from the expected Vercel app
 - [ ] Confirm the Vercel project is deployed from the correct root directory
 - [ ] Validate the production app domain and callback URLs match the live deployment
 - [ ] Add a health check endpoint to monitor uptime and deployment health
@@ -63,9 +67,11 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Extension and browser experience
 - [x] Package the Chrome extension for local Edge testing
-- [ ] Verify MV3 extension permissions and storage requirements
+- [x] Stabilize the YouTube trigger flow and remove the refresh loop
+- [x] Add a visible enabled/paused status in the popup and content script UI
+- [ ] Verify MV3 extension permissions and storage requirements in the production deployment context
 - [ ] Test the extension flow against the live API and deployed app
-- [ ] Review YouTube DOM compatibility and fallback behavior
+- [ ] Review YouTube DOM compatibility and fallback behavior against production content
 - [ ] Add representative YouTube DOM fixtures for Home, Subscriptions, Search, and Shorts
 - [ ] Prepare Chrome Web Store submission requirements and assets
 
@@ -88,7 +94,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Add scheduled/background sync for content refresh
 - [ ] Add analytics and retention tracking for feed engagement
 - [ ] Consider Redis caching for hot feed reads as usage grows
-- [ ] Add automated CI for linting, typecheck, and build verification
+- [x] Add automated CI for linting, typecheck, tests, and extension build verification
 - [ ] Add Sentry monitoring and error dashboards
 - [ ] Plan the next feature set after MVP validation
 

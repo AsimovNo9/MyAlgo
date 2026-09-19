@@ -75,7 +75,7 @@ jobs:
 1. **Create a Supabase project.** Note the project URL and anon/service-role keys.
 2. **Apply the schema:** `supabase db push` (runs `packages/db/schema.sql` + RLS policies).
 3. **Google Cloud setup:** create a project, enable the YouTube Data API v3, create an OAuth 2.0 client (web application type for the backend flow).
-4. **Set environment variables in Vercel:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`.
+4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ANTHROPIC_API_KEY`.
 5. **Deploy:** `vercel link` then `vercel --prod`.
 6. **Extension (dev):** load unpacked via `chrome://extensions` → "Load unpacked" pointing at `apps/extension/dist`.
 7. **Extension (public):** package and submit through the Chrome Web Store developer dashboard once ready for outside users.

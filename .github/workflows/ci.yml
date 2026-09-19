@@ -34,3 +34,10 @@ jobs:
 
       - name: Build extension
         run: pnpm --filter extension build
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-algorithm-extension
+          path: apps/extension/dist
+          if-no-files-found: error

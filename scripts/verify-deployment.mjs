@@ -21,7 +21,7 @@ if (!health.response.ok) {
 const cors = await request('/api/rank', {
   method: 'OPTIONS',
   headers: {
-    Origin: 'chrome-extension://deployment-smoke-test',
+    Origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
     'Access-Control-Request-Method': 'POST',
     'Access-Control-Request-Headers': 'authorization,content-type',
   },
@@ -32,7 +32,7 @@ if (cors.response.status !== 204) {
 }
 
 const allowOrigin = cors.response.headers.get('access-control-allow-origin');
-if (allowOrigin !== 'chrome-extension://deployment-smoke-test') {
+if (allowOrigin !== 'chrome-extension://abcdefghijklmnopabcdefghijklmnop') {
   throw new Error(`Unexpected CORS origin: ${allowOrigin ?? '(missing)'}`);
 }
 

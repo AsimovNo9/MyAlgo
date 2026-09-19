@@ -72,6 +72,6 @@ pnpm --filter extension build
 ## Notes
 - The extension never ships secrets. All external API calls are proxied through the app layer.
 - The content script is intentionally scoped to `youtube.com` and uses typed runtime messaging.
-- YouTube OAuth, subscription upload sync, channel metadata enrichment, Supabase persistence, feedback, and live-page ranking are implemented; production deployment and DOM compatibility remain active work.
+- The main extension bug cycle has been resolved locally: ranking triggers are stable, the refresh loop is removed, and the enable/disable state is visible. The current focus is production validation, deployment verification, and launch hardening.
 - Discovery currently uses bounded format-aware YouTube queries and deterministic metadata classification. Issues #20 and #22 track the next semantic stage: pgvector concepts, aliases, embeddings, and optional AI disambiguation with deterministic fallback.
 - See [docs/ONBOARDING.md](docs/ONBOARDING.md) and [docs/GITHUB_ISSUES.md](docs/GITHUB_ISSUES.md) before picking up a task.
