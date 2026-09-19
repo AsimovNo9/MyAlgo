@@ -203,6 +203,7 @@ export function buildFeedResponse(
   options: { includeHidden?: boolean } = {},
 ): FeedResponse {
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
+  const hasTopicWeights = weights.size > 0;
   const rules = algorithm?.rules ?? [];
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
@@ -308,6 +309,11 @@ export function buildFeedResponse(
       }
     }
 
+    if (hasTopicWeights && matchedTopics.length === 0 && !ruleSummary.some((summary) => summary.startsWith('always-show rule:'))) {
+      visible = false;
+      ruleSummary.push('outside selected algorithm topics');
+    }
+
     const reasonBits = [
       matchedTopics.length > 0 ? `Matched ${matchedTopics.join(', ')} topics.` : 'No strong topic match.',
       ruleSummary.length > 0 ? `Rules boosted it: ${ruleSummary.join('; ')}.` : 'No matching rule adjustments.',
@@ -336,10 +342,17 @@ export function buildFeedResponse(
     .filter((item) => item.visible)
     .sort((a, b) => b.score - a.score);
   const fallbackRanked = [...feedItems].sort((a, b) => b.score - a.score);
+  const items = options.includeHidden
+    ? fallbackRanked
+    : ranked.length > 0
+      ? ranked
+      : hasTopicWeights
+        ? []
+        : fallbackRanked;
 
   return {
     generatedAt: new Date().toISOString(),
     algorithmId: algorithm?.id,
-    items: options.includeHidden ? fallbackRanked : ranked.length > 0 ? ranked : fallbackRanked,
+    items,
   };
 }
