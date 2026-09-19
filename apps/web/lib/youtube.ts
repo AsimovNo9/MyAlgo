@@ -373,7 +373,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
             ? 'The YouTube API request failed.'
             : 'No live YouTube subscriptions were available to sync.';
 
-    return { ok: false, source: result.source, synced: 0, classified: 0, items: [], error: reason };
+    return { ok: false, source: result.source, synced: 0, discovered: 0, classified: 0, items: [], error: reason };
   }
 
   const algorithms = await listAlgorithms(userId);
@@ -440,6 +440,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     ok: true,
     source: result.source,
     synced,
+    discovered: discoveryItems.length,
     classified,
     items,
   };
