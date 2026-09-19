@@ -7,7 +7,7 @@
     "build": "next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"No web tests yet\""
+    "test": "node --experimental-strip-types --test lib/feed.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.0",
