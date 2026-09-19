@@ -24,6 +24,7 @@ export interface Algorithm {
   created_at?: string;
   topic_weights?: TopicWeight[];
   rules?: Rule[];
+  semantic_terms?: string[] | null;
 }
 
 export interface FeedItem {

@@ -3,6 +3,7 @@ import { buildFeedResponse, type FeedCandidate } from '@/lib/feed';
 import { ensureDefaultAlgorithmsForUser } from '@/lib/bootstrap';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
+import { resolveTopicConceptTerms } from '@/lib/concepts';
 
 type RankRequest = {
   mode?: string;
@@ -27,12 +28,31 @@ const topicAliases: Record<string, RegExp> = {
   science: /\b(science|physics|biology|chemistry|space|astronomy)\b/i,
 };
 
-function inferCandidateTopics(title: string, channelName: string, algorithmTopics: string[]): string[] {
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function inferCandidateTopics(
+  title: string,
+  channelName: string,
+  algorithmTopics: string[],
+  goalText?: string | null,
+  semanticTerms: string[] = [],
+): string[] {
   const searchableText = `${title} ${channelName}`;
   return algorithmTopics.filter((topic) => {
     const normalizedTopic = topic.trim().toLowerCase();
-    const pattern = topicAliases[normalizedTopic] ?? new RegExp(`\\b${normalizedTopic.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i');
-    return pattern.test(searchableText);
+    const topicPattern = topicAliases[normalizedTopic] ?? new RegExp(`\\b${escapeRegex(normalizedTopic)}\\b`, 'i');
+    const conceptTerms = resolveTopicConceptTerms(topic, goalText);
+    const persistedTerms = semanticTerms.filter((term) => term.trim().length > 0);
+    return [topic, ...conceptTerms, ...persistedTerms].some((term) => {
+      const normalizedTerm = term.trim().toLowerCase();
+      if (!normalizedTerm) {
+        return false;
+      }
+
+      return topicPattern.test(searchableText) || searchableText.toLowerCase().includes(normalizedTerm);
+    });
   });
 }
 
@@ -57,13 +77,14 @@ export async function POST(request: Request) {
 
   const modeTopics = modeTopicDefaults[requestedMode ?? ''] ?? [];
   const algorithmTopics = algorithm?.topic_weights?.map((item) => item.topic) ?? modeTopics;
+  const semanticTerms = algorithm?.semantic_terms ?? [];
   const candidates: FeedCandidate[] = (payload.candidates ?? [])
     .filter((candidate) => typeof candidate.title === 'string' && candidate.title.trim().length > 0)
     .slice(0, 100)
     .map((candidate, index) => {
       const title = candidate.title!.trim();
       const channelName = candidate.channel_name ?? '';
-      const topics = inferCandidateTopics(title, channelName, algorithmTopics);
+      const topics = inferCandidateTopics(title, channelName, algorithmTopics, algorithm?.goal_text, semanticTerms);
       const matchingRule = algorithm?.rules?.some((rule) => matchesRule(title, rule.condition_text));
       return {
       id: candidate.external_id ?? `page-${index}`,

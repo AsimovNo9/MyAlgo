@@ -33,7 +33,7 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
 
   const { data, error } = await client
     .from('algorithms')
-    .select('*, topic_weights(*), rules(*)')
+    .select('*, topic_weights(*), rules(*), algorithm_intent_profiles(semantic_terms)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -42,15 +42,25 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
     return demoAlgorithms;
   }
 
-  return data.map((row) => ({
-    id: row.id,
-    name: row.name,
-    is_active: row.is_active,
-    goal_text: row.goal_text,
-    created_at: row.created_at,
-    topic_weights: (row.topic_weights ?? []) as TopicWeight[],
-    rules: (row.rules ?? []) as Rule[],
-  }));
+  return data.map((row) => {
+    const profileRows = Array.isArray(row.algorithm_intent_profiles)
+      ? (row.algorithm_intent_profiles as Array<{ semantic_terms?: string[] | null }>)
+      : [];
+    const semanticTerms = profileRows.flatMap((profile: { semantic_terms?: string[] | null }) =>
+      Array.isArray(profile?.semantic_terms) ? profile.semantic_terms : [],
+    );
+
+    return {
+      id: row.id,
+      name: row.name,
+      is_active: row.is_active,
+      goal_text: row.goal_text,
+      created_at: row.created_at,
+      topic_weights: (row.topic_weights ?? []) as TopicWeight[],
+      rules: (row.rules ?? []) as Rule[],
+      semantic_terms: semanticTerms,
+    };
+  });
 }
 
 export async function createAlgorithm(userId: string, input: Partial<Algorithm>): Promise<Algorithm> {

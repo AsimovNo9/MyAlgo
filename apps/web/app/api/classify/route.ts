@@ -20,6 +20,6 @@ export async function POST(request: Request) {
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    note: 'Classification endpoint is active and uses keyword-based topic detection until an external model is connected.',
+    note: 'Classification uses deterministic topic detection and optionally asks Anthropic to disambiguate titles with no strong local topic match when ANTHROPIC_API_KEY is configured.',
   });
 }
