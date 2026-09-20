@@ -46,12 +46,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build Vercel production artifact
-        run: pnpm dlx vercel build --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy Vercel production artifact
-        run: pnpm dlx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+      - name: Create fresh Vercel production deployment
+        run: pnpm dlx vercel deploy --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
