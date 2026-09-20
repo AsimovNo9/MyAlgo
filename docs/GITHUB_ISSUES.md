@@ -41,3 +41,16 @@ The recommender implementation milestone is complete in merged PRs #113, #115–
 ## Cross-cutting release gates
 
 OAuth/token encryption, RLS isolation, cron authorization, production embedding configuration, and live extension smoke tests remain tracked in [../TODO.md](../TODO.md) and [STATUS.md](STATUS.md). They are prerequisites for production claims, not alternate recommender requirements.
+
+## Extension and UX Pathway
+
+The next presentation-layer work is tracked in [EXTENSION_UX_PATHWAY.md](EXTENSION_UX_PATHWAY.md):
+
+- #125 render generations and stale feed state
+- #126 native-compatible cards and duplicate suppression
+- #127 DOM/infinite-scroll fixture coverage
+- #128 larger bounded Personal Picks shelf
+- #129 goal-aware algorithm editor
+- #130 topic weight sliders and explicit normalization
+- #131 calibration UX and learning controls
+- #132 authenticated production extension demo and baseline
