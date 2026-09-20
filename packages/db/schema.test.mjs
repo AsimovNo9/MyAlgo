@@ -14,6 +14,10 @@ const seedChannelsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920000000_add_topic_seed_channels.sql'),
   'utf8',
 );
+const seedDiscoveryMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920010000_add_seed_channel_discovery_review.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -30,6 +34,12 @@ test('topic seed channels table is present in the tracked migration with a uniqu
   assert.match(seedChannelsMigration, /create table if not exists public\.topic_seed_channels/i);
   assert.match(seedChannelsMigration, /alter table public\.topic_seed_channels enable row level security/i);
   assert.match(seedChannelsMigration, /unique \(topic, channel_id\)/i);
+});
+
+test('seed channel discovery review metadata is tracked', () => {
+  assert.match(seedDiscoveryMigration, /add column if not exists status/i);
+  assert.match(seedDiscoveryMigration, /pending.*approved.*rejected/i);
+  assert.match(seedDiscoveryMigration, /confidence numeric/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

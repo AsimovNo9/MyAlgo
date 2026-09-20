@@ -60,7 +60,9 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add retry and timeout handling for downstream API calls
 - [x] Add RSS-based seed-channel ingestion for niche topics with no shared per-user quota cost
 - [x] Add a shared Vercel Cron job to poll seed channels, replacing per-user background discovery search
-- [ ] Add a periodic shared search job to discover new candidate channels for the seed catalog
+- [x] Add a periodic shared search job to discover new candidate channels for the seed catalog
+- [x] Queue discovered channels as pending review instead of automatically polluting the approved RSS catalog
+- [ ] Add admin/user review UI to approve or reject discovered channels
 - [ ] Set the CRON_SECRET production environment variable and verify the cron job runs
 
 ## Feed ranking and scoring

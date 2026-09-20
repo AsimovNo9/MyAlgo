@@ -1,6 +1,6 @@
 import { fetchChannelRssItems } from './rss.ts';
 
-export type SeedChannelRow = { topic: string; channel_id: string };
+export type SeedChannelRow = { topic: string; channel_id: string; status?: 'pending' | 'approved' | 'rejected' };
 
 const MAX_CHANNELS_PER_SYNC = 25;
 const MAX_ITEMS_PER_CHANNEL = 5;
@@ -43,6 +43,7 @@ export async function syncSeedChannelContent() {
   const { data: seedRows, error: seedError } = await client
     .from('topic_seed_channels')
     .select('topic, channel_id')
+    .eq('status', 'approved')
     .limit(500);
 
   if (seedError || !seedRows) {

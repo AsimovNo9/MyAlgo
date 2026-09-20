@@ -175,6 +175,6 @@ Subscriptions-only sourcing has a real gap: a niche "Work" algorithm (e.g. nucle
 - `GET`/`POST /api/seed-channels` to list and add curated channels.
 
 **Still needed**
-- A periodic, shared `search.list` job for *discovering new* candidate channels (item 2 above) to promote into `topic_seed_channels`; channels are currently added manually via the API route.
+- A review UI for the pending channels produced by the periodic shared `search.list` job; discovery now runs through `/api/seed-channels/discover` and queues candidates without auto-approving them.
 - Dedicated "pin this channel" UI using `channel_id` instead of name matching.
 - A UI for browsing/curating the seed-channel catalog (currently API-only).

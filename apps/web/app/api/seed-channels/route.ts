@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data, error } = await client
     .from('topic_seed_channels')
-    .select('id, topic, channel_id, source, added_at')
+    .select('id, topic, channel_id, source, status, confidence, channel_name, subscriber_count, added_at')
     .order('topic', { ascending: true });
 
   if (error || !data) {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   const { error } = await client
     .from('topic_seed_channels')
-    .upsert({ topic, channel_id: channelId, source: 'curated' }, { onConflict: 'topic,channel_id' });
+    .upsert({ topic, channel_id: channelId, source: 'curated', status: 'approved' }, { onConflict: 'topic,channel_id' });
 
   if (error) {
     console.error('Failed to save seed channel', error);
