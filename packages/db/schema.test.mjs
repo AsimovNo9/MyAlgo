@@ -26,6 +26,10 @@ const algorithmConsistencyMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920030000_enforce_algorithm_consistency.sql'),
   'utf8',
 );
+const retrievalPreferencesMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920040000_add_algorithm_retrieval_preferences.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -60,6 +64,13 @@ test('algorithm consistency migration deduplicates names and enforces one active
   assert.match(algorithmConsistencyMigration, /partition by user_id, lower\(btrim\(name\)\)/i);
   assert.match(algorithmConsistencyMigration, /algorithms_one_name_per_user/i);
   assert.match(algorithmConsistencyMigration, /algorithms_one_active_per_user/i);
+});
+
+test('algorithm retrieval preferences are tracked in schema and migration', () => {
+  assert.match(schema, /language text/i);
+  assert.match(schema, /preferred_formats text\[\] not null default '\{\}'/i);
+  assert.match(retrievalPreferencesMigration, /add column if not exists language text/i);
+  assert.match(retrievalPreferencesMigration, /add column if not exists preferred_formats text\[\] not null default '\{\}'/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

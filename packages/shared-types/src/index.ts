@@ -21,6 +21,8 @@ export interface Algorithm {
   name: string;
   is_active?: boolean;
   goal_text?: string | null;
+  language?: string | null;
+  preferred_formats?: string[];
   created_at?: string;
   topic_weights?: TopicWeight[];
   rules?: Rule[];
@@ -59,6 +61,8 @@ export interface AlgorithmPayload {
   name: string;
   is_active?: boolean;
   goal_text?: string | null;
+  language?: string | null;
+  preferred_formats?: string[];
   topic_weights: TopicWeight[];
   rules: Rule[];
 }

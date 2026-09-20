@@ -24,6 +24,8 @@ create table public.algorithms (
   name text not null,
   is_active boolean not null default false,
   goal_text text,
+  language text,
+  preferred_formats text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 

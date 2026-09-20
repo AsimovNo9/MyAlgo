@@ -21,6 +21,23 @@ test('buildRecommendationProfile separates positive and negative rules', () => {
   assert.equal(profile.semanticTerms.includes('game design'), true);
 });
 
+test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {
+  const profile = buildRecommendationProfile({
+    name: 'Gaming',
+    goal_text: 'Learn Nintendo RPG design',
+    language: ' EN ',
+    preferred_formats: ['Review', 'long-form', 'Review'],
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [],
+  });
+
+  assert.equal(profile.language, 'en');
+  assert.deepEqual(profile.preferredFormats, ['review', 'long-form']);
+  const queryTexts = buildRecommendationQueries(profile, 20).map((query) => query.text);
+  assert.equal(queryTexts.includes('Gaming review'), true);
+  assert.equal(queryTexts.includes('Gaming long-form'), true);
+});
+
 test('buildRecommendationQueries is bounded, round-robin, and deduplicated', () => {
   const profile = buildRecommendationProfile({
     name: 'Gaming',

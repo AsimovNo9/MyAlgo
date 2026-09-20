@@ -26,6 +26,8 @@ export async function POST(request: Request) {
     name: payload.name ?? 'Work',
     is_active: payload.is_active ?? true,
     goal_text: payload.goal_text ?? null,
+    language: payload.language ?? null,
+    preferred_formats: payload.preferred_formats ?? [],
     topic_weights: payload.topic_weights ?? [],
     rules: payload.rules ?? [],
   });

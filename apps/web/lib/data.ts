@@ -69,6 +69,8 @@ export async function listAlgorithms(userId: string): Promise<Algorithm[]> {
       name: row.name,
       is_active: row.is_active,
       goal_text: row.goal_text,
+      language: row.language ?? null,
+      preferred_formats: Array.isArray(row.preferred_formats) ? row.preferred_formats : [],
       created_at: row.created_at,
       topic_weights: (row.topic_weights ?? []) as TopicWeight[],
       rules: (row.rules ?? []) as Rule[],
@@ -97,6 +99,8 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
       name: input.name ?? 'Work',
       is_active: input.is_active ?? true,
       goal_text: input.goal_text ?? null,
+      language: input.language ?? null,
+      preferred_formats: input.preferred_formats ?? [],
       topic_weights: input.topic_weights ?? [],
       rules: input.rules ?? [],
     };
@@ -109,6 +113,8 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
       name: input.name ?? 'Work',
       is_active: false,
       goal_text: input.goal_text ?? null,
+      language: input.language ?? null,
+      preferred_formats: input.preferred_formats ?? [],
     })
     .select()
     .single();
@@ -120,6 +126,8 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
       name: input.name ?? 'Work',
       is_active: input.is_active ?? true,
       goal_text: input.goal_text ?? null,
+      language: input.language ?? null,
+      preferred_formats: input.preferred_formats ?? [],
       topic_weights: input.topic_weights ?? [],
       rules: input.rules ?? [],
     };
@@ -168,6 +176,8 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
     name: data.name,
     is_active: isActive,
     goal_text: data.goal_text,
+    language: data.language ?? null,
+    preferred_formats: Array.isArray(input.preferred_formats) ? input.preferred_formats : [],
     created_at: data.created_at,
     topic_weights: topicWeights,
     rules,
