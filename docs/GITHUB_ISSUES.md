@@ -6,22 +6,29 @@ The authoritative recommendation requirements and delivery order are in [RECOMME
 
 ## Remaining Issues In Priority Order
 
-1. [#105 Establish offline and production recommendation quality baselines](https://github.com/AsimovNo9/MyAlgo/issues/105) — per-interest retrieval/classification/eligibility/visibility metrics, privacy-safe production aggregates, and regression fixtures.
-2. [#110 Make activation coverage topic-specific and backfill thin lanes](https://github.com/AsimovNo9/MyAlgo/issues/110) — per-interest pipeline counts, balanced multi-topic planning, and bounded gap backfill.
-3. [#100 Improve YouTube discovery depth and ordering](https://github.com/AsimovNo9/MyAlgo/issues/100) — bounded configurable Search depth, explicit ordering, useful-candidate and quota metrics.
-4. [#103 Enrich YouTube candidates before semantic classification](https://github.com/AsimovNo9/MyAlgo/issues/103) — bounded metadata enrichment and richer classification facets.
-5. [#111 Preserve multi-facet concept matches through classification](https://github.com/AsimovNo9/MyAlgo/issues/111) — retain all approved concept/alias/intent/entity matches with provenance and confidence.
-6. [#102 Build a persistent historical taste profile](https://github.com/AsimovNo9/MyAlgo/issues/102) — durable affinities, short/long-term separation, confidence/evidence, rebuild/reset.
-7. [#101 Make vector retrieval a first-class candidate source](https://github.com/AsimovNo9/MyAlgo/issues/101) — merge vector candidates with existing sources, preserve model provenance, retain safe fallback.
-8. [#104 Add personal reranking, diversity, and exploration controls](https://github.com/AsimovNo9/MyAlgo/issues/104) — explicit-intent precedence, lane allocation, diversity, novelty, and explanations.
-9. [#107 Add semantic-path recommendation explanations](https://github.com/AsimovNo9/MyAlgo/issues/107) — approved concept paths and inspectable debug provenance.
-10. [#106 Build reviewed semantic-context repository ingestion](https://github.com/AsimovNo9/MyAlgo/issues/106) — governed, versioned, idempotent concept/context imports and embeddings.
+The recommender implementation milestone is complete in merged PRs #113, #115–#123. Remaining work is production validation and release readiness:
 
-11. [#3 Complete extension authentication in production](https://github.com/AsimovNo9/MyAlgo/issues/3) — production OAuth, bearer sessions, token persistence/refresh, and sign-out validation.
-12. [#9 Finish launch security review](https://github.com/AsimovNo9/MyAlgo/issues/9) — secrets, CORS, RLS isolation, and environment separation.
-13. [#8 Add production observability and health checks](https://github.com/AsimovNo9/MyAlgo/issues/8) — structured failures, provider quota/sync visibility, and error monitoring.
-14. [#4 Make mode switching visibly change the YouTube feed](https://github.com/AsimovNo9/MyAlgo/issues/4) — production validation of mode-specific ranking and extension behavior.
-15. [#10 Package and document the Edge release](https://github.com/AsimovNo9/MyAlgo/issues/10) — release workflow, extension ID/redirect setup, and store submission requirements.
+1. [#3 Complete extension authentication in production](https://github.com/AsimovNo9/MyAlgo/issues/3) — production OAuth, bearer sessions, token persistence/refresh, and sign-out validation.
+2. [#9 Finish launch security review](https://github.com/AsimovNo9/MyAlgo/issues/9) — secrets, CORS, RLS isolation, and environment separation.
+3. [#8 Add production observability and health checks](https://github.com/AsimovNo9/MyAlgo/issues/8) — structured failures, provider quota/sync visibility, and error monitoring.
+4. [#4 Make mode switching visibly change the YouTube feed](https://github.com/AsimovNo9/MyAlgo/issues/4) — production validation of mode-specific ranking and extension behavior.
+5. [#10 Package and document the Edge release](https://github.com/AsimovNo9/MyAlgo/issues/10) — release workflow, extension ID/redirect setup, and store submission requirements.
+
+## Merged Recommender Implementation Issues
+
+- Historical merged PRs #108 and #109 completed per-interest coverage and generalized approved-concept alias expansion.
+- #108 — Build per-interest candidate coverage
+- #109 — Expand every approved concept through aliases and intents
+- #100 -> [PR #116](https://github.com/AsimovNo9/MyAlgo/pull/116)
+- #101 -> [PR #120](https://github.com/AsimovNo9/MyAlgo/pull/120)
+- #102 -> [PR #119](https://github.com/AsimovNo9/MyAlgo/pull/119)
+- #103 -> [PR #117](https://github.com/AsimovNo9/MyAlgo/pull/117)
+- #104 -> [PR #121](https://github.com/AsimovNo9/MyAlgo/pull/121)
+- #105 -> [PR #113](https://github.com/AsimovNo9/MyAlgo/pull/113)
+- #106 -> [PR #123](https://github.com/AsimovNo9/MyAlgo/pull/123)
+- #107 -> [PR #122](https://github.com/AsimovNo9/MyAlgo/pull/122)
+- #110 -> [PR #115](https://github.com/AsimovNo9/MyAlgo/pull/115)
+- #111 -> [PR #118](https://github.com/AsimovNo9/MyAlgo/pull/118)
 
 ## Closed Superseded Issues
 
