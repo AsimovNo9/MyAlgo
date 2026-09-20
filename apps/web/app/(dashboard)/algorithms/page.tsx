@@ -10,6 +10,9 @@ type Preset = {
   rules: Array<{ type: RuleType; condition_text: string }>;
 };
 
+type LearnedFacet = { key: string; strength: number; confidence: number };
+type LearnedProfileResponse = { facets?: { topics?: LearnedFacet[]; formats?: LearnedFacet[]; languages?: LearnedFacet[] } };
+
 const presetOptions: Preset[] = [
   {
     name: 'AI Work',
@@ -161,6 +164,7 @@ export default function AlgorithmsPage() {
   const [calibrationItems, setCalibrationItems] = useState<FeedItem[]>([]);
   const [calibrationLoading, setCalibrationLoading] = useState(false);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [learnedProfile, setLearnedProfile] = useState<LearnedProfileResponse['facets'] | null>(null);
 
   useEffect(() => {
     void fetchAlgorithms();
@@ -190,6 +194,16 @@ export default function AlgorithmsPage() {
       .catch((error) => setCalibrationError(error instanceof Error ? error.message : 'Unable to load calibration candidates.'))
       .finally(() => setCalibrationLoading(false));
   }, [activeAlgorithmName]);
+
+  useEffect(() => {
+    void fetch('/api/recommendation-profile')
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json() as LearnedProfileResponse;
+        setLearnedProfile(data.facets ?? null);
+      })
+      .catch(() => undefined);
+  }, [calibrationItems.length]);
 
   const hasRule = useMemo(
     () => (condition_text: string) => form.rules.some((rule) => rule.condition_text.toLowerCase() === condition_text.toLowerCase()),
@@ -823,6 +837,21 @@ export default function AlgorithmsPage() {
             </article>
           ))}
         </div>
+        {learnedProfile ? (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(204,251,241,0.2)' }}>
+            <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#99f6e4' }}>What we’re learning</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              {[...(learnedProfile.topics ?? []), ...(learnedProfile.formats ?? []), ...(learnedProfile.languages ?? [])]
+                .filter((facet) => facet.strength > 0)
+                .slice(0, 8)
+                .map((facet) => (
+                  <span key={`${facet.key}-${facet.strength}`} style={{ padding: '6px 9px', borderRadius: 999, background: 'rgba(204,251,241,0.16)', color: '#ccfbf1', fontSize: 12, fontWeight: 700 }}>
+                    {facet.key}
+                  </span>
+                ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(248,250,252,0.74) 100%)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRadius: 24, padding: 20, border: '1px solid rgba(148,163,184,0.2)', boxShadow: '0 10px 28px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.9)' }}>

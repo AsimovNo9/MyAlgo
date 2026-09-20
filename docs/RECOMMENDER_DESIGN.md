@@ -593,6 +593,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Emit privacy-bounded opened and revisited activity events from the extension.
 - [x] Recompute profile affinities from feedback and observed activity.
 - [x] Add a user-facing taste calibration flow using the existing feed and feedback APIs.
+- [x] Expose a user-facing learned-profile summary without returning raw activity history.
 - [ ] Evaluate semantic or visual classification only where calibration data demonstrates a text-first gap.
 
 ## 18. Architecture decision record: retrieval before sophistication
