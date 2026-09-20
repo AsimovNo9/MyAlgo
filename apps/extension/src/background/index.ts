@@ -1,7 +1,7 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { fetchFeed, getApiBaseUrl, rankPageCandidates, type PageCandidate } from '../lib/api-client';
+import { activateAlgorithm, fetchAlgorithms, fetchFeed, getApiBaseUrl, rankPageCandidates, type PageCandidate } from '../lib/api-client';
 import { normalizeFeed } from '../lib/extension-helpers';
 import { getExtensionAccessToken, signInWithGoogle, signOutExtension } from '../lib/auth';
 
@@ -91,7 +91,7 @@ const refreshFeed = async (mode?: string) => {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, payload } = message as { type: string; payload?: { mode?: string; enabled?: boolean; contentItemId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
+  const { type, payload } = message as { type: string; payload?: { mode?: string; algorithmId?: string; enabled?: boolean; contentItemId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
@@ -122,13 +122,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const nextMode = payload?.mode ?? 'Work';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
+      const algorithmId = payload?.algorithmId
+        ?? (await fetchAlgorithms()).find((algorithm) => algorithm.name === nextMode)?.id;
+      const activation = algorithmId ? await activateAlgorithm(algorithmId) : null;
       await refreshFeed(nextMode);
       const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
         : undefined));
-    })();
-    sendResponse({ ok: true });
+      sendResponse({ ok: true, activation });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to activate algorithm.' }));
     return true;
   }
 

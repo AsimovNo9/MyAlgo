@@ -111,6 +111,11 @@ create index on public.classifications (content_item_id);
 create unique index if not exists algorithms_one_seeded_default_per_user
   on public.algorithms (user_id, lower(name))
   where lower(name) in ('work', 'learning', 'relax');
+create unique index if not exists algorithms_one_name_per_user
+  on public.algorithms (user_id, lower(btrim(name)));
+create unique index if not exists algorithms_one_active_per_user
+  on public.algorithms (user_id)
+  where is_active = true;
 create index on public.content_items (channel_id);
 create index on public.content_items (source_kind);
 create unique index classifications_content_item_id_key on public.classifications (content_item_id);

@@ -31,6 +31,7 @@ export interface FeedItem {
   id: string;
   title: string;
   channel_name?: string | null;
+  channel_id?: string | null;
   thumbnail_url?: string | null;
   external_id: string;
   score: number;
@@ -60,6 +61,15 @@ export interface AlgorithmPayload {
   goal_text?: string | null;
   topic_weights: TopicWeight[];
   rules: Rule[];
+}
+
+export interface AlgorithmActivationResponse {
+  ok: boolean;
+  tier: 0 | 1 | 2;
+  poolCount: number;
+  rss: unknown;
+  coldStart: unknown;
+  error?: string;
 }
 
 export interface ClassifyRequest {

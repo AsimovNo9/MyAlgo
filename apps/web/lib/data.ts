@@ -107,7 +107,7 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
     .insert({
       user_id: userId,
       name: input.name ?? 'Work',
-      is_active: input.is_active ?? false,
+      is_active: false,
       goal_text: input.goal_text ?? null,
     })
     .select()
@@ -153,15 +153,52 @@ export async function createAlgorithm(userId: string, input: Partial<Algorithm>)
     }
   }
 
+  let isActive = false;
+  if (input.is_active) {
+    const activation = await activateAlgorithm(userId, data.id);
+    if (activation.ok) {
+      isActive = true;
+    } else {
+      console.error('Failed to activate newly created algorithm', activation.error);
+    }
+  }
+
   return {
     id: data.id,
     name: data.name,
-    is_active: data.is_active,
+    is_active: isActive,
     goal_text: data.goal_text,
     created_at: data.created_at,
     topic_weights: topicWeights,
     rules,
   };
+}
+
+export async function activateAlgorithm(userId: string, algorithmId: string): Promise<{ ok: boolean; error?: string }> {
+  const client = await createSupabaseServerClient();
+  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+
+  const { data: target } = await client
+    .from('algorithms')
+    .select('id')
+    .eq('id', algorithmId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: 'Algorithm not found.' };
+
+  const { error: deactivateError } = await client
+    .from('algorithms')
+    .update({ is_active: false })
+    .eq('user_id', userId)
+    .eq('is_active', true);
+  if (deactivateError) return { ok: false, error: 'Unable to deactivate the previous algorithm.' };
+
+  const { error: activateError } = await client
+    .from('algorithms')
+    .update({ is_active: true })
+    .eq('id', algorithmId)
+    .eq('user_id', userId);
+  return activateError ? { ok: false, error: 'Unable to activate algorithm.' } : { ok: true };
 }
 
 export async function deleteAlgorithm(userId: string, algorithmId: string): Promise<{ ok: boolean; error?: string }> {

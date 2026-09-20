@@ -92,6 +92,45 @@ function normalizeTopics(topics?: string[] | null): string[] {
     .map((topic) => topic.trim());
 }
 
+export function getEligibleTopicNames(algorithm?: Algorithm | null): Set<string> {
+  const weights = algorithm?.topic_weights ?? [];
+  const highestWeight = Math.max(0, ...weights.map((item) => Number(item.weight) || 0));
+  const threshold = Math.max(50, highestWeight * 0.6);
+  return new Set(
+    weights
+      .filter((item) => item.topic.trim().length > 0 && item.weight >= threshold)
+      .map((item) => item.topic.trim().toLowerCase()),
+  );
+}
+
+function getSeriesKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\b(part|episode|ep)\s*\d+\b/g, '')
+    .replace(/\b\d+\b/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .slice(0, 8)
+    .join(' ');
+}
+
+export function diversifyFeedItems(items: FeedItem[], maxPerChannel = 2, maxPerSeries = 2): FeedItem[] {
+  const channelCounts = new Map<string, number>();
+  const seriesCounts = new Map<string, number>();
+
+  return items.filter((item) => {
+    const channelKey = (item.channel_id ?? item.channel_name ?? '').trim().toLowerCase();
+    const seriesKey = getSeriesKey(item.title);
+    if (channelKey && (channelCounts.get(channelKey) ?? 0) >= maxPerChannel) return false;
+    if (seriesKey && (seriesCounts.get(seriesKey) ?? 0) >= maxPerSeries) return false;
+    if (channelKey) channelCounts.set(channelKey, (channelCounts.get(channelKey) ?? 0) + 1);
+    if (seriesKey) seriesCounts.set(seriesKey, (seriesCounts.get(seriesKey) ?? 0) + 1);
+    return true;
+  });
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -227,6 +266,7 @@ export function buildFeedResponse(
 ): FeedResponse {
   const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
+  const eligibleTopics = getEligibleTopicNames(algorithm);
   const rules = algorithm?.rules ?? [];
   const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
@@ -245,6 +285,7 @@ export function buildFeedResponse(
     const normalizedTopics = normalizeTopics(video.topics);
     const titleDerivedTopics = inferTopicsFromTitle(video.title, algorithm);
     const matchedTopics = [...new Set([...normalizedTopics, ...titleDerivedTopics])].filter((topic) => weights.has(topic.toLowerCase()));
+    const eligibleMatchedTopics = matchedTopics.filter((topic) => eligibleTopics.has(topic.toLowerCase()));
     let score = Number.isFinite(Number(video.base_score)) ? Number(video.base_score) * 0.5 : 25;
     let visible = true;
     let feedbackSuppressed = false;
@@ -353,7 +394,7 @@ export function buildFeedResponse(
       }
     }
 
-    if (hasTopicWeights && matchedTopics.length === 0 && !ruleSummary.some((summary) => summary.startsWith('always-show rule:'))) {
+    if (hasTopicWeights && eligibleMatchedTopics.length === 0 && !ruleSummary.some((summary) => summary.startsWith('always-show rule:'))) {
       visible = false;
       ruleSummary.push('outside selected algorithm topics');
     }
@@ -374,6 +415,7 @@ export function buildFeedResponse(
       external_id: video.external_id,
       title: video.title,
       channel_name: video.channel_name,
+      channel_id: video.channel_id,
       thumbnail_url: video.thumbnail_url,
       score: Math.min(100, Math.max(0, Math.round(score))),
       visible,
@@ -386,11 +428,12 @@ export function buildFeedResponse(
   const ranked = feedItems
     .filter((item) => item.visible)
     .sort((a, b) => b.score - a.score);
+  const diversifiedRanked = diversifyFeedItems(ranked);
   const fallbackRanked = [...feedItems].sort((a, b) => b.score - a.score);
   const items = options.includeHidden
     ? fallbackRanked
-    : ranked.length > 0
-      ? ranked
+    : diversifiedRanked.length > 0
+      ? diversifiedRanked
       : hasTopicWeights
         ? []
         : fallbackRanked;
