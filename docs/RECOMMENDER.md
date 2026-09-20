@@ -114,20 +114,20 @@ Compare Relevant@K, false positives, per-interest coverage, qualified-candidate 
 
 ## 5. GitHub implementation issue map
 
-These focused issues are the recommendation execution backlog. Closed predecessors #22 and #63 are retained in GitHub history but must not receive new work.
+The core recommender implementation sequence is complete in merged PRs #113 and #115–#123. The issues below are retained as historical traceability; they are closed and must not receive new work.
 
 | Order | Issue | Scope | Depends on |
 |---:|---|---|---|
-| 1 | #105 | Offline and privacy-safe production quality baselines | Existing evaluation helpers |
-| 2 | #110 | Topic-specific activation coverage and bounded thin-lane backfill | #105 instrumentation |
-| 3 | #100 | Search depth, ordering, configurable result budget, useful-candidate metrics | #105 instrumentation |
-| 4 | #103 | Enrich YouTube candidates before semantic classification | #100; quota measurement |
-| 5 | #111 | Preserve multi-facet concept matches through classification | #103; approved catalog |
-| 6 | #102 | Persistent historical taste profile and rebuild/reset | #105; activity/feedback tables |
-| 7 | #101 | Vector retrieval as a first-class, safely optional candidate source | #100; embedding status/backfill |
-| 8 | #104 | Personal reranking, lane allocation, diversity, exploration controls | #102 and #101 |
-| 9 | #107 | Approved semantic-path explanations and debug provenance | #104; approved concept graph |
-| 10 | #106 | Reviewed/versioned semantic-context repository ingestion | #105; concept governance |
+| #105 | Merged PR #113 | Baseline instrumentation and privacy-safe collector |
+| #110 | Merged PR #115 | Topic-specific activation coverage |
+| #100 | Merged PR #116 | Search depth and lane-aware ordering |
+| #103 | Merged PR #117 | YouTube candidate metadata enrichment |
+| #111 | Merged PR #118 | Multi-facet concept matches |
+| #102 | Merged PR #119 | Persistent historical taste profile |
+| #101 | Merged PR #120 | Vector candidates in sync |
+| #104 | Merged PR #121 | Lane allocation and reranking controls |
+| #107 | Merged PR #122 | Semantic-path explanations |
+| #106 | Merged PR #123 | Reviewed semantic-context ingestion |
 
 Existing local issue notes must link to these issue numbers rather than restating requirements. Production safety work in `TODO.md` remains a release gate, not a competing recommender roadmap.
 
