@@ -39,61 +39,9 @@ The first is read-only and checks production tables/RPC status. The second requi
 
 Embedding preflight is available at `/api/embeddings/status` with the cron authorization header. It reports only configuration presence, model version, and stored row count.
 
-## 2.1 Recommendation Engine Rollout
+## 2.1 Recommendation engine rollout
 
-The implementation and verification state for this rollout is maintained in [docs/STATUS.md](docs/STATUS.md). This document defines infrastructure constraints; it is not a second feature-status checklist.
-
-The next major architecture shift is not a UI change; it is a retrieval-and-ranking pipeline.
-
-The system should evolve from:
-
-- fetch subscription pool
-- classify items
-- rank them
-
-into:
-
-- build taste profile
-- generate candidates
-- enrich candidates
-- retrieve likely videos via search and subscription queries
-- rerank against the active algorithm
-
-This is the minimum product definition for a real personalized recommendation engine.
-
-### Recommendation engine stages
-
-1. **Taste profile** — explicit preferences, learned affinity, language, format, creator affinity, and negative signals.
-2. **Candidate generation** — subscriptions, liked videos, creator queries, topic queries, and bounded discovery searches.
-3. **Retrieval** — query planner and ranked candidate pull from YouTube search + known feeds.
-4. **Enrichment** — classify title, description, channel, tags, and category; resolve canonical concepts.
-5. **Reranking** — score aligned items and suppress duplicates or off-topic items.
-6. **Feedback loop** — likes, dislikes, hide, and “less like this” update the taste profile.
-
-### MVP retrieval decision
-
-Candidate generation is a separate sync/activation concern, not part of `/api/feed` or page mutation handling. Approved RSS and the shared classified pool provide primary coverage; YouTube Search is bounded gap filling. Keep the current maximum of five queries and five results per query until coverage, quota, latency, and deduplication metrics justify an increase.
-
-The first candidate-generation coordinator should report:
-
-```text
-pool size before retrieval
-items reused from the shared pool
-items ingested from RSS
-Search queries attempted and results returned
-deduplicated candidate count
-classification coverage
-```
-
-This makes retrieval quality measurable independently from reranking quality.
-
-### Scope guardrails for MVP
-
-- Keep classification text-first and metadata-driven.
-- Do not add an image classifier in the MVP.
-- Model language, creator, format, and topic as separate dimensions.
-- Do not treat channel names like IGN as a topic match.
-- Use a separate exploration lane rather than one flat deterministic list.
+The sole recommender contract is [docs/RECOMMENDER.md](docs/RECOMMENDER.md). It defines the pipeline, source budgets, hard-filter boundaries, delivery sequence, metrics, and acceptance criteria. This document only defines infrastructure, deployment, and scaling constraints; it must not duplicate recommender requirements.
 
 **Estimated MVP cost (first few hundred users):** $0–20/month, driven almost entirely by Anthropic API usage — everything else stays in free tiers.
 

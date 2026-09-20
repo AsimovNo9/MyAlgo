@@ -1,204 +1,26 @@
-# GitHub Issue Backlog
+# Recommendation Issue Register
 
 Repository: `AsimovNo9/MyAlgo`
 
-This backlog is ordered by delivery risk. Each issue is intentionally scoped so a second developer can pick up one slice independently.
+The authoritative recommendation requirements and delivery order are in [RECOMMENDER.md](RECOMMENDER.md). This file is only a compact register of GitHub execution issues; issue bodies are the detailed implementation contract.
 
-## 0. Build the user taste profile and candidate generation engine
+## Active sequence
 
-**Status:** Planned umbrella outcome. See [docs/STATUS.md](STATUS.md) for implementation and verification state; this issue is not evidence that every listed capability is complete.
+1. [#105 Establish offline and production recommendation quality baselines](https://github.com/AsimovNo9/MyAlgo/issues/105) — per-interest retrieval/classification/eligibility/visibility metrics, privacy-safe production aggregates, and regression fixtures.
+2. [#110 Make activation coverage topic-specific and backfill thin lanes](https://github.com/AsimovNo9/MyAlgo/issues/110) — per-interest pipeline counts, balanced multi-topic planning, and bounded gap backfill.
+3. [#100 Improve YouTube discovery depth and ordering](https://github.com/AsimovNo9/MyAlgo/issues/100) — bounded configurable Search depth, explicit ordering, useful-candidate and quota metrics.
+4. [#111 Preserve multi-facet concept matches through classification](https://github.com/AsimovNo9/MyAlgo/issues/111) — retain all approved concept/alias/intent/entity matches with provenance and confidence.
+5. [#102 Build a persistent historical taste profile](https://github.com/AsimovNo9/MyAlgo/issues/102) — durable affinities, short/long-term separation, confidence/evidence, rebuild/reset.
+6. [#101 Make vector retrieval a first-class candidate source](https://github.com/AsimovNo9/MyAlgo/issues/101) — merge vector candidates with existing sources, preserve model provenance, retain safe fallback.
+7. [#104 Add personal reranking, diversity, and exploration controls](https://github.com/AsimovNo9/MyAlgo/issues/104) — explicit-intent precedence, lane allocation, diversity, novelty, and explanations.
+8. [#107 Add semantic-path recommendation explanations](https://github.com/AsimovNo9/MyAlgo/issues/107) — approved concept paths and inspectable debug provenance.
+9. [#106 Build reviewed semantic-context repository ingestion](https://github.com/AsimovNo9/MyAlgo/issues/106) — governed, versioned, idempotent concept/context imports and embeddings.
 
-**Labels:** `priority:high`, `area:ranking`, `area:backend`, `area:extension`
+## Superseded or umbrella issues
 
-The current feed pipeline ranks a fetched subset of content. The next major architecture change is to understand the user first, generate candidate videos from that profile, then classify and rerank them.
+- [#63 Build taste profile and candidate generation engine](https://github.com/AsimovNo9/MyAlgo/issues/63) is an umbrella predecessor. Close it after the focused issue sequence is accepted; do not add new work there.
+- [#22 Add semantic topic concepts and intent resolution](https://github.com/AsimovNo9/MyAlgo/issues/22) is the historical semantic foundation. New semantic-context work belongs in #106; current implementation status is in [STATUS.md](STATUS.md).
 
-**Acceptance criteria**
-- The user profile includes explicit weights, learned affinities, language, format, creator affinity, and negative signals.
-- Candidate generation expands from subscriptions, liked videos, creator queries, topic queries, and freshness queries rather than only a single fetched feed.
-- The query planner generates multiple retrieval queries per topic instead of one broad keyword string.
-- Language and format are first-class dimensions during retrieval and ranking.
-- The feed mixes strong matches, discovery, and a limited exploration lane.
-- The ranking explanation shows user-preference reasoning rather than raw implementation tags.
+## Cross-cutting release gates
 
-## 1. Deploy the live-page ranking API
-
-**Labels:** `priority:high`, `area:backend`, `area:extension`
-
-The extension calls `POST /api/rank` to rank videos currently rendered on YouTube. The production route and its CORS preflight are now deployed and verified; the remaining work is authenticated live ranking validation.
-
-**Acceptance criteria**
-- `/api/rank` is available in production.
-- Authenticated extension requests return ranked candidates for `Work`, `Learning`, and `Relax`.
-- CORS allows the approved extension origin.
-- A production smoke test covers the endpoint.
-
-## 2. Make extension YouTube card detection reliable
-
-**Labels:** `priority:high`, `area:extension`
-
-The content script loads, but some YouTube surfaces report `no cards`. YouTube DOM experiments vary across Home, Subscriptions, Search, Shorts, and navigation transitions.
-
-**Acceptance criteria**
-- Detects video IDs and titles on Home, Subscriptions, Search, and Shorts.
-- Handles client-side navigation without a full reload.
-- Shows a useful diagnostic when no candidates are found.
-- Does not hide unrelated page containers.
-- Adds content-script tests using representative DOM fixtures.
-
-## 3. Complete extension authentication in production
-
-**Labels:** `priority:high`, `area:auth`, `area:extension`
-
-The extension has Supabase PKCE code and token storage, but the deployed OAuth redirect and bearer-session flow need a complete production test. The next pass should focus on confirming the live session state, the YouTube provider tokens, and whether the authentication callback reaches the backend with enough token data for `oauth_connections` persistence.
-
-**Acceptance criteria**
-- The extension signs in through Edge using Google.
-- The extension redirect URL is configured in Supabase.
-- `/api/feed`, `/api/rank`, and `/api/feedback` accept the extension bearer token.
-- The OAuth callback logs only non-secret provider-token/refresh-token state and callback outcome metadata so a missing token is diagnosable in production without exposing raw token values.
-- `oauth_connections` persists a valid YouTube access/refresh pair for the active user.
-- Token refresh works after access-token expiry.
-- Sign-out removes local tokens and cached personalized feed data.
-
-## 4. Make mode switching visibly change the YouTube feed
-
-**Labels:** `priority:high`, `area:ranking`, `area:extension`
-
-`Work`, `Learning`, and `Relax` now select different algorithms, but this needs a production validation pass and stronger candidate scoring so the change is obvious to users.
-
-**Acceptance criteria**
-- Each mode has a distinct default topic/rule profile.
-- Switching modes re-ranks current page candidates without a page refresh.
-- A visible mode/score marker is shown while debugging is enabled.
-- Automated tests prove that the same candidate set receives different ordering across modes.
-
-## 5. Improve classification quality beyond title heuristics
-
-**Labels:** `priority:medium`, `area:ranking`, `area:ai`
-
-The current classifier is deterministic and title-based. It supports common topics but cannot reliably understand descriptions, channel context, language, or nuanced content types.
-
-**Acceptance criteria**
-- Classifications use title plus channel description and available metadata.
-- AI/computer vision, tutorials, entertainment, engineering, and business cases are covered.
-- False substring matches are prevented.
-- Classification results are cached and failures have a safe fallback.
-- Cost and rate-limit behavior are documented before enabling an external LLM.
-
-## 6. Add feedback and ranking regression coverage
-
-**Labels:** `priority:medium`, `area:ranking`, `area:testing`
-
-Dashboard feedback works, but the extension and API need broader behavioral coverage.
-
-**Acceptance criteria**
-- Tests cover `more_like_this`, `not_interested`, and `never_show_channel`.
-- Tests cover positive feedback scoring and never-show versus always-show precedence.
-- Channel-wide suppression is tested across multiple videos.
-- Rule precedence is explicit and tested.
-- Extension feedback sends YouTube video IDs rather than titles.
-- Feed refresh/re-ranking after feedback is covered.
-
-## 7. Add CI for the monorepo and extension artifact
-
-**Labels:** `priority:medium`, `area:infra`
-
-The repository workflow now covers the monorepo checks and uploads the built extension artifact; keep this issue focused on maintaining that release gate as the project changes.
-
-**Acceptance criteria**
-- Pull requests run install, typecheck, tests, lint, and extension build.
-- The extension `dist` output is uploaded as a CI artifact.
-- CI uses Node 22 and pnpm 9.
-- Secrets are not printed in logs.
-
-## 8. Add production observability and health checks
-
-**Labels:** `priority:medium`, `area:infra`, `area:backend`
-
-The app has a health route with a server-side Supabase connectivity check; feed generation and downstream API failures still need richer structured observability.
-
-**Acceptance criteria**
-- Health check reports Supabase connectivity without exposing secrets.
-- Feed, YouTube, OAuth, and classification failures include structured context.
-- Sentry or an equivalent error tracker is configured for web and extension paths.
-- YouTube quota and sync duration are observable.
-
-## 9. Finish launch security review
-
-**Labels:** `priority:high`, `area:security`
-
-Before sharing the extension, review token handling, CORS, RLS, and production configuration.
-
-**Acceptance criteria**
-- No service-role key or third-party secret appears in extension output.
-- CORS is restricted to known origins.
-- RLS policy coverage is guarded by a schema test; production user-isolation behavior still needs verification with separate accounts.
-- Production and local environment variables are separated.
-- OAuth callback URLs are documented and verified.
-
-## 10. Package and document the Edge release
-
-**Labels:** `priority:low`, `area:extension`, `area:docs`
-
-The extension currently builds successfully as an unpacked MV3 artifact, but release steps are not yet documented for another developer.
-
-**Acceptance criteria**
-- Edge loading instructions use the WSL path format.
-- A release build command is documented.
-- Extension ID and Supabase redirect setup are documented.
-- Chrome Web Store / Edge Add-ons submission requirements are tracked separately.
-
-## 11. Make discovery intent-driven with format-aware queries
-
-See [Issue #20](https://github.com/AsimovNo9/MyAlgo/issues/20). The first implementation generates bounded tutorial, lecture, course, and explainer queries from user goals and strong topics, and classifies richer YouTube metadata.
-
-## 12. Add semantic topic concepts and intent resolution
-
-**Status:** Implemented locally and partially verified in production. Deterministic concepts, aliases, intent profiles, catalog loading, content concept matches, pgvector schema/RPC, and graph-aware LLM context exist; Vercel embedding configuration, backfill, and quality measurement remain open.
-
-See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next semantic layer: Supabase pgvector concepts, aliases, embeddings, structured intent, and low-confidence AI disambiguation with deterministic fallback.
-
-## 13. Persist semantic concept catalogs and algorithm intent profiles
-
-**Status:** Implemented and production schema-verified. Concept catalog, content-concept, and pgvector migrations/RPC are deployed; production data backfill and user-facing semantic quality remain open.
-
-The tracked Supabase migration creates the canonical concept catalog and per-algorithm intent profiles with RLS. `GET /api/concepts` now exposes both persisted catalog entries and user-scoped profiles; future work is low-confidence AI disambiguation and production validation of the API path.
-
-## 14. Quality-first feed relevance and source controls
-
-The product priority has shifted from adding semantic breadth to making the visible feed reliably match the selected algorithm. The normal feed path must hide unrelated content instead of surfacing it as a fallback, then give users explicit control over subscriptions, discovery, Shorts, and live content.
-
-**Acceptance criteria**
-- Unmatched content is hidden by default when an algorithm has topic weights.
-- A no-match feed returns a clear empty state with an explanation and recovery action.
-- Users can choose subscribed-only, hide Shorts, and allow/disallow discovery content.
-- Ranking applies a configurable relevance threshold, channel diversity limit, and duplicate suppression.
-- Feedback and source filters are covered by regression tests and reflected in the extension UI.
-
-## 15. Niche-topic sourcing: RSS seed channels and shared discovery search
-
-**Labels:** `priority:high`, `area:ranking`, `area:infra`
-
-Subscriptions-only sourcing has a real gap: a niche "Work" algorithm (e.g. nuclear engineering, semiconductor research) produces nothing to rank if the user isn't already subscribed to relevant channels — rules cannot invent content that was never fetched. `search.list` discovery closes part of this gap but is quota-expensive (100 units/call) and the YouTube Data API quota (10,000 units/day) is shared across the whole project, not per user, so per-user recurring search cannot scale past a handful of active users.
-
-**Recommended approach (cheapest to most involved)**
-1. **Curated seed channels + RSS polling** — every channel exposes a free `youtube.com/feeds/videos.xml?channel_id=...` feed with no API quota cost. Add a `topic_seed_channels` table (`topic`, `channel_id`, `source: 'curated' | 'discovered_via_search'`) and poll RSS on a cron to ingest uploads into `content_items`. This becomes the primary ingestion path for topics a user cares about but isn't personally subscribed to.
-2. **Periodic, shared `search.list` for channel discovery only** — run search rarely (weekly/monthly) and shared across all users interested in a topic to find new candidate channels, then promote good ones into `topic_seed_channels`. Search finds channels; RSS does the ongoing work.
-3. **User-pinned channels** — already partially supported: `always_show`/`never_show` rules now match a channel name directly (see feed.ts `ruleConditionMatches`), so a user can already pin/exclude a channel via the existing rules UI without a schema change. A dedicated "pin this channel" UI and channel_id-based matching (instead of name-based) would still be an improvement.
-
-**Already implemented**
-- `never_show` now filters by classifier `content_type` (e.g. `gossip`) independent of which channel posted it, so a trusted channel's off-topic content is still caught.
-- Rule matching checks channel name in addition to title, enabling channel pinning today.
-- `topic_seed_channels` migration and RLS policy (`supabase/migrations/20260920000000_add_topic_seed_channels.sql`, `packages/db/schema.sql`).
-- RSS polling (`apps/web/lib/rss.ts`) and orchestration (`apps/web/lib/seed-channels.ts`) that ingests curated channels into `content_items`/`classifications` and guarantees the seeded topic on each item.
-- A shared, project-wide Vercel Cron job (`apps/web/vercel.json`, daily at 02:00 UTC on Hobby) hitting `/api/seed-channels/sync`, replacing the per-user background alarm as the primary discovery mechanism and consuming no per-user YouTube API quota.
-- `GET`/`POST /api/seed-channels` to list and add curated channels.
-
-**Still needed**
-- A review UI for the pending channels produced by the periodic shared `search.list` job; discovery now runs through `/api/seed-channels/discover` and queues candidates without auto-approving them.
-- Dedicated "pin this channel" UI using `channel_id` instead of name matching.
-- A UI for browsing/curating the seed-channel catalog (currently API-only).
-
-## 16. Tiered algorithm activation
-
-`POST /api/algorithms/activate` now applies the shared-pool strategy: reuse existing classified content first, burst approved RSS channels if the pool is thin, then run a weekly-deduplicated cold-start search and auto-approve only high-confidence channels before RSS syncing. The response includes the tier and counts so the client can show instant results followed by background enrichment.
+OAuth/token encryption, RLS isolation, cron authorization, production embedding configuration, and live extension smoke tests remain tracked in [../TODO.md](../TODO.md) and [STATUS.md](STATUS.md). They are prerequisites for production claims, not alternate recommender requirements.

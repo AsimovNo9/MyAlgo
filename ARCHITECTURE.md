@@ -109,7 +109,7 @@ supabase/migrations/                           # deployable schema changes
 docs/STATUS.md                                 # implementation and verification authority
 ```
 
-The requirements document describes planned semantic modules that do not exist yet; they must not be read as current code.
+Recommendation requirements and planned semantic modules are maintained in [docs/RECOMMENDER.md](docs/RECOMMENDER.md); this document only records product-wide architecture and ownership.
 
 ```
 
