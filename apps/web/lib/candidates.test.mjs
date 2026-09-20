@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildCandidateRawMetadata,
   createCandidateProvenance,
+  hasSufficientSharedTopicPool,
   normalizeRssCandidate,
 } from './candidates.ts';
 
@@ -53,4 +54,15 @@ test('buildCandidateRawMetadata preserves bounded description and retrieval prov
       retrieved_at: '2026-09-20T10:00:00Z',
     },
   });
+});
+
+test('hasSufficientSharedTopicPool recognizes classified RSS content case-insensitively', () => {
+  const rows = Array.from({ length: 15 }, (_, index) => ({
+    classifications: [{ topics: [index < 14 ? 'Gaming' : 'RPG'] }],
+  }));
+
+  assert.equal(hasSufficientSharedTopicPool(rows, ['gaming'], 14), true);
+  assert.equal(hasSufficientSharedTopicPool(rows.slice(0, 13), ['Gaming'], 14), false);
+  assert.equal(hasSufficientSharedTopicPool(rows, ['Engineering'], 1), false);
+  assert.equal(hasSufficientSharedTopicPool(rows, [], 1), false);
 });

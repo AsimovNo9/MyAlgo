@@ -4,6 +4,8 @@ import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
 import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
+import { getEligibleTopicNames } from './feed.ts';
+import { hasSufficientSharedTopicPool, type ClassifiedCandidateRow } from './candidates.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -259,6 +261,27 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
   return [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
 }
 
+async function shouldRunYoutubeDiscovery(
+  client: Awaited<ReturnType<typeof import('./supabase/server').createSupabaseServerClient>>,
+  algorithm?: Algorithm | null,
+): Promise<boolean> {
+  const topics = algorithm ? [...getEligibleTopicNames(algorithm)] : [];
+  if (!client || topics.length === 0) {
+    return topics.length > 0;
+  }
+
+  const { data, error } = await client
+    .from('content_items')
+    .select('classifications(topics)')
+    .limit(200);
+
+  if (error || !data) {
+    return true;
+  }
+
+  return !hasSufficientSharedTopicPool(data as ClassifiedCandidateRow[], topics);
+}
+
 export function resolveYoutubeAccessTokenCandidate(
   providerTokens: GoogleProviderTokenBundle,
   hasStoredYoutubeConnection: boolean,
@@ -426,7 +449,8 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const algorithms = await listAlgorithms(userId);
   const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
   const accessToken = await getValidYoutubeAccessToken(userId);
-  const discoveryItems = accessToken ? await fetchYoutubeDiscoveryItems(accessToken, activeAlgorithm) : [];
+  const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
+  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm) : [];
   const items = [...result.items, ...discoveryItems];
 
   let synced = 0;
