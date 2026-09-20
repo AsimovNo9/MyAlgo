@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildLearnedAffinityProfile, getCandidateLearnedAffinity, getStrongChannelAffinityTerms } from './learned-profile.ts';
+import { buildLearnedAffinityProfile, buildPersistedAffinityRows, getCandidateLearnedAffinity, getStrongChannelAffinityTerms, learnedAffinityProfileFromRows } from './learned-profile.ts';
 
 test('buildLearnedAffinityProfile derives bounded positive affinities from more-like-this feedback', () => {
   const candidate = {
@@ -81,4 +81,46 @@ test('liked candidates seed positive taste affinities without explicit feedback'
   assert.equal(profile.formats.get('review'), 0.24);
   assert.equal(profile.languages.get('en'), 0.24);
   assert.ok(getCandidateLearnedAffinity(profile, relatedCandidate) > 0);
+});
+
+test('buildPersistedAffinityRows aggregates historical signals with evidence and timestamps', () => {
+  const rows = buildPersistedAffinityRows([
+    {
+      external_id: 'historical',
+      title: 'Historical RPG',
+      channel_id: 'channel-rpg',
+      channel_name: 'RPG Lab',
+      topics: ['RPG'],
+      format: 'review',
+      language: 'en',
+      source_kind: 'discovery',
+    },
+  ], [
+    { external_id: 'historical', eventType: 'more_like_this', createdAt: '2026-09-01T00:00:00Z' },
+  ], [
+    { external_id: 'historical', eventType: 'completed', occurredAt: '2026-09-02T00:00:00Z' },
+  ], '2026-09-20T00:00:00Z');
+
+  const topic = rows.find((row) => row.facet === 'topic' && row.facet_key === 'rpg');
+  assert.deepEqual(topic, {
+    facet: 'topic',
+    facet_key: 'rpg',
+    signed_value: 0.595,
+    confidence: 0.595,
+    evidence_count: 2,
+    first_observed_at: '2026-09-01T00:00:00Z',
+    last_observed_at: '2026-09-02T00:00:00Z',
+    source_signals: ['more_like_this', 'completed'],
+    profile_revision: '2026-09-20T00:00:00Z',
+  });
+});
+
+test('learnedAffinityProfileFromRows reconstructs bounded ranking maps', () => {
+  const profile = learnedAffinityProfileFromRows([
+    { facet: 'topic', facet_key: 'rpg', signed_value: 1.4 },
+    { facet: 'channel', facet_key: 'channel-rpg', signed_value: -0.8 },
+  ]);
+
+  assert.equal(profile.topics.get('rpg'), 1);
+  assert.equal(profile.channels.get('channel-rpg'), -0.8);
 });

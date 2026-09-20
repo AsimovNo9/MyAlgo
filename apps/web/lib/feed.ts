@@ -3,17 +3,20 @@ import type { ConceptCatalogEntry, ConceptRelationEntry } from './concepts.ts';
 
 import { resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
 import { buildLearnedAffinityProfile, getCandidateLearnedAffinity } from './learned-profile.ts';
+import type { LearnedAffinityProfile } from './learned-profile.ts';
 
 export type FeedFeedbackSignal = {
   external_id: string;
   channel_id?: string | null;
   eventType: 'not_interested' | 'more_like_this' | 'never_show_channel';
+  createdAt?: string | null;
 };
 
 export type FeedActivitySignal = {
   external_id: string;
   eventType: 'opened' | 'watch_progress' | 'completed' | 'skipped' | 'revisited';
   watchSeconds?: number | null;
+  occurredAt?: string | null;
 };
 
 export type FeedCandidate = RecommendationCandidate;
@@ -328,7 +331,7 @@ export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
-  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[]; conceptGraph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] } } = {},
+  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[]; conceptGraph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] }; learnedProfile?: LearnedAffinityProfile } = {},
 ): FeedResponse {
   const weights = new Map(getRankingTopicWeights(algorithm).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
@@ -344,7 +347,7 @@ export function buildFeedResponse(
       .filter((signal) => signal.eventType === 'completed' || signal.eventType === 'revisited' || (signal.eventType === 'watch_progress' && Number(signal.watchSeconds ?? 0) > 0))
       .map((signal) => signal.external_id),
   );
-  const learnedProfile = buildLearnedAffinityProfile(candidateItems, feedbackSignals, options.activitySignals);
+  const learnedProfile = options.learnedProfile ?? buildLearnedAffinityProfile(candidateItems, feedbackSignals, options.activitySignals);
 
   for (const signal of feedbackSignals) {
     const existing = signalMap.get(signal.external_id) ?? [];
