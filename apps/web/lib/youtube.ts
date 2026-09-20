@@ -502,6 +502,8 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
         content_item_id: contentRow.id,
         topics: classification.topics,
         content_type: classification.content_type,
+        language: classification.language,
+        format: classification.format,
         quality_score: classification.quality_score,
         reasoning: classification.reasoning,
       },

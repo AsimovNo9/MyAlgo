@@ -21,6 +21,8 @@ export type FeedCandidate = {
   is_short?: boolean;
   is_live?: boolean;
   content_type?: string | null;
+  language?: string | null;
+  format?: string | null;
   subscription_affinity?: number;
   candidate_relevance?: 'matched' | 'unmatched';
   published_at?: string | null;
@@ -157,19 +159,21 @@ function matchesSemanticTerm(title: string, term: string): boolean {
   return new RegExp(`(^|\\s|[^a-z0-9])${escapeRegex(normalizedTerm)}($|\\s|[^a-z0-9])`, 'i').test(normalizedTitle);
 }
 
-export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number; content_type?: string } | null {
+export function normalizeClassificationRecord(classification: unknown): { topics: string[]; quality_score?: number; content_type?: string; language?: string; format?: string } | null {
   const candidate = Array.isArray(classification) ? classification[0] : classification;
 
   if (!candidate || typeof candidate !== 'object') {
     return null;
   }
 
-  const record = candidate as { topics?: string[] | null; quality_score?: number | null; content_type?: string | null };
+  const record = candidate as { topics?: string[] | null; quality_score?: number | null; content_type?: string | null; language?: string | null; format?: string | null };
 
   return {
     topics: Array.isArray(record.topics) ? record.topics : [],
     quality_score: typeof record.quality_score === 'number' ? record.quality_score : undefined,
     content_type: typeof record.content_type === 'string' && record.content_type.trim().length > 0 ? record.content_type.trim() : undefined,
+    language: typeof record.language === 'string' && /^[a-z]{2}$/i.test(record.language.trim()) ? record.language.trim().toLowerCase() : undefined,
+    format: typeof record.format === 'string' && record.format.trim().length > 0 ? record.format.trim().toLowerCase() : undefined,
   };
 }
 
@@ -280,6 +284,8 @@ export function buildFeedResponse(
   const hasTopicWeights = weights.size > 0;
   const eligibleTopics = getEligibleTopicNames(algorithm);
   const rules = algorithm?.rules ?? [];
+  const preferredLanguage = algorithm?.language?.trim().toLowerCase() ?? null;
+  const preferredFormats = new Set((algorithm?.preferred_formats ?? []).map((format) => format.trim().toLowerCase()).filter(Boolean));
   const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
@@ -309,6 +315,16 @@ export function buildFeedResponse(
     if (video.candidate_relevance === 'unmatched') {
       visible = false;
       ruleSummary.push('outside selected algorithm topics');
+    }
+
+    if (preferredLanguage && video.language && video.language !== preferredLanguage) {
+      visible = false;
+      ruleSummary.push(`language mismatch (${video.language})`);
+    }
+
+    if (preferredFormats.size > 0 && video.format && !preferredFormats.has(video.format.toLowerCase())) {
+      visible = false;
+      ruleSummary.push(`format mismatch (${video.format})`);
     }
 
     if (sourceFilters.subscribedOnly && video.source_kind && video.source_kind !== 'subscription') {

@@ -8,6 +8,15 @@ test('classifyContent keeps deterministic topic matches local', async () => {
 
   assert.ok(classification.topics.includes('AI'));
   assert.ok(classification.topics.includes('Tutorial'));
+  assert.equal(classification.format, 'tutorial');
+  assert.equal(classification.language, null);
+});
+
+test('classifyContent detects known script languages without treating Latin content as English', async () => {
+  const classification = await classifyContent('最新のゲーム review');
+
+  assert.equal(classification.language, 'ja');
+  assert.equal(classification.format, 'review');
 });
 
 test('classifyContent falls back to General when semantic AI is not configured', async () => {

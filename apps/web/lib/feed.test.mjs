@@ -10,10 +10,34 @@ import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
 test('normalizeClassificationRecord unwraps Supabase nested relation arrays', () => {
-  const record = normalizeClassificationRecord([{ topics: ['AI', 'Productivity'], quality_score: 91 }]);
+  const record = normalizeClassificationRecord([{ topics: ['AI', 'Productivity'], quality_score: 91, language: 'en', format: 'tutorial' }]);
 
   assert.deepEqual(record?.topics, ['AI', 'Productivity']);
   assert.equal(record?.quality_score, 91);
+  assert.equal(record?.language, 'en');
+  assert.equal(record?.format, 'tutorial');
+});
+
+test('buildFeedResponse hard-filters known language and format conflicts', () => {
+  const feed = buildFeedResponse(
+    {
+      name: 'Learning',
+      language: 'en',
+      preferred_formats: ['tutorial'],
+      topic_weights: [{ topic: 'AI', weight: 90 }],
+      rules: [],
+    },
+    [],
+    [
+      { external_id: 'good', title: 'AI tutorial', topics: ['AI'], language: 'en', format: 'tutorial' },
+      { external_id: 'language', title: 'AI tutorial', topics: ['AI'], language: 'ja', format: 'tutorial' },
+      { external_id: 'format', title: 'AI review', topics: ['AI'], language: 'en', format: 'review' },
+      { external_id: 'unknown', title: 'AI content', topics: ['AI'] },
+    ],
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['good', 'unknown']);
+  assert.equal(feed.items.some((item) => item.reason?.includes('language mismatch')), false);
 });
 
 test('getEligibleTopicNames prevents low-weight secondary topics from admitting content', () => {
