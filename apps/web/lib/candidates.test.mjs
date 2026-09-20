@@ -33,6 +33,8 @@ test('normalizes RSS and Search-compatible candidate fields with provenance', ()
     provenance: {
       source: 'youtube_rss',
       query: null,
+      query_lane: null,
+      query_topics: [],
       channel_id: 'UC_nuclear',
       retrieved_at: '2026-09-20T10:00:00Z',
     },
@@ -50,6 +52,8 @@ test('buildCandidateRawMetadata preserves bounded description and retrieval prov
     retrieval: {
       source: 'youtube_search',
       query: 'Nintendo RPG guide',
+      query_lane: null,
+      query_topics: [],
       channel_id: null,
       retrieved_at: '2026-09-20T10:00:00Z',
     },

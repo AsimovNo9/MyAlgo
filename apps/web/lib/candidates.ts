@@ -1,8 +1,12 @@
 export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss';
 
+export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
+
 export type CandidateProvenance = {
   source: CandidateRetrievalSource;
   query?: string | null;
+  query_lane?: CandidateQueryLane | null;
+  query_topics?: string[];
   channel_id?: string | null;
   retrieved_at: string;
 };
@@ -45,6 +49,8 @@ export function createCandidateProvenance(
   return {
     source,
     query: details.query ?? null,
+    query_lane: details.query_lane ?? null,
+    query_topics: details.query_topics ?? [],
     channel_id: details.channel_id ?? null,
     retrieved_at: details.retrievedAt ?? new Date().toISOString(),
   };
