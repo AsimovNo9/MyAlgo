@@ -50,6 +50,65 @@ export interface ConceptRelationEntry {
   weight: number;
 }
 
+const semanticSources = new Set(['curated', 'platform', 'user', 'content', 'llm']);
+
+function normalizeSemanticList(values: unknown, limit = 50): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean))].slice(0, limit);
+}
+
+export type SemanticContextUpsert = {
+  canonical_name: string;
+  aliases: string[];
+  intents: string[];
+  entities: string[];
+  positive_phrases: string[];
+  negative_phrases: string[];
+  description: string | null;
+  language: string | null;
+  source: string;
+  status: 'pending';
+  provenance: Record<string, unknown>;
+  version: number;
+};
+
+export function normalizeSemanticContextEntry(input: unknown): SemanticContextUpsert | null {
+  if (!input || typeof input !== 'object') return null;
+  const entry = input as Record<string, unknown>;
+  const canonicalName = typeof entry.canonical_name === 'string'
+    ? entry.canonical_name.trim()
+    : typeof entry.canonicalName === 'string'
+      ? entry.canonicalName.trim()
+      : '';
+  if (!canonicalName) return null;
+
+  const source = typeof entry.source === 'string' && semanticSources.has(entry.source)
+    ? entry.source
+    : 'llm';
+  const versionValue = Number(entry.version);
+  const provenance = entry.provenance && typeof entry.provenance === 'object'
+    ? entry.provenance as Record<string, unknown>
+    : {};
+
+  return {
+    canonical_name: canonicalName,
+    aliases: normalizeSemanticList(entry.aliases),
+    intents: normalizeSemanticList(entry.intents),
+    entities: normalizeSemanticList(entry.entities),
+    positive_phrases: normalizeSemanticList(entry.positive_phrases ?? entry.positivePhrases),
+    negative_phrases: normalizeSemanticList(entry.negative_phrases ?? entry.negativePhrases),
+    description: typeof entry.description === 'string' ? entry.description.trim() || null : null,
+    language: typeof entry.language === 'string' && /^[a-z]{2}(?:-[A-Z]{2})?$/i.test(entry.language.trim()) ? entry.language.trim().toLowerCase() : null,
+    source,
+    status: 'pending',
+    provenance,
+    version: Number.isInteger(versionValue) && versionValue > 0 ? versionValue : 1,
+  };
+}
+
 export function buildConceptCatalog(
   entries: Array<{
     id: string;
