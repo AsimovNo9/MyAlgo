@@ -34,14 +34,18 @@ export async function backfillContentEmbeddings(limit = 25) {
 
   const { data, error } = await client
     .from('content_items')
-    .select('id, title, description, channel_name')
+    .select('id, title, channel_name, raw_metadata')
     .order('fetched_at', { ascending: false })
     .limit(Math.min(100, Math.max(1, limit)));
   if (error || !data) return { ok: false, processed: 0, embedded: 0, error: 'Unable to load content for embedding backfill.' };
 
   let embedded = 0;
   for (const item of data) {
-    const text = [item.title, item.description, item.channel_name].filter(Boolean).join('\n');
+    const rawDescription = item.raw_metadata && typeof item.raw_metadata === 'object'
+      ? (item.raw_metadata as { description?: unknown }).description
+      : null;
+    const description = typeof rawDescription === 'string' ? rawDescription : null;
+    const text = [item.title, description, item.channel_name].filter(Boolean).join('\n');
     const embedding = await generateEmbedding(text);
     if (!embedding) continue;
     const { error: upsertError } = await client.from('content_embeddings').upsert({
