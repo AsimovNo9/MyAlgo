@@ -27,19 +27,34 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
 }
 
 export async function backfillContentEmbeddings(limit = 25) {
-  const client = createSupabaseAdminClient();
+  let client;
+  try {
+    client = createSupabaseAdminClient();
+  } catch (error) {
+    console.error('Embedding backfill Supabase initialization failed', error);
+    return { ok: false, processed: 0, embedded: 0, error: 'Supabase client initialization failed.' };
+  }
   const modelVersion = process.env.EMBEDDING_MODEL_VERSION?.trim() || process.env.EMBEDDING_MODEL?.trim() || defaultEmbeddingModel;
   if (!client) return { ok: false, processed: 0, embedded: 0, error: 'Supabase admin client is not configured.' };
   if (!process.env.EMBEDDING_API_KEY?.trim()) return { ok: false, processed: 0, embedded: 0, error: 'EMBEDDING_API_KEY is not configured.' };
 
-  const { data, error } = await client
-    .from('content_items')
-    .select('id, title, channel_name, raw_metadata')
-    .order('fetched_at', { ascending: false })
-    .limit(Math.min(100, Math.max(1, limit)));
+  let data;
+  let error;
+  try {
+    ({ data, error } = await client
+      .from('content_items')
+      .select('id, title, channel_name, raw_metadata')
+      .order('fetched_at', { ascending: false })
+      .limit(Math.min(100, Math.max(1, limit))));
+  } catch (queryError) {
+    console.error('Embedding backfill content query failed', queryError);
+    return { ok: false, processed: 0, embedded: 0, error: 'Content query failed.' };
+  }
   if (error || !data) return { ok: false, processed: 0, embedded: 0, error: 'Unable to load content for embedding backfill.' };
 
   let embedded = 0;
+  let providerFailures = 0;
+  let databaseFailures = 0;
   for (const item of data) {
     const rawDescription = item.raw_metadata && typeof item.raw_metadata === 'object'
       ? (item.raw_metadata as { description?: unknown }).description
@@ -47,13 +62,34 @@ export async function backfillContentEmbeddings(limit = 25) {
     const description = typeof rawDescription === 'string' ? rawDescription : null;
     const text = [item.title, description, item.channel_name].filter(Boolean).join('\n');
     const embedding = await generateEmbedding(text);
-    if (!embedding) continue;
-    const { error: upsertError } = await client.from('content_embeddings').upsert({
-      content_item_id: item.id,
-      model_version: modelVersion,
-      embedding,
-    }, { onConflict: 'content_item_id,model_version' });
-    if (!upsertError) embedded += 1;
+    if (!embedding) {
+      providerFailures += 1;
+      continue;
+    }
+    try {
+      const { error: upsertError } = await client.from('content_embeddings').upsert({
+        content_item_id: item.id,
+        model_version: modelVersion,
+        embedding,
+      }, { onConflict: 'content_item_id,model_version' });
+      if (!upsertError) embedded += 1;
+      else databaseFailures += 1;
+    } catch (upsertError) {
+      console.error('Embedding backfill vector upsert failed', upsertError);
+      databaseFailures += 1;
+    }
+  }
+
+  if (data.length > 0 && embedded === 0) {
+    return {
+      ok: false,
+      processed: data.length,
+      embedded,
+      error: databaseFailures > 0 ? 'Vector database upsert failed.' : 'Embedding provider returned no usable vectors.',
+      providerFailures,
+      databaseFailures,
+      modelVersion,
+    };
   }
 
   return { ok: true, processed: data.length, embedded, modelVersion };
