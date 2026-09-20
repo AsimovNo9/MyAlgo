@@ -172,7 +172,7 @@ export interface ContentFacet {
 }
 
 export interface RetrievalProvenance {
-  source: 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked';
+  source: 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
   query?: string | null;
   query_lane?: 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness' | null;
   query_topics?: string[];
@@ -200,7 +200,7 @@ export interface EmbeddingRecord {
   generated_at: string;
 }
 
-export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked';
+export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
 
 export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
 

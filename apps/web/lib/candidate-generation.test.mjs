@@ -31,6 +31,7 @@ test('assembleCandidatePool deduplicates sources while preserving first-seen can
     youtube_search: 2,
     youtube_rss: 0,
     youtube_liked: 0,
+    semantic_vector: 0,
   });
   assert.deepEqual(result.metrics.topicCoverage, { gaming: 2, rpg: 1 });
 });
@@ -45,6 +46,22 @@ test('assembleCandidatePool uses provenance source when available', () => {
 
   assert.equal(result.metrics.sourceCounts.youtube_subscription, 0);
   assert.equal(result.metrics.sourceCounts.youtube_rss, 1);
+});
+
+test('assembleCandidatePool keeps semantic vector provenance as a distinct source', () => {
+  const result = assembleCandidatePool([
+    {
+      source: 'semantic_vector',
+      items: [{
+        external_id: 'vector-item',
+        source_kind: 'discovery',
+        provenance: { source: 'semantic_vector' },
+      }],
+    },
+  ]);
+
+  assert.equal(result.items[0].external_id, 'vector-item');
+  assert.equal(result.metrics.sourceCounts.semantic_vector, 1);
 });
 
 test('topic coverage requires each strong interest, not only a global match total', () => {
