@@ -13,6 +13,7 @@ import { loadApprovedConceptGraph } from './semantic-catalog.ts';
 import type { ConceptCatalogEntry, ConceptRelationEntry } from './concepts.ts';
 import { buildContentConceptMatches, persistContentConceptMatches } from './content-concepts.ts';
 import { buildRecommendationQualityMetrics } from './recommendation-quality.ts';
+import { buildLearnedAffinityProfile, getStrongChannelAffinityTerms } from './learned-profile.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -221,11 +222,11 @@ async function fetchYoutubeRecentUploads(
   return uploads;
 }
 
-async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = []): Promise<YoutubeSubscriptionItem[]> {
+async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = [], learnedCreatorTerms: string[] = []): Promise<YoutubeSubscriptionItem[]> {
   const discoveryItems: YoutubeSubscriptionItem[] = [];
   const language = buildRecommendationProfile(algorithm, catalog).language;
 
-  for (const plan of buildDiscoveryQueryPlans(algorithm, catalog, relations)) {
+  for (const plan of buildDiscoveryQueryPlans(algorithm, catalog, relations, learnedCreatorTerms)) {
     const query = plan.text;
     const params = new URLSearchParams({
       part: 'snippet',
@@ -507,6 +508,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const { createSupabaseServerClient } = await import('./supabase/server');
   const { classifyContent } = await import('./classifier');
   const { listAlgorithms } = await import('./data');
+  const { fetchFeedbackSignalsForUser } = await import('./feedback-signals');
 
   const result = await fetchYoutubeSubscriptionFeed(userId);
   const client = await createSupabaseServerClient();
@@ -528,9 +530,12 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
   const conceptGraph = await loadApprovedConceptGraph(client);
   const accessToken = await getValidYoutubeAccessToken(userId);
-  const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
-  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations) : [];
   const likedItems = accessToken ? await fetchYoutubeLikedItems(accessToken) : [];
+  const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
+  const learnedProfile = buildLearnedAffinityProfile([...result.items, ...likedItems] as never[], feedbackSignals);
+  const learnedCreatorTerms = getStrongChannelAffinityTerms(learnedProfile);
+  const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
+  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations, learnedCreatorTerms) : [];
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
     { source: 'youtube_search', items: discoveryItems },

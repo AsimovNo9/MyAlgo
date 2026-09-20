@@ -37,6 +37,8 @@ node scripts/collect-production-baseline.mjs
 
 The first is read-only and checks production tables/RPC status. The second requires an explicit `SUPABASE_ACCESS_TOKEN` and reports aggregate feed/rank metrics only.
 
+Embedding preflight is available at `/api/embeddings/status` with the cron authorization header. It reports only configuration presence, model version, and stored row count.
+
 ## 2.1 Recommendation Engine Rollout
 
 The implementation and verification state for this rollout is maintained in [docs/STATUS.md](docs/STATUS.md). This document defines infrastructure constraints; it is not a second feature-status checklist.
@@ -145,7 +147,7 @@ jobs:
 1. **Create a Supabase project.** Note the project URL and anon/service-role keys.
 2. **Apply the schema:** `supabase db push` (runs `packages/db/schema.sql` + RLS policies).
 3. **Google Cloud setup:** create a project, enable the YouTube Data API v3, create an OAuth 2.0 client (web application type for the backend flow).
-4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `YOUTUBE_API_KEY`, `ANTHROPIC_API_KEY`, and `CRON_SECRET`.
+4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `YOUTUBE_API_KEY`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `OAUTH_TOKEN_ENCRYPTION_KEY`, `EMBEDDING_API_KEY`, `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_MODEL_VERSION`.
 5. **Deploy a release:** create and push a version tag, for example `git tag v0.1.0 && git push origin v0.1.0`. GitHub Actions deploys that tag to Vercel production.
 6. **Extension (dev):** load unpacked via `chrome://extensions` → "Load unpacked" pointing at `apps/extension/dist`.
 7. **Extension (public):** package and submit through the Chrome Web Store developer dashboard once ready for outside users.

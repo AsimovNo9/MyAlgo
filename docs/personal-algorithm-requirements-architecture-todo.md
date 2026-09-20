@@ -1826,15 +1826,16 @@ The concept graph is the durable product asset. Embeddings are a retrieval index
 - [ ] Enrich candidates with title, description, channel, creator, category, language, format, freshness and provider taxonomy before semantic matching.
 - [ ] Implement deterministic graph expansion from explicit topics into aliases, child concepts, related concepts, entities and preferred formats.
 - [x] Add bounded semantic-neighborhood query lanes from approved graph relations for strong topics.
+- [x] Add a bounded freshness query lane for strong topics.
 - [ ] Keep retrieval bounded, cached and provenance-preserving across subscriptions, RSS, liked videos and YouTube Search.
 - [x] Add candidate quality metrics for duplicate rate, classification coverage, source diversity, topic coverage, and freshness coverage; production baselines remain planned.
 
 ## P1 — Vector stage in Supabase
 
-- [x] Enable `pgvector` through a tracked migration; production extension policy/application remains to be verified.
+- [x] Enable `pgvector` through a tracked migration; production tables, index, and RPC are verified.
 - [ ] Choose and record one embedding model, dimensions, normalization policy and versioning strategy.
 - [x] Add `content_embeddings` and concept embedding storage with model-version uniqueness constraints.
-- [ ] Implement batched embedding generation as sync/activation work, with retry, timeout, cost limits and stale-version detection.
+- [x] Implement bounded embedding generation/backfill as server-side work with retry and timeout handling; Vercel provider configuration, cost controls, and stale-version operations remain planned.
 - [x] Add a database nearest-neighbor function with a minimum similarity threshold and bounded result count.
 - [x] Use vector retrieval only as an optional candidate-pool expansion boundary; it cannot bypass hard exclusions.
 - [x] Add a safe empty fallback when embeddings or vector retrieval are unavailable.

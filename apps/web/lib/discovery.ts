@@ -9,10 +9,10 @@ export function buildDiscoveryQueries(algorithm?: Algorithm | null): string[] {
   return buildDiscoveryQueryPlans(algorithm).map((query) => query.text);
 }
 
-export function buildDiscoveryQueryPlans(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = []) {
-  const profile = buildRecommendationProfile(algorithm, catalog);
+export function buildDiscoveryQueryPlans(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = [], learnedCreatorTerms: string[] = []) {
+  const profile = buildRecommendationProfile(algorithm, catalog, learnedCreatorTerms);
   const algorithmRevision = algorithm?.id ?? algorithm?.name.trim().toLowerCase() ?? 'current';
-  return buildRecommendationQueryPlans(profile, MAX_DISCOVERY_QUERIES, algorithmRevision, catalog, relations);
+  return buildRecommendationQueryPlans(profile, MAX_DISCOVERY_QUERIES, algorithmRevision, catalog, relations, true);
 }
 
 export const discoveryLimits = {

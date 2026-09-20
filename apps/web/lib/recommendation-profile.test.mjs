@@ -21,6 +21,20 @@ test('buildRecommendationProfile separates positive and negative rules', () => {
   assert.equal(profile.semanticTerms.includes('game design'), true);
 });
 
+test('buildRecommendationProfile creates explicit creator query terms', () => {
+  const profile = buildRecommendationProfile({
+    name: 'Gaming',
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [
+      { type: 'priority', condition_text: 'creator: Digital Foundry' },
+      { type: 'priority', condition_text: 'channel: Digital Foundry' },
+    ],
+  });
+
+  assert.deepEqual(profile.creatorTerms, ['Digital Foundry']);
+  assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.lane === 'creator' && /Digital Foundry/i.test(query.text)), true);
+});
+
 test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {
   const profile = buildRecommendationProfile({
     name: 'Gaming',

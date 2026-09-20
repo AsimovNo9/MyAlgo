@@ -46,6 +46,8 @@ test('buildDiscoveryQueries derives one query per strong topic alongside the goa
     'Learn practical AI agents',
     'AI tutorial',
     'Engineering tutorial',
+    'AI latest',
+    'Engineering latest',
   ]);
   assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
 });
@@ -72,6 +74,7 @@ test('buildDiscoveryQueries creates a format-aware query for a learning topic', 
   assert.deepEqual(queries, [
     'Learn computer vision from university-level material',
     'Computer Vision tutorial',
+    'Computer Vision latest',
   ]);
 });
 

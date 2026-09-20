@@ -8,8 +8,7 @@ This document records the earlier feed-quality and launch-hardening plan. It is 
 
 The active sequence is now:
 
-1. Complete production OAuth, token, RLS, cron, monitoring, and extension smoke-test gates.
-2. Load the database-backed concept catalog with deterministic fallback.
-3. Add semantic candidate fixtures and concept matches before enabling vector retrieval.
-4. Add bounded, versioned pgvector retrieval only when measured coverage gaps justify it.
-5. Add low-confidence, context-aware LLM enrichment and semantic reranking.
+1. Configure Vercel embedding variables and deploy the hardened backfill route.
+2. Run the authorized production embedding backfill and collect aggregate quality baselines.
+3. Complete production OAuth, token, RLS, cron, monitoring, and extension smoke-test gates.
+4. Compare semantic reranking and graph-aware LLM enrichment against the flat-label baseline.

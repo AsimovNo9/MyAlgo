@@ -258,6 +258,7 @@ export interface RecommendationProfile {
   positiveRuleTerms: string[];
   negativeRuleTerms: string[];
   preferredFormats: string[];
+  creatorTerms: string[];
 }
 
 export function normalizeSemanticKey(value: string): string {
