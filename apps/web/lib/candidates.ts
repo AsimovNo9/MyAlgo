@@ -30,6 +30,13 @@ export type RssCandidateInput = {
   provenance?: CandidateProvenance;
 };
 
+export type ClassifiedCandidateRow = {
+  classifications?:
+    | { topics?: string[] | null }
+    | Array<{ topics?: string[] | null }>
+    | null;
+};
+
 export function createCandidateProvenance(
   source: CandidateRetrievalSource,
   details: Omit<Partial<CandidateProvenance>, 'source' | 'retrieved_at'> & { retrievedAt?: string } = {},
@@ -61,4 +68,22 @@ export function buildCandidateRawMetadata(candidate: Pick<RecommendationCandidat
     description: candidate.description ?? null,
     retrieval: candidate.provenance ?? null,
   };
+}
+
+export function hasSufficientSharedTopicPool(
+  rows: ClassifiedCandidateRow[],
+  topics: string[],
+  minimum = 15,
+): boolean {
+  if (topics.length === 0 || minimum <= 0) {
+    return false;
+  }
+
+  const normalizedTopics = new Set(topics.map((topic) => topic.trim().toLowerCase()).filter(Boolean));
+  const matchingRows = rows.filter((row) => {
+    const classification = Array.isArray(row.classifications) ? row.classifications[0] : row.classifications;
+    return (classification?.topics ?? []).some((topic) => normalizedTopics.has(topic.toLowerCase()));
+  });
+
+  return matchingRows.length >= minimum;
 }

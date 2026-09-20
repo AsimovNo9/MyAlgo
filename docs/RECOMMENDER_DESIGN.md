@@ -541,8 +541,8 @@ This is the smallest change that moves the product from "rank the current pool" 
 
 - [x] Add a shared candidate contract for subscription, YouTube Search, and RSS items.
 - [x] Record retrieval lane and query provenance for Search candidates.
-- [ ] Reuse the shared RSS pool before spending YouTube Search quota.
-- [ ] Run Search only from activation or sync jobs, never from page mutations or ordinary feed reads.
+- [x] Reuse the shared RSS pool before spending YouTube Search quota.
+- [x] Run Search only from activation or sync jobs, never from page mutations or ordinary feed reads.
 - [ ] Add language and format constraints to retrieval when explicit preferences exist.
 
 ### Milestone 3: Profile-aware reranking
