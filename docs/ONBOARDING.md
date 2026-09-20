@@ -66,4 +66,4 @@ node --test packages/db/schema.test.mjs
 
 ## First task for a new developer
 
-Start with issue 3 in [GITHUB_ISSUES.md](GITHUB_ISSUES.md): complete the production Google OAuth, YouTube sync, token refresh, and authenticated `/api/rank` smoke test. The route is deployed; the remaining risk is the real-user flow.
+Start with the current gates in [STATUS.md](STATUS.md): complete the production Google OAuth, YouTube sync, token refresh, RLS isolation, and authenticated `/api/rank` smoke test. Then implement database-backed concept catalog loading with deterministic fallback. Do not start pgvector or broad LLM enrichment before the semantic contracts and evaluation fixtures are complete.

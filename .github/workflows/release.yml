@@ -12,6 +12,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      VERCEL_ORG_ID: team_polq3qXI3YX2grGE2vOiixMU
+      VERCEL_PROJECT_ID: prj_QHgp0Kl4F4h86Nb99QBj8bIsyso0
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -36,25 +39,19 @@ jobs:
           pnpm --filter extension build
 
       - name: Pull Vercel production settings
-        working-directory: apps/web
-        run: pnpm dlx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          pnpm dlx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build Vercel production artifact
-        working-directory: apps/web
         run: pnpm dlx vercel build --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deploy Vercel production artifact
-        working-directory: apps/web
         run: pnpm dlx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

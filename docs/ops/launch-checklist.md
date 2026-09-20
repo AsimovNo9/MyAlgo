@@ -11,7 +11,8 @@
 - [x] Verify `/api/health`, `/api/rank` CORS preflight, and `/auth/callback` routes
 - [x] Rotate exposed secrets
 - [x] Verify rotated values are set in Vercel/local environments and redeploy
-- [ ] Encrypt YouTube OAuth tokens at rest before public launch
+- [x] Implement server-side encryption for YouTube OAuth tokens
+- [ ] Set `OAUTH_TOKEN_ENCRYPTION_KEY` in production and verify encrypted persistence/refresh
 - [ ] Verify the extension never ships secrets in the client bundle
 - [ ] Add uptime/health monitoring and Sentry tracking
 - [x] Review MV3 permission requirements and final extension packaging

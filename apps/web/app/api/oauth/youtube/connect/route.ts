@@ -3,6 +3,7 @@ import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from '@/li
 import { redactSensitiveValues } from '@/lib/logging';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { encryptOAuthToken } from '@/lib/oauth-token-crypto';
 
 export async function POST() {
   const userId = await getCurrentUserIdFromServer();
@@ -49,12 +50,22 @@ export async function POST() {
     return NextResponse.json({ error: 'Google OAuth tokens were not returned for this session.' }, { status: 400 });
   }
 
+  let encryptedAccessToken: string;
+  let encryptedRefreshToken: string;
+  try {
+    encryptedAccessToken = encryptOAuthToken(accessToken);
+    encryptedRefreshToken = encryptOAuthToken(refreshToken);
+  } catch (error) {
+    console.error('OAuth token encryption is unavailable', error);
+    return NextResponse.json({ error: 'Server OAuth encryption is not configured.' }, { status: 500 });
+  }
+
   const { error } = await client.from('oauth_connections').upsert(
     {
       user_id: userId,
       provider: 'youtube',
-      access_token_encrypted: accessToken,
-      refresh_token_encrypted: refreshToken,
+      access_token_encrypted: encryptedAccessToken,
+      refresh_token_encrypted: encryptedRefreshToken,
       scope: 'https://www.googleapis.com/auth/youtube.readonly',
       expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     },

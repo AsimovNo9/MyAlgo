@@ -3,7 +3,9 @@
 This file tracks launch-blocking work, production hardening, and follow-up tasks for Personal Algorithm.
 
 ## Current focus
+- Status definitions and the audited implementation matrix live in [docs/STATUS.md](docs/STATUS.md). Checkmarks are not production verification unless explicitly confirmed there.
 - [ ] Move from feed filtering to a recommendation engine: taste profile + candidate generation + retrieval + reranking
+- [ ] Integrate the semantic knowledge layer: concept graph, semantic enrichment, bounded vector retrieval, and low-confidence LLM fallback
 - [ ] Quality-first feed relevance: unrelated items must be hidden or explained as fallback content
 - [ ] Add purchaser-facing source controls: subscribed-only, hide Shorts, and discovery toggle
 - [x] Add feed quality signals: adaptive relevance eligibility, empty state, and diversity limits
@@ -13,6 +15,47 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Repeat the full sign-in → profile creation → YouTube sync flow in production
 - [ ] Run production validation and launch hardening for the live app and extension
 - [ ] Complete the production OAuth/session validation pass for the Google + YouTube provider tokens
+
+## Production Safety Baseline — Remaining Work
+
+These are the unresolved items from the production safety review. The implementation status is summarized in [docs/STATUS.md](docs/STATUS.md); these checklist items are the execution queue.
+
+### Real-user OAuth and YouTube flow
+
+- [ ] Set `OAUTH_TOKEN_ENCRYPTION_KEY` in Vercel and local deployment environments.
+- [ ] Reconnect the approved Google account so tokens created by the previous plaintext implementation are replaced with encrypted values.
+- [ ] Complete production Google OAuth sign-in from a clean browser session.
+- [ ] Verify `/api/oauth/youtube/connect` persists encrypted access and refresh tokens.
+- [ ] Verify access-token refresh after expiry and encrypted refresh-token rotation.
+- [ ] Verify extension sign-in, bearer authentication, sign-out, and session restoration against the deployed API.
+- [ ] Verify authenticated `/api/feed` and `/api/rank` with a real extension session.
+- [ ] Verify real YouTube subscription sync and liked-video import where the granted scope permits it.
+
+### Database and deployment safety
+
+- [ ] Confirm every pending Supabase migration, including the concept graph migration, is applied to the production project.
+- [ ] Verify RLS isolation with two separate production users across algorithms, feed cache, feedback, activity, OAuth connections, and intent profiles.
+- [ ] Set `CRON_SECRET` in production and verify unauthorized seed discovery/sync requests return `401`.
+- [ ] Verify authorized cron requests execute successfully and record source/coverage metrics.
+- [ ] Verify database backups and document a recovery procedure.
+- [ ] Verify production and local environment separation, including server-only encryption and provider secrets.
+
+### Observability and provider safety
+
+- [ ] Configure production error monitoring for web, API, sync, OAuth, classifier, and extension failures.
+- [ ] Confirm YouTube quota usage, retry behavior, timeout behavior, and partial-sync failures are observable without logging tokens.
+- [ ] Add uptime monitoring for `/api/health` and alerting for failed cron/sync runs.
+- [ ] Confirm deployment logs contain only redacted token diagnostics and no provider credentials.
+- [ ] Compare production semantic-ranking metrics against the flat-label baseline before increasing semantic score weight.
+
+### Live extension behavior
+
+- [ ] Test native-card replacement on YouTube Home, Subscriptions, Search, and Shorts with the deployed API.
+- [ ] Verify Shorts remain visible unless the user selects Hide Shorts.
+- [ ] Verify watched/revisited videos are excluded from replacement recommendations.
+- [ ] Verify injected personal cards have stable markers and are never re-collected as native candidates.
+- [ ] Verify infinite-scroll and client-side navigation continue ranking and replacing cards without loops or duplicate injections.
+- [ ] Verify extension pause/resume, mode switching, source controls, and stale-cache fallback in a real browser.
 
 ## Recommendation-engine architecture actions
 - [x] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
@@ -123,7 +166,13 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 ## Security and compliance
 - [x] Rotate the exposed Supabase service-role, Anthropic, and Google OAuth secrets
 - [x] Verify rotated values are set in Vercel/local environments and redeploy
-- [ ] Encrypt YouTube OAuth tokens at rest before public launch
+- [x] Implement AES-256-GCM encryption for YouTube OAuth tokens at rest
+- [ ] Set `OAUTH_TOKEN_ENCRYPTION_KEY` in production and verify encrypted persistence/refresh with a real account
+- [ ] Configure `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_MODEL_VERSION` in production.
+- [x] Verify the pgvector migration and `match_content_embeddings` RPC in the production Supabase project.
+- [ ] Run an authorized `/api/embeddings/backfill` job and verify model-versioned rows are created.
+- [ ] Run `node scripts/verify-production-pgvector.mjs` after applying migrations; current production check found `concept_relations`, `content_concepts`, `content_embeddings`, `concept_embeddings`, and `match_content_embeddings` missing.
+- [ ] Run `node scripts/collect-production-baseline.mjs` with an authenticated `SUPABASE_ACCESS_TOKEN` and record aggregate feed/rank metrics without exporting content identifiers.
 - [ ] Confirm secrets are never included in the browser extension bundle
 - [ ] Review access patterns for service-role usage and server-only code
 - [ ] Add basic error monitoring and alerts for API failures

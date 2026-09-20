@@ -8,6 +8,11 @@ import { getEligibleTopicNames } from './feed.ts';
 import { hasSufficientSharedTopicPool, type ClassifiedCandidateRow } from './candidates.ts';
 import { buildRecommendationProfile } from './recommendation-profile.ts';
 import { assembleCandidatePool } from './candidate-generation.ts';
+import { decryptOAuthToken, encryptOAuthToken } from './oauth-token-crypto.ts';
+import { loadApprovedConceptGraph } from './semantic-catalog.ts';
+import type { ConceptCatalogEntry, ConceptRelationEntry } from './concepts.ts';
+import { buildContentConceptMatches, persistContentConceptMatches } from './content-concepts.ts';
+import { buildRecommendationQualityMetrics } from './recommendation-quality.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -216,11 +221,11 @@ async function fetchYoutubeRecentUploads(
   return uploads;
 }
 
-async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null): Promise<YoutubeSubscriptionItem[]> {
+async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = []): Promise<YoutubeSubscriptionItem[]> {
   const discoveryItems: YoutubeSubscriptionItem[] = [];
-  const language = buildRecommendationProfile(algorithm).language;
+  const language = buildRecommendationProfile(algorithm, catalog).language;
 
-  for (const plan of buildDiscoveryQueryPlans(algorithm)) {
+  for (const plan of buildDiscoveryQueryPlans(algorithm, catalog, relations)) {
     const query = plan.text;
     const params = new URLSearchParams({
       part: 'snippet',
@@ -425,8 +430,15 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
     return resolveYoutubeAccessTokenCandidate(providerTokens, false);
   }
 
-  const accessToken = data.access_token_encrypted;
-  const refreshToken = data.refresh_token_encrypted;
+  let accessToken: string;
+  let refreshToken: string;
+  try {
+    accessToken = decryptOAuthToken(data.access_token_encrypted);
+    refreshToken = decryptOAuthToken(data.refresh_token_encrypted);
+  } catch (error) {
+    console.error('Stored YouTube OAuth tokens could not be decrypted; reconnect required', error);
+    return null;
+  }
   const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : 0;
 
   console.log('YouTube token check', redactSensitiveValues(buildYoutubeTokenCheckLog(userId, accessToken, refreshToken, expiresAt)));
@@ -473,8 +485,8 @@ async function getValidYoutubeAccessToken(userId: string): Promise<string | null
     const { error: updateError } = await client
       .from('oauth_connections')
       .update({
-        access_token_encrypted: payload.access_token,
-        refresh_token_encrypted: payload.refresh_token ?? refreshToken,
+        access_token_encrypted: encryptOAuthToken(payload.access_token),
+        refresh_token_encrypted: encryptOAuthToken(payload.refresh_token ?? refreshToken),
         expires_at: nextExpiresAt,
       })
       .eq('user_id', userId)
@@ -514,9 +526,10 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
 
   const algorithms = await listAlgorithms(userId);
   const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
+  const conceptGraph = await loadApprovedConceptGraph(client);
   const accessToken = await getValidYoutubeAccessToken(userId);
   const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
-  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm) : [];
+  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations) : [];
   const likedItems = accessToken ? await fetchYoutubeLikedItems(accessToken) : [];
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
@@ -524,6 +537,8 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     { source: 'youtube_liked', items: likedItems },
   ]);
   const items = candidatePool.items;
+  const freshnessCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const freshCount = items.filter((item) => item.published_at && new Date(item.published_at).getTime() >= freshnessCutoff).length;
 
   let synced = 0;
   let classified = 0;
@@ -563,7 +578,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
 
     synced += 1;
 
-    const classification = await classifyContent(`${item.title} ${item.description ?? ''} ${item.channel_name ?? ''}`);
+    const classification = await classifyContent(`${item.title} ${item.description ?? ''} ${item.channel_name ?? ''}`, conceptGraph.catalog);
     const { error: classificationError } = await client.from('classifications').upsert(
       {
         content_item_id: contentRow.id,
@@ -579,6 +594,10 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     );
 
     if (!classificationError) {
+      await persistContentConceptMatches(
+        client,
+        buildContentConceptMatches(contentRow.id, classification.topics, conceptGraph.catalog, classification.confidence),
+      );
       classified += 1;
     }
   }
@@ -591,6 +610,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     liked: likedItems.length,
     classified,
     candidatePool: candidatePool.metrics,
+    quality: buildRecommendationQualityMetrics(candidatePool.metrics, classified, freshCount),
     items,
   };
 }

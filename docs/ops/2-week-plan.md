@@ -1,22 +1,15 @@
-# 2-week plan: Production validation and launch hardening
+# Archived plan: production validation and launch hardening
 
-## Week 1: Feed quality pivot
-1. Enforce strict relevance gating and a truthful no-match empty state
-2. Add subscribed-only, hide Shorts, discovery, and live-content controls
-3. Add relevance thresholds, duplicate suppression, and channel diversity limits
-4. Test the same candidate set across algorithms and source-control combinations
-5. Validate the improved feed against real production content
+**Original planning window:** two weeks
+**Archived:** 2026-09-20
+**Current status authority:** [docs/STATUS.md](../STATUS.md)
 
-## Week 2: Production and launch hardening
-1. Complete Google OAuth, YouTube sync, and token refresh validation
-2. Encrypt OAuth tokens at rest and verify extension bundle secret hygiene
-3. Add production monitoring and health checks
-4. Run end-to-end QA for pause/resume, mode switching, and source controls
-5. Prepare launch notes and Chrome Web Store submission materials
+This document records the earlier feed-quality and launch-hardening plan. It is no longer the active execution plan. Its unfinished items remain launch gates in [../../TODO.md](../../TODO.md), but their status must be read from the status matrix rather than from this historical checklist.
 
-## Definition of done
-- Real user flow works from sign-in through YouTube sync and ranking
-- Production secrets are rotated and verified
-- Monitoring and health checks are active
-- Chrome extension is ready for submission and install testing
-- Launch notes and support path are prepared
+The active sequence is now:
+
+1. Complete production OAuth, token, RLS, cron, monitoring, and extension smoke-test gates.
+2. Load the database-backed concept catalog with deterministic fallback.
+3. Add semantic candidate fixtures and concept matches before enabling vector retrieval.
+4. Add bounded, versioned pgvector retrieval only when measured coverage gaps justify it.
+5. Add low-confidence, context-aware LLM enrichment and semantic reranking.

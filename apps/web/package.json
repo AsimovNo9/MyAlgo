@@ -7,7 +7,7 @@
     "build": "next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test lib/activity.test.mjs lib/activity-signals.test.mjs lib/candidate-generation.test.mjs lib/candidates.test.mjs lib/feed.test.mjs lib/discovery.test.mjs lib/learned-profile.test.mjs lib/recommendation-profile.test.mjs lib/rss-candidate-pool.test.mjs lib/rss.test.mjs lib/seed-channels.test.mjs lib/channel-discovery.test.mjs lib/youtube.test.ts"
+    "test": "node --experimental-strip-types --test lib/activity.test.mjs lib/activity-signals.test.mjs lib/candidate-generation.test.mjs lib/candidates.test.mjs lib/content-concepts.test.mjs lib/feed.test.mjs lib/discovery.test.mjs lib/learned-profile.test.mjs lib/oauth-token-crypto.test.mjs lib/recommendation-boundaries.test.mjs lib/recommendation-evaluation.test.mjs lib/recommendation-profile.test.mjs lib/recommendation-quality.test.mjs lib/rss-candidate-pool.test.mjs lib/rss.test.mjs lib/seed-channels.test.mjs lib/channel-discovery.test.mjs lib/semantic-catalog.test.mjs lib/vector-retrieval.test.mjs lib/youtube.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.0",

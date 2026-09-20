@@ -90,69 +90,27 @@ flowchart LR
   RANK --> BG
 ```
 
-## 5. Folder Structure
+## 5. Current Ownership Map
 
 ```
-personal-algorithm/
-├── apps/
-│   ├── extension/                     # Chrome MV3 extension
-│   │   ├── src/
-│   │   │   ├── background/
-│   │   │   │   └── index.ts           # service worker: session, polling, messaging
-│   │   │   ├── content-scripts/
-│   │   │   │   └── youtube.ts         # reads feed DOM, hides/reorders/marks
-│   │   │   ├── popup/
-│   │   │   │   ├── Popup.tsx          # quick mode switch (Work/Learning/Relax)
-│   │   │   │   └── main.tsx
-│   │   │   ├── options/
-│   │   │   │   ├── Options.tsx        # full rule/weight editor
-│   │   │   │   └── main.tsx
-│   │   │   ├── lib/
-│   │   │   │   ├── api-client.ts
-│   │   │   │   ├── storage.ts         # typed chrome.storage wrapper
-│   │   │   │   └── messaging.ts       # typed runtime messages
-│   │   │   └── manifest.json
-│   │   ├── vite.config.ts
-│   │   └── package.json
-│   │
-│   └── web/                           # Next.js dashboard + API
-│       ├── app/
-│       │   ├── (dashboard)/
-│       │   │   ├── page.tsx               # feed preview / "why am I seeing this"
-│       │   │   ├── algorithms/page.tsx    # manage modes (Work/Learning/Relax)
-│       │   │   └── rules/page.tsx
-│       │   ├── api/
-│       │   │   ├── auth/[...supabase]/route.ts
-│       │   │   ├── algorithms/route.ts
-│       │   │   ├── rules/route.ts
-│       │   │   ├── feed/route.ts          # returns ranked+filtered feed
-│       │   │   ├── classify/route.ts      # internal: scores new content
-│       │   │   └── feedback/route.ts      # not-interested / more-like-this
-│       │   └── layout.tsx
-│       ├── lib/
-│       │   ├── supabase/
-│       │   │   ├── client.ts
-│       │   │   └── server.ts
-│       │   ├── youtube.ts               # YT Data API wrapper
-│       │   ├── classifier.ts            # Anthropic API wrapper
-│       │   └── scoring.ts               # weight/rule → score logic
-│       └── package.json
-│
-├── packages/
-│   ├── shared-types/                    # Zod schemas + TS types, shared by both apps
-│   │   └── src/index.ts
-│   └── db/
-│       ├── schema.sql
-│       └── migrations/
-│
-├── infra/
-│   ├── supabase/                        # supabase CLI config, RLS policies
-│   └── vercel.json
-│
-├── .github/workflows/ci.yml
-├── package.json
-├── pnpm-workspace.yaml
-└── README.md
+Current implementation ownership:
+apps/extension/src/background/index.ts       # session, sync, messaging, feed cache
+apps/extension/src/content-scripts/youtube.ts # native detection, ranking, replacement UI
+apps/extension/src/lib/                       # API, auth, storage, messages, helpers
+apps/web/app/api/                             # Next.js API routes and sync jobs
+apps/web/lib/feed.ts                          # deterministic ranking and hard filters
+apps/web/lib/concepts.ts                      # current deterministic concept fallback
+apps/web/lib/recommendation-profile.ts        # explicit profile and query planning
+apps/web/lib/youtube.ts                       # YouTube retrieval and sync
+apps/web/lib/classifier.ts                    # metadata classifier and low-confidence AI fallback
+packages/shared-types/src/index.ts            # shared API and semantic contracts
+packages/db/schema.sql                        # canonical database schema
+supabase/migrations/                           # deployable schema changes
+docs/STATUS.md                                 # implementation and verification authority
+```
+
+The requirements document describes planned semantic modules that do not exist yet; they must not be read as current code.
+
 ```
 
 ## 6. What Each Part Does

@@ -1,8 +1,8 @@
-import type { Algorithm } from '@repo/shared-types';
+import type { Algorithm, RecommendationProfile as SharedRecommendationProfile, RecommendationQuery, RecommendationQueryPlan, RecommendationQueryLane } from '@repo/shared-types';
 
-import { buildAlgorithmIntentProfile, resolveTopicConceptTerms } from './concepts.ts';
+import { buildAlgorithmIntentProfile, resolveTopicConceptTerms, type ConceptCatalogEntry, type ConceptRelationEntry } from './concepts.ts';
 
-export type RecommendationProfile = {
+export type RecommendationProfile = SharedRecommendationProfile & {
   goal: string;
   language: string | null;
   explicitTopics: string[];
@@ -14,17 +14,7 @@ export type RecommendationProfile = {
   preferredFormats: string[];
 };
 
-export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format';
-
-export type RecommendationQuery = {
-  text: string;
-  lane: RecommendationQueryLane;
-  topics: string[];
-};
-
-export type RecommendationQueryPlan = RecommendationQuery & {
-  algorithmRevision: string;
-};
+export type { RecommendationQuery, RecommendationQueryLane, RecommendationQueryPlan } from '@repo/shared-types';
 
 const defaultQueryLimit = 5;
 
@@ -32,8 +22,10 @@ export function buildRecommendationQueryPlans(
   profile: RecommendationProfile,
   limit = defaultQueryLimit,
   algorithmRevision = 'current',
+  catalog: ConceptCatalogEntry[] = [],
+  relations: ConceptRelationEntry[] = [],
 ): RecommendationQueryPlan[] {
-  return buildRecommendationQueries(profile, limit).map((query) => ({
+  return buildRecommendationQueries(profile, limit, catalog, relations).map((query) => ({
     ...query,
     algorithmRevision,
   }));
@@ -55,8 +47,8 @@ function normalizeFormats(formats?: string[]): string[] {
   return [...new Set((formats ?? []).map((format) => format.trim().toLowerCase()).filter(Boolean))];
 }
 
-export function buildRecommendationProfile(algorithm?: Algorithm | null): RecommendationProfile {
-  const intentProfile = buildAlgorithmIntentProfile(algorithm);
+export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = []): RecommendationProfile {
+  const intentProfile = buildAlgorithmIntentProfile(algorithm, catalog);
   const rules = algorithm?.rules ?? [];
   const positiveRuleTerms = rules
     .filter((rule) => rule.type !== 'never_show' && rule.condition_text.trim().length > 0)
@@ -84,10 +76,10 @@ function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function buildTopicQueries(profile: RecommendationProfile, topic: string): RecommendationQuery[] {
+function buildTopicQueries(profile: RecommendationProfile, topic: string, catalog: ConceptCatalogEntry[] = []): RecommendationQuery[] {
   const lowerTopic = topic.toLowerCase();
   const supportsAliasExpansion = /\b(game|gaming|esports|design|ux design|product design)\b/.test(lowerTopic);
-  const terms = resolveTopicConceptTerms(topic, profile.goal)
+  const terms = resolveTopicConceptTerms(topic, profile.goal, catalog)
     .filter((term) => term.toLowerCase() !== lowerTopic);
   const ruleAliases = terms.filter((term) => profile.positiveRuleTerms.some((rule) => rule.toLowerCase() === term.toLowerCase()));
   const aliasTerms = supportsAliasExpansion ? [...new Set([...ruleAliases, ...terms])] : [];
@@ -102,9 +94,42 @@ function buildTopicQueries(profile: RecommendationProfile, topic: string): Recom
   ];
 }
 
+function buildGraphQueries(
+  profile: RecommendationProfile,
+  catalog: ConceptCatalogEntry[],
+  relations: ConceptRelationEntry[],
+): RecommendationQuery[] {
+  if (catalog.length === 0 || relations.length === 0) return [];
+
+  const strongConcepts = profile.explicitTopics
+    .map((topic) => {
+      const normalized = topic.trim().toLowerCase();
+      return catalog.find((concept) => concept.canonicalName.trim().toLowerCase() === normalized);
+    })
+    .filter((concept): concept is ConceptCatalogEntry => Boolean(concept));
+  const strongIds = new Set(strongConcepts.map((concept) => concept.id));
+  const allowedRelations = new Set(['parent_of', 'child_of', 'related_to', 'example_of', 'often_cooccurs_with', 'format_for']);
+
+  return relations
+    .filter((relation) => strongIds.has(relation.source_concept_id) && allowedRelations.has(relation.relation_type) && relation.weight >= 0.5)
+    .sort((left, right) => right.weight - left.weight)
+    .flatMap((relation) => {
+      const source = catalog.find((concept) => concept.id === relation.source_concept_id);
+      const target = catalog.find((concept) => concept.id === relation.target_concept_id);
+      if (!source || !target) return [];
+      return [{
+        text: `${target.canonicalName} ${profile.preferredFormats[0] ?? ''}`.trim(),
+        lane: 'intent' as const,
+        topics: [source.canonicalName, target.canonicalName],
+      }];
+    });
+}
+
 export function buildRecommendationQueries(
   profile: RecommendationProfile,
   limit = defaultQueryLimit,
+  catalog: ConceptCatalogEntry[] = [],
+  relations: ConceptRelationEntry[] = [],
 ): RecommendationQuery[] {
   if (limit <= 0 || profile.explicitTopics.length === 0) {
     return [];
@@ -115,7 +140,9 @@ export function buildRecommendationQueries(
     planned.push({ text: profile.goal, lane: 'goal', topics: profile.explicitTopics });
   }
 
-  const queriesByTopic = profile.explicitTopics.map((topic) => buildTopicQueries(profile, topic));
+  planned.push(...buildGraphQueries(profile, catalog, relations));
+
+  const queriesByTopic = profile.explicitTopics.map((topic) => buildTopicQueries(profile, topic, catalog));
   const cursors = new Array(queriesByTopic.length).fill(0);
   let hasMore = true;
 

@@ -3,6 +3,7 @@ import type { FeedSourceFilters } from '@repo/shared-types';
 import { buildFeedResponse, getRankingTopicWeights, type FeedCandidate } from '@/lib/feed';
 import { ensureDefaultAlgorithmsForUser } from '@/lib/bootstrap';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
+import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { inferPageCandidateTopics } from '@/lib/page-relevance';
 import { applyCorsHeaders, isAllowedOrigin } from '@/lib/cors';
@@ -90,9 +91,13 @@ export async function POST(request: Request) {
       candidate_relevance: topics.length > 0 || matchingRule ? 'matched' : 'unmatched',
     }; });
 
-  const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
+  const [feedbackSignals, activitySignals] = await Promise.all([
+    fetchFeedbackSignalsForUser(userId),
+    fetchActivitySignalsForUser(userId),
+  ]);
   return jsonResponse(request, buildFeedResponse(algorithm, feedbackSignals, candidates, {
     includeHidden: true,
     sourceFilters: payload.sourceFilters,
+    activitySignals,
   }));
 }

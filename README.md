@@ -25,12 +25,12 @@ Personal Algorithm is a Chrome extension + web dashboard that lets a user define
 1. The user configures a mode and set of topic weights in the dashboard or extension options page.
 2. The extension requests a ranked feed from the web API.
 3. The API fetches relevant content, applies weighting and rule logic, and returns a filtered feed.
-4. The extension updates the YouTube UI by hiding or emphasizing candidate items.
+4. The extension updates the YouTube UI by ranking native cards and replacing rejected slots with marked personal recommendation cards when candidate metadata is available.
 
 ## Notes
-- The architecture and deployment specs in the repo root are binding requirements.
+- The canonical status matrix is [docs/STATUS.md](docs/STATUS.md). Architecture and deployment constraints are documented in [ARCHITECTURE.md](ARCHITECTURE.md) and [DEPLOYMENT_AND_SCALING.md](DEPLOYMENT_AND_SCALING.md).
 - Supabase schema RLS is defined in `packages/db/schema.sql`; deployable migrations live in `supabase/migrations`.
 - The extension ranking loop has been stabilized locally, and the active work is now production validation, live OAuth verification, and launch hardening rather than core extension bug fixing.
-- Product priority has pivoted to feed quality: strict relevance gating, useful empty states, subscribed-only and Shorts controls, discovery controls, and ranking diversity come before broader semantic features.
+- Product priority is production safety and semantic candidate coverage: strict relevance, useful empty states, source controls, replacement quality, then the database-backed concept catalog and measured semantic retrieval.
 - Start onboarding with [docs/ONBOARDING.md](docs/ONBOARDING.md) and the scoped backlog in [docs/GITHUB_ISSUES.md](docs/GITHUB_ISSUES.md).
 - Secrets are intentionally not embedded in the extension bundle.

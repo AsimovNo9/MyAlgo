@@ -1,3 +1,9 @@
+## Archived Status Update
+
+**Original status date:** 2026-09-20
+**Current status authority:** [docs/STATUS.md](../STATUS.md)
+**Note:** This is a historical snapshot. Do not use its checklist or “next phase” wording as the current roadmap.
+
 ## Status update
 The extension stability issue has been resolved in the current branch: we removed the feedback loop, tightened the rank trigger logic, and made the active/paused state much clearer in both the popup and the page UI. The extension now ranks on real page lifecycle changes without the constant re-trigger behavior that was previously causing the feed to refresh repeatedly.
 

@@ -6,6 +6,8 @@ This backlog is ordered by delivery risk. Each issue is intentionally scoped so 
 
 ## 0. Build the user taste profile and candidate generation engine
 
+**Status:** Planned umbrella outcome. See [docs/STATUS.md](STATUS.md) for implementation and verification state; this issue is not evidence that every listed capability is complete.
+
 **Labels:** `priority:high`, `area:ranking`, `area:backend`, `area:extension`
 
 The current feed pipeline ranks a fetched subset of content. The next major architecture change is to understand the user first, generate candidate videos from that profile, then classify and rerank them.
@@ -152,9 +154,13 @@ See [Issue #20](https://github.com/AsimovNo9/MyAlgo/issues/20). The first implem
 
 ## 12. Add semantic topic concepts and intent resolution
 
+**Status:** Partially implemented locally. Deterministic concepts, aliases, intent profiles, and the initial concept graph migration exist; database catalog loading, content concept matches, embeddings, and graph-aware LLM context remain planned.
+
 See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next semantic layer: Supabase pgvector concepts, aliases, embeddings, structured intent, and low-confidence AI disambiguation with deterministic fallback.
 
 ## 13. Persist semantic concept catalogs and algorithm intent profiles
+
+**Status:** Implemented and locally schema-verified. Production migration application and catalog write/read smoke tests remain open.
 
 The tracked Supabase migration creates the canonical concept catalog and per-algorithm intent profiles with RLS. `GET /api/concepts` now exposes both persisted catalog entries and user-scoped profiles; future work is low-confidence AI disambiguation and production validation of the API path.
 

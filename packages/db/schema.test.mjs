@@ -10,6 +10,18 @@ const semanticMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260919011000_add_semantic_intent_tables.sql'),
   'utf8',
 );
+const conceptGraphMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920090000_add_concept_graph.sql'),
+  'utf8',
+);
+const contentConceptsMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920091000_add_content_concepts.sql'),
+  'utf8',
+);
+const vectorMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920092000_add_vector_retrieval.sql'),
+  'utf8',
+);
 const seedChannelsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920000000_add_topic_seed_channels.sql'),
   'utf8',
@@ -56,6 +68,35 @@ test('semantic intent tables are present in the tracked migration', () => {
   assert.match(semanticMigration, /create table if not exists public\.algorithm_intent_profiles/i);
   assert.match(semanticMigration, /alter table public\.concept_entries enable row level security/i);
   assert.match(semanticMigration, /alter table public\.algorithm_intent_profiles enable row level security/i);
+});
+
+test('concept graph tables are versioned and protected by RLS', () => {
+  assert.match(schema, /create table public\.concept_aliases/i);
+  assert.match(schema, /create table public\.concept_relations/i);
+  assert.match(conceptGraphMigration, /alter table public\.concept_entries[\s\S]*add column if not exists description/i);
+  assert.match(conceptGraphMigration, /create table if not exists public\.concept_aliases/i);
+  assert.match(conceptGraphMigration, /create table if not exists public\.concept_relations/i);
+  assert.match(conceptGraphMigration, /alter table public\.concept_aliases enable row level security/i);
+  assert.match(conceptGraphMigration, /alter table public\.concept_relations enable row level security/i);
+  assert.match(conceptGraphMigration, /relation_type text not null check/i);
+});
+
+test('content concept matches are persisted with confidence, provenance, and RLS', () => {
+  assert.match(schema, /create table public\.content_concepts/i);
+  assert.match(contentConceptsMigration, /create table if not exists public\.content_concepts/i);
+  assert.match(contentConceptsMigration, /confidence numeric not null check/i);
+  assert.match(contentConceptsMigration, /model_version text not null/i);
+  assert.match(contentConceptsMigration, /alter table public\.content_concepts enable row level security/i);
+});
+
+test('vector retrieval is optional, versioned, indexed, and protected by RLS', () => {
+  assert.match(schema, /create table public\.concept_embeddings/i);
+  assert.match(schema, /create table public\.content_embeddings/i);
+  assert.match(vectorMigration, /create extension if not exists vector/i);
+  assert.match(vectorMigration, /content_embeddings_hnsw_idx/i);
+  assert.match(vectorMigration, /match_content_embeddings/i);
+  assert.match(vectorMigration, /model_version text not null/i);
+  assert.match(vectorMigration, /alter table public\.content_embeddings enable row level security/i);
 });
 
 test('topic seed channels table is present in the tracked migration with a unique topic+channel constraint', () => {

@@ -1,4 +1,5 @@
-import type { Algorithm, FeedItem, FeedResponse, FeedSourceFilters, Rule } from '@repo/shared-types';
+import type { Algorithm, FeedItem, FeedResponse, FeedSourceFilters, RecommendationCandidate, Rule } from '@repo/shared-types';
+import type { ConceptCatalogEntry, ConceptRelationEntry } from './concepts.ts';
 
 import { resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
 import { buildLearnedAffinityProfile, getCandidateLearnedAffinity } from './learned-profile.ts';
@@ -15,27 +16,7 @@ export type FeedActivitySignal = {
   watchSeconds?: number | null;
 };
 
-export type FeedCandidate = {
-  id?: string;
-  external_id: string;
-  title: string;
-  channel_name?: string | null;
-  thumbnail_url?: string | null;
-  channel_id?: string | null;
-  channel_description?: string | null;
-  channel_subscriber_count?: number | null;
-  source_kind?: 'subscription' | 'discovery' | 'liked' | null;
-  is_short?: boolean;
-  is_live?: boolean;
-  content_type?: string | null;
-  language?: string | null;
-  format?: string | null;
-  subscription_affinity?: number;
-  candidate_relevance?: 'matched' | 'unmatched';
-  published_at?: string | null;
-  base_score?: number;
-  topics?: string[];
-};
+export type FeedCandidate = RecommendationCandidate;
 
 export type FeedGenerationSummary = {
   candidateCount: number;
@@ -290,11 +271,57 @@ function getChannelQualityBoost(
   return boost;
 }
 
+function normalizeConceptValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function findConceptForTerm(term: string, catalog: ConceptCatalogEntry[]): ConceptCatalogEntry | null {
+  const normalized = normalizeConceptValue(term);
+  return catalog.find((concept) => (
+    normalizeConceptValue(concept.canonicalName) === normalized
+    || concept.aliases.some((alias) => normalizeConceptValue(alias) === normalized)
+  )) ?? null;
+}
+
+function buildSemanticExplanation(
+  video: FeedCandidate,
+  algorithm: Algorithm | null | undefined,
+  graph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] },
+): string | null {
+  if (!graph || graph.catalog.length === 0) return null;
+
+  const candidateConcepts = (video.topics ?? [])
+    .map((topic) => findConceptForTerm(topic, graph.catalog))
+    .filter((concept): concept is ConceptCatalogEntry => Boolean(concept));
+  if (candidateConcepts.length === 0) return null;
+
+  const preferredConcepts = (algorithm?.topic_weights ?? [])
+    .filter((item) => item.weight >= 55)
+    .map((item) => findConceptForTerm(item.topic, graph.catalog))
+    .filter((concept): concept is ConceptCatalogEntry => Boolean(concept));
+  const direct = candidateConcepts.find((candidate) => preferredConcepts.some((preferred) => preferred.id === candidate.id));
+  if (direct) return `Matches your approved concept "${direct.canonicalName}".`;
+
+  for (const preferred of preferredConcepts) {
+    const relation = graph.relations.find((item) => (
+      item.source_concept_id === preferred.id
+      && candidateConcepts.some((candidate) => candidate.id === item.target_concept_id)
+      && ['parent_of', 'child_of', 'related_to', 'example_of', 'often_cooccurs_with', 'format_for'].includes(item.relation_type)
+    ));
+    if (relation) {
+      const related = candidateConcepts.find((candidate) => candidate.id === relation.target_concept_id);
+      if (related) return `Related to your approved concept "${preferred.canonicalName}" through "${related.canonicalName}".`;
+    }
+  }
+
+  return null;
+}
+
 export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
-  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[] } = {},
+  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[]; conceptGraph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] } } = {},
 ): FeedResponse {
   const weights = new Map(getRankingTopicWeights(algorithm).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
@@ -305,6 +332,11 @@ export function buildFeedResponse(
   const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
+  const watchedExternalIds = new Set(
+    (options.activitySignals ?? [])
+      .filter((signal) => signal.eventType === 'completed' || signal.eventType === 'revisited' || (signal.eventType === 'watch_progress' && Number(signal.watchSeconds ?? 0) > 0))
+      .map((signal) => signal.external_id),
+  );
   const learnedProfile = buildLearnedAffinityProfile(candidateItems, feedbackSignals, options.activitySignals);
 
   for (const signal of feedbackSignals) {
@@ -328,7 +360,17 @@ export function buildFeedResponse(
     const scoreContributors: string[] = [];
     const ruleSummary: string[] = [];
     const feedbackSummary: string[] = [];
+    const activitySummary: string[] = [];
     const learnedAffinity = getCandidateLearnedAffinity(learnedProfile, video);
+    const semanticExplanation = buildSemanticExplanation(video, algorithm, options.conceptGraph);
+    const semanticSimilarity = typeof video.semantic_similarity === 'number'
+      ? Math.min(1, Math.max(0, video.semantic_similarity))
+      : 0;
+
+    if (watchedExternalIds.has(video.external_id)) {
+      visible = false;
+      activitySummary.push('already watched');
+    }
 
     if (video.candidate_relevance === 'unmatched') {
       visible = false;
@@ -387,6 +429,10 @@ export function buildFeedResponse(
     );
     const learnedBoost = Math.round(learnedAffinity * 8);
     score += freshnessBoost + channelBoost + subscriptionBoost + learnedBoost;
+    if (semanticSimilarity > 0) {
+      score += Math.round(semanticSimilarity * 12);
+      scoreContributors.push(`semantic similarity (${Math.round(semanticSimilarity * 100)}%)`);
+    }
     if (freshnessBoost > 0) {
       scoreContributors.push(`freshness (${freshnessBoost})`);
     }
@@ -431,7 +477,7 @@ export function buildFeedResponse(
       }
 
       if (rule.type === 'always_show') {
-        if (!feedbackSuppressed && !neverShowRuleMatched) {
+        if (!feedbackSuppressed && !neverShowRuleMatched && !watchedExternalIds.has(video.external_id)) {
           visible = true;
         }
         score += 20;
@@ -464,6 +510,9 @@ export function buildFeedResponse(
       preferredFormats.has(video.format?.toLowerCase() ?? '') ? `Matches your ${video.format} format preference.` : null,
       ruleSummary.length > 0 ? `Your rules affected it: ${ruleSummary.join('; ')}.` : null,
       feedbackSummary.length > 0 ? `Your feedback affected it: ${feedbackSummary.join('; ')}.` : null,
+      activitySummary.length > 0 ? `Your activity affected it: ${activitySummary.join('; ')}.` : null,
+      semanticExplanation,
+      semanticSimilarity > 0 ? `It is semantically close to your selected interests (${Math.round(semanticSimilarity * 100)}%).` : null,
       learnedBoost > 0 ? 'It is similar to content you responded positively to.' : null,
       learnedBoost < 0 ? 'It reflects a learned preference from your past feedback.' : null,
       scoreContributors.some((contributor) => contributor.startsWith('freshness')) ? 'It is relatively fresh.' : null,
@@ -471,7 +520,7 @@ export function buildFeedResponse(
 
     const reason = visible
       ? preferenceBits.join(' ')
-      : `Filtered because ${[...feedbackSummary, ...ruleSummary].join('; ') || 'it did not match your current preferences.'}`;
+      : `Filtered because ${[...activitySummary, ...feedbackSummary, ...ruleSummary].join('; ') || 'it did not match your current preferences.'}`;
 
     return {
       id: video.id ?? video.external_id,

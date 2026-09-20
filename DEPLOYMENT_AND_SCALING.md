@@ -24,7 +24,22 @@
 | Domain / DNS | Cloudflare | Free |
 | Secrets | Vercel + Supabase environment variables | Built-in, no separate vault needed at this stage |
 
+OAuth provider tokens are encrypted server-side with AES-256-GCM before persistence. Set a stable, server-only `OAUTH_TOKEN_ENCRYPTION_KEY` in local and production environments; never expose it to `NEXT_PUBLIC_*` variables or the extension.
+
+Optional semantic backfill uses `EMBEDDING_API_KEY`, `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_MODEL_VERSION`. These are server-only settings. Run `/api/embeddings/backfill` only from an authorized job after the pgvector migration is verified.
+
+Operational verification commands:
+
+```bash
+node scripts/verify-production-pgvector.mjs
+node scripts/collect-production-baseline.mjs
+```
+
+The first is read-only and checks production tables/RPC status. The second requires an explicit `SUPABASE_ACCESS_TOKEN` and reports aggregate feed/rank metrics only.
+
 ## 2.1 Recommendation Engine Rollout
+
+The implementation and verification state for this rollout is maintained in [docs/STATUS.md](docs/STATUS.md). This document defines infrastructure constraints; it is not a second feature-status checklist.
 
 The next major architecture shift is not a UI change; it is a retrieval-and-ranking pipeline.
 
