@@ -86,6 +86,8 @@ export interface ClassifyResponse {
   id: string;
   topics: string[];
   content_type?: string | null;
+  language?: string | null;
+  format?: string | null;
   quality_score?: number | null;
   reasoning?: string | null;
 }

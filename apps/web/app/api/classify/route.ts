@@ -10,6 +10,8 @@ export async function POST(request: Request) {
     id: body.contentItemId,
     topics: classification.topics,
     content_type: classification.content_type,
+    language: classification.language,
+    format: classification.format,
     quality_score: classification.quality_score,
     reasoning: classification.reasoning,
   };

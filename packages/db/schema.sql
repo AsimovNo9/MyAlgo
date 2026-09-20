@@ -84,6 +84,8 @@ create table public.classifications (
   content_item_id uuid not null references public.content_items(id) on delete cascade,
   topics text[] not null default '{}',
   content_type text,
+  language text,
+  format text,
   quality_score numeric,
   reasoning text,
   classified_at timestamptz not null default now()

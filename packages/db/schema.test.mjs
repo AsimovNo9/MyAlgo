@@ -30,6 +30,10 @@ const retrievalPreferencesMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920040000_add_algorithm_retrieval_preferences.sql'),
   'utf8',
 );
+const classificationFacetsMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920050000_add_classification_facets.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -71,6 +75,13 @@ test('algorithm retrieval preferences are tracked in schema and migration', () =
   assert.match(schema, /preferred_formats text\[\] not null default '\{\}'/i);
   assert.match(retrievalPreferencesMigration, /add column if not exists language text/i);
   assert.match(retrievalPreferencesMigration, /add column if not exists preferred_formats text\[\] not null default '\{\}'/i);
+});
+
+test('classification language and format facets are tracked in schema and migration', () => {
+  assert.match(schema, /create table public\.classifications[\s\S]*language text/i);
+  assert.match(schema, /create table public\.classifications[\s\S]*format text/i);
+  assert.match(classificationFacetsMigration, /add column if not exists language text/i);
+  assert.match(classificationFacetsMigration, /add column if not exists format text/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

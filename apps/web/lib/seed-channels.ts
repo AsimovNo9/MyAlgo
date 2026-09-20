@@ -102,6 +102,8 @@ export async function syncSeedChannelContent() {
           content_item_id: contentRow.id,
           topics: buildSeedClassificationTopics(topics, detected.topics),
           content_type: detected.content_type,
+          language: detected.language,
+          format: detected.format,
           quality_score: detected.quality_score,
           reasoning: detected.reasoning,
         },

@@ -547,8 +547,8 @@ This is the smallest change that moves the product from "rank the current pool" 
 
 ### Milestone 3: Profile-aware reranking
 
-- [ ] Separate topic, channel, publisher, language, format, creator, and source facets in classification.
-- [ ] Add hard eligibility checks for explicit language, format, source, and exclusion rules.
+- [x] Separate topic, channel, publisher, language, format, creator, and source facets in classification.
+- [x] Add hard eligibility checks for explicit language, format, source, and exclusion rules.
 - [ ] Add learned topic, channel, creator, format, language, and source affinities.
 - [ ] Allocate results into matched, discovery, and explore lanes.
 - [ ] Replace raw classifier labels in explanations with preference-based reasons.

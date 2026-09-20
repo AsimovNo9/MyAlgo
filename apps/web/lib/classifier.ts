@@ -3,6 +3,8 @@ import { fetchWithRetry } from './http.ts';
 export type ClassificationResult = {
   topics: string[];
   content_type: string;
+  language: string | null;
+  format: string | null;
   quality_score: number;
   reasoning: string;
 };
@@ -37,6 +39,24 @@ function classifyDeterministically(title: string): ClassificationResult {
         : matchedTopics.includes('Business')
           ? 'business'
           : 'general';
+  const format = matchedTopics.includes('Tutorial')
+    ? 'tutorial'
+    : /review|recap|first look/i.test(normalizedTitle)
+      ? 'review'
+      : /analysis|deep dive|breakdown|explained/i.test(normalizedTitle)
+        ? 'deep analysis'
+        : /interview|commentary/i.test(normalizedTitle)
+          ? 'developer commentary'
+          : null;
+  const language = /[\u3040-\u30ff]/.test(normalizedTitle)
+    ? 'ja'
+    : /[\uac00-\ud7af]/.test(normalizedTitle)
+      ? 'ko'
+      : /[\u4e00-\u9fff]/.test(normalizedTitle)
+        ? 'zh'
+        : /[\u0400-\u04ff]/.test(normalizedTitle)
+          ? 'ru'
+          : null;
 
   const qualityScore = Math.min(
     98,
@@ -46,6 +66,8 @@ function classifyDeterministically(title: string): ClassificationResult {
   return {
     topics,
     content_type: contentType,
+    language,
+    format,
     quality_score: Math.round(qualityScore),
     reasoning: matchedTopics.length
       ? `Matched ${matchedTopics.join(', ')} based on the title's subject signals.`
@@ -61,6 +83,8 @@ function parseAiClassification(payload: unknown): ClassificationResult | null {
   const candidate = payload as {
     topics?: unknown;
     content_type?: unknown;
+    language?: unknown;
+    format?: unknown;
     quality_score?: unknown;
     reasoning?: unknown;
   };
@@ -78,6 +102,12 @@ function parseAiClassification(payload: unknown): ClassificationResult | null {
     content_type: typeof candidate.content_type === 'string' && candidate.content_type.trim().length > 0
       ? candidate.content_type.trim()
       : 'general',
+    language: typeof candidate.language === 'string' && /^[a-z]{2}$/i.test(candidate.language.trim())
+      ? candidate.language.trim().toLowerCase()
+      : null,
+    format: typeof candidate.format === 'string' && candidate.format.trim().length > 0
+      ? candidate.format.trim().toLowerCase()
+      : null,
     quality_score: Math.round(Math.min(100, Math.max(0, qualityScore))),
     reasoning: typeof candidate.reasoning === 'string' && candidate.reasoning.trim().length > 0
       ? candidate.reasoning.trim()
@@ -118,7 +148,7 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
         model: 'claude-3-5-haiku-latest',
         max_tokens: 180,
         temperature: 0,
-        system: 'Classify content conservatively. Return only JSON with topics (array of short strings), content_type, quality_score from 0 to 100, and reasoning.',
+        system: 'Classify content conservatively. Return only JSON with topics (array of short strings), content_type, language (two-letter code or null), format (short format label or null), quality_score from 0 to 100, and reasoning.',
         messages: [{
           role: 'user',
           content: `Classify this title:\n${title.slice(0, 500)}`,
