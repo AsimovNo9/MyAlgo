@@ -188,6 +188,12 @@ create table public.topic_seed_channels (
   topic text not null,
   channel_id text not null,
   source text not null default 'curated' check (source in ('curated', 'discovered_via_search')),
+  status text not null default 'approved' check (status in ('pending', 'approved', 'rejected')),
+  confidence numeric check (confidence >= 0 and confidence <= 1),
+  channel_name text,
+  channel_description text,
+  subscriber_count bigint,
+  discovered_at timestamptz,
   added_at timestamptz not null default now(),
   unique (topic, channel_id)
 );
