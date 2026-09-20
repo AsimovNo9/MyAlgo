@@ -1,30 +1,11 @@
-export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked';
+import type {
+  CandidateProvenance,
+  CandidateQueryLane,
+  CandidateRetrievalSource,
+  RecommendationCandidate,
+} from '@repo/shared-types';
 
-export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
-
-export type CandidateProvenance = {
-  source: CandidateRetrievalSource;
-  query?: string | null;
-  query_lane?: CandidateQueryLane | null;
-  query_topics?: string[];
-  channel_id?: string | null;
-  retrieved_at: string;
-};
-
-export type RecommendationCandidate = {
-  id: string;
-  external_id: string;
-  title: string;
-  channel_name: string;
-  channel_id?: string | null;
-  channel_description?: string | null;
-  channel_subscriber_count?: number | null;
-  description?: string | null;
-  published_at?: string | null;
-  source_kind: 'subscription' | 'discovery' | 'liked';
-  topics?: string[];
-  provenance?: CandidateProvenance;
-};
+export type { CandidateProvenance, CandidateQueryLane, CandidateRetrievalSource, RecommendationCandidate } from '@repo/shared-types';
 
 export type RssCandidateInput = {
   videoId: string;

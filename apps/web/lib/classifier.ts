@@ -1,4 +1,5 @@
 import { fetchWithRetry } from './http.ts';
+import type { ConceptCatalogEntry } from './concepts.ts';
 
 export type ClassificationResult = {
   topics: string[];
@@ -19,7 +20,7 @@ const topicRules: Array<{ match: RegExp; topic: string }> = [
   { match: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
 ];
 
-function classifyDeterministically(title: string): ClassificationResult {
+function classifyDeterministically(title: string, catalog: ConceptCatalogEntry[] = []): ClassificationResult {
   const normalizedTitle = title.trim();
   const matchedTopics = Array.from(
     new Set(
@@ -29,18 +30,27 @@ function classifyDeterministically(title: string): ClassificationResult {
     ),
   );
 
+  for (const concept of catalog) {
+    const terms = [concept.canonicalName, ...concept.aliases, ...concept.intents];
+    if (terms.some((term) => matchesWholePhrase(normalizedTitle, term))) {
+      matchedTopics.push(concept.canonicalName);
+    }
+  }
+
+  const uniqueTopics = [...new Set(matchedTopics)];
+
   const fallbackTopic = 'General';
-  const topics = matchedTopics.length > 0 ? matchedTopics : [fallbackTopic];
+  const topics = uniqueTopics.length > 0 ? uniqueTopics : [fallbackTopic];
 
   const contentType =
-    matchedTopics.includes('Tutorial') || /how to|tutorial|guide|walkthrough|demo/i.test(normalizedTitle)
+    uniqueTopics.includes('Tutorial') || /how to|tutorial|guide|walkthrough|demo/i.test(normalizedTitle)
       ? 'tutorial'
-      : matchedTopics.includes('Entertainment')
+      : uniqueTopics.includes('Entertainment')
         ? 'entertainment'
-        : matchedTopics.includes('Business')
+        : uniqueTopics.includes('Business')
           ? 'business'
           : 'general';
-  const format = matchedTopics.includes('Tutorial')
+  const format = uniqueTopics.includes('Tutorial')
     ? 'tutorial'
     : /review|recap|first look/i.test(normalizedTitle)
       ? 'review'
@@ -61,7 +71,7 @@ function classifyDeterministically(title: string): ClassificationResult {
 
   const qualityScore = Math.min(
     98,
-    Math.max(65, 72 + matchedTopics.length * 6 + (normalizedTitle.length > 40 ? 8 : 0)),
+    Math.max(65, 72 + uniqueTopics.length * 6 + (normalizedTitle.length > 40 ? 8 : 0)),
   );
 
   return {
@@ -69,12 +79,19 @@ function classifyDeterministically(title: string): ClassificationResult {
     content_type: contentType,
     language,
     format,
-    confidence: matchedTopics.length > 0 ? 0.82 : 0.2,
+    confidence: uniqueTopics.length > 0 ? 0.82 : 0.2,
     quality_score: Math.round(qualityScore),
-    reasoning: matchedTopics.length
-      ? `Matched ${matchedTopics.join(', ')} based on the title's subject signals.`
+    reasoning: uniqueTopics.length
+      ? `Matched ${uniqueTopics.join(', ')} based on the title's subject signals.`
       : 'No strong topic match; treated as general content.',
   };
+}
+
+function matchesWholePhrase(value: string, term: string): boolean {
+  const normalizedTerm = term.trim().replace(/\s+/g, ' ');
+  if (!normalizedTerm) return false;
+  const escaped = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, 'i').test(value);
 }
 
 function parseAiClassification(payload: unknown): ClassificationResult | null {
@@ -136,7 +153,7 @@ function parseJsonObject(text: string): unknown {
   }
 }
 
-async function classifyWithAnthropic(title: string): Promise<ClassificationResult | null> {
+async function classifyWithAnthropic(title: string, semanticContext: string[] = []): Promise<ClassificationResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey || apiKey === 'your-anthropic-key') {
     return null;
@@ -154,10 +171,10 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
         model: 'claude-3-5-haiku-latest',
         max_tokens: 180,
         temperature: 0,
-        system: 'Classify content conservatively. Return only JSON with topics (array of short strings), content_type, language (two-letter code or null), format (short format label or null), confidence from 0 to 1, quality_score from 0 to 100, and reasoning.',
+        system: `Classify content conservatively against this approved semantic context when relevant: ${semanticContext.slice(0, 8).join('; ') || 'none'}. Return only JSON with topics (array of short strings), content_type, language (two-letter code or null), format (short format label or null), confidence from 0 to 1, quality_score from 0 to 100, and reasoning. Do not invent concepts outside the context unless the title clearly requires it.`,
         messages: [{
           role: 'user',
-          content: `Classify this title:\n${title.slice(0, 500)}`,
+          content: `Classify this content:\n${title.slice(0, 500)}`,
         }],
       }),
     }, { timeoutMs: 4000 });
@@ -174,11 +191,12 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
   }
 }
 
-export async function classifyContent(title: string): Promise<ClassificationResult> {
-  const deterministic = classifyDeterministically(title);
+export async function classifyContent(title: string, catalog: ConceptCatalogEntry[] = []): Promise<ClassificationResult> {
+  const deterministic = classifyDeterministically(title, catalog);
   if (deterministic.confidence >= 0.7) {
     return deterministic;
   }
 
-  return (await classifyWithAnthropic(title)) ?? deterministic;
+  const semanticContext = catalog.slice(0, 12).flatMap((concept) => [concept.canonicalName, ...concept.intents]).filter(Boolean);
+  return (await classifyWithAnthropic(title, semanticContext)) ?? deterministic;
 }

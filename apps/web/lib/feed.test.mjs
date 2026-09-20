@@ -40,6 +40,22 @@ test('buildFeedResponse hard-filters known language and format conflicts', () =>
   assert.equal(feed.items.some((item) => item.reason?.includes('language mismatch')), false);
 });
 
+test('buildFeedResponse hides previously watched videos', () => {
+  const feed = buildFeedResponse(
+    { name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { external_id: 'watched', title: 'AI tutorial', topics: ['AI'] },
+      { external_id: 'unwatched', title: 'AI guide', topics: ['AI'] },
+    ],
+    {
+      activitySignals: [{ external_id: 'watched', eventType: 'revisited' }],
+    },
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['unwatched']);
+});
+
 test('summarizeFeedGeneration returns metrics without content identifiers', () => {
   const response = buildFeedResponse(
     { name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
@@ -361,6 +377,25 @@ test('buildFeedResponse explains why a ranked item was boosted', () => {
   assert.match(feed.items[0].reason ?? '', /AI/i);
   assert.match(feed.items[0].reason ?? '', /priority|boost/i);
   assert.match(feed.items[0].reason ?? '', /more like this|feedback/i);
+});
+
+test('buildFeedResponse explains approved direct and related concepts', () => {
+  const feed = buildFeedResponse(
+    { name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
+    [],
+    [{ external_id: 'rpg-video', title: 'RPG systems deep dive', topics: ['Gaming', 'RPG'] }],
+    {
+      conceptGraph: {
+        catalog: [
+          { id: 'gaming', canonicalName: 'Gaming', aliases: [], intents: [] },
+          { id: 'rpg', canonicalName: 'Role-playing games', aliases: ['RPG'], intents: [] },
+        ],
+        relations: [{ source_concept_id: 'gaming', target_concept_id: 'rpg', relation_type: 'child_of', weight: 0.9 }],
+      },
+    },
+  );
+
+  assert.match(feed.items[0].reason ?? '', /approved concept "Gaming"/i);
 });
 
 test('buildFeedResponse boosts more-like-this feedback without changing visibility', () => {

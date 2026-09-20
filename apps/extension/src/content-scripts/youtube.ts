@@ -1,5 +1,6 @@
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom';
 import { STORAGE_KEYS } from '../lib/storage';
+import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 
 const videoSelectors = [
   'ytd-rich-item-renderer',
@@ -12,18 +13,22 @@ const videoSelectors = [
 
 type RankedFeedItem = {
   title?: string;
+  channel_name?: string | null;
+  thumbnail_url?: string | null;
   visible?: boolean;
   score?: number;
   external_id?: string;
 };
 
 let cachedFeed: RankedFeedItem[] = [];
+let personalPicks: RankedFeedItem[] = [];
 let rankingInFlight = false;
 let activeMode = 'Work';
 let rankGeneration = 0;
 let extensionEnabled = true;
 let lastCandidateSignature = '';
 let lastRankMode = '';
+let includeShorts = true;
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
 document.documentElement.setAttribute(instanceAttribute, instanceId);
@@ -50,6 +55,8 @@ const showStatus = (message: string, error = false, paused = false) => {
 const normalizeText = (value: string) => normalizeYouTubeText(value).toLowerCase();
 
 const clearExtensionPresentation = () => {
+  document.querySelector('[data-personal-algorithm-shelf]')?.remove();
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
     element.style.outline = '';
@@ -60,6 +67,113 @@ const clearExtensionPresentation = () => {
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
   });
   showStatus('Personal Algorithm: Paused', false, true);
+};
+
+const removeReplacementCards = () => {
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+};
+
+const createReplacementCard = (item: RankedFeedItem): HTMLElement => {
+  const card = document.createElement('div');
+  card.dataset.personalAlgorithmReplacement = 'true';
+  card.style.cssText = 'display:block;min-width:0;padding:8px;background:var(--yt-spec-base-background, #fff);';
+
+  const link = document.createElement('a');
+  link.href = `https://www.youtube.com/watch?v=${encodeURIComponent(item.external_id ?? '')}`;
+  link.style.cssText = 'display:block;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
+
+  if (item.thumbnail_url) {
+    const image = document.createElement('img');
+    image.src = item.thumbnail_url;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.style.cssText = 'display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#eee;';
+    link.appendChild(image);
+  }
+
+  const title = document.createElement('div');
+  title.textContent = item.title ?? 'Recommended video';
+  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+  link.appendChild(title);
+
+  const channel = document.createElement('div');
+  channel.textContent = item.channel_name ?? `${activeMode} pick`;
+  channel.style.cssText = 'margin-top:4px;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
+  link.appendChild(channel);
+  card.appendChild(link);
+  return card;
+};
+
+const renderRecommendationShelf = (attempt = 0) => {
+  if (!isCurrentInstance() || !extensionEnabled) return;
+
+  const feedContainer = document.querySelector<HTMLElement>(
+    'ytd-rich-grid-renderer #contents, ytd-two-column-browse-results-renderer #primary #contents, #contents',
+  );
+  if (!feedContainer) {
+    if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
+    return;
+  }
+
+  const picks = personalPicks
+    .filter((item) => item.visible !== false && (item.score ?? 0) >= 52 && item.external_id)
+    .slice(0, 6);
+  if (picks.length === 0) {
+    document.querySelector('[data-personal-algorithm-shelf]')?.remove();
+    return;
+  }
+
+  let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
+  if (!shelf) {
+    shelf = document.createElement('section');
+    shelf.dataset.personalAlgorithmShelf = 'true';
+    shelf.style.cssText = 'display:block;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
+    feedContainer.prepend(shelf);
+  }
+
+  shelf.replaceChildren();
+  const heading = document.createElement('h2');
+  heading.textContent = `${activeMode} picks for you`;
+  heading.style.cssText = 'margin:0 16px 12px;font-size:20px;line-height:28px;color:var(--yt-spec-text-primary, #0f0f0f);';
+  shelf.appendChild(heading);
+
+  const cards = document.createElement('div');
+  cards.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;padding:0 16px;';
+  for (const item of picks) {
+    const card = document.createElement('a');
+    card.href = `https://www.youtube.com/watch?v=${encodeURIComponent(item.external_id ?? '')}`;
+    card.style.cssText = 'display:block;min-width:0;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
+
+    if (item.thumbnail_url) {
+      const image = document.createElement('img');
+      image.src = item.thumbnail_url;
+      image.alt = '';
+      image.loading = 'lazy';
+      image.style.cssText = 'display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#eee;';
+      card.appendChild(image);
+    }
+
+    const title = document.createElement('div');
+    title.textContent = item.title ?? 'Recommended video';
+    title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+    card.appendChild(title);
+
+    const channel = document.createElement('div');
+    channel.textContent = item.channel_name ?? `${activeMode} pick`;
+    channel.style.cssText = 'margin-top:4px;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
+    card.appendChild(channel);
+    cards.appendChild(card);
+  }
+  shelf.appendChild(cards);
+};
+
+const refreshRecommendationShelf = () => {
+  chrome.runtime.sendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
+    if (!isCurrentInstance() || !response || !Array.isArray(response.feed)) return;
+    personalPicks = response.feed as RankedFeedItem[];
+    renderRecommendationShelf();
+    applyRankedFeed();
+  });
 };
 
 const getVideoTitle = (element: HTMLElement) => {
@@ -128,6 +242,7 @@ const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => 
 };
 
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
+  if (link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]')) return null;
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
 
@@ -169,6 +284,7 @@ const collectCandidates = () => {
     .slice(0, 80);
 
   const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
+    .filter((link) => !link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]'))
     .map((link) => ({
       external_id: extractYouTubeVideoId(link.href) ?? '',
       title: normalizeText(extractYouTubeLinkTitle({
@@ -204,9 +320,11 @@ const collectCandidates = () => {
 
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
+  removeReplacementCards();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
   const rankedElements: Array<{ element: HTMLElement; rank: number }> = [];
+  const replacementTargets: HTMLElement[] = [];
   const knownElements = getVideoElements();
 
   knownElements.forEach((element) => {
@@ -219,10 +337,16 @@ const applyRankedFeed = () => {
 
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
+    const isShort = getVideoSourceFlags(element).is_short;
+    if (isShort && includeShorts) {
+      element.style.removeProperty('display');
+      return;
+    }
     if (!item) {
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = 'unmatched';
       element.querySelector('[data-personal-algorithm-badge]')?.remove();
+      replacementTargets.push(element);
       return;
     }
 
@@ -230,6 +354,7 @@ const applyRankedFeed = () => {
     const shouldHide = item.visible === false || score < 52;
     if (shouldHide) {
       element.style.setProperty('display', 'none', 'important');
+      replacementTargets.push(element);
     } else {
       element.style.removeProperty('display');
     }
@@ -301,11 +426,21 @@ const rankCurrentPage = async () => {
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
       applyRankedFeed();
+      renderRecommendationShelf();
       const visibleCount = response.feed.filter((item: RankedFeedItem) => item.visible !== false && (item.score ?? 0) >= 52).length;
       showStatus(`${requestMode}: ${visibleCount} shown · ${response.feed.length - visibleCount} hidden`);
     } else {
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
     }
+  });
+
+  const existingIds = new Set(cachedFeed.map((item) => item.external_id).filter(Boolean));
+  const replacements = personalPicks
+    .filter((item) => item.visible !== false && (item.score ?? 0) >= 52 && item.external_id && !existingIds.has(item.external_id))
+    .slice(0, replacementTargets.length);
+  replacementTargets.forEach((target, index) => {
+    const replacement = replacements[index];
+    if (replacement) target.parentElement?.insertBefore(createReplacementCard(replacement), target);
   });
 };
 
@@ -342,9 +477,15 @@ chrome.storage.local.get([STORAGE_KEYS.ENABLED]).then((result) => {
   if (!extensionEnabled) {
     clearExtensionPresentation();
     return;
+    refreshRecommendationShelf();
   }
   showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
   scheduleInitialRank();
+});
+
+chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
+  const filters = result[STORAGE_KEYS.SOURCE_FILTERS] as { includeShorts?: boolean } | undefined;
+  includeShorts = filters?.includeShorts !== false;
 });
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -358,6 +499,7 @@ chrome.runtime.onMessage.addListener((message) => {
     lastRankMode = '';
     if (extensionEnabled) {
       showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+      refreshRecommendationShelf();
       triggerRank('mode');
     } else {
       clearExtensionPresentation();
@@ -370,7 +512,12 @@ chrome.runtime.onMessage.addListener((message) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
-    triggerRank('mode');
+    void chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
+      const filters = result[STORAGE_KEYS.SOURCE_FILTERS] as { includeShorts?: boolean } | undefined;
+      includeShorts = filters?.includeShorts !== false;
+      refreshRecommendationShelf();
+      triggerRank('mode');
+    });
     return;
   }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
@@ -378,6 +525,7 @@ chrome.runtime.onMessage.addListener((message) => {
   rankingInFlight = false;
   activeMode = message.payload.mode;
   cachedFeed = [];
+  refreshRecommendationShelf();
   triggerRank('mode');
 });
 
@@ -405,6 +553,7 @@ registerFeedbackHandlers();
 
 window.addEventListener('load', () => {
   scheduleInitialRank();
+  refreshRecommendationShelf();
 });
 window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = extractYouTubeVideoId(window.location.href);

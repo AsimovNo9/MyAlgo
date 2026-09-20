@@ -1,6 +1,9 @@
 import { fetchChannelRssItems } from './rss.ts';
 import { buildCandidateRawMetadata, normalizeRssCandidate } from './candidates.ts';
 import { assembleCandidatePool } from './candidate-generation.ts';
+import { loadConceptCatalog } from './semantic-catalog.ts';
+import { buildContentConceptMatches, persistContentConceptMatches } from './content-concepts.ts';
+import { buildRecommendationQualityMetrics } from './recommendation-quality.ts';
 
 export type SeedChannelRow = { topic: string; channel_id: string; status?: 'pending' | 'approved' | 'rejected' };
 
@@ -41,6 +44,8 @@ export async function syncSeedChannelContent() {
   if (!client) {
     return { ok: false, channels: 0, synced: 0, classified: 0, error: 'Supabase is not configured.' };
   }
+
+  const conceptCatalog = await loadConceptCatalog(client);
 
   const { data: seedRows, error: seedError } = await client
     .from('topic_seed_channels')
@@ -99,7 +104,7 @@ export async function syncSeedChannelContent() {
         continue;
       }
 
-      const detected = await classifyContent(`${candidate.title} ${candidate.description ?? ''} ${candidate.channel_name}`);
+      const detected = await classifyContent(`${candidate.title} ${candidate.description ?? ''} ${candidate.channel_name}`, conceptCatalog);
       const { error: classificationError } = await client.from('classifications').upsert(
         {
           content_item_id: contentRow.id,
@@ -115,6 +120,10 @@ export async function syncSeedChannelContent() {
       );
 
       if (!classificationError) {
+        await persistContentConceptMatches(
+          client,
+          buildContentConceptMatches(contentRow.id, detected.topics, conceptCatalog, detected.confidence),
+        );
         classified += 1;
       }
     }
@@ -123,6 +132,15 @@ export async function syncSeedChannelContent() {
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_rss', items: rssCandidates },
   ], [...new Set(seedRows.map((row) => row.topic))]);
+  const freshnessCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const freshCount = rssCandidates.filter((item) => item.published_at && new Date(item.published_at).getTime() >= freshnessCutoff).length;
 
-  return { ok: true, channels: channels.length, synced, classified, candidatePool: candidatePool.metrics };
+  return {
+    ok: true,
+    channels: channels.length,
+    synced,
+    classified,
+    candidatePool: candidatePool.metrics,
+    quality: buildRecommendationQualityMetrics(candidatePool.metrics, classified, freshCount),
+  };
 }

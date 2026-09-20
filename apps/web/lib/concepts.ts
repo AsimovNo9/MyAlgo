@@ -33,6 +33,21 @@ export interface ConceptCatalogEntry {
   canonicalName: string;
   aliases: string[];
   intents: string[];
+  description?: string | null;
+  entities?: string[];
+  positivePhrases?: string[];
+  negativePhrases?: string[];
+  language?: string | null;
+  source?: string;
+  version?: number;
+  status?: 'pending' | 'approved' | 'rejected';
+}
+
+export interface ConceptRelationEntry {
+  source_concept_id: string;
+  target_concept_id: string;
+  relation_type: 'parent_of' | 'child_of' | 'related_to' | 'alias_of' | 'example_of' | 'contrasts_with' | 'often_cooccurs_with' | 'format_for';
+  weight: number;
 }
 
 export function buildConceptCatalog(
@@ -41,14 +56,34 @@ export function buildConceptCatalog(
     canonical_name: string;
     aliases?: string[] | null;
     intents?: string[] | null;
+    description?: string | null;
+    entities?: string[] | null;
+    positive_phrases?: string[] | null;
+    negative_phrases?: string[] | null;
+    language?: string | null;
+    source?: string | null;
+    version?: number | null;
+    status?: 'pending' | 'approved' | 'rejected' | null;
   }>,
 ): ConceptCatalogEntry[] {
-  return entries.map((entry) => ({
-    id: entry.id,
-    canonicalName: entry.canonical_name,
-    aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
-    intents: Array.isArray(entry.intents) ? entry.intents : [],
-  }));
+  return entries.map((entry) => {
+    const normalized: ConceptCatalogEntry = {
+      id: entry.id,
+      canonicalName: entry.canonical_name,
+      aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
+      intents: Array.isArray(entry.intents) ? entry.intents : [],
+    };
+
+    if ('description' in entry) normalized.description = entry.description ?? null;
+    if ('entities' in entry) normalized.entities = Array.isArray(entry.entities) ? entry.entities : [];
+    if ('positive_phrases' in entry) normalized.positivePhrases = Array.isArray(entry.positive_phrases) ? entry.positive_phrases : [];
+    if ('negative_phrases' in entry) normalized.negativePhrases = Array.isArray(entry.negative_phrases) ? entry.negative_phrases : [];
+    if ('language' in entry) normalized.language = entry.language ?? null;
+    if ('source' in entry) normalized.source = entry.source ?? 'curated';
+    if ('version' in entry) normalized.version = entry.version ?? 1;
+    if ('status' in entry) normalized.status = entry.status ?? 'approved';
+    return normalized;
+  });
 }
 
 function normalizeStringList(values?: string[] | null): string[] {
@@ -113,8 +148,24 @@ const conceptMap: Record<string, { aliases: string[]; intents: string[] }> = {
   },
 };
 
+export function buildFallbackConceptCatalog(): ConceptCatalogEntry[] {
+  return Object.entries(conceptMap).map(([canonicalName, concept]) => ({
+    id: `fallback-${canonicalName}`,
+    canonicalName,
+    aliases: [...concept.aliases],
+    intents: [...concept.intents],
+    description: null,
+    entities: [],
+    positivePhrases: [],
+    negativePhrases: [],
+    language: 'en',
+    source: 'curated',
+    version: 1,
+  }));
+}
+
 function normalizeTopic(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+  return value.trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function matchConceptEntry(key: string) {
@@ -134,9 +185,22 @@ function matchConceptEntry(key: string) {
   return null;
 }
 
-export function resolveTopicConcepts(topic: string): ResolvedConcept {
+export function resolveTopicConcepts(topic: string, catalog: ConceptCatalogEntry[] = []): ResolvedConcept {
   const canonical = topic.trim();
   const key = normalizeTopic(canonical);
+  const catalogMatch = catalog.find((entry) => (
+    normalizeTopic(entry.canonicalName) === key
+    || entry.aliases.some((alias) => normalizeTopic(alias) === key)
+  ));
+
+  if (catalogMatch) {
+    return {
+      canonical,
+      aliases: [...new Set(catalogMatch.aliases)],
+      intents: [...new Set(catalogMatch.intents)],
+    };
+  }
+
   const exactMatch = conceptMap[key] ?? null;
   const conceptMatch = exactMatch ? { conceptKey: key, concept: exactMatch } : matchConceptEntry(key);
 
@@ -155,8 +219,8 @@ export function resolveTopicConcepts(topic: string): ResolvedConcept {
   };
 }
 
-export function resolveTopicConceptTerms(topic: string, goalText?: string | null): string[] {
-  const concept = resolveTopicConcepts(topic);
+export function resolveTopicConceptTerms(topic: string, goalText?: string | null, catalog: ConceptCatalogEntry[] = []): string[] {
+  const concept = resolveTopicConcepts(topic, catalog);
   const terms = new Set<string>([concept.canonical]);
 
   for (const alias of concept.aliases) {
@@ -176,7 +240,7 @@ export function resolveTopicConceptTerms(topic: string, goalText?: string | null
   return [...terms].filter(Boolean);
 }
 
-export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): AlgorithmIntentProfile {
+export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = []): AlgorithmIntentProfile {
   const canonicalTopics = (algorithm?.topic_weights ?? [])
     .filter((item) => item.weight >= 55 && item.topic.trim().length > 0)
     .sort((left, right) => right.weight - left.weight)
@@ -187,7 +251,7 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null): Algor
   const semanticTerms = new Set<string>();
 
   for (const topic of canonicalTopics) {
-    const concept = resolveTopicConcepts(topic);
+    const concept = resolveTopicConcepts(topic, catalog);
     for (const alias of concept.aliases) {
       aliases.add(alias);
       semanticTerms.add(alias);
@@ -246,7 +310,7 @@ export function buildConceptsApiResponse({
   conceptEntries,
   algorithms,
 }: {
-  conceptEntries: Array<{
+  conceptEntries: ConceptCatalogEntry[] | Array<{
     id: string;
     canonical_name: string;
     aliases?: string[] | null;
@@ -254,8 +318,12 @@ export function buildConceptsApiResponse({
   }>;
   algorithms: ConceptsApiAlgorithmRecord[];
 }) {
+  const concepts = conceptEntries.length > 0 && 'canonicalName' in conceptEntries[0]
+    ? conceptEntries as ConceptCatalogEntry[]
+    : buildConceptCatalog(conceptEntries as Array<{ id: string; canonical_name: string; aliases?: string[] | null; intents?: string[] | null }>);
+
   return {
-    concepts: buildConceptCatalog(conceptEntries),
+    concepts,
     profiles: algorithms.map((algorithm) => ({
       algorithmId: algorithm.id,
       name: algorithm.name,

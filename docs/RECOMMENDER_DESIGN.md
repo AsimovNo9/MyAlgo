@@ -91,7 +91,7 @@ The pasted paper therefore supports the direction, but does not justify adding a
 
 ### Steering decision
 
-The next major outcome is a standalone, quota-aware candidate-generation subsystem that assembles one normalized pool from subscriptions, approved RSS, and bounded YouTube Search. Ranking and candidate generation must have separate contracts and tests.
+The next system sequence is recorded in [docs/STATUS.md](STATUS.md): production safety gates and semantic contracts first, then database-backed concept loading, measured candidate coverage, and only then vector retrieval and graph-aware LLM enrichment.
 
 The MVP target should be a useful, measured pool rather than an arbitrary 200-1000 Search results. A practical budget is:
 
@@ -550,9 +550,9 @@ A separate `/api/discover` endpoint is optional. The first implementation can ex
 
 ## 16. Immediate next engineering task
 
-Implement a standalone candidate-generation coordinator that consumes the recommendation profile and returns a deduplicated, provenance-preserving candidate pool from the shared content pool, approved RSS, subscriptions, and bounded YouTube Search.
+Complete production safety verification in parallel with loading the database-backed concept catalog and adding deterministic fallback. The next semantic implementation should make one catalog power query expansion, classifier context, candidate concept matches, and explanations before adding embeddings.
 
-The coordinator should run only from activation or sync jobs. `/api/feed` and page ranking should consume its cached output and never trigger retrieval. This is the smallest change that moves the product from "rank the current pool" toward "generate a pool for this user" without prematurely introducing new infrastructure or an opaque model.
+Candidate generation must still run only from activation or sync jobs. `/api/feed` and page ranking should consume cached output and never trigger retrieval, embeddings, or LLM work. See [docs/STATUS.md](STATUS.md) for the current verification matrix and the canonical requirements document for the full phase plan.
 
 ## 17. Implementation checklist
 

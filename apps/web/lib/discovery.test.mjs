@@ -17,6 +17,19 @@ test('buildDiscoveryQueryPlans preserves query lane, topics, and algorithm revis
   assert.deepEqual(plans[0].topics, ['Gaming']);
 });
 
+test('buildDiscoveryQueryPlans expands strong topics through approved graph relations', () => {
+  const plans = buildDiscoveryQueryPlans(
+    { id: 'alg-graph', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
+    [
+      { id: 'gaming', canonicalName: 'Gaming', aliases: [], intents: [] },
+      { id: 'rpg', canonicalName: 'Role-playing games', aliases: ['RPG'], intents: [] },
+    ],
+    [{ source_concept_id: 'gaming', target_concept_id: 'rpg', relation_type: 'child_of', weight: 0.9 }],
+  );
+
+  assert.ok(plans.some((plan) => plan.lane === 'intent' && /Role-playing games/i.test(plan.text)));
+});
+
 test('buildDiscoveryQueries derives one query per strong topic alongside the goal', () => {
   const queries = buildDiscoveryQueries({
     name: 'Work',

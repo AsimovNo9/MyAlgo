@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import type { AlgorithmIntentProfile } from '@/lib/concepts';
 import { buildConceptsApiResponse } from '@/lib/concepts';
+import { loadConceptCatalogForRequest } from '@/lib/semantic-catalog';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -17,15 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Supabase is not configured.' }, { status: 500 });
   }
 
-  const { data: conceptEntries, error: conceptError } = await client
-    .from('concept_entries')
-    .select('id, canonical_name, aliases, intents')
-    .order('canonical_name', { ascending: true });
-
-  if (conceptError || !conceptEntries) {
-    console.error('Failed to load concept catalog', conceptError);
-    return NextResponse.json({ error: 'Unable to load the concept catalog.' }, { status: 500 });
-  }
+  const conceptEntries = await loadConceptCatalogForRequest();
 
   const { data: algorithms, error } = await client
     .from('algorithms')

@@ -3,6 +3,7 @@ import { buildFeedResponse, normalizeClassificationRecord, summarizeFeedGenerati
 import { redactSensitiveValues } from '@/lib/logging';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { loadApprovedConceptGraph } from '@/lib/semantic-catalog';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -137,7 +138,8 @@ export async function GET(request: Request) {
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
   const activitySignals = await fetchActivitySignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
-  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters, activitySignals });
+  const conceptGraph = await loadApprovedConceptGraph(await createSupabaseServerClient());
+  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters, activitySignals, conceptGraph });
   console.info('Feed generation summary', redactSensitiveValues({
     userId,
     algorithmId: activeAlgorithm?.id ?? null,

@@ -3,7 +3,8 @@ import { discoverAndQueueSeedChannels } from '@/lib/channel-discovery';
 
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
-  return !secret || request.headers.get('authorization') === `Bearer ${secret}`;
+  if (!secret) return process.env.NODE_ENV !== 'production';
+  return request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
 export async function GET(request: Request) {
