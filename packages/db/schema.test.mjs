@@ -22,6 +22,10 @@ const vectorMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920092000_add_vector_retrieval.sql'),
   'utf8',
 );
+const conceptMetadataMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920093000_add_concept_metadata.sql'),
+  'utf8',
+);
 const seedChannelsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920000000_add_topic_seed_channels.sql'),
   'utf8',
@@ -97,6 +101,15 @@ test('vector retrieval is optional, versioned, indexed, and protected by RLS', (
   assert.match(vectorMigration, /match_content_embeddings/i);
   assert.match(vectorMigration, /model_version text not null/i);
   assert.match(vectorMigration, /alter table public\.content_embeddings enable row level security/i);
+});
+
+test('concept catalog metadata columns are tracked', () => {
+  assert.match(schema, /entities text\[\] not null default '\{\}'/i);
+  assert.match(schema, /positive_phrases text\[\] not null default '\{\}'/i);
+  assert.match(schema, /negative_phrases text\[\] not null default '\{\}'/i);
+  assert.match(conceptMetadataMigration, /add column if not exists entities text\[\]/i);
+  assert.match(conceptMetadataMigration, /add column if not exists positive_phrases text\[\]/i);
+  assert.match(conceptMetadataMigration, /add column if not exists negative_phrases text\[\]/i);
 });
 
 test('topic seed channels table is present in the tracked migration with a unique topic+channel constraint', () => {
