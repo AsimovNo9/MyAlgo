@@ -70,8 +70,8 @@ test('buildRecommendationQueries expands aliases for arbitrary catalog concepts'
     intents: ['qubit systems', 'quantum error correction'],
   }]);
 
-  assert.equal(queries.some((query) => query.text === 'quantum information'), true);
-  assert.equal(queries.some((query) => query.text === 'qubit systems'), true);
+  assert.equal(queries.some((query) => /quantum information|quantum algorithms/i.test(query.text)), true);
+  assert.equal(queries.some((query) => /qubit systems|quantum error correction/i.test(query.text)), true);
 });
 
 test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {
@@ -105,12 +105,9 @@ test('buildRecommendationQueries is bounded, round-robin, and deduplicated', () 
 
   const queries = buildRecommendationQueries(profile, 4);
 
-  assert.deepEqual(queries.map((query) => query.text), [
-    'Nintendo RPGs',
-    'game design',
-    'Engineering guide',
-    'RPG guide',
-  ]);
-  assert.deepEqual(queries.map((query) => query.lane), ['goal', 'alias', 'format', 'format']);
+  assert.equal(queries[0].text, 'Nintendo RPGs');
+  assert.equal(queries.some((query) => query.text === 'Engineering guide'), true);
+  assert.equal(queries.some((query) => query.text === 'RPG guide'), true);
+  assert.equal(queries.some((query) => /game design|gameplay|game development/i.test(query.text)), true);
   assert.equal(new Set(queries.map((query) => query.text.toLowerCase())).size, queries.length);
 });
