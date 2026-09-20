@@ -30,6 +30,7 @@ Implemented does not imply verified locally. Verified locally does not imply ver
 | Freshness candidate retrieval | Verified locally | Discovery planning adds bounded `topic latest` queries within the existing sync budget; creator-query retrieval remains planned. |
 | Explicit creator candidate retrieval | Verified locally | `creator:` and `channel:` positive rules now generate bounded creator query plans; learned creator retrieval remains planned. |
 | Learned creator candidate retrieval | Verified locally | Strong channel affinities from liked content and feedback now feed bounded creator queries during YouTube sync. |
+| Active algorithm coverage | In progress | Recognized algorithm names now seed retrieval when custom topic weights are weak; live sync should be rerun to populate discovery candidates. |
 | Feed ranking and hard filters | Verified locally | Feed tests cover relevance, rules, diversity, source controls, and watched-state behavior. Real-user quality remains unverified. |
 | Extension native-card ranking/replacement | Implemented, verified locally | Content-script build passes. Real YouTube Home/Search/Subscriptions/Shorts compatibility remains unverified. |
 | Authentication and YouTube OAuth | Production blocked | Local encryption/refresh paths pass, but the deployed browser currently reports invalid/missing Supabase public configuration before sign-in. Vercel must set valid `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, then OAuth/browser smoke tests remain. |
