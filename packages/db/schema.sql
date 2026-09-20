@@ -86,6 +86,7 @@ create table public.classifications (
   content_type text,
   language text,
   format text,
+  confidence numeric check (confidence is null or (confidence >= 0 and confidence <= 1)),
   quality_score numeric,
   reasoning text,
   classified_at timestamptz not null default now()

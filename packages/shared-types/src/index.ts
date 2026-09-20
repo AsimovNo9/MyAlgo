@@ -91,6 +91,7 @@ export interface ClassifyResponse {
   content_type?: string | null;
   language?: string | null;
   format?: string | null;
+  confidence?: number | null;
   quality_score?: number | null;
   reasoning?: string | null;
 }

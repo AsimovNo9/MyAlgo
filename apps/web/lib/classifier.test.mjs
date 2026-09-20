@@ -10,6 +10,7 @@ test('classifyContent keeps deterministic topic matches local', async () => {
   assert.ok(classification.topics.includes('Tutorial'));
   assert.equal(classification.format, 'tutorial');
   assert.equal(classification.language, null);
+  assert.equal(classification.confidence >= 0.7, true);
 });
 
 test('classifyContent detects known script languages without treating Latin content as English', async () => {
@@ -28,6 +29,7 @@ test('classifyContent falls back to General when semantic AI is not configured',
 
     assert.deepEqual(classification.topics, ['General']);
     assert.equal(classification.content_type, 'general');
+    assert.equal(classification.confidence, 0.2);
   } finally {
     if (previousKey === undefined) {
       delete process.env.ANTHROPIC_API_KEY;

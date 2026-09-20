@@ -571,6 +571,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
         content_type: classification.content_type,
         language: classification.language,
         format: classification.format,
+        confidence: classification.confidence,
         quality_score: classification.quality_score,
         reasoning: classification.reasoning,
       },

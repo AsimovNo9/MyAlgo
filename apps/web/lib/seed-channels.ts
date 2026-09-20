@@ -107,6 +107,7 @@ export async function syncSeedChannelContent() {
           content_type: detected.content_type,
           language: detected.language,
           format: detected.format,
+          confidence: detected.confidence,
           quality_score: detected.quality_score,
           reasoning: detected.reasoning,
         },

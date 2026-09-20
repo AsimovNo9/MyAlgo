@@ -42,6 +42,10 @@ const activityEventsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920070000_add_activity_events.sql'),
   'utf8',
 );
+const classificationConfidenceMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920080000_add_classification_confidence.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -102,6 +106,12 @@ test('activity events are tracked with bounded watch duration and RLS', () => {
   assert.match(activityEventsMigration, /create table if not exists public\.activity_events/i);
   assert.match(activityEventsMigration, /watch_seconds integer check/i);
   assert.match(activityEventsMigration, /enable row level security/i);
+});
+
+test('classification confidence is bounded and tracked in schema and migration', () => {
+  assert.match(schema, /confidence numeric check \(confidence is null or \(confidence >= 0 and confidence <= 1\)\)/i);
+  assert.match(classificationConfidenceMigration, /add column if not exists confidence numeric/i);
+  assert.match(classificationConfidenceMigration, /confidence >= 0 and confidence <= 1/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {
