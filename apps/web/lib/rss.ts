@@ -1,4 +1,5 @@
 import { fetchWithRetry } from './http.ts';
+import { createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
 
 export type RssVideoItem = {
   videoId: string;
@@ -6,6 +7,7 @@ export type RssVideoItem = {
   channelName: string | null;
   description: string | null;
   publishedAt: string | null;
+  provenance?: CandidateProvenance;
 };
 
 function decodeXmlEntities(value: string): string {
@@ -58,5 +60,12 @@ export async function fetchChannelRssItems(channelId: string): Promise<RssVideoI
     return [];
   }
 
-  return parseYoutubeRssFeed(await response.text());
+  const retrievedAt = new Date().toISOString();
+  return parseYoutubeRssFeed(await response.text()).map((item) => ({
+    ...item,
+    provenance: createCandidateProvenance('youtube_rss', {
+      channel_id: channelId,
+      retrievedAt,
+    }),
+  }));
 }
