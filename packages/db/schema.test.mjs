@@ -22,6 +22,10 @@ const discoveryRunsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920020000_add_topic_discovery_runs.sql'),
   'utf8',
 );
+const algorithmConsistencyMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920030000_enforce_algorithm_consistency.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -50,6 +54,12 @@ test('topic discovery runs are tracked for shared cold-start deduplication', () 
   assert.match(discoveryRunsMigration, /create table if not exists public\.topic_discovery_runs/i);
   assert.match(discoveryRunsMigration, /topic text primary key/i);
   assert.match(discoveryRunsMigration, /enable row level security/i);
+});
+
+test('algorithm consistency migration deduplicates names and enforces one active row', () => {
+  assert.match(algorithmConsistencyMigration, /partition by user_id, lower\(btrim\(name\)\)/i);
+  assert.match(algorithmConsistencyMigration, /algorithms_one_name_per_user/i);
+  assert.match(algorithmConsistencyMigration, /algorithms_one_active_per_user/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

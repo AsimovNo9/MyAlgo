@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
-import { buildFeedResponse, normalizeClassificationRecord } from './feed.ts';
+import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, normalizeClassificationRecord } from './feed.ts';
 import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
@@ -13,6 +13,41 @@ test('normalizeClassificationRecord unwraps Supabase nested relation arrays', ()
 
   assert.deepEqual(record?.topics, ['AI', 'Productivity']);
   assert.equal(record?.quality_score, 91);
+});
+
+test('getEligibleTopicNames prevents low-weight secondary topics from admitting content', () => {
+  const eligible = getEligibleTopicNames({
+    name: 'Relax',
+    topic_weights: [
+      { topic: 'Entertainment', weight: 80 },
+      { topic: 'Productivity', weight: 30 },
+      { topic: 'AI', weight: 20 },
+    ],
+  });
+
+  assert.deepEqual([...eligible], ['entertainment']);
+});
+
+test('getEligibleTopicNames keeps weight-50 topics eligible when all topics are weight 50', () => {
+  const eligible = getEligibleTopicNames({
+    name: 'Gaming',
+    topic_weights: [{ topic: 'Games', weight: 50 }, { topic: 'Gaming news', weight: 50 }],
+  });
+
+  assert.deepEqual([...eligible], ['games', 'gaming news']);
+});
+
+test('diversifyFeedItems limits repeated channels and numbered series', () => {
+  const items = [
+    { id: '1', external_id: '1', title: 'Wolverine Gameplay Part 1', channel_name: 'Gaming Hub', score: 100, visible: true },
+    { id: '2', external_id: '2', title: 'Wolverine Gameplay Part 2', channel_name: 'Console Guides', score: 99, visible: true },
+    { id: '3', external_id: '3', title: 'Wolverine Gameplay Part 3', channel_name: 'Walkthrough World', score: 98, visible: true },
+    { id: '4', external_id: '4', title: 'New RPG release analysis', channel_name: 'Gaming Hub', score: 97, visible: true },
+    { id: '5', external_id: '5', title: 'Indie game design interview', channel_name: 'Gaming Hub', score: 96, visible: true },
+    { id: '6', external_id: '6', title: 'Computer Vision Research', channel_name: 'Vision Lab', score: 95, visible: true },
+  ];
+
+  assert.deepEqual(diversifyFeedItems(items).map((item) => item.external_id), ['1', '2', '4', '6']);
 });
 
 test('fetchWithRetry retries transient responses and returns the recovered response', async () => {

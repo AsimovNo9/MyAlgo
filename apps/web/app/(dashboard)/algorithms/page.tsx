@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { Algorithm, AlgorithmPayload, RuleType, TopicWeight } from '@repo/shared-types';
+import type { Algorithm, AlgorithmActivationResponse, AlgorithmPayload, RuleType, TopicWeight } from '@repo/shared-types';
 
 type Preset = {
   name: string;
@@ -156,6 +156,8 @@ export default function AlgorithmsPage() {
   const [customRuleType, setCustomRuleType] = useState<RuleType>('priority');
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [customTopicText, setCustomTopicText] = useState('');
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [activationStatus, setActivationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchAlgorithms();
@@ -215,7 +217,7 @@ export default function AlgorithmsPage() {
 
       return {
         ...current,
-        topic_weights: [...current.topic_weights, { topic: normalized, weight: 50 }],
+        topic_weights: [...current.topic_weights, { topic: normalized, weight: 60 }],
       };
     });
     setCustomTopicText('');
@@ -288,6 +290,10 @@ export default function AlgorithmsPage() {
       });
 
       if (response.ok) {
+        const algorithm = await response.json() as Algorithm;
+        if (algorithm.id) {
+          await handleActivate(algorithm);
+        }
         setSelectedPresetName('');
         setForm({
           name: 'Work',
@@ -300,6 +306,32 @@ export default function AlgorithmsPage() {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivate = async (algorithm: Algorithm) => {
+    if (!algorithm.id) return;
+    setActivatingId(algorithm.id);
+    setActivationStatus('Using the shared library and finding more if needed…');
+
+    try {
+      const response = await fetch('/api/algorithms/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ algorithmId: algorithm.id }),
+      });
+      const result = await response.json() as AlgorithmActivationResponse;
+      if (!response.ok) throw new Error(result.error ?? 'Unable to activate algorithm.');
+      setActivationStatus(result.tier === 0
+        ? `Using ${result.poolCount} items from the shared library.`
+        : result.tier === 1
+          ? `Added trusted-channel content; ${result.poolCount} items are ready.`
+          : `Expanded this topic; ${result.poolCount} items are ready.`);
+      await fetchAlgorithms();
+    } catch (error) {
+      setActivationStatus(error instanceof Error ? error.message : 'Unable to activate algorithm.');
+    } finally {
+      setActivatingId(null);
     }
   };
 
@@ -736,6 +768,7 @@ export default function AlgorithmsPage() {
       <section style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(248,250,252,0.74) 100%)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRadius: 24, padding: 20, border: '1px solid rgba(148,163,184,0.2)', boxShadow: '0 10px 28px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255,255,255,0.9)' }}>
         <h2 style={{ marginTop: 0, color: '#0f172a', letterSpacing: '-0.04em' }}>Saved algorithms</h2>
         {activeAlgorithm ? <p style={{ color: '#334155' }}>Active mode: {activeAlgorithm.name}</p> : <p style={{ color: '#334155' }}>No algorithms yet.</p>}
+        {activationStatus ? <p style={{ color: '#334155' }}>{activationStatus}</p> : null}
         {deleteError ? <p style={{ color: '#b91c1c' }}>{deleteError}</p> : null}
         <div style={{ display: 'grid', gap: 12 }}>
           {algorithms.map((algorithm) => (
@@ -756,6 +789,14 @@ export default function AlgorithmsPage() {
                   </span>
                 ))}
               </div>
+              <button
+                type="button"
+                onClick={() => void handleActivate(algorithm)}
+                disabled={!algorithm.id || activatingId !== null}
+                style={{ marginTop: 14, marginRight: 8, border: '1px solid #bfdbfe', background: algorithm.is_active ? '#dbeafe' : '#eff6ff', color: '#1d4ed8', borderRadius: 10, padding: '8px 12px', cursor: activatingId !== null ? 'wait' : 'pointer', fontWeight: 700 }}
+              >
+                {activatingId === algorithm.id ? 'Finding content…' : algorithm.is_active ? 'Active' : 'Activate'}
+              </button>
               <button
                 type="button"
                 onClick={() => void handleDelete(algorithm)}

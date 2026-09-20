@@ -1,4 +1,4 @@
-import type { Algorithm, FeedResponse, FeedSourceFilters } from '@repo/shared-types';
+import type { Algorithm, AlgorithmActivationResponse, FeedResponse, FeedSourceFilters } from '@repo/shared-types';
 import { getExtensionAccessToken, signOutExtension } from './auth';
 
 export type PageCandidate = {
@@ -45,6 +45,23 @@ export async function fetchAlgorithms(): Promise<Algorithm[]> {
   }
 
   return (await response.json()) as Algorithm[];
+}
+
+export async function activateAlgorithm(algorithmId: string): Promise<AlgorithmActivationResponse> {
+  const baseUrl = await getApiBaseUrl();
+  const accessToken = await getExtensionAccessToken();
+  const response = await fetch(`${baseUrl}/api/algorithms/activate`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ algorithmId }),
+  });
+  const body = await response.json().catch(() => null) as AlgorithmActivationResponse | null;
+  if (!response.ok || !body) throw new Error(body?.error ?? `Unable to activate algorithm: ${response.status}`);
+  return body;
 }
 
 export async function fetchFeed(mode?: string, sourceFilters?: FeedSourceFilters): Promise<FeedResponse> {

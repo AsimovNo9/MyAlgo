@@ -5,7 +5,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 ## Current focus
 - [ ] Quality-first feed relevance: unrelated items must be hidden or explained as fallback content
 - [ ] Add purchaser-facing source controls: subscribed-only, hide Shorts, and discovery toggle
-- [ ] Add feed quality signals: relevance threshold, empty state, diversity limits, and feedback loop
+- [x] Add feed quality signals: adaptive relevance eligibility, empty state, and diversity limits
 - [x] Resolve the extension ranking loop and stabilize the page-trigger behavior
 - [x] Add a clearer enabled/paused state in the popup and on the YouTube page
 - [x] Validate the extension locally with typecheck, tests, and a production build
@@ -47,6 +47,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Apply final schema and channel metadata migrations to the production Supabase project
 - [x] Add automated schema coverage for RLS enablement and policy presence
 - [x] Deduplicate user algorithm rows by name so ranking always uses the newest configured row
+- [x] Enforce one case-insensitive name and one active algorithm per user at the database layer
 - [ ] Confirm RLS policies are active and tested for user isolation in production
 - [x] Verify profile creation and OAuth persistence for the approved test user
 - [ ] Validate database backups and recovery expectations
@@ -69,12 +70,12 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Feed ranking and scoring
 - [x] Enforce strict topic relevance in the normal feed path and return a useful empty state when nothing matches
-- [ ] Add a configurable relevance threshold and explain why borderline items are shown
+- [x] Add adaptive topic eligibility so low-weight secondary topics cannot independently admit content
 - [x] Add source controls for subscriptions, discovery, Shorts, and live content
 - [x] Discover content from every strong topic in a multi-topic algorithm, not just the top one
 - [x] Make never_show filter by classifier content_type, independent of the source channel
 - [x] Let always_show/never_show rules pin or exclude a channel by name (no schema change)
-- [ ] Add channel diversity and duplicate suppression to improve perceived feed quality
+- [x] Add channel diversity and numbered-series suppression to improve perceived feed quality
 - [ ] Validate ranking logic against real user subscriptions and content
 - [x] Add regression coverage for positive feedback and rule precedence
 - [ ] Check rule precedence and feedback weighting in production conditions
