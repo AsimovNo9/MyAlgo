@@ -7,7 +7,7 @@
     "build": "next build",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test lib/candidates.test.mjs lib/feed.test.mjs lib/discovery.test.mjs lib/learned-profile.test.mjs lib/recommendation-profile.test.mjs lib/rss.test.mjs lib/seed-channels.test.mjs lib/channel-discovery.test.mjs"
+    "test": "node --experimental-strip-types --test lib/candidate-generation.test.mjs lib/candidates.test.mjs lib/feed.test.mjs lib/discovery.test.mjs lib/learned-profile.test.mjs lib/recommendation-profile.test.mjs lib/rss.test.mjs lib/seed-channels.test.mjs lib/channel-discovery.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.0",
