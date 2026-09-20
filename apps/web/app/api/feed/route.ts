@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { buildFeedResponse, normalizeClassificationRecord, summarizeFeedGeneration, type FeedCandidate } from '@/lib/feed';
+import { buildFeedResponse, getEligibleTopicNames, normalizeClassificationRecord, summarizeFeedGeneration, type FeedCandidate } from '@/lib/feed';
 import { redactSensitiveValues } from '@/lib/logging';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -139,16 +139,19 @@ export async function GET(request: Request) {
   const activitySignals = await fetchActivitySignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
   const conceptGraph = await loadApprovedConceptGraph(await createSupabaseServerClient());
-  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters, activitySignals, conceptGraph });
+  const feedCandidates = liveItems.length > 0 ? liveItems : undefined;
+  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph });
+  const metricsResponse = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph, includeHidden: true });
+  const generationMetrics = summarizeFeedGeneration(metricsResponse, liveItems, Date.now() - startedAt, [...getEligibleTopicNames(activeAlgorithm)]);
   console.info('Feed generation summary', redactSensitiveValues({
     userId,
     algorithmId: activeAlgorithm?.id ?? null,
-    ...summarizeFeedGeneration(response, liveItems, Date.now() - startedAt),
+    ...generationMetrics,
   }));
 
   if (activeAlgorithm?.id) {
     await persistFeedCacheForUser(userId, activeAlgorithm.id, response.items);
   }
 
-  return NextResponse.json(response);
+  return NextResponse.json({ ...response, metrics: generationMetrics });
 }

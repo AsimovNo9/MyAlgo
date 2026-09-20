@@ -25,6 +25,12 @@ export type FeedGenerationSummary = {
   laneCounts: Record<'matched' | 'discovery' | 'explore', number>;
   sourceCounts: Record<string, number>;
   durationMs: number;
+  topicCoverage?: Record<string, {
+    retrieved: number;
+    classifiedMatching: number;
+    eligible: number;
+    visible: number;
+  }>;
 };
 
 const demoVideos: FeedCandidate[] = [
@@ -563,9 +569,21 @@ export function summarizeFeedGeneration(
   response: FeedResponse,
   candidates: FeedCandidate[],
   durationMs: number,
+  strongTopics: string[] = [],
 ): FeedGenerationSummary {
   const laneCounts: FeedGenerationSummary['laneCounts'] = { matched: 0, discovery: 0, explore: 0 };
   const sourceCounts: Record<string, number> = {};
+  const topicCoverage = Object.fromEntries(
+    strongTopics
+      .map((topic) => topic.trim().toLowerCase())
+      .filter(Boolean)
+      .map((topic) => [topic, {
+        retrieved: candidates.filter((candidate) => (candidate.topics ?? []).some((item) => item.trim().toLowerCase() === topic)).length,
+        classifiedMatching: candidates.filter((candidate) => (candidate.topics ?? []).some((item) => item.trim().toLowerCase() === topic)).length,
+        eligible: response.items.filter((item) => item.visible && (item.matched_topics ?? []).some((itemTopic) => itemTopic.trim().toLowerCase() === topic)).length,
+        visible: response.items.filter((item) => item.visible && (item.matched_topics ?? []).some((itemTopic) => itemTopic.trim().toLowerCase() === topic)).length,
+      }]),
+  );
 
   for (const item of response.items) {
     if (item.lane) laneCounts[item.lane] += 1;
@@ -582,5 +600,6 @@ export function summarizeFeedGeneration(
     laneCounts,
     sourceCounts,
     durationMs: Math.max(0, Math.round(durationMs)),
+    ...(strongTopics.length > 0 ? { topicCoverage } : {}),
   };
 }

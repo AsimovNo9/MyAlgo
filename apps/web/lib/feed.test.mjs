@@ -81,6 +81,27 @@ test('summarizeFeedGeneration returns metrics without content identifiers', () =
   assert.equal(JSON.stringify(summary).includes('matched-id'), false);
 });
 
+test('summarizeFeedGeneration reports privacy-safe per-topic pipeline counts', () => {
+  const response = buildFeedResponse(
+    { name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { external_id: 'matched-id', title: 'AI tutorial', topics: ['AI'] },
+      { external_id: 'other-id', title: 'Entertainment recap', topics: ['Entertainment'] },
+    ],
+    { includeHidden: true },
+  );
+
+  const summary = summarizeFeedGeneration(response, [
+    { external_id: 'matched-id', title: 'AI tutorial', topics: ['AI'] },
+    { external_id: 'other-id', title: 'Entertainment recap', topics: ['Entertainment'] },
+  ], 5, ['AI']);
+
+  assert.deepEqual(summary.topicCoverage, {
+    ai: { retrieved: 1, classifiedMatching: 1, eligible: 1, visible: 1 },
+  });
+});
+
 test('getEligibleTopicNames prevents low-weight secondary topics from admitting content', () => {
   const eligible = getEligibleTopicNames({
     name: 'Relax',

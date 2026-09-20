@@ -19,6 +19,7 @@ Implemented does not imply verified locally. Verified locally does not imply ver
 |---|---|---|
 | Shared TypeScript contracts | Verified locally | `packages/shared-types/src/index.ts`; shared contract tests and root typecheck pass. |
 | Recommendation evaluation contracts and metrics | Verified locally | `apps/web/lib/recommendation-evaluation.ts` fixtures/metrics and route-boundary tests pass; production baselines are not collected yet. |
+| Recommendation baseline collector | Verified locally | `/api/feed` now exposes privacy-safe per-interest pipeline counts and the production collector reports aggregate candidate, semantic-hit, and topic-coverage metrics; authenticated production collection remains open. |
 | Semantic reranking evaluation | Verified locally | Feed regression coverage proves bounded semantic similarity improves ordering without bypassing language exclusions; production comparison remains open. |
 | Production candidate quality instrumentation | Verified locally | Sync responses now expose duplicate rate, classification coverage, source diversity, topic coverage, and freshness coverage; production baselines remain open. |
 | Concept intent aliases and profiles | Verified locally | `apps/web/lib/concepts.ts`, persisted intent migration, normalized database catalog loader, fallback tests, and concepts API path. Query planning, classification, and explanations consume the catalog. |
