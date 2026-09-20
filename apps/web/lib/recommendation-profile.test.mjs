@@ -51,6 +51,29 @@ test('buildRecommendationProfile keeps a recognized algorithm name as a retrieva
   assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.topics.includes('Gaming')), true);
 });
 
+test('buildRecommendationQueries expands aliases for arbitrary catalog concepts', () => {
+  const profile = buildRecommendationProfile({
+    name: 'Science',
+    topic_weights: [{ topic: 'Quantum computing', weight: 90 }],
+    rules: [],
+  }, [{
+    id: 'quantum',
+    canonicalName: 'Quantum computing',
+    aliases: ['quantum information', 'quantum algorithms'],
+    intents: ['qubit systems', 'quantum error correction'],
+  }]);
+
+  const queries = buildRecommendationQueries(profile, 10, [{
+    id: 'quantum',
+    canonicalName: 'Quantum computing',
+    aliases: ['quantum information', 'quantum algorithms'],
+    intents: ['qubit systems', 'quantum error correction'],
+  }]);
+
+  assert.equal(queries.some((query) => query.text === 'quantum information'), true);
+  assert.equal(queries.some((query) => query.text === 'qubit systems'), true);
+});
+
 test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {
   const profile = buildRecommendationProfile({
     name: 'Gaming',
