@@ -20,6 +20,7 @@ Implemented does not imply verified locally. Verified locally does not imply ver
 | Shared TypeScript contracts | Verified locally | `packages/shared-types/src/index.ts`; shared contract tests and root typecheck pass. |
 | Recommendation evaluation contracts and metrics | Verified locally | `apps/web/lib/recommendation-evaluation.ts` fixtures/metrics and route-boundary tests pass; production baselines are not collected yet. |
 | Recommendation baseline collector | Verified locally | `/api/feed` now exposes privacy-safe per-interest pipeline counts and the production collector reports aggregate candidate, semantic-hit, and topic-coverage metrics; authenticated production collection remains open. |
+| Production recommender preflight | Partially verified in production | Deployment/API checks, pgvector/RPC checks, remote migration presence, and protected embedding-status reachability pass; authenticated aggregate baseline is blocked until `SUPABASE_ACCESS_TOKEN` is supplied. |
 | Semantic reranking evaluation | Verified locally | Feed regression coverage proves bounded semantic similarity improves ordering without bypassing language exclusions; production comparison remains open. |
 | Production candidate quality instrumentation | Verified locally | Sync responses now expose duplicate rate, classification coverage, source diversity, topic coverage, and freshness coverage; production baselines remain open. |
 | Concept intent aliases and profiles | Verified locally | `apps/web/lib/concepts.ts`, persisted intent migration, normalized database catalog loader, fallback tests, and concepts API path. Query planning, classification, and explanations consume the catalog. |
@@ -51,8 +52,9 @@ Implemented does not imply verified locally. Verified locally does not imply ver
 
 ## Canonical Next Sequence
 
-1. Complete production safety gates: OAuth, YouTube sync, token refresh/encryption, RLS isolation, cron secrets, and extension live smoke tests.
-2. Confirm the merged release deploys the hardened backfill route and configure Vercel embedding variables.
-3. Run the authorized production embedding backfill and collect authenticated candidate-quality baselines.
-4. Complete real-user OAuth and YouTube browser smoke tests, then compare semantic ranking against the flat-label baseline.
-5. Reconcile production metrics and update this document before marking any production status complete.
+1. Complete production extension authentication, OAuth/token refresh, encryption, and RLS isolation checks.
+2. Verify cron authorization, production observability, backups, and secret separation.
+3. Configure embedding variables, run authorized content backfill, and verify vector-assisted sync.
+4. Run authenticated production feed/rank baselines and compare semantic ranking against the flat-label baseline.
+5. Test mode switching and extension behavior across Home, Search, Subscriptions, Shorts, navigation, and infinite scroll.
+6. Reconcile production metrics and update this document before marking any production status complete.
