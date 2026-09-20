@@ -48,7 +48,7 @@ test('buildRecommendationProfile keeps a recognized algorithm name as a retrieva
   });
 
   assert.equal(profile.explicitTopics.includes('Gaming'), true);
-  assert.equal(buildRecommendationQueries(profile, 5).some((query) => /Gaming/i.test(query.text)), true);
+  assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.topics.includes('Gaming')), true);
 });
 
 test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {

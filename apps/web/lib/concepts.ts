@@ -250,7 +250,7 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalo
   if (algorithmName && !canonicalTopics.some((topic) => normalizeTopic(topic) === normalizeTopic(algorithmName))) {
     const algorithmConcept = resolveTopicConcepts(algorithmName, catalog);
     if (algorithmConcept.aliases.length > 0 || algorithmConcept.intents.length > 0) {
-      canonicalTopics.push(algorithmName);
+      canonicalTopics.unshift(algorithmName);
     }
   }
 
