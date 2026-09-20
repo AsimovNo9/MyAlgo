@@ -258,5 +258,6 @@ Expand `youtube-fixtures.ts` and content-script tests for:
 6. [#130](https://github.com/AsimovNo9/MyAlgo/issues/130) Topic weight sliders, explicit normalization, and rule separation.
 7. [#131](https://github.com/AsimovNo9/MyAlgo/issues/131) Calibration UX, learning explanation, reset/rebuild controls.
 8. [#132](https://github.com/AsimovNo9/MyAlgo/issues/132) Authenticated baseline and real-browser production demo.
+9. [#136](https://github.com/AsimovNo9/MyAlgo/issues/136) Accessible visual contract and visual-regression suite across extension surfaces.
 
 Each issue should remain independently testable and must not weaken hard exclusions or trigger retrieval from DOM mutations.
