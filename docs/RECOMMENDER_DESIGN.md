@@ -76,6 +76,34 @@ Visual classification is a later option for gaps that metadata cannot solve, suc
 - `algorithm_intent_profiles` persists derived intent data per algorithm.
 - This is the correct foundation for query expansion, but it is not itself a learned taste profile.
 
+### Current architecture assessment
+
+The current implementation has the ingredients of retrieval, but not yet a separate candidate-generation subsystem:
+
+- `buildRecommendationProfile` derives explicit topics, rules, language, and formats.
+- `buildDiscoveryQueries` produces a bounded query list, but the public compatibility API currently returns query strings rather than a fully annotated retrieval plan.
+- YouTube Search runs during subscription sync when the shared pool is thin.
+- RSS runs as shared channel ingestion and is correctly preferred for approved seed channels.
+- `buildLearnedAffinityProfile` is an initial request-time signal derived from feedback-linked candidates; it is not yet a historical taste model and does not include liked videos, observed activity, creators, or entities.
+- `/api/feed` still reads and reranks the recent shared pool. It is not allowed to invent candidates during a feed read, which is correct for latency and quota control.
+
+The pasted paper therefore supports the direction, but does not justify adding a larger model or an image classifier next. The controlling product gap is still candidate coverage.
+
+### Steering decision
+
+The next major outcome is a standalone, quota-aware candidate-generation subsystem that assembles one normalized pool from subscriptions, approved RSS, and bounded YouTube Search. Ranking and candidate generation must have separate contracts and tests.
+
+The MVP target should be a useful, measured pool rather than an arbitrary 200-1000 Search results. A practical budget is:
+
+```text
+shared RSS and subscription pool: primary coverage
+YouTube Search: bounded gap filling only
+per sync: at most 5 queries and 5 results per query
+deduplicated candidate pool: normally 75-200 items across all sources
+```
+
+The system should measure topic coverage and source contribution before increasing this budget. More candidates do not help if classification, quota, latency, and deduplication costs make the feed stale.
+
 ## 5. Target architecture
 
 ```mermaid
@@ -522,9 +550,9 @@ A separate `/api/discover` endpoint is optional. The first implementation can ex
 
 ## 16. Immediate next engineering task
 
-Implement the typed, pure `RecommendationProfile` and query-planner layer, then wire it into the existing YouTube Search discovery path while leaving RSS ingestion and the current reranker intact.
+Implement a standalone candidate-generation coordinator that consumes the recommendation profile and returns a deduplicated, provenance-preserving candidate pool from the shared content pool, approved RSS, subscriptions, and bounded YouTube Search.
 
-This is the smallest change that moves the product from "rank the current pool" toward "generate a pool for this user" without prematurely introducing new infrastructure or an opaque model.
+The coordinator should run only from activation or sync jobs. `/api/feed` and page ranking should consume its cached output and never trigger retrieval. This is the smallest change that moves the product from "rank the current pool" toward "generate a pool for this user" without prematurely introducing new infrastructure or an opaque model.
 
 ## 17. Implementation checklist
 
@@ -532,7 +560,7 @@ This is the smallest change that moves the product from "rank the current pool" 
 
 - [ ] Define the typed `RecommendationProfile`, query, facet, and provenance contracts.
 - [x] Derive explicit topics, semantic terms, positive rules, negative rules, and format intent from an algorithm.
-- [ ] Generate bounded, deduplicated queries across goal, topic, alias, intent, creator, format, and freshness lanes.
+- [ ] Generate bounded, deduplicated, annotated queries across goal, topic, alias, intent, creator, format, and freshness lanes.
 - [x] Keep query generation deterministic and independent of network or database access.
 - [x] Preserve the existing `buildDiscoveryQueries` API while routing it through the planner.
 - [x] Add tests for multi-topic coverage, aliases, negative rules, deduplication, and query limits.
@@ -544,6 +572,8 @@ This is the smallest change that moves the product from "rank the current pool" 
 - [x] Reuse the shared RSS pool before spending YouTube Search quota.
 - [x] Run Search only from activation or sync jobs, never from page mutations or ordinary feed reads.
 - [x] Add language and format constraints to retrieval when explicit preferences exist.
+- [ ] Add a candidate-generation coordinator with source budgets, coverage accounting, and deterministic deduplication.
+- [ ] Return retrieval provenance and source contribution metrics from the coordinator.
 
 ### Milestone 3: Profile-aware reranking
 
@@ -560,3 +590,28 @@ This is the smallest change that moves the product from "rank the current pool" 
 - [ ] Recompute profile affinities from feedback and observed activity.
 - [ ] Add a user-facing taste calibration flow.
 - [ ] Evaluate semantic or visual classification only where text-first metadata leaves a demonstrated gap.
+
+## 18. Architecture decision record: retrieval before sophistication
+
+### Decision
+
+Prioritize candidate coverage and source orchestration before adding embeddings, image understanding, or a more complex learned ranker.
+
+### Why
+
+The current ranker can only select from `content_items` that already exist. A perfect score cannot recommend a video that was never retrieved. RSS gives inexpensive recurring coverage, while YouTube Search is useful for bounded topic-gap filling and channel discovery.
+
+### Consequences
+
+- Candidate generation becomes a server-side job boundary with explicit budgets.
+- Search results must be cached and attributed to a query/lane.
+- Feed reads remain fast and deterministic.
+- Ranking quality can be evaluated separately from retrieval coverage.
+- The learned profile remains deliberately modest until more behavioral data exists.
+
+### Rejected next steps
+
+- Do not add an image classifier now; the current metadata facets are not yet fully measured.
+- Do not create a permanent taste-profile table now; request-time feedback-derived affinities are sufficient for the next retrieval slice.
+- Do not expand Search to hundreds of results per user; use RSS and shared pool coverage first.
+- Do not let YouTube's result order become the application ranking order.
