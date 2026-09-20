@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 650" width="900" height="650">
+  <defs>
+    <style>
+      .bg { fill: #0F0F0F; }
+      .surface { fill: #181818; rx: 8px; stroke: #2A2A2A; stroke-width: 1; }
+      .text-primary { fill: #FFFFFF; font-family: -apple-system, Roboto, sans-serif; }
+      .text-secondary { fill: #A1A1AA; font-family: -apple-system, Roboto, sans-serif; font-size: 13px; }
+      .thumbnail { fill: #27272A; rx: 6px 6px 0 0; }
+      .btn-positive { fill: rgba(16, 185, 129, 0.1); stroke: #10B981; stroke-width: 1; rx: 4px; }
+      .btn-positive-text { fill: #10B981; font-size: 13px; font-weight: 500; }
+      .btn-negative { fill: rgba(244, 63, 94, 0.1); stroke: #FB7185; stroke-width: 1; rx: 4px; }
+      .btn-negative-text { fill: #FB7185; font-size: 13px; font-weight: 500; }
+      .progress-track { fill: #27272A; rx: 4px; }
+      .progress-fill { fill: #6366F1; rx: 4px; }
+      .debug-panel { fill: #121212; stroke: #333; stroke-width: 1; rx: 6px; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="900" height="650" />
+
+  <text x="40" y="50" class="text-primary" font-size="24px" font-weight="600">Calibrate your feed</text>
+  <text x="40" y="74" class="text-secondary">Give quick feedback on candidates to sharpen the retrieval engine.</text>
+
+  <!-- Progress Bar -->
+  <rect x="40" y="100" width="820" height="8" class="progress-track" />
+  <rect x="40" y="100" width="328" height="8" class="progress-fill" /> <!-- 40% -->
+  <text x="800" y="90" class="text-secondary" font-size="12px">4 / 10 Rated</text>
+
+  <!-- Calibration Grid -->
+  <g transform="translate(40, 130)">
+    <!-- Card 1 -->
+    <rect x="0" y="0" width="260" height="280" class="surface" />
+    <rect x="0" y="0" width="260" height="146" class="thumbnail" /> <!-- Strict 16:9 -->
+    <text x="16" y="174" class="text-primary" font-size="15px" font-weight="500">Plan by day, let agents...</text>
+    <text x="16" y="196" class="text-secondary" font-size="13px">The Pragmatic Engineer</text>
+
+    <rect x="16" y="226" width="108" height="36" class="btn-positive" />
+    <text x="32" y="249" class="btn-positive-text">+ More like this</text>
+
+    <rect x="136" y="226" width="108" height="36" class="btn-negative" />
+    <text x="156" y="249" class="btn-negative-text">- Not for me</text>
+
+    <!-- Card 2 -->
+    <rect x="280" y="0" width="260" height="280" class="surface" />
+    <rect x="280" y="0" width="260" height="146" class="thumbnail" />
+    <text x="296" y="174" class="text-primary" font-size="15px" font-weight="500">How to avoid sleep while...</text>
+    <text x="296" y="196" class="text-secondary" font-size="13px">Logical Study21</text>
+
+    <rect x="296" y="226" width="108" height="36" class="btn-positive" />
+    <text x="312" y="249" class="btn-positive-text">+ More like this</text>
+
+    <rect x="416" y="226" width="108" height="36" class="btn-negative" />
+    <text x="436" y="249" class="btn-negative-text">- Not for me</text>
+
+    <!-- Card 3 -->
+    <rect x="560" y="0" width="260" height="280" class="surface" />
+    <rect x="560" y="0" width="260" height="146" class="thumbnail" />
+    <text x="576" y="174" class="text-primary" font-size="15px" font-weight="500">MARVEL'S WOLVERINE...</text>
+    <text x="576" y="196" class="text-secondary" font-size="13px">RadBrad</text>
+
+    <rect x="576" y="226" width="108" height="36" class="btn-positive" />
+    <text x="592" y="249" class="btn-positive-text">+ More like this</text>
+
+    <rect x="696" y="226" width="108" height="36" class="btn-negative" />
+    <text x="716" y="249" class="btn-negative-text">- Not for me</text>
+  </g>
+
+  <!-- Learned Signals / Semantic Debug State -->
+  <rect x="40" y="440" width="820" height="160" class="debug-panel" />
+  <text x="64" y="474" class="text-primary" font-weight="600" font-size="14px">LEARNED TASTE PROFILE</text>
+  <text x="64" y="496" class="text-secondary">Historical affinity signals derived from feedback. Does not override explicit exclusions.</text>
+
+  <rect x="64" y="520" width="140" height="26" fill="#18181B" stroke="#3F3F46" rx="13" />
+  <text x="80" y="538" class="text-primary" font-size="12px">Engineering <tspan fill="#34D399">+12</tspan></text>
+
+  <rect x="216" y="520" width="120" height="26" fill="#18181B" stroke="#3F3F46" rx="13" />
+  <text x="232" y="538" class="text-primary" font-size="12px">Tutorials <tspan fill="#34D399">+8</tspan></text>
+
+  <rect x="348" y="520" width="140" height="26" fill="#18181B" stroke="#3F3F46" rx="13" />
+  <text x="364" y="538" class="text-primary" font-size="12px">Gaming <tspan fill="#FB7185">-42 (Low)</tspan></text>
+
+  <rect x="64" y="566" width="140" height="32" fill="none" stroke="#6366F1" stroke-width="1" rx="4" />
+  <text x="86" y="586" fill="#6366F1" font-size="13px">Reset Learned Taste</text>
+</svg>

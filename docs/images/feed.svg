@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" width="960" height="380">
+  <defs>
+    <style>
+      .bg { fill: #0F0F0F; }
+      .text-primary { fill: #FFFFFF; font-family: -apple-system, Roboto, sans-serif; }
+      .text-secondary { fill: #AAAAAA; font-family: -apple-system, Roboto, sans-serif; font-size: 14px; }
+      .text-explanation { fill: #71717A; font-family: -apple-system, Roboto, sans-serif; font-size: 12px; }
+      .thumbnail-bg { fill: #212121; rx: 8px; }
+      .shelf-divider { stroke: rgba(255, 255, 255, 0.1); stroke-width: 4; }
+      .badge-bg { fill: rgba(16, 185, 129, 0.2); rx: 4px; }
+      .badge-text { fill: #10B981; font-size: 12px; font-weight: 500; font-family: sans-serif; }
+      .tag-bg { fill: rgba(99, 102, 241, 0.15); rx: 4px; }
+      .tag-text { fill: #818CF8; font-size: 11px; font-weight: 500; font-family: sans-serif; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="960" height="380" />
+
+  <!-- Shelf Header -->
+  <line x1="24" y1="20" x2="936" y2="20" class="shelf-divider" />
+  <text x="24" y="60" class="text-primary" font-size="20px" font-weight="bold">Personal Picks</text>
+  <text x="170" y="58" class="text-secondary">·</text>
+  <rect x="190" y="44" width="52" height="20" class="tag-bg" />
+  <text x="198" y="58" class="tag-text">WORK</text>
+
+  <!-- Video Card 1 -->
+  <g transform="translate(24, 84)">
+    <rect class="thumbnail-bg" width="290" height="163" /> <!-- 16:9 ratio -->
+    <text x="12" y="80" class="text-secondary" opacity="0.3">THUMBNAIL IMAGE</text>
+
+    <!-- Score Badge over thumbnail -->
+    <rect x="8" y="8" width="46" height="24" class="badge-bg" />
+    <text x="16" y="24" class="badge-text">100%</text>
+
+    <!-- Metadata -->
+    <text x="0" y="190" class="text-primary" font-size="16px" font-weight="500">AI Skills with Matt Pocock</text>
+    <text x="0" y="214" class="text-secondary">The Pragmatic Engineer</text>
+    <text x="0" y="238" class="text-explanation">↳ Matches your approved concept "AI"</text>
+  </g>
+
+  <!-- Video Card 2 -->
+  <g transform="translate(338, 84)">
+    <rect class="thumbnail-bg" width="290" height="163" />
+    <!-- Score Badge -->
+    <rect x="8" y="8" width="38" height="24" class="badge-bg" />
+    <text x="16" y="24" class="badge-text">98%</text>
+
+    <text x="0" y="190" class="text-primary" font-size="16px" font-weight="500">How to run light on your feet</text>
+    <text x="0" y="214" class="text-secondary">Chase Tech</text>
+    <text x="0" y="238" class="text-explanation">↳ Discovery recommendation for Productivity</text>
+  </g>
+
+  <!-- Video Card 3 -->
+  <g transform="translate(652, 84)">
+    <rect class="thumbnail-bg" width="290" height="163" />
+    <!-- Score Badge -->
+    <rect x="8" y="8" width="38" height="24" class="badge-bg" fill="rgba(14, 165, 233, 0.2)" />
+    <text x="16" y="24" class="badge-text" fill="#38BDF8">87%</text>
+
+    <text x="0" y="190" class="text-primary" font-size="16px" font-weight="500">Building a 150,000 HP Jet...</text>
+    <text x="0" y="214" class="text-secondary">FD Engineering</text>
+    <text x="0" y="238" class="text-explanation">↳ Matches Engineering concept path</text>
+  </g>
+
+  <line x1="24" y1="360" x2="936" y2="360" class="shelf-divider" />
+</svg>
