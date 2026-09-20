@@ -48,6 +48,7 @@ Reload the extension after every build. The extension popup supports Google sign
 - The extension defaults to `https://my-algo-web.vercel.app` but can be pointed to `http://localhost:3000` from its options page.
 - The local web app must be running for the local API URL to work.
 - The deployed app includes `/api/rank`; live-page ranking still requires an authenticated production smoke test with the extension.
+- Production deploys happen only from version tags (`v*`) through `.github/workflows/release.yml`; ordinary pushes to `main` run CI without deploying.
 - Discovery currently uses bounded YouTube Search queries and metadata classification. It is not yet a full semantic/RAG system.
 - The planned semantic layer uses Supabase `pgvector` for canonical concepts, aliases, embeddings, and cached algorithm intent. See GitHub issues #20 and #22.
 - The content script displays a temporary diagnostic pill on YouTube. It reports whether cards were found, ranked, or rejected by the API.
