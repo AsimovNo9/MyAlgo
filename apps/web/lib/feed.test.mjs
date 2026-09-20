@@ -356,6 +356,19 @@ test('buildFeedResponse boosts more-like-this feedback without changing visibili
   assert.match(boostedItem.reason ?? '', /more_like_this feedback/);
 });
 
+test('buildFeedResponse applies learned preferences across candidate facets', () => {
+  const algorithm = { id: 'alg-learned', name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] };
+  const candidates = [
+    { id: 'liked', external_id: 'liked', title: 'Gaming RPG review', channel_name: 'RPG Lab', topics: ['Gaming', 'RPG'], format: 'review', language: 'en', source_kind: 'discovery', base_score: 60 },
+    { id: 'other', external_id: 'other', title: 'Other video', channel_name: 'Other Channel', topics: ['Other'], format: 'news', language: 'en', source_kind: 'subscription', base_score: 60 },
+  ];
+
+  const feed = buildFeedResponse(algorithm, [{ external_id: 'liked', eventType: 'more_like_this' }], candidates);
+
+  assert.equal(feed.items[0].external_id, 'liked');
+  assert.match(feed.items[0].reason ?? '', /learned preference/);
+});
+
 test('buildFeedResponse falls back to title-derived topics when classifications are empty', () => {
   const algorithm = {
     id: 'alg-2',

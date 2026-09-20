@@ -1,6 +1,7 @@
 import type { Algorithm, FeedItem, FeedResponse, FeedSourceFilters, Rule } from '@repo/shared-types';
 
 import { resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
+import { buildLearnedAffinityProfile, getCandidateLearnedAffinity } from './learned-profile.ts';
 
 export type FeedFeedbackSignal = {
   external_id: string;
@@ -289,6 +290,7 @@ export function buildFeedResponse(
   const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
+  const learnedProfile = buildLearnedAffinityProfile(candidateItems, feedbackSignals);
 
   for (const signal of feedbackSignals) {
     const existing = signalMap.get(signal.external_id) ?? [];
@@ -311,6 +313,7 @@ export function buildFeedResponse(
     const scoreContributors: string[] = [];
     const ruleSummary: string[] = [];
     const feedbackSummary: string[] = [];
+    const learnedAffinity = getCandidateLearnedAffinity(learnedProfile, video);
 
     if (video.candidate_relevance === 'unmatched') {
       visible = false;
@@ -367,7 +370,8 @@ export function buildFeedResponse(
       video.channel_subscriber_count,
       matchedTopics,
     );
-    score += freshnessBoost + channelBoost + subscriptionBoost;
+    const learnedBoost = Math.round(learnedAffinity * 8);
+    score += freshnessBoost + channelBoost + subscriptionBoost + learnedBoost;
     if (freshnessBoost > 0) {
       scoreContributors.push(`freshness (${freshnessBoost})`);
     }
@@ -376,6 +380,9 @@ export function buildFeedResponse(
     }
     if (subscriptionBoost > 0) {
       scoreContributors.push(`subscription affinity (${subscriptionBoost})`);
+    }
+    if (learnedBoost !== 0) {
+      scoreContributors.push(`learned preference (${learnedBoost > 0 ? '+' : ''}${learnedBoost})`);
     }
 
     for (const signal of signalMap.get(video.external_id) ?? []) {
