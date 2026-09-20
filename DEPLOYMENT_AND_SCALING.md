@@ -32,7 +32,7 @@
 |---|---|---|
 | `local` | Day-to-day development | Supabase CLI local stack + `next dev` |
 | `preview` | Per-PR review builds | Vercel preview deploys (automatic), pointed at a Supabase staging project |
-| `production` | Live users | Vercel production deploy on `main`, Supabase production project |
+| `production` | Live users | Vercel production deploy on version tags, Supabase production project |
 
 ## 4. Deployment Diagram
 
@@ -40,7 +40,7 @@
 flowchart TB
     DEV[Local Dev] -->|git push| GH[GitHub Repo]
     GH -->|PR opened| PREVIEW[Vercel Preview Deploy]
-    GH -->|merge to main| PROD[Vercel Production Deploy]
+    GH -->|version tag v*| PROD[Vercel Production Deploy]
     PROD --> SUPA_PROD[(Supabase — Production)]
     PREVIEW --> SUPA_STAGE[(Supabase — Staging)]
     GH -->|CI| ACTIONS[GitHub Actions:<br/>lint, typecheck, test]
@@ -50,7 +50,8 @@ flowchart TB
 ## 5. CI/CD Pipeline
 
 - **On pull request:** install deps, typecheck, lint, run unit tests, build the extension bundle as a CI artifact for manual QA.
-- **On merge to `main`:** Vercel's native GitHub integration auto-deploys — no custom deploy script needed.
+- **On merge to `main`:** CI validates the merged code; production is not deployed automatically.
+- **On a version tag (`v*`):** `.github/workflows/release.yml` deploys `apps/web` to Vercel with the Vercel CLI.
 - **Extension releases:** manual at MVP stage — `pnpm build:extension` → zip → upload via the Chrome Web Store developer dashboard. Automate later with the Chrome Web Store publish API once release frequency justifies it.
 
 ```yaml
@@ -76,7 +77,7 @@ jobs:
 2. **Apply the schema:** `supabase db push` (runs `packages/db/schema.sql` + RLS policies).
 3. **Google Cloud setup:** create a project, enable the YouTube Data API v3, create an OAuth 2.0 client (web application type for the backend flow).
 4. **Set environment variables in Vercel:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_REDIRECT_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `YOUTUBE_API_KEY`, `ANTHROPIC_API_KEY`, and `CRON_SECRET`.
-5. **Deploy:** `vercel link` then `vercel --prod`.
+5. **Deploy a release:** create and push a version tag, for example `git tag v0.1.0 && git push origin v0.1.0`. GitHub Actions deploys that tag to Vercel production.
 6. **Extension (dev):** load unpacked via `chrome://extensions` → "Load unpacked" pointing at `apps/extension/dist`.
 7. **Extension (public):** package and submit through the Chrome Web Store developer dashboard once ready for outside users.
 
@@ -96,6 +97,8 @@ DEPLOYMENT_URL=https://your-app.vercel.app SUPABASE_ACCESS_TOKEN="$TOKEN" pnpm v
 
 The Vercel project must deploy the `apps/web` Next.js app using `pnpm --filter web build`. The deployed app must include `apps/web/app/api/rank/route.ts` and `apps/web/middleware.ts`; a `404` for `/api/rank` means the deployment is stale or pointed at the wrong project/root.
 
+`apps/web/vercel.json` disables Vercel's automatic Git deployments. Add GitHub Actions production secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`; application secrets stay in Vercel's production environment variables.
+
 ## 7. Secrets Management
 
 - The extension bundle is client-visible code — **never** put the Google OAuth client secret or Anthropic API key in it. The extension only ever talks to your own API; your API holds the secrets.
@@ -114,7 +117,7 @@ Current stack as-is. No changes needed.
 
 Discovery search is deliberately bounded at MVP scale: each sync derives at most three queries and requests at most five videos per query. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search.
 
-Niche-topic content that no user is subscribed to is sourced separately via free RSS polling (`apps/web/lib/rss.ts`, `apps/web/lib/seed-channels.ts`), driven by a shared Vercel Cron job (`apps/web/vercel.json`, every 6 hours) hitting `/api/seed-channels/sync`. This ingestion path consumes no YouTube Data API quota and runs once for the whole project, not per user, which is why it is the primary mechanism for topics like niche engineering or research content rather than per-user `search.list` polling.
+Niche-topic content that no user is subscribed to is sourced separately via free RSS polling (`apps/web/lib/rss.ts`, `apps/web/lib/seed-channels.ts`), driven by a shared Vercel Cron job (`apps/web/vercel.json`, daily at 02:00 UTC on Hobby) hitting `/api/seed-channels/sync`. This ingestion path consumes no YouTube Data API quota and runs once for the whole project, not per user, which is why it is the primary mechanism for topics like niche engineering or research content rather than per-user `search.list` polling.
 
 Semantic retrieval adds a second budget: embedding and resolver calls. Embed canonical concepts and algorithm intent, not every page mutation. Cache by content hash and algorithm revision; use deterministic aliases as the outage and cost fallback. Do not add a separate vector database before Supabase `pgvector` volume proves it necessary.
 
