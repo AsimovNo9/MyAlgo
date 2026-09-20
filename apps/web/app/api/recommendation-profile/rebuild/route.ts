@@ -2,23 +2,11 @@ import { NextResponse } from 'next/server';
 import type { FeedCandidate } from '@/lib/feed';
 import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
-import { buildLearnedAffinityProfile, learnedAffinityProfileFromRows } from '@/lib/learned-profile';
+import { buildPersistedAffinityRows } from '@/lib/learned-profile';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-function serializeFacet(map: Map<string, number>) {
-  return [...map.entries()]
-    .filter(([, strength]) => Math.abs(strength) >= 0.05)
-    .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]))
-    .slice(0, 8)
-    .map(([key, strength]) => ({
-      key,
-      strength: Number(strength.toFixed(2)),
-      confidence: Number(Math.min(1, Math.abs(strength)).toFixed(2)),
-    }));
-}
-
-export async function GET() {
+export async function POST() {
   const userId = await getCurrentUserIdFromServer();
   if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
@@ -29,11 +17,10 @@ export async function GET() {
     .from('content_items')
     .select('external_id, title, channel_name, channel_id, source_kind, classifications(topics, language, format)')
     .order('fetched_at', { ascending: false })
-    .limit(200);
-
+    .limit(5000);
   if (error || !data) {
-    console.error('Failed to load recommendation profile candidates', error);
-    return NextResponse.json({ error: 'Unable to load recommendation profile.' }, { status: 500 });
+    console.error('Failed to load historical profile candidates', error);
+    return NextResponse.json({ error: 'Unable to rebuild recommendation profile.' }, { status: 500 });
   }
 
   const candidates: FeedCandidate[] = data.map((row) => {
@@ -49,27 +36,26 @@ export async function GET() {
       format: classification?.format ?? null,
     };
   });
-
   const [feedbackSignals, activitySignals] = await Promise.all([
     fetchFeedbackSignalsForUser(userId),
     fetchActivitySignalsForUser(userId),
   ]);
-  const { data: persistedRows } = await client
-    .from('taste_profile_affinities')
-    .select('facet, facet_key, signed_value')
-    .eq('user_id', userId);
-  const profile = Array.isArray(persistedRows) && persistedRows.length > 0
-    ? learnedAffinityProfileFromRows(persistedRows)
-    : buildLearnedAffinityProfile(candidates, feedbackSignals, activitySignals);
+  const profileRevision = new Date().toISOString();
+  const rows = buildPersistedAffinityRows(candidates, feedbackSignals, activitySignals, profileRevision)
+    .map((row) => ({ user_id: userId, ...row }));
 
-  return NextResponse.json({
-    generatedAt: new Date().toISOString(),
-    facets: {
-      topics: serializeFacet(profile.topics),
-      channels: serializeFacet(profile.channels),
-      formats: serializeFacet(profile.formats),
-      languages: serializeFacet(profile.languages),
-      sources: serializeFacet(profile.sources),
-    },
-  });
+  const { error: deleteError } = await client.from('taste_profile_affinities').delete().eq('user_id', userId);
+  if (deleteError) {
+    console.error('Failed to clear historical recommendation profile', deleteError);
+    return NextResponse.json({ error: 'Unable to rebuild recommendation profile.' }, { status: 500 });
+  }
+  if (rows.length > 0) {
+    const { error: insertError } = await client.from('taste_profile_affinities').insert(rows);
+    if (insertError) {
+      console.error('Failed to persist historical recommendation profile', insertError);
+      return NextResponse.json({ error: 'Unable to rebuild recommendation profile.' }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ ok: true, profileRevision, facetCount: rows.length });
 }

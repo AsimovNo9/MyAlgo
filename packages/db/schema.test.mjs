@@ -62,6 +62,10 @@ const activityEventsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920070000_add_activity_events.sql'),
   'utf8',
 );
+const tasteProfileMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920095000_add_taste_profile_affinities.sql'),
+  'utf8',
+);
 const classificationConfidenceMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920080000_add_classification_confidence.sql'),
   'utf8',
@@ -166,6 +170,15 @@ test('activity events are tracked with bounded watch duration and RLS', () => {
   assert.match(activityEventsMigration, /create table if not exists public\.activity_events/i);
   assert.match(activityEventsMigration, /watch_seconds integer check/i);
   assert.match(activityEventsMigration, /enable row level security/i);
+});
+
+test('durable taste profile affinities are bounded, versioned, and protected by RLS', () => {
+  assert.match(schema, /create table public\.taste_profile_affinities/i);
+  assert.match(schema, /signed_value numeric not null check \(signed_value >= -1 and signed_value <= 1\)/i);
+  assert.match(schema, /source_signals text\[\] not null/i);
+  assert.match(tasteProfileMigration, /create table if not exists public\.taste_profile_affinities/i);
+  assert.match(tasteProfileMigration, /alter table public\.taste_profile_affinities enable row level security/i);
+  assert.match(tasteProfileMigration, /auth\.uid\(\) = user_id/i);
 });
 
 test('classification confidence is bounded and tracked in schema and migration', () => {

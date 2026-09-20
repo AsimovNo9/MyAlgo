@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { loadApprovedConceptGraph } from '@/lib/semantic-catalog';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
+import { learnedAffinityProfileFromRows } from '@/lib/learned-profile';
 import type { FeedSourceFilters } from '@repo/shared-types';
 
 async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
@@ -138,10 +139,17 @@ export async function GET(request: Request) {
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
   const activitySignals = await fetchActivitySignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
-  const conceptGraph = await loadApprovedConceptGraph(await createSupabaseServerClient());
+  const client = await createSupabaseServerClient();
+  const { data: persistedAffinityRows } = client
+    ? await client.from('taste_profile_affinities').select('facet, facet_key, signed_value').eq('user_id', userId)
+    : { data: null };
+  const learnedProfile = Array.isArray(persistedAffinityRows) && persistedAffinityRows.length > 0
+    ? learnedAffinityProfileFromRows(persistedAffinityRows)
+    : undefined;
+  const conceptGraph = await loadApprovedConceptGraph(client);
   const feedCandidates = liveItems.length > 0 ? liveItems : undefined;
-  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph });
-  const metricsResponse = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph, includeHidden: true });
+  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph, learnedProfile });
+  const metricsResponse = buildFeedResponse(activeAlgorithm, feedbackSignals, feedCandidates, { sourceFilters, activitySignals, conceptGraph, learnedProfile, includeHidden: true });
   const generationMetrics = summarizeFeedGeneration(metricsResponse, liveItems, Date.now() - startedAt, [...getEligibleTopicNames(activeAlgorithm)]);
   console.info('Feed generation summary', redactSensitiveValues({
     userId,

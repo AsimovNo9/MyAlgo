@@ -9,7 +9,7 @@ export async function fetchFeedbackSignalsForUser(userId: string): Promise<FeedF
 
   const { data, error } = await client
     .from('feedback_events')
-    .select('event_type, content_items(external_id, channel_id)')
+    .select('event_type, created_at, content_items(external_id, channel_id)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -33,6 +33,7 @@ export async function fetchFeedbackSignalsForUser(userId: string): Promise<FeedF
         external_id: externalId,
         channel_id: contentItem?.channel_id ?? null,
         eventType: row.event_type as FeedFeedbackSignal['eventType'],
+        createdAt: typeof row.created_at === 'string' ? row.created_at : null,
       };
     })
     .filter((item): item is FeedFeedbackSignal => item !== null);

@@ -181,6 +181,21 @@ create table public.activity_events (
   created_at timestamptz not null default now()
 );
 
+create table public.taste_profile_affinities (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  facet text not null check (facet in ('topic', 'channel', 'format', 'language', 'source')),
+  facet_key text not null,
+  signed_value numeric not null check (signed_value >= -1 and signed_value <= 1),
+  confidence numeric not null check (confidence >= 0 and confidence <= 1),
+  evidence_count integer not null check (evidence_count >= 0),
+  first_observed_at timestamptz not null,
+  last_observed_at timestamptz not null,
+  source_signals text[] not null default '{}',
+  profile_revision timestamptz not null,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, facet, facet_key)
+);
+
 create index on public.activity_events (user_id, created_at desc);
 
 create index on public.feed_cache (user_id, algorithm_id, rank);
@@ -287,6 +302,10 @@ create policy "own rows only" on public.feedback_events
 
 alter table public.activity_events enable row level security;
 create policy "own rows only" on public.activity_events
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+alter table public.taste_profile_affinities enable row level security;
+create policy "own rows only" on public.taste_profile_affinities
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create table public.topic_seed_channels (
