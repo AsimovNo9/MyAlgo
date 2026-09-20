@@ -400,7 +400,7 @@ test('buildFeedResponse explains approved direct and related concepts', () => {
 
 test('buildFeedResponse uses semantic similarity as a bounded ranking signal', () => {
   const feed = buildFeedResponse(
-    { name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    { name: 'AI', language: 'en', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
     [],
     [
       { external_id: 'semantic-match', title: 'AI systems', topics: ['AI'], base_score: 60, semantic_similarity: 0.95 },
