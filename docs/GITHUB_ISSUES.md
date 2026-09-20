@@ -4,6 +4,20 @@ Repository: `AsimovNo9/MyAlgo`
 
 This backlog is ordered by delivery risk. Each issue is intentionally scoped so a second developer can pick up one slice independently.
 
+## 0. Build the user taste profile and candidate generation engine
+
+**Labels:** `priority:high`, `area:ranking`, `area:backend`, `area:extension`
+
+The current feed pipeline ranks a fetched subset of content. The next major architecture change is to understand the user first, generate candidate videos from that profile, then classify and rerank them.
+
+**Acceptance criteria**
+- The user profile includes explicit weights, learned affinities, language, format, creator affinity, and negative signals.
+- Candidate generation expands from subscriptions, liked videos, creator queries, topic queries, and freshness queries rather than only a single fetched feed.
+- The query planner generates multiple retrieval queries per topic instead of one broad keyword string.
+- Language and format are first-class dimensions during retrieval and ranking.
+- The feed mixes strong matches, discovery, and a limited exploration lane.
+- The ranking explanation shows user-preference reasoning rather than raw implementation tags.
+
 ## 1. Deploy the live-page ranking API
 
 **Labels:** `priority:high`, `area:backend`, `area:extension`

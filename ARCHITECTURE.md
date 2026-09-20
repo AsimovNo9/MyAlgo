@@ -6,10 +6,16 @@
 
 ## 1. Product Summary
 
-A Chrome extension (MV3) + lightweight web dashboard that lets a user define "algorithms" (topic weights + always/never-show rules), then reshapes what they see on youtube.com to match — sourced from their own subscriptions/uploads via the official YouTube Data API, scored by deterministic metadata rules with optional AI fallback, and applied client-side.
+A Chrome extension (MV3) + lightweight web dashboard that helps a user define a taste profile and then reshapes what they see on YouTube using a recommendation engine: generate relevant candidates, classify them with metadata-first signals, and rerank them against the active algorithm.
+
+The product should evolve from a "feed filter" into a retrieval + ranking system that uses explicit preferences, learned affinities, source controls, and candidate generation instead of only trimming a single fetched feed.
 
 ## 2. Guiding Principles
 
+- **Profile before ranking.** The user's algorithm is a taste model, not just a list of keywords.
+- **Candidates before feed.** Retrieval and candidate generation happen before scoring, not after.
+- **Text-first classification.** Use title, description, tags, channel metadata, and user feedback before adding visual understanding.
+- **No image classifier in MVP.** Keep visual analysis as a later phase when text and metadata are insufficient.
 - **No servers to manage.** Everything serverless/managed (Vercel + Supabase).
 - **One language.** TypeScript everywhere — extension, API, scripts.
 - **Defer complexity.** No queues, no microservices, no k8s until usage data demands it.
@@ -34,37 +40,54 @@ A Chrome extension (MV3) + lightweight web dashboard that lets a user define "al
 
 ```mermaid
 flowchart LR
-  subgraph Browser[User's Browser]
+  subgraph User[User + Browser]
     CS[Content Script<br/>youtube.com]
     BG[Background Service Worker]
     POPUP[Popup / Options UI<br/>React]
     LS[(chrome.storage.local)]
+    FEEDBACK[Feedback: like, dislike, hide, less-like-this]
+  end
+
+  subgraph Profile[Taste + Retrieval Layer]
+    TP[User Taste Profile<br/>explicit + learned]
+    CG[Candidate Generation<br/>subscriptions, likes, search, creators]
+    QP[Query Planner / Retrieval Engine]
   end
 
   subgraph Vercel[Vercel — Next.js]
     API[API Routes<br/>/api/*]
+    RANK[Personal Reranker]
   end
 
   subgraph Supabase[Supabase]
     PG[(Postgres)]
     AUTH[Auth]
+    CATALOG[Concept catalog + intent profiles]
   end
 
   subgraph External[External APIs]
     YT[YouTube Data API v3]
-    CLAUDE[Anthropic API]
-    EMB[Embedding model<br/>optional]
+    RSS[RSS seed feeds]
+    LLM[Anthropic / semantic resolver<br/>low-confidence only]
   end
 
   POPUP <-->|preferences, rules| API
-  BG <-->|fetch feed / scores| API
+  BG <-->|fetch feed / page rank| API
   CS <-->|DOM refs, video ids| BG
   BG <--> LS
+  FEEDBACK --> TP
+  TP --> CG
+  CG --> QP
+  QP --> YT
+  QP --> RSS
+  YT --> API
+  RSS --> API
+  API --> CATALOG
   API <--> PG
   API <--> AUTH
-  API --> YT
-  API --> CLAUDE
-  API --> EMB
+  API --> RANK
+  API --> LLM
+  RANK --> BG
 ```
 
 ## 5. Folder Structure

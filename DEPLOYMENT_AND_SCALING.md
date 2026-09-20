@@ -24,6 +24,43 @@
 | Domain / DNS | Cloudflare | Free |
 | Secrets | Vercel + Supabase environment variables | Built-in, no separate vault needed at this stage |
 
+## 2.1 Recommendation Engine Rollout
+
+The next major architecture shift is not a UI change; it is a retrieval-and-ranking pipeline.
+
+The system should evolve from:
+
+- fetch subscription pool
+- classify items
+- rank them
+
+into:
+
+- build taste profile
+- generate candidates
+- enrich candidates
+- retrieve likely videos via search and subscription queries
+- rerank against the active algorithm
+
+This is the minimum product definition for a real personalized recommendation engine.
+
+### Recommendation engine stages
+
+1. **Taste profile** — explicit preferences, learned affinity, language, format, creator affinity, and negative signals.
+2. **Candidate generation** — subscriptions, liked videos, creator queries, topic queries, and bounded discovery searches.
+3. **Retrieval** — query planner and ranked candidate pull from YouTube search + known feeds.
+4. **Enrichment** — classify title, description, channel, tags, and category; resolve canonical concepts.
+5. **Reranking** — score aligned items and suppress duplicates or off-topic items.
+6. **Feedback loop** — likes, dislikes, hide, and “less like this” update the taste profile.
+
+### Scope guardrails for MVP
+
+- Keep classification text-first and metadata-driven.
+- Do not add an image classifier in the MVP.
+- Model language, creator, format, and topic as separate dimensions.
+- Do not treat channel names like IGN as a topic match.
+- Use a separate exploration lane rather than one flat deterministic list.
+
 **Estimated MVP cost (first few hundred users):** $0–20/month, driven almost entirely by Anthropic API usage — everything else stays in free tiers.
 
 ## 3. Environments
