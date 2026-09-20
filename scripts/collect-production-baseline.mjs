@@ -19,11 +19,17 @@ if (!feedResponse.ok) {
 
 const feed = await feedResponse.json();
 const items = Array.isArray(feed.items) ? feed.items : [];
+const metrics = feed.metrics && typeof feed.metrics === 'object' ? feed.metrics : {};
 const visible = items.filter((item) => item.visible !== false);
 const lanes = Object.fromEntries(['matched', 'discovery', 'explore'].map((lane) => [lane, visible.filter((item) => item.lane === lane).length]));
 const sources = Object.fromEntries([...new Set(visible.map((item) => item.source_kind ?? 'unknown'))].map((source) => [source, visible.filter((item) => (item.source_kind ?? 'unknown') === source).length]));
 const channels = new Set(visible.map((item) => item.channel_id ?? item.channel_name ?? '').filter(Boolean));
 const watchedReasons = items.filter((item) => /already watched/i.test(item.reason ?? '')).length;
+const semanticMatches = visible.filter((item) => /semantically close/i.test(item.reason ?? '')).length;
+const topicCoverage = metrics.topicCoverage && typeof metrics.topicCoverage === 'object' ? metrics.topicCoverage : {};
+const qualifiedCandidateRate = Number.isFinite(Number(metrics.candidateCount)) && Number(metrics.candidateCount) > 0
+  ? Number((visible.length / Number(metrics.candidateCount)).toFixed(4))
+  : 0;
 
 const rankResponse = await fetch(`${baseUrl}/api/rank`, {
   method: 'POST',
@@ -48,6 +54,10 @@ console.log(JSON.stringify({
   sources,
   channelDiversity: channels.size,
   watchedExclusionsReported: watchedReasons,
+  relevantCandidateRate: qualifiedCandidateRate,
+  qualifiedCandidateRate,
+  semanticRetrievalHitRate: visible.length > 0 ? Number((semanticMatches / visible.length).toFixed(4)) : 0,
+  topicCoverage,
 }, null, 2));
 
 if (!rankResponse.ok) process.exit(1);

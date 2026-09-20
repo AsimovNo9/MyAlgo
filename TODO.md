@@ -45,6 +45,7 @@ These are the unresolved items from the production safety review. The implementa
 
 - [ ] Configure production error monitoring for web, API, sync, OAuth, classifier, and extension failures.
 - [ ] Confirm YouTube quota usage, retry behavior, timeout behavior, and partial-sync failures are observable without logging tokens.
+- [x] Add privacy-safe recommendation baseline metrics for candidate quality, semantic hits, and per-interest pipeline coverage.
 - [ ] Add uptime monitoring for `/api/health` and alerting for failed cron/sync runs.
 - [ ] Confirm deployment logs contain only redacted token diagnostics and no provider credentials.
 - [ ] Compare production semantic-ranking metrics against the flat-label baseline before increasing semantic score weight.
