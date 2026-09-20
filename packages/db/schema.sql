@@ -160,6 +160,7 @@ create table public.feed_cache (
   score numeric not null,
   rank int not null,
   visible boolean not null default true,
+  semantic_path jsonb,
   generated_at timestamptz not null default now()
 );
 

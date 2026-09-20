@@ -345,7 +345,7 @@ function buildSemanticExplanation(
   video: FeedCandidate,
   algorithm: Algorithm | null | undefined,
   graph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] },
-): string | null {
+): { text: string; path: Array<{ concept: string; relation_type: string | null; confidence: number }> } | null {
   if (!graph || graph.catalog.length === 0) return null;
 
   const candidateConcepts = (video.topics ?? [])
@@ -358,7 +358,12 @@ function buildSemanticExplanation(
     .map((item) => findConceptForTerm(item.topic, graph.catalog))
     .filter((concept): concept is ConceptCatalogEntry => Boolean(concept));
   const direct = candidateConcepts.find((candidate) => preferredConcepts.some((preferred) => preferred.id === candidate.id));
-  if (direct) return `Matches your approved concept "${direct.canonicalName}".`;
+  if (direct) {
+    return {
+      text: `Matches your approved concept "${direct.canonicalName}".`,
+      path: [{ concept: direct.canonicalName, relation_type: 'user_interest', confidence: 1 }],
+    };
+  }
 
   for (const preferred of preferredConcepts) {
     const relation = graph.relations.find((item) => (
@@ -368,7 +373,15 @@ function buildSemanticExplanation(
     ));
     if (relation) {
       const related = candidateConcepts.find((candidate) => candidate.id === relation.target_concept_id);
-      if (related) return `Related to your approved concept "${preferred.canonicalName}" through "${related.canonicalName}".`;
+      if (related) {
+        return {
+          text: `Related to your approved concept "${preferred.canonicalName}" through "${related.canonicalName}".`,
+          path: [
+            { concept: preferred.canonicalName, relation_type: 'user_interest', confidence: 1 },
+            { concept: related.canonicalName, relation_type: relation.relation_type, confidence: Math.min(1, Math.max(0, relation.weight)) },
+          ],
+        };
+      }
     }
   }
 
@@ -569,7 +582,7 @@ export function buildFeedResponse(
       ruleSummary.length > 0 ? `Your rules affected it: ${ruleSummary.join('; ')}.` : null,
       feedbackSummary.length > 0 ? `Your feedback affected it: ${feedbackSummary.join('; ')}.` : null,
       activitySummary.length > 0 ? `Your activity affected it: ${activitySummary.join('; ')}.` : null,
-      semanticExplanation,
+      semanticExplanation?.text,
       semanticSimilarity > 0 ? `It is semantically close to your selected interests (${Math.round(semanticSimilarity * 100)}%).` : null,
       learnedBoost > 0 ? 'It is similar to content you responded positively to.' : null,
       learnedBoost < 0 ? 'It reflects a learned preference from your past feedback.' : null,
@@ -591,6 +604,7 @@ export function buildFeedResponse(
       visible,
       reason,
       matched_topics: matchedTopics,
+      ...(semanticExplanation ? { semantic_path: semanticExplanation.path } : {}),
       source_kind: video.source_kind ?? null,
       lane,
     };

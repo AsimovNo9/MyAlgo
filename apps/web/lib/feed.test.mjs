@@ -431,6 +431,29 @@ test('buildFeedResponse explains approved direct and related concepts', () => {
   );
 
   assert.match(feed.items[0].reason ?? '', /approved concept "Gaming"/i);
+  assert.deepEqual(feed.items[0].semantic_path, [{ concept: 'Gaming', relation_type: 'user_interest', confidence: 1 }]);
+});
+
+test('buildFeedResponse exposes approved related concept paths with bounded relation confidence', () => {
+  const feed = buildFeedResponse(
+    { name: 'Gaming', topic_weights: [{ topic: 'Gaming', weight: 90 }], rules: [] },
+    [],
+    [{ external_id: 'rpg-video', title: 'RPG systems deep dive', topics: ['RPG'] }],
+    {
+      conceptGraph: {
+        catalog: [
+          { id: 'gaming', canonicalName: 'Gaming', aliases: [], intents: [] },
+          { id: 'rpg', canonicalName: 'Role-playing games', aliases: ['RPG'], intents: [] },
+        ],
+        relations: [{ source_concept_id: 'gaming', target_concept_id: 'rpg', relation_type: 'child_of', weight: 0.8 }],
+      },
+    },
+  );
+
+  assert.deepEqual(feed.items[0].semantic_path, [
+    { concept: 'Gaming', relation_type: 'user_interest', confidence: 1 },
+    { concept: 'Role-playing games', relation_type: 'child_of', confidence: 0.8 },
+  ]);
 });
 
 test('buildFeedResponse uses semantic similarity as a bounded ranking signal', () => {
