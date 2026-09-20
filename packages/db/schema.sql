@@ -110,6 +110,18 @@ create table public.feedback_events (
   created_at timestamptz not null default now()
 );
 
+create table public.activity_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  content_item_id uuid not null references public.content_items(id) on delete cascade,
+  event_type text not null check (event_type in ('opened', 'watch_progress', 'completed', 'skipped', 'revisited')),
+  watch_seconds integer check (watch_seconds is null or (watch_seconds >= 0 and watch_seconds <= 86400)),
+  occurred_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index on public.activity_events (user_id, created_at desc);
+
 create index on public.feed_cache (user_id, algorithm_id, rank);
 create index on public.classifications (content_item_id);
 create unique index if not exists algorithms_one_seeded_default_per_user
@@ -190,6 +202,10 @@ create policy "own rows only" on public.feed_cache
 
 alter table public.feedback_events enable row level security;
 create policy "own rows only" on public.feedback_events
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+alter table public.activity_events enable row level security;
+create policy "own rows only" on public.activity_events
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create table public.topic_seed_channels (

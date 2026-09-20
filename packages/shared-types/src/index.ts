@@ -4,6 +4,8 @@ export type RuleType = 'always_show' | 'never_show' | 'priority';
 
 export type FeedbackEventType = 'not_interested' | 'more_like_this' | 'never_show_channel';
 
+export type ActivityEventType = 'opened' | 'watch_progress' | 'completed' | 'skipped' | 'revisited';
+
 export interface TopicWeight {
   topic: string;
   weight: number;
@@ -96,6 +98,13 @@ export interface ClassifyResponse {
 export interface FeedbackRequest {
   contentItemId: string;
   eventType: FeedbackEventType;
+}
+
+export interface ActivityRequest {
+  externalId: string;
+  eventType: ActivityEventType;
+  watchSeconds?: number;
+  occurredAt?: string;
 }
 
 export interface ExtensionMessage<T = unknown> {
