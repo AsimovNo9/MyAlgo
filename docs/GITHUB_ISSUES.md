@@ -13,6 +13,14 @@ The recommender implementation milestone is complete in merged PRs #113, #115–
 3. [#8 Add production observability and health checks](https://github.com/AsimovNo9/MyAlgo/issues/8) — structured failures, provider quota/sync visibility, and error monitoring.
 4. [#4 Make mode switching visibly change the YouTube feed](https://github.com/AsimovNo9/MyAlgo/issues/4) — production validation of mode-specific ranking and extension behavior.
 5. [#10 Package and document the Edge release](https://github.com/AsimovNo9/MyAlgo/issues/10) — release workflow, extension ID/redirect setup, and store submission requirements.
+6. [#125 Stabilize extension render generations and stale feed state](https://github.com/AsimovNo9/MyAlgo/issues/125) — prevent stale responses, cache errors, and mode/filter/navigation races.
+7. [#126 Make YouTube injected cards native-compatible and deduplicated](https://github.com/AsimovNo9/MyAlgo/issues/126) — stable card geometry and video-ID deduplication across extraction, pooling, and rendering.
+8. [#127 Expand extension DOM and infinite-scroll test coverage](https://github.com/AsimovNo9/MyAlgo/issues/127) — fixture and behavior coverage across surfaces, navigation, scrolling, and layouts.
+9. [#128 Build a larger bounded Personal Picks shelf](https://github.com/AsimovNo9/MyAlgo/issues/128) — append/recycle cached algorithm candidates without retrieval from DOM mutations.
+10. [#129 Make algorithm goals visible and operational in the editor](https://github.com/AsimovNo9/MyAlgo/issues/129) — expose goal-driven query lanes and ranking influence.
+11. [#130 Add topic weight sliders and explicit normalization controls](https://github.com/AsimovNo9/MyAlgo/issues/130) — user-adjustable weights with explicit distribution and hard-rule separation.
+12. [#131 Improve calibration UX and expose learning controls](https://github.com/AsimovNo9/MyAlgo/issues/131) — stable calibration cards, progress, learning explanation, and reset/rebuild controls.
+13. [#132 Run authenticated production extension demo and baseline](https://github.com/AsimovNo9/MyAlgo/issues/132) — real-browser extension validation and privacy-safe aggregate metrics.
 
 ## Merged Recommender Implementation Issues
 
