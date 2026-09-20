@@ -6,6 +6,7 @@ export type ContentConceptMatchRow = {
   confidence: number;
   source: 'deterministic' | 'graph' | 'embedding' | 'llm';
   model_version: string;
+  concept_version: number;
 };
 
 function normalize(value: string): string {
@@ -23,13 +24,20 @@ export function buildContentConceptMatches(
   const boundedConfidence = Math.min(1, Math.max(0, Number.isFinite(confidence) ? confidence : 0));
 
   return catalog
-    .filter((concept) => [concept.canonicalName, ...concept.aliases, ...concept.intents].some((term) => normalizedTopics.has(normalize(term))))
+    .filter((concept) => [
+      concept.canonicalName,
+      ...concept.aliases,
+      ...concept.intents,
+      ...(concept.entities ?? []),
+      ...(concept.positivePhrases ?? []),
+    ].some((term) => normalizedTopics.has(normalize(term))))
     .map((concept) => ({
       content_item_id: contentItemId,
       concept_id: concept.id,
       confidence: boundedConfidence,
       source: 'deterministic' as const,
       model_version: modelVersion,
+      concept_version: concept.version ?? 1,
     }));
 }
 

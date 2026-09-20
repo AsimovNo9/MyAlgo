@@ -18,6 +18,10 @@ const contentConceptsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920091000_add_content_concepts.sql'),
   'utf8',
 );
+const contentConceptVersionMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920094000_add_content_concept_version.sql'),
+  'utf8',
+);
 const vectorMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920092000_add_vector_retrieval.sql'),
   'utf8',
@@ -90,6 +94,8 @@ test('content concept matches are persisted with confidence, provenance, and RLS
   assert.match(contentConceptsMigration, /create table if not exists public\.content_concepts/i);
   assert.match(contentConceptsMigration, /confidence numeric not null check/i);
   assert.match(contentConceptsMigration, /model_version text not null/i);
+  assert.match(schema, /create table public\.content_concepts[\s\S]*concept_version integer not null default 1/i);
+  assert.match(contentConceptVersionMigration, /add column if not exists concept_version integer/i);
   assert.match(contentConceptsMigration, /alter table public\.content_concepts enable row level security/i);
 });
 
