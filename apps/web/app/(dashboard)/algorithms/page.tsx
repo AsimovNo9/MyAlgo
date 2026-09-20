@@ -6,6 +6,8 @@ import type { Algorithm, AlgorithmActivationResponse, AlgorithmPayload, RuleType
 type Preset = {
   name: string;
   goal_text: string;
+  language?: string;
+  preferred_formats?: string[];
   topic_weights: TopicWeight[];
   rules: Array<{ type: RuleType; condition_text: string }>;
 };
@@ -120,6 +122,8 @@ const emptyPayload: Omit<AlgorithmPayload, 'id'> = {
   name: 'Work',
   is_active: true,
   goal_text: 'Learn AI agents and shipping decisions.',
+  language: 'en',
+  preferred_formats: ['tutorial'],
   topic_weights: presetOptions[0].topic_weights,
   rules: presetOptions[0].rules.map((rule) => ({ ...rule })),
 };
@@ -142,6 +146,7 @@ const formatRuleType = (type: RuleType) => {
 };
 
 const defaultTopicCatalog = ['AI', 'Productivity', 'Business', 'Engineering', 'Tutorial', 'Nature', 'Learning', 'Driving', 'Education', 'Science', 'Lifestyle', 'Creativity'];
+const formatOptions = ['tutorial', 'review', 'deep analysis', 'developer commentary', 'news', 'long-form'];
 
 export default function AlgorithmsPage() {
   const [algorithms, setAlgorithms] = useState<Algorithm[]>([]);
@@ -184,6 +189,8 @@ export default function AlgorithmsPage() {
       name: preset.name,
       is_active: true,
       goal_text: preset.goal_text,
+      language: preset.language ?? 'en',
+      preferred_formats: preset.preferred_formats ?? ['tutorial'],
       topic_weights: preset.topic_weights.map((item) => ({ ...item })),
       rules: preset.rules.map((rule, index) => ({ id: `preset-rule-${index}`, ...rule })),
     });
@@ -228,6 +235,18 @@ export default function AlgorithmsPage() {
       ...current,
       topic_weights: current.topic_weights.filter((weight) => weight.topic.toLowerCase() !== topic.toLowerCase()),
     }));
+  };
+
+  const toggleFormat = (format: string) => {
+    setForm((current) => {
+      const formats = current.preferred_formats ?? [];
+      return {
+        ...current,
+        preferred_formats: formats.includes(format)
+          ? formats.filter((item) => item !== format)
+          : [...formats, format],
+      };
+    });
   };
 
   const toggleRuleTemplate = (template: { type: RuleType; label: string }) => {
@@ -299,6 +318,8 @@ export default function AlgorithmsPage() {
           name: 'Work',
           is_active: true,
           goal_text: 'Learn AI agents and shipping decisions.',
+          language: 'en',
+          preferred_formats: ['tutorial'],
           topic_weights: presetOptions[0].topic_weights,
           rules: presetOptions[0].rules.map((rule) => ({ ...rule })),
         });
@@ -439,6 +460,47 @@ export default function AlgorithmsPage() {
               placeholder="What should this algorithm reward?"
               style={{ padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(255,255,255,0.7)', color: '#0f172a', resize: 'vertical' }}
             />
+          </div>
+
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'minmax(150px, 0.7fr) minmax(0, 1.3fr)', alignItems: 'start' }}>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <label htmlFor="algorithm-language" style={{ fontSize: 12, opacity: 0.8 }}>Language</label>
+              <select
+                id="algorithm-language"
+                value={form.language ?? ''}
+                onChange={(event) => setForm((current) => ({ ...current, language: event.target.value || null }))}
+                style={{ padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(255,255,255,0.7)', color: '#0f172a' }}
+              >
+                <option value="">Any language</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gap: 8 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>Preferred formats</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {formatOptions.map((format) => {
+                  const selected = (form.preferred_formats ?? []).includes(format);
+                  return (
+                    <label key={format} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 999, border: selected ? '1px solid #93c5fd' : '1px solid rgba(148,163,184,0.35)', background: selected ? '#dbeafe' : 'rgba(255,255,255,0.55)', color: selected ? '#1d4ed8' : '#334155', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleFormat(format)}
+                        style={{ accentColor: '#2563eb' }}
+                      />
+                      {format}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div>
