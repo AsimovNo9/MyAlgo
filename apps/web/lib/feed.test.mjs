@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
-import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, normalizeClassificationRecord } from './feed.ts';
+import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, getRankingTopicWeights, normalizeClassificationRecord } from './feed.ts';
 import { fetchWithRetry } from './http.ts';
+import { inferPageCandidateTopics } from './page-relevance.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildYoutubeProviderSessionStateLog, buildYoutubeTokenCheckLog } from './youtube.ts';
 
@@ -28,13 +29,27 @@ test('getEligibleTopicNames prevents low-weight secondary topics from admitting 
   assert.deepEqual([...eligible], ['entertainment']);
 });
 
+test('inferPageCandidateTopics does not treat a channel brand as video relevance', () => {
+  assert.deepEqual(inferPageCandidateTopics('Unrelated lifestyle documentary', ['IGN']), []);
+  assert.deepEqual(inferPageCandidateTopics('IGN reviews a new RPG game', ['IGN', 'Gaming']), ['IGN', 'Gaming']);
+});
+
 test('getEligibleTopicNames keeps weight-50 topics eligible when all topics are weight 50', () => {
   const eligible = getEligibleTopicNames({
     name: 'Gaming',
     topic_weights: [{ topic: 'Games', weight: 50 }, { topic: 'Gaming news', weight: 50 }],
   });
 
-  assert.deepEqual([...eligible], ['games', 'gaming news']);
+  assert.deepEqual([...eligible], ['games', 'gaming news', 'gaming']);
+});
+
+test('getRankingTopicWeights adds a canonical concept from the algorithm name', () => {
+  const weights = getRankingTopicWeights({
+    name: 'Gaming',
+    topic_weights: [{ topic: 'IGN', weight: 50 }],
+  });
+
+  assert.deepEqual(weights, [{ topic: 'IGN', weight: 50 }, { topic: 'Gaming', weight: 50 }]);
 });
 
 test('diversifyFeedItems limits repeated channels and numbered series', () => {

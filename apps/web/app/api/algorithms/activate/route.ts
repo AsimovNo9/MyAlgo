@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { syncSeedChannelContent } from '@/lib/seed-channels';
 import { runColdStartTopicDiscovery } from '@/lib/channel-discovery';
 import type { Algorithm } from '@repo/shared-types';
+import { getEligibleTopicNames } from '@/lib/feed';
 import { activateAlgorithm } from '@/lib/data';
 
 const MINIMUM_POOL_ITEMS = 15;
@@ -42,10 +43,7 @@ export async function POST(request: Request) {
   const activation = await activateAlgorithm(userId, algorithm.id);
   if (!activation.ok) return NextResponse.json({ error: activation.error }, { status: 500 });
 
-  const topics = (algorithm as Algorithm).topic_weights
-    ?.filter((item) => item.weight >= 55)
-    .map((item) => item.topic.trim())
-    .filter(Boolean) ?? [];
+  const topics = [...getEligibleTopicNames(algorithm as Algorithm)];
   let poolCount = await countSharedPool(client, topics);
   if (poolCount >= MINIMUM_POOL_ITEMS) {
     return NextResponse.json({ ok: true, tier: 0, poolCount, rss: false, coldStart: false });

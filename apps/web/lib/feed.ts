@@ -1,6 +1,6 @@
 import type { Algorithm, FeedItem, FeedResponse, FeedSourceFilters, Rule } from '@repo/shared-types';
 
-import { resolveTopicConceptTerms } from './concepts.ts';
+import { resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
 
 export type FeedFeedbackSignal = {
   external_id: string;
@@ -92,8 +92,20 @@ function normalizeTopics(topics?: string[] | null): string[] {
     .map((topic) => topic.trim());
 }
 
+export function getRankingTopicWeights(algorithm?: Algorithm | null): Array<{ topic: string; weight: number }> {
+  const weights = [...(algorithm?.topic_weights ?? [])];
+  const algorithmName = algorithm?.name?.trim();
+  if (!algorithmName || weights.some((item) => item.topic.toLowerCase() === algorithmName.toLowerCase())) return weights;
+
+  const concept = resolveTopicConcepts(algorithmName);
+  if (concept.aliases.length === 0 && concept.intents.length === 0) return weights;
+
+  const highestWeight = Math.max(50, ...weights.map((item) => item.weight));
+  return [...weights, { topic: algorithmName, weight: highestWeight }];
+}
+
 export function getEligibleTopicNames(algorithm?: Algorithm | null): Set<string> {
-  const weights = algorithm?.topic_weights ?? [];
+  const weights = getRankingTopicWeights(algorithm);
   const highestWeight = Math.max(0, ...weights.map((item) => Number(item.weight) || 0));
   const threshold = Math.max(50, highestWeight * 0.6);
   return new Set(
@@ -173,7 +185,7 @@ function inferTopicsFromTitle(title: string, algorithm?: Algorithm | null): stri
   ];
 
   const inferredTopics = Array.from(new Set(topicRules.filter(({ pattern }) => pattern.test(normalizedTitle)).map(({ topic }) => topic)));
-  const algorithmTopicMatches = (algorithm?.topic_weights ?? []).flatMap((item) => {
+  const algorithmTopicMatches = getRankingTopicWeights(algorithm).flatMap((item) => {
     const topic = item.topic.trim();
     if (!topic) {
       return [];
@@ -264,7 +276,7 @@ export function buildFeedResponse(
   candidateItems: FeedCandidate[] = demoVideos,
   options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters } = {},
 ): FeedResponse {
-  const weights = new Map((algorithm?.topic_weights ?? []).map((item) => [item.topic.toLowerCase(), item.weight]));
+  const weights = new Map(getRankingTopicWeights(algorithm).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
   const eligibleTopics = getEligibleTopicNames(algorithm);
   const rules = algorithm?.rules ?? [];
