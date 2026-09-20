@@ -18,7 +18,7 @@ export type FeedCandidate = {
   channel_id?: string | null;
   channel_description?: string | null;
   channel_subscriber_count?: number | null;
-  source_kind?: 'subscription' | 'discovery' | null;
+  source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   is_short?: boolean;
   is_live?: boolean;
   content_type?: string | null;

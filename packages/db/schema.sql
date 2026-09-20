@@ -72,7 +72,7 @@ create table public.content_items (
   channel_id text,
   channel_description text,
   channel_subscriber_count bigint,
-  source_kind text not null default 'subscription' check (source_kind in ('subscription', 'discovery')),
+  source_kind text not null default 'subscription' check (source_kind in ('subscription', 'discovery', 'liked')),
   published_at timestamptz,
   raw_metadata jsonb,
   fetched_at timestamptz not null default now(),

@@ -34,6 +34,10 @@ const classificationFacetsMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920050000_add_classification_facets.sql'),
   'utf8',
 );
+const likedContentSourceMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920060000_add_liked_content_source.sql'),
+  'utf8',
+);
 
 test('classifications table has a unique constraint on content_item_id for upserts', () => {
   assert.match(schema, /create unique index .*public\.classifications.*content_item_id/i);
@@ -82,6 +86,11 @@ test('classification language and format facets are tracked in schema and migrat
   assert.match(schema, /create table public\.classifications[\s\S]*format text/i);
   assert.match(classificationFacetsMigration, /add column if not exists language text/i);
   assert.match(classificationFacetsMigration, /add column if not exists format text/i);
+});
+
+test('liked content source is tracked in schema and migration', () => {
+  assert.match(schema, /source_kind text not null default 'subscription' check \(source_kind in \('subscription', 'discovery', 'liked'\)\)/i);
+  assert.match(likedContentSourceMigration, /source_kind in \('subscription', 'discovery', 'liked'\)/i);
 });
 
 test('schema enables RLS and defines a policy for every application table', () => {

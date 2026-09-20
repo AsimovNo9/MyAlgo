@@ -4,7 +4,7 @@ export type CandidatePoolItem = {
   external_id: string;
   topics?: string[];
   provenance?: { source?: CandidateRetrievalSource | null } | null;
-  source_kind?: 'subscription' | 'discovery' | null;
+  source_kind?: 'subscription' | 'discovery' | 'liked' | null;
 };
 
 export type CandidateSourceBatch<T extends CandidatePoolItem> = {
@@ -30,6 +30,7 @@ function emptySourceCounts(): Record<CandidateRetrievalSource, number> {
     youtube_subscription: 0,
     youtube_search: 0,
     youtube_rss: 0,
+    youtube_liked: 0,
   };
 }
 
