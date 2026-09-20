@@ -87,12 +87,12 @@ function buildTopicQueries(profile: RecommendationProfile, topic: string, catalo
   const aliasTerms = [...new Set(terms)];
 
   return [
-    ...aliasTerms.map((term) => ({ text: term, lane: 'alias' as const, topics: [topic] })),
     ...profile.preferredFormats.map((format) => ({
       text: `${topic} ${format}`,
       lane: 'format' as const,
       topics: [topic],
     })),
+    ...aliasTerms.map((term) => ({ text: term, lane: 'alias' as const, topics: [topic] })),
   ];
 }
 
