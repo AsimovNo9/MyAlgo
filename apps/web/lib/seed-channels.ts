@@ -1,5 +1,6 @@
 import { fetchChannelRssItems } from './rss.ts';
 import { buildCandidateRawMetadata, normalizeRssCandidate } from './candidates.ts';
+import { assembleCandidatePool } from './candidate-generation.ts';
 
 export type SeedChannelRow = { topic: string; channel_id: string; status?: 'pending' | 'approved' | 'rejected' };
 
@@ -55,12 +56,14 @@ export async function syncSeedChannelContent() {
   const channels = groupSeedChannelsByChannel(seedRows).slice(0, MAX_CHANNELS_PER_SYNC);
   let synced = 0;
   let classified = 0;
+  const rssCandidates = [];
 
   for (const { channelId, topics } of channels) {
     const items = (await fetchChannelRssItems(channelId)).slice(0, MAX_ITEMS_PER_CHANNEL);
 
     for (const item of items) {
       const candidate = normalizeRssCandidate(item, channelId);
+      rssCandidates.push({ ...candidate, topics });
       const { data: contentRow, error: upsertError } = await client
         .from('content_items')
         .upsert(
@@ -116,5 +119,9 @@ export async function syncSeedChannelContent() {
     }
   }
 
-  return { ok: true, channels: channels.length, synced, classified };
+  const candidatePool = assembleCandidatePool([
+    { source: 'youtube_rss', items: rssCandidates },
+  ], [...new Set(seedRows.map((row) => row.topic))]);
+
+  return { ok: true, channels: channels.length, synced, classified, candidatePool: candidatePool.metrics };
 }

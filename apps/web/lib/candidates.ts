@@ -18,6 +18,7 @@ export type RecommendationCandidate = {
   description?: string | null;
   published_at?: string | null;
   source_kind: 'subscription' | 'discovery';
+  topics?: string[];
   provenance?: CandidateProvenance;
 };
 

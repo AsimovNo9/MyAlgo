@@ -46,18 +46,18 @@ export async function POST(request: Request) {
   const topics = [...getEligibleTopicNames(algorithm as Algorithm)];
   let poolCount = await countSharedPool(client, topics);
   if (poolCount >= MINIMUM_POOL_ITEMS) {
-    return NextResponse.json({ ok: true, tier: 0, poolCount, rss: false, coldStart: false });
+    return NextResponse.json({ ok: true, tier: 0, poolCount, rss: false, coldStart: false, candidatePool: null });
   }
 
   const rss = await syncSeedChannelContent();
   poolCount = await countSharedPool(client, topics);
   if (poolCount >= MINIMUM_POOL_ITEMS) {
-    return NextResponse.json({ ok: true, tier: 1, poolCount, rss, coldStart: false });
+    return NextResponse.json({ ok: true, tier: 1, poolCount, rss, coldStart: false, candidatePool: rss.candidatePool ?? null });
   }
 
   const coldStart = await runColdStartTopicDiscovery(topics);
   const postDiscoveryRss = coldStart.approved > 0 ? await syncSeedChannelContent() : null;
   poolCount = await countSharedPool(client, topics);
 
-  return NextResponse.json({ ok: true, tier: 2, poolCount, rss, coldStart, postDiscoveryRss });
+  return NextResponse.json({ ok: true, tier: 2, poolCount, rss, coldStart, postDiscoveryRss, candidatePool: postDiscoveryRss?.candidatePool ?? rss.candidatePool ?? null });
 }
