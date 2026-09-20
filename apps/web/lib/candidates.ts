@@ -1,4 +1,4 @@
-export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss';
+export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked';
 
 export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
 
@@ -21,7 +21,7 @@ export type RecommendationCandidate = {
   channel_subscriber_count?: number | null;
   description?: string | null;
   published_at?: string | null;
-  source_kind: 'subscription' | 'discovery';
+  source_kind: 'subscription' | 'discovery' | 'liked';
   topics?: string[];
   provenance?: CandidateProvenance;
 };

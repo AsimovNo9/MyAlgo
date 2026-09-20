@@ -20,7 +20,7 @@ export type YoutubeSubscriptionItem = {
   external_id: string;
   published_at?: string;
   topics?: string[];
-  source_kind?: 'subscription' | 'discovery';
+  source_kind?: 'subscription' | 'discovery' | 'liked';
   provenance?: CandidateProvenance;
 };
 
@@ -273,6 +273,60 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
   return [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
 }
 
+export function mapYoutubeLikedItems(rawItems: unknown[]): YoutubeSubscriptionItem[] {
+  const items: YoutubeSubscriptionItem[] = [];
+
+  for (const item of Array.isArray(rawItems) ? rawItems : []) {
+    const record = item as {
+      id?: string;
+      snippet?: {
+        title?: string;
+        channelTitle?: string;
+        channelId?: string;
+        description?: string;
+        publishedAt?: string;
+      };
+    };
+    const videoId = record.id?.trim();
+    const title = record.snippet?.title?.trim();
+    if (!videoId || !title) continue;
+
+    items.push({
+      id: videoId,
+      external_id: videoId,
+      title,
+      description: record.snippet?.description ?? null,
+      channel_name: record.snippet?.channelTitle ?? 'Unknown channel',
+      channel_id: record.snippet?.channelId ?? null,
+      published_at: record.snippet?.publishedAt ?? new Date().toISOString(),
+      topics: [],
+      source_kind: 'liked',
+      provenance: createCandidateProvenance('youtube_liked', { channel_id: record.snippet?.channelId ?? null }),
+    });
+  }
+
+  return items;
+}
+
+async function fetchYoutubeLikedItems(accessToken: string): Promise<YoutubeSubscriptionItem[]> {
+  const params = new URLSearchParams({
+    part: 'snippet',
+    myRating: 'like',
+    maxResults: '50',
+  });
+  const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    console.error('Failed to fetch liked YouTube videos', response.status, await response.text());
+    return [];
+  }
+
+  const payload = await response.json() as { items?: unknown[] };
+  return mapYoutubeLikedItems(payload.items ?? []);
+}
+
 async function shouldRunYoutubeDiscovery(
   client: Awaited<ReturnType<typeof import('./supabase/server').createSupabaseServerClient>>,
   algorithm?: Algorithm | null,
@@ -463,9 +517,11 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const accessToken = await getValidYoutubeAccessToken(userId);
   const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
   const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm) : [];
+  const likedItems = accessToken ? await fetchYoutubeLikedItems(accessToken) : [];
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
     { source: 'youtube_search', items: discoveryItems },
+    { source: 'youtube_liked', items: likedItems },
   ]);
   const items = candidatePool.items;
 
@@ -531,6 +587,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     source: result.source,
     synced,
     discovered: discoveryItems.length,
+    liked: likedItems.length,
     classified,
     candidatePool: candidatePool.metrics,
     items,

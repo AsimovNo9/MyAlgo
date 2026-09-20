@@ -29,6 +29,7 @@ test('assembleCandidatePool deduplicates sources while preserving first-seen can
     youtube_subscription: 2,
     youtube_search: 2,
     youtube_rss: 0,
+    youtube_liked: 0,
   });
   assert.deepEqual(result.metrics.topicCoverage, { gaming: 2, rpg: 1 });
 });

@@ -40,7 +40,7 @@ export interface FeedItem {
   visible: boolean;
   reason?: string;
   matched_topics?: string[];
-  source_kind?: 'subscription' | 'discovery' | null;
+  source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   lane?: 'matched' | 'discovery' | 'explore';
 }
 

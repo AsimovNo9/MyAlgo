@@ -28,6 +28,7 @@ test('RSS candidates contribute seeded topic coverage to the shared pool metrics
     youtube_subscription: 0,
     youtube_search: 0,
     youtube_rss: 2,
+    youtube_liked: 0,
   });
   assert.deepEqual(result.metrics.topicCoverage, {
     'nuclear engineering': 1,
