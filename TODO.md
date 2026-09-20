@@ -3,6 +3,7 @@
 This file tracks launch-blocking work, production hardening, and follow-up tasks for Personal Algorithm.
 
 ## Current focus
+- [ ] Move from feed filtering to a recommendation engine: taste profile + candidate generation + retrieval + reranking
 - [ ] Quality-first feed relevance: unrelated items must be hidden or explained as fallback content
 - [ ] Add purchaser-facing source controls: subscribed-only, hide Shorts, and discovery toggle
 - [x] Add feed quality signals: adaptive relevance eligibility, empty state, and diversity limits
@@ -12,6 +13,15 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Repeat the full sign-in → profile creation → YouTube sync flow in production
 - [ ] Run production validation and launch hardening for the live app and extension
 - [ ] Complete the production OAuth/session validation pass for the Google + YouTube provider tokens
+
+## Recommendation-engine architecture actions
+- [ ] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
+- [ ] Add candidate generation from subscriptions, liked videos, creator queries, topic queries, and freshness searches rather than only ranking fetched content.
+- [ ] Add a query planner that expands user preferences into multiple retrieval queries instead of a single broad keyword string.
+- [ ] Keep language and format as first-class ranking dimensions instead of treating them as generic tags.
+- [ ] Keep classification text-first and metadata-driven; defer image models until they solve a real gap.
+- [ ] Add a discovery lane separate from strong matches so the feed mixes relevance and exploration without turning into a bubble.
+- [ ] Add a “why am I seeing this” explanation layer that uses user-preference reasoning instead of raw implementation strings.
 
 ## Immediate next actions
 - [x] Stabilize the YouTube ranking trigger flow and remove the re-trigger refresh loop
