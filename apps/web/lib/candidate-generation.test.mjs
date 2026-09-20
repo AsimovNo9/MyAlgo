@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assembleCandidatePool } from './candidate-generation.ts';
+import { getTopicCoverage, hasSufficientTopicCoverage } from './candidates.ts';
 
 test('assembleCandidatePool deduplicates sources while preserving first-seen candidates', () => {
   const result = assembleCandidatePool([
@@ -44,4 +45,18 @@ test('assembleCandidatePool uses provenance source when available', () => {
 
   assert.equal(result.metrics.sourceCounts.youtube_subscription, 0);
   assert.equal(result.metrics.sourceCounts.youtube_rss, 1);
+});
+
+test('topic coverage requires each strong interest, not only a global match total', () => {
+  const rows = [
+    { classifications: { topics: ['Gaming', 'Elden Ring'] } },
+    { classifications: { topics: ['Gaming'] } },
+    { classifications: { topics: ['Gaming'] } },
+    { classifications: { topics: ['Gaming'] } },
+    { classifications: { topics: ['Gaming'] } },
+  ];
+
+  assert.deepEqual(getTopicCoverage(rows, ['Gaming', 'Elden Ring']), { gaming: 5, 'elden ring': 1 });
+  assert.equal(hasSufficientTopicCoverage(rows, ['Gaming', 'Elden Ring'], 2), false);
+  assert.equal(hasSufficientTopicCoverage([...rows, ...rows], ['Gaming', 'Elden Ring'], 2), true);
 });

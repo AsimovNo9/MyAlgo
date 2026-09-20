@@ -182,6 +182,7 @@ function inferTopicsFromTitle(title: string, algorithm?: Algorithm | null): stri
     { pattern: /(engineering|software|code|architecture|build)/i, topic: 'Engineering' },
     { pattern: /(business|startup|strategy|marketing|founder|product)/i, topic: 'Business' },
     { pattern: /(tutorial|how to|guide|walkthrough|demo)/i, topic: 'Tutorial' },
+    { pattern: /(game|gaming|gameplay|playthrough|speedrun|esports|rpg|fps|boss fight|xbox|playstation|nintendo|steam|minecraft|fortnite|valorant|elden ring)/i, topic: 'Gaming' },
     { pattern: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
   ];
 

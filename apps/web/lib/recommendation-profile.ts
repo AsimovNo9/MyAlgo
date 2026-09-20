@@ -141,6 +141,14 @@ export function buildRecommendationQueries(
     return [];
   }
 
+  const freshnessQueries = includeFreshness
+    ? profile.explicitTopics.slice(0, 1).map((topic) => ({
+      text: `${topic} latest`,
+      lane: 'freshness' as const,
+      topics: [topic],
+    }))
+    : [];
+  const planningLimit = Math.max(1, limit - freshnessQueries.length);
   const planned: RecommendationQuery[] = [];
   if (profile.goal) {
     planned.push({ text: profile.goal, lane: 'goal', topics: profile.explicitTopics });
@@ -158,9 +166,9 @@ export function buildRecommendationQueries(
   const cursors = new Array(queriesByTopic.length).fill(0);
   let hasMore = true;
 
-  while (planned.length < limit && hasMore) {
+  while (planned.length < planningLimit && hasMore) {
     hasMore = false;
-    for (let topicIndex = 0; topicIndex < queriesByTopic.length && planned.length < limit; topicIndex += 1) {
+    for (let topicIndex = 0; topicIndex < queriesByTopic.length && planned.length < planningLimit; topicIndex += 1) {
       const topicQueries = queriesByTopic[topicIndex];
       const cursor = cursors[topicIndex];
       if (cursor >= topicQueries.length) {
@@ -173,13 +181,7 @@ export function buildRecommendationQueries(
     }
   }
 
-  if (includeFreshness) {
-    planned.push(...profile.explicitTopics.map((topic) => ({
-      text: `${topic} latest`,
-      lane: 'freshness' as const,
-      topics: [topic],
-    })));
-  }
+  planned.push(...freshnessQueries);
 
   const seen = new Set<string>();
   return planned.filter((query) => {

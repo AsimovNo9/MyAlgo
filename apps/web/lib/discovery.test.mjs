@@ -30,6 +30,20 @@ test('buildDiscoveryQueryPlans expands strong topics through approved graph rela
   assert.ok(plans.some((plan) => plan.lane === 'intent' && /Role-playing games/i.test(plan.text)));
 });
 
+test('buildDiscoveryQueryPlans reserves a recent-content lane for the strongest topic', () => {
+  const plans = buildDiscoveryQueryPlans({
+    name: 'Gaming',
+    topic_weights: [
+      { topic: 'Elden Ring', weight: 50 },
+      { topic: 'Game news', weight: 50 },
+    ],
+    rules: [],
+  });
+
+  assert.equal(plans.some((plan) => plan.lane === 'freshness' && plan.text === 'Elden Ring latest'), true);
+  assert.equal(plans.length <= discoveryLimits.maxQueriesPerSync, true);
+});
+
 test('buildDiscoveryQueries derives one query per strong topic alongside the goal', () => {
   const queries = buildDiscoveryQueries({
     name: 'Work',
@@ -47,7 +61,6 @@ test('buildDiscoveryQueries derives one query per strong topic alongside the goa
     'AI tutorial',
     'Engineering tutorial',
     'AI latest',
-    'Engineering latest',
   ]);
   assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
 });

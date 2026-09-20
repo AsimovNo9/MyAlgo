@@ -413,6 +413,28 @@ test('buildFeedResponse uses semantic similarity as a bounded ranking signal', (
   assert.match(feed.items[0].reason ?? '', /semantically close/i);
 });
 
+test('buildFeedResponse admits explicit Elden Ring content alongside broad Gaming content', () => {
+  const feed = buildFeedResponse(
+    {
+      name: 'Gaming',
+      goal_text: 'Learn about the latest games',
+      topic_weights: [
+        { topic: 'Elden Ring', weight: 50 },
+        { topic: 'Game news', weight: 50 },
+      ],
+      rules: [],
+    },
+    [],
+    [
+      { external_id: 'elden-ring', title: 'Elden Ring latest boss builds', topics: ['Gaming'] },
+      { external_id: 'backlog', title: 'My gaming backlog update', topics: ['Gaming'] },
+    ],
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['elden-ring', 'backlog']);
+  assert.match(feed.items[0].reason ?? '', /Elden Ring|Gaming/i);
+});
+
 test('buildFeedResponse boosts more-like-this feedback without changing visibility', () => {
   const algorithm = { id: 'alg-feedback-boost', name: 'Work', topic_weights: [], rules: [] };
   const candidates = [

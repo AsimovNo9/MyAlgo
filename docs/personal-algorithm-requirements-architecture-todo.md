@@ -1829,6 +1829,7 @@ The concept graph is the durable product asset. Embeddings are a retrieval index
 - [x] Add a bounded freshness query lane for strong topics.
 - [ ] Keep retrieval bounded, cached and provenance-preserving across subscriptions, RSS, liked videos and YouTube Search.
 - [x] Add candidate quality metrics for duplicate rate, classification coverage, source diversity, topic coverage, and freshness coverage; production baselines remain planned.
+- [x] Gate retrieval by per-interest coverage so broad topic volume cannot suppress missing concrete interests.
 
 ## P1 — Vector stage in Supabase
 

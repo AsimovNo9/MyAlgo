@@ -47,7 +47,7 @@ test('buildRecommendationProfile keeps a recognized algorithm name as a retrieva
     rules: [],
   });
 
-  assert.equal(profile.explicitTopics.includes('Gaming'), true);
+  assert.deepEqual(profile.explicitTopics, ['Elden Ring', 'Game news', 'Gaming']);
   assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.topics.includes('Gaming')), true);
 });
 
