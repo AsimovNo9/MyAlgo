@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
-import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, getRankingTopicWeights, normalizeClassificationRecord, summarizeFeedGeneration } from './feed.ts';
+import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, getRankingTopicWeights, interleaveFeedLanes, normalizeClassificationRecord, summarizeFeedGeneration } from './feed.ts';
 import { fetchWithRetry } from './http.ts';
 import { inferPageCandidateTopics } from './page-relevance.ts';
 import { redactSensitiveValues } from './logging.ts';
@@ -79,6 +79,20 @@ test('summarizeFeedGeneration returns metrics without content identifiers', () =
     durationMs: 13,
   });
   assert.equal(JSON.stringify(summary).includes('matched-id'), false);
+});
+
+test('interleaveFeedLanes applies weighted lane proportions without dropping items', () => {
+  const items = [
+    { id: 'm1', external_id: 'm1', title: 'Matched 1', score: 90, visible: true, lane: 'matched' },
+    { id: 'm2', external_id: 'm2', title: 'Matched 2', score: 80, visible: true, lane: 'matched' },
+    { id: 'm3', external_id: 'm3', title: 'Matched 3', score: 70, visible: true, lane: 'matched' },
+    { id: 'd1', external_id: 'd1', title: 'Discovery 1', score: 60, visible: true, lane: 'discovery' },
+    { id: 'e1', external_id: 'e1', title: 'Explore 1', score: 50, visible: true, lane: 'explore' },
+  ];
+
+  const ordered = interleaveFeedLanes(items, { matched: 0.5, discovery: 0.3, explore: 0.2 });
+
+  assert.deepEqual(ordered.map((item) => item.external_id), ['m1', 'd1', 'm2', 'e1', 'm3']);
 });
 
 test('summarizeFeedGeneration reports privacy-safe per-topic pipeline counts', () => {

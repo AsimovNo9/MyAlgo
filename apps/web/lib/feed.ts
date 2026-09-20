@@ -21,6 +21,18 @@ export type FeedActivitySignal = {
 
 export type FeedCandidate = RecommendationCandidate;
 
+export type FeedLaneAllocation = {
+  matched: number;
+  discovery: number;
+  explore: number;
+};
+
+export const defaultFeedLaneAllocation: FeedLaneAllocation = {
+  matched: 0.6,
+  discovery: 0.25,
+  explore: 0.15,
+};
+
 export type FeedGenerationSummary = {
   candidateCount: number;
   visibleCount: number;
@@ -149,6 +161,42 @@ export function diversifyFeedItems(items: FeedItem[], maxPerChannel = 2, maxPerS
     if (seriesKey) seriesCounts.set(seriesKey, (seriesCounts.get(seriesKey) ?? 0) + 1);
     return true;
   });
+}
+
+export function interleaveFeedLanes(
+  items: FeedItem[],
+  allocation: Partial<FeedLaneAllocation> = {},
+): FeedItem[] {
+  const weights: FeedLaneAllocation = {
+    matched: Math.max(0, allocation.matched ?? defaultFeedLaneAllocation.matched),
+    discovery: Math.max(0, allocation.discovery ?? defaultFeedLaneAllocation.discovery),
+    explore: Math.max(0, allocation.explore ?? defaultFeedLaneAllocation.explore),
+  };
+  const buckets = new Map<FeedItem['lane'], FeedItem[]>([
+    ['matched', items.filter((item) => item.lane === 'matched')],
+    ['discovery', items.filter((item) => item.lane === 'discovery')],
+    ['explore', items.filter((item) => item.lane === 'explore')],
+  ]);
+  const selected = new Map<NonNullable<FeedItem['lane']>, number>([['matched', 0], ['discovery', 0], ['explore', 0]]);
+  const result: FeedItem[] = [];
+
+  while (result.length < items.length) {
+    const available = (['matched', 'discovery', 'explore'] as const)
+      .filter((lane) => (buckets.get(lane)?.length ?? 0) > 0 && weights[lane] > 0);
+    if (available.length === 0) break;
+
+    const lane = available.reduce((best, candidate) => {
+      const bestRatio = ((selected.get(best) ?? 0) + 1) / weights[best];
+      const candidateRatio = ((selected.get(candidate) ?? 0) + 1) / weights[candidate];
+      return candidateRatio < bestRatio ? candidate : best;
+    });
+    const item = buckets.get(lane)?.shift();
+    if (!item) break;
+    result.push(item);
+    selected.set(lane, (selected.get(lane) ?? 0) + 1);
+  }
+
+  return result;
 }
 
 function escapeRegex(value: string): string {
@@ -331,7 +379,7 @@ export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
-  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[]; conceptGraph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] }; learnedProfile?: LearnedAffinityProfile } = {},
+  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[]; conceptGraph?: { catalog: ConceptCatalogEntry[]; relations: ConceptRelationEntry[] }; learnedProfile?: LearnedAffinityProfile; laneAllocation?: Partial<FeedLaneAllocation> } = {},
 ): FeedResponse {
   const weights = new Map(getRankingTopicWeights(algorithm).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
@@ -556,7 +604,7 @@ export function buildFeedResponse(
   const items = options.includeHidden
     ? fallbackRanked
     : diversifiedRanked.length > 0
-      ? diversifiedRanked
+      ? interleaveFeedLanes(diversifiedRanked, options.laneAllocation)
       : hasTopicWeights
         ? []
         : fallbackRanked;
