@@ -588,6 +588,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 ### Milestone 4: Learning loop and calibration
 
 - [x] Import liked-video metadata when the OAuth scope permits it.
+- [x] Use liked-video facets as bounded positive evidence in the derived taste profile.
 - [ ] Record privacy-bounded extension activity such as opens, revisits, and approximate watch duration.
 - [ ] Recompute profile affinities from feedback and observed activity.
 - [ ] Add a user-facing taste calibration flow.
