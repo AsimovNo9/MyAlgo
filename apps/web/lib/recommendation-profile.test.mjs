@@ -44,3 +44,18 @@ test('buildRecommendationQueries is bounded, round-robin, and deduplicated', () 
   assert.deepEqual(queries.map((query) => query.lane), ['goal', 'alias', 'format', 'format']);
   assert.equal(new Set(queries.map((query) => query.text.toLowerCase())).size, queries.length);
 });
+
+test('buildRecommendationQueries adds intent and freshness lanes after core topic queries', () => {
+  const profile = buildRecommendationProfile({
+    name: 'Gaming',
+    goal_text: 'Learn game design systems',
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [],
+  });
+
+  const queries = buildRecommendationQueries(profile, 20);
+
+  assert.equal(queries.some((query) => query.lane === 'intent' && query.text.includes('game design')), true);
+  assert.equal(queries.some((query) => query.lane === 'freshness' && query.text === 'Gaming latest tutorial'), true);
+  assert.equal(queries.length <= 20, true);
+});
