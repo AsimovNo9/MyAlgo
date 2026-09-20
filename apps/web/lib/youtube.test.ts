@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fetchYoutubeSubscriptionFeed, mapYoutubeLikedItems, resolveYoutubeAccessTokenCandidate } from './youtube.ts';
+import { fetchYoutubeSubscriptionFeed, getDiscoverySearchOrder, mapYoutubeLikedItems, resolveYoutubeAccessTokenCandidate } from './youtube.ts';
 
 test('missing user should not silently return demo fixture content', async () => {
   const result = await fetchYoutubeSubscriptionFeed(undefined);
@@ -67,4 +67,12 @@ test('resolveYoutubeAccessTokenCandidate only uses identity tokens before persis
     ),
     'identity-access-token',
   );
+});
+
+test('discovery search uses relevance ordering except for freshness queries', () => {
+  assert.equal(getDiscoverySearchOrder('topic'), 'relevance');
+  assert.equal(getDiscoverySearchOrder('intent'), 'relevance');
+  assert.equal(getDiscoverySearchOrder('creator'), 'relevance');
+  assert.equal(getDiscoverySearchOrder('format'), 'relevance');
+  assert.equal(getDiscoverySearchOrder('freshness'), 'date');
 });

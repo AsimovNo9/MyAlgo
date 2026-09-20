@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDiscoveryQueries, buildDiscoveryQueryPlans, discoveryLimits } from './discovery.ts';
+import { buildDiscoveryQueries, buildDiscoveryQueryPlans, discoveryLimits, getDiscoveryLimits } from './discovery.ts';
 
 test('buildDiscoveryQueryPlans preserves query lane, topics, and algorithm revision', () => {
   const plans = buildDiscoveryQueryPlans({
@@ -117,4 +117,19 @@ test('buildDiscoveryQueries discovers content from every strong topic in a multi
   assert.equal(queries.includes('AI guide'), true);
   assert.equal(queries.some((query) => query.toLowerCase().includes('gam')), true);
   assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
+});
+
+test('discovery limits keep the default result budget bounded', () => {
+  assert.equal(discoveryLimits.maxResultsPerQuery, 5);
+  assert.equal(discoveryLimits.maxResultsPerQuery <= 50, true);
+});
+
+test('configured discovery result depth is clamped to the provider-safe range', () => {
+  const previous = process.env.YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY;
+  process.env.YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY = '999';
+  assert.equal(getDiscoveryLimits().maxResultsPerQuery, 50);
+  process.env.YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY = '0';
+  assert.equal(getDiscoveryLimits().maxResultsPerQuery, 1);
+  if (previous === undefined) delete process.env.YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY;
+  else process.env.YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY = previous;
 });

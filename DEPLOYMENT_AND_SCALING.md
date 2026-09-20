@@ -134,7 +134,7 @@ Current stack as-is. No changes needed.
 - Move classification off the request path into a queue (Upstash QStash, or Supabase `pg_cron` + an edge function) so `/api/feed` isn't blocked waiting on the Anthropic API.
 - Add a quota-tracking table for the YouTube Data API (shared 10,000 units/day free quota) and request a quota increase from Google once usage approaches it.
 
-Discovery search is deliberately bounded at MVP scale: each sync derives at most three queries and requests at most five videos per query. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search.
+Discovery search is deliberately bounded at MVP scale: each sync derives at most five queries and requests five videos per query by default. The result depth can be configured through `YOUTUBE_DISCOVERY_MAX_RESULTS_PER_QUERY` but is clamped to 1–50. YouTube `search.list` is quota-expensive, so discovery must remain a sync-time operation with cached results; page mutations and feed reads must never trigger a new search. Sync responses report attempted queries, returned/qualified candidates, unique candidates, lane counts, and estimated Search quota units.
 
 Niche-topic content that no user is subscribed to is sourced separately via free RSS polling (`apps/web/lib/rss.ts`, `apps/web/lib/seed-channels.ts`), driven by a shared Vercel Cron job (`apps/web/vercel.json`, daily at 02:00 UTC on Hobby) hitting `/api/seed-channels/sync`. This ingestion path consumes no YouTube Data API quota and runs once for the whole project, not per user, which is why it is the primary mechanism for topics like niche engineering or research content rather than per-user `search.list` polling.
 
