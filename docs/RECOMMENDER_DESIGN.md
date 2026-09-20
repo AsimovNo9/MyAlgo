@@ -574,6 +574,8 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Add language and format constraints to retrieval when explicit preferences exist.
 - [ ] Add a candidate-generation coordinator with source budgets, coverage accounting, and deterministic deduplication.
 - [ ] Return retrieval provenance and source contribution metrics from the coordinator.
+- [x] Add reusable candidate-pool assembly with deterministic deduplication for subscription and Search batches.
+- [x] Return source contribution and topic-coverage metrics from YouTube sync.
 
 ### Milestone 3: Profile-aware reranking
 

@@ -7,6 +7,7 @@ import { buildCandidateRawMetadata, createCandidateProvenance, type CandidatePro
 import { getEligibleTopicNames } from './feed.ts';
 import { hasSufficientSharedTopicPool, type ClassifiedCandidateRow } from './candidates.ts';
 import { buildRecommendationProfile } from './recommendation-profile.ts';
+import { assembleCandidatePool } from './candidate-generation.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -456,7 +457,11 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const accessToken = await getValidYoutubeAccessToken(userId);
   const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
   const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm) : [];
-  const items = [...result.items, ...discoveryItems];
+  const candidatePool = assembleCandidatePool([
+    { source: 'youtube_subscription', items: result.items },
+    { source: 'youtube_search', items: discoveryItems },
+  ]);
+  const items = candidatePool.items;
 
   let synced = 0;
   let classified = 0;
@@ -521,6 +526,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     synced,
     discovered: discoveryItems.length,
     classified,
+    candidatePool: candidatePool.metrics,
     items,
   };
 }
