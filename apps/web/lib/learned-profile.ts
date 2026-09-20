@@ -26,6 +26,14 @@ function signalValue(eventType: FeedFeedbackSignal['eventType']): number {
   return eventType === 'more_like_this' ? 1 : -1;
 }
 
+function addCandidateAffinity(profile: LearnedAffinityProfile, candidate: FeedCandidate, strength: number) {
+  for (const topic of candidate.topics ?? []) addSignal(profile.topics, topic, strength * 0.35);
+  addSignal(profile.channels, candidate.channel_id ?? candidate.channel_name, strength * 0.5);
+  addSignal(profile.formats, candidate.format, strength * 0.4);
+  addSignal(profile.languages, candidate.language, strength * 0.4);
+  addSignal(profile.sources, candidate.source_kind, strength * 0.25);
+}
+
 export function buildLearnedAffinityProfile(
   candidates: FeedCandidate[],
   signals: FeedFeedbackSignal[],
@@ -33,16 +41,18 @@ export function buildLearnedAffinityProfile(
   const profile = emptyProfile();
   const candidatesById = new Map(candidates.map((candidate) => [candidate.external_id, candidate]));
 
+  for (const candidate of candidates) {
+    if (candidate.source_kind === 'liked') {
+      addCandidateAffinity(profile, candidate, 0.6);
+    }
+  }
+
   for (const signal of signals) {
     const candidate = candidatesById.get(signal.external_id);
     const value = signalValue(signal.eventType);
     if (!candidate) continue;
 
-    for (const topic of candidate.topics ?? []) addSignal(profile.topics, topic, value * 0.35);
-    addSignal(profile.channels, candidate.channel_id ?? candidate.channel_name, value * 0.5);
-    addSignal(profile.formats, candidate.format, value * 0.4);
-    addSignal(profile.languages, candidate.language, value * 0.4);
-    addSignal(profile.sources, candidate.source_kind, value * 0.25);
+    addCandidateAffinity(profile, candidate, value);
   }
 
   return profile;
