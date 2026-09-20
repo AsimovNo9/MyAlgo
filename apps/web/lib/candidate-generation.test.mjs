@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assembleCandidatePool } from './candidate-generation.ts';
-import { getTopicCoverage, hasSufficientTopicCoverage } from './candidates.ts';
+import { getTopicCoverage, hasSufficientTopicCoverage, summarizeActivationCoverage } from './candidates.ts';
 
 test('assembleCandidatePool deduplicates sources while preserving first-seen candidates', () => {
   const result = assembleCandidatePool([
@@ -59,4 +59,30 @@ test('topic coverage requires each strong interest, not only a global match tota
   assert.deepEqual(getTopicCoverage(rows, ['Gaming', 'Elden Ring']), { gaming: 5, 'elden ring': 1 });
   assert.equal(hasSufficientTopicCoverage(rows, ['Gaming', 'Elden Ring'], 2), false);
   assert.equal(hasSufficientTopicCoverage([...rows, ...rows], ['Gaming', 'Elden Ring'], 2), true);
+});
+
+test('topic coverage remains case-insensitive across multiple classified facets', () => {
+  const rows = [
+    { classifications: [{ topics: ['AI', 'Computer Vision'] }] },
+    { classifications: [{ topics: ['computer vision'] }] },
+  ];
+
+  assert.deepEqual(getTopicCoverage(rows, ['AI', 'Computer Vision']), {
+    ai: 1,
+    'computer vision': 2,
+  });
+});
+
+test('activation coverage requires every strong topic to meet the threshold', () => {
+  const rows = [
+    { classifications: [{ topics: ['AI'] }] },
+    { classifications: [{ topics: ['AI'] }] },
+    { classifications: [{ topics: ['Computer Vision'] }] },
+  ];
+
+  assert.deepEqual(summarizeActivationCoverage(rows, ['AI', 'Computer Vision'], 2), {
+    poolCount: 3,
+    topicCoverage: { ai: 2, 'computer vision': 1 },
+    sufficient: false,
+  });
 });
