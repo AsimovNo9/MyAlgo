@@ -41,6 +41,7 @@ export interface FeedItem {
   reason?: string;
   matched_topics?: string[];
   source_kind?: 'subscription' | 'discovery' | null;
+  lane?: 'matched' | 'discovery' | 'explore';
 }
 
 export interface FeedResponse {
