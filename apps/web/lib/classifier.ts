@@ -192,8 +192,16 @@ async function classifyWithAnthropic(title: string, semanticContext: string[] = 
   }
 }
 
-export async function classifyContent(title: string, catalog: ConceptCatalogEntry[] = []): Promise<ClassificationResult> {
+export async function classifyContent(
+  title: string,
+  catalog: ConceptCatalogEntry[] = [],
+  metadata: { language?: string | null } = {},
+): Promise<ClassificationResult> {
   const deterministic = classifyDeterministically(title, catalog);
+  const languageHint = metadata.language?.trim().toLowerCase().match(/^[a-z]{2}/)?.[0] ?? null;
+  if (!deterministic.language && languageHint) {
+    deterministic.language = languageHint;
+  }
   if (deterministic.confidence >= 0.7) {
     return deterministic;
   }

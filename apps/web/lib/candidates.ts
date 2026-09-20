@@ -53,10 +53,11 @@ export function normalizeRssCandidate(item: RssCandidateInput, channelId: string
   };
 }
 
-export function buildCandidateRawMetadata(candidate: Pick<RecommendationCandidate, 'description' | 'provenance'>): Record<string, unknown> {
+export function buildCandidateRawMetadata(candidate: Pick<RecommendationCandidate, 'description' | 'provenance'> & { metadata?: Record<string, unknown> }): Record<string, unknown> {
   return {
     description: candidate.description ?? null,
     retrieval: candidate.provenance ?? null,
+    ...(candidate.metadata ? { metadata: candidate.metadata } : {}),
   };
 }
 

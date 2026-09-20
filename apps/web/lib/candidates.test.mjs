@@ -60,6 +60,27 @@ test('buildCandidateRawMetadata preserves bounded description and retrieval prov
   });
 });
 
+test('buildCandidateRawMetadata persists optional enriched video metadata', () => {
+  const metadata = { category_id: '28', duration_seconds: 120, tags: ['systems'] };
+
+  assert.deepEqual(buildCandidateRawMetadata({
+    description: 'Enriched description',
+    provenance: createCandidateProvenance('youtube_search', { retrievedAt: '2026-09-20T10:00:00Z' }),
+    metadata,
+  }), {
+    description: 'Enriched description',
+    retrieval: {
+      source: 'youtube_search',
+      query: null,
+      query_lane: null,
+      query_topics: [],
+      channel_id: null,
+      retrieved_at: '2026-09-20T10:00:00Z',
+    },
+    metadata,
+  });
+});
+
 test('hasSufficientSharedTopicPool recognizes classified RSS content case-insensitively', () => {
   const rows = Array.from({ length: 15 }, (_, index) => ({
     classifications: [{ topics: [index < 14 ? 'Gaming' : 'RPG'] }],
