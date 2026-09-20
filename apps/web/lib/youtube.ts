@@ -6,6 +6,7 @@ import { redactSensitiveValues } from './logging.ts';
 import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
 import { getEligibleTopicNames } from './feed.ts';
 import { hasSufficientSharedTopicPool, type ClassifiedCandidateRow } from './candidates.ts';
+import { buildRecommendationProfile } from './recommendation-profile.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -216,6 +217,7 @@ async function fetchYoutubeRecentUploads(
 
 async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null): Promise<YoutubeSubscriptionItem[]> {
   const discoveryItems: YoutubeSubscriptionItem[] = [];
+  const language = buildRecommendationProfile(algorithm).language;
 
   for (const query of buildDiscoveryQueries(algorithm)) {
     const params = new URLSearchParams({
@@ -225,6 +227,9 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
       order: 'date',
       q: query,
     });
+    if (language) {
+      params.set('relevanceLanguage', language);
+    }
     const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
     });

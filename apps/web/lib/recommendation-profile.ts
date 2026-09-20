@@ -4,6 +4,7 @@ import { buildAlgorithmIntentProfile, resolveTopicConceptTerms } from './concept
 
 export type RecommendationProfile = {
   goal: string;
+  language: string | null;
   explicitTopics: string[];
   aliases: string[];
   intents: string[];
@@ -30,6 +31,15 @@ function inferPreferredFormats(goal: string, positiveRuleTerms: string[]): strin
     : ['guide'];
 }
 
+function normalizeLanguage(language?: string | null): string | null {
+  const normalized = language?.trim().toLowerCase() ?? '';
+  return /^[a-z]{2}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeFormats(formats?: string[]): string[] {
+  return [...new Set((formats ?? []).map((format) => format.trim().toLowerCase()).filter(Boolean))];
+}
+
 export function buildRecommendationProfile(algorithm?: Algorithm | null): RecommendationProfile {
   const intentProfile = buildAlgorithmIntentProfile(algorithm);
   const rules = algorithm?.rules ?? [];
@@ -40,16 +50,18 @@ export function buildRecommendationProfile(algorithm?: Algorithm | null): Recomm
     .filter((rule) => rule.type === 'never_show' && rule.condition_text.trim().length > 0)
     .map((rule) => rule.condition_text.trim());
   const goal = algorithm?.goal_text?.trim() ?? '';
+  const explicitFormats = normalizeFormats(algorithm?.preferred_formats);
 
   return {
     goal,
+    language: normalizeLanguage(algorithm?.language),
     explicitTopics: intentProfile.canonicalTopics,
     aliases: intentProfile.aliases,
     intents: intentProfile.intents,
     semanticTerms: intentProfile.semanticTerms,
     positiveRuleTerms,
     negativeRuleTerms,
-    preferredFormats: inferPreferredFormats(goal, positiveRuleTerms),
+    preferredFormats: explicitFormats.length > 0 ? explicitFormats : inferPreferredFormats(goal, positiveRuleTerms),
   };
 }
 
@@ -67,11 +79,11 @@ function buildTopicQueries(profile: RecommendationProfile, topic: string): Recom
 
   return [
     ...aliasTerms.map((term) => ({ text: term, lane: 'alias' as const, topics: [topic] })),
-    {
-      text: `${topic} ${profile.preferredFormats[0] ?? 'guide'}`,
-      lane: 'format',
+    ...profile.preferredFormats.map((format) => ({
+      text: `${topic} ${format}`,
+      lane: 'format' as const,
       topics: [topic],
-    },
+    })),
   ];
 }
 
