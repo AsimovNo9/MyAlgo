@@ -110,7 +110,25 @@ export async function discoverAndQueueSeedChannels() {
     return { ok: false, discovered: 0, error: 'Unable to load discovery topics.' };
   }
 
-  const candidates = await discoverChannelCandidates(concepts.map((concept) => concept.canonical_name));
+  const { data: algorithms, error: algorithmError } = await client
+    .from('algorithms')
+    .select('topic_weights(topic, weight)');
+  if (algorithmError || !algorithms) {
+    return { ok: false, discovered: 0, error: 'Unable to load algorithm topics.' };
+  }
+
+  const algorithmTopics = algorithms.flatMap((algorithm) => (
+    Array.isArray(algorithm.topic_weights)
+      ? algorithm.topic_weights
+        .filter((item) => Number(item.weight) >= 55 && typeof item.topic === 'string')
+        .map((item) => item.topic)
+      : []
+  ));
+  const topics = [...new Set([
+    ...concepts.map((concept) => concept.canonical_name),
+    ...algorithmTopics,
+  ])];
+  const candidates = await discoverChannelCandidates(topics);
   let discovered = 0;
   for (const candidate of candidates) {
     const { error } = await client.from('topic_seed_channels').upsert({
