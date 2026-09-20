@@ -242,7 +242,7 @@ export function resolveTopicConceptTerms(topic: string, goalText?: string | null
 
 export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = []): AlgorithmIntentProfile {
   const canonicalTopics = (algorithm?.topic_weights ?? [])
-    .filter((item) => item.weight >= 55 && item.topic.trim().length > 0)
+    .filter((item) => item.weight >= 50 && item.topic.trim().length > 0)
     .sort((left, right) => right.weight - left.weight)
     .map((item) => item.topic.trim());
 
@@ -250,7 +250,7 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalo
   if (algorithmName && !canonicalTopics.some((topic) => normalizeTopic(topic) === normalizeTopic(algorithmName))) {
     const algorithmConcept = resolveTopicConcepts(algorithmName, catalog);
     if (algorithmConcept.aliases.length > 0 || algorithmConcept.intents.length > 0) {
-      canonicalTopics.unshift(algorithmName);
+      canonicalTopics.push(algorithmName);
     }
   }
 

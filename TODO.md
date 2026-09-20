@@ -140,6 +140,7 @@ These are the unresolved items from the production safety review. The implementa
 - [x] Add channel diversity and numbered-series suppression to improve perceived feed quality
 - [ ] Validate ranking logic against real user subscriptions and content
 - [ ] Rerun the active Gaming sync after algorithm-name retrieval fix and confirm discovery candidates increase visible feed coverage.
+- [x] Gate discovery by per-interest coverage instead of a global shared-pool total.
 - [x] Add regression coverage for positive feedback and rule precedence
 - [ ] Check rule precedence and feedback weighting in production conditions
 - [ ] Review empty-state and fallback feed behavior

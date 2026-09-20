@@ -17,6 +17,7 @@ const topicRules: Array<{ match: RegExp; topic: string }> = [
   { match: /(engineering|software|code|architecture|systems|build)/i, topic: 'Engineering' },
   { match: /(startup|business|strategy|marketing|founder|product)/i, topic: 'Business' },
   { match: /(tutorial|how to|guide|walkthrough|lesson|demo|lecture|course|university|explainer)/i, topic: 'Tutorial' },
+  { match: /(game|gaming|gameplay|playthrough|speedrun|esports|rpg|fps|boss fight|xbox|playstation|nintendo|steam|minecraft|fortnite|valorant|elden ring)/i, topic: 'Gaming' },
   { match: /(celebrity|gossip|entertainment|movie|music|tv|drama)/i, topic: 'Entertainment' },
 ];
 

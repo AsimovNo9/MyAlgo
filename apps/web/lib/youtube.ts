@@ -5,7 +5,7 @@ import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
 import { getEligibleTopicNames } from './feed.ts';
-import { hasSufficientSharedTopicPool, type ClassifiedCandidateRow } from './candidates.ts';
+import { hasSufficientTopicCoverage, type ClassifiedCandidateRow } from './candidates.ts';
 import { buildRecommendationProfile } from './recommendation-profile.ts';
 import { assembleCandidatePool } from './candidate-generation.ts';
 import { decryptOAuthToken, encryptOAuthToken } from './oauth-token-crypto.ts';
@@ -235,6 +235,9 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
       order: 'date',
       q: query,
     });
+    if (plan.lane === 'freshness') {
+      params.set('publishedAfter', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    }
     if (language) {
       params.set('relevanceLanguage', language);
     }
@@ -352,7 +355,7 @@ async function shouldRunYoutubeDiscovery(
     return true;
   }
 
-  return !hasSufficientSharedTopicPool(data as ClassifiedCandidateRow[], topics);
+  return !hasSufficientTopicCoverage(data as ClassifiedCandidateRow[], topics);
 }
 
 export function resolveYoutubeAccessTokenCandidate(

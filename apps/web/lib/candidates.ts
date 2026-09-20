@@ -23,6 +23,8 @@ export type ClassifiedCandidateRow = {
     | null;
 };
 
+export type TopicCoverage = Record<string, number>;
+
 export function createCandidateProvenance(
   source: CandidateRetrievalSource,
   details: Omit<Partial<CandidateProvenance>, 'source' | 'retrieved_at'> & { retrievedAt?: string } = {},
@@ -74,4 +76,30 @@ export function hasSufficientSharedTopicPool(
   });
 
   return matchingRows.length >= minimum;
+}
+
+export function getTopicCoverage(rows: ClassifiedCandidateRow[], topics: string[]): TopicCoverage {
+  const coverage: TopicCoverage = Object.fromEntries(
+    topics.map((topic) => topic.trim().toLowerCase()).filter(Boolean).map((topic) => [topic, 0]),
+  );
+
+  for (const row of rows) {
+    const classification = Array.isArray(row.classifications) ? row.classifications[0] : row.classifications;
+    const rowTopics = new Set((classification?.topics ?? []).map((topic) => topic.toLowerCase()));
+    for (const topic of Object.keys(coverage)) {
+      if (rowTopics.has(topic)) coverage[topic] += 1;
+    }
+  }
+
+  return coverage;
+}
+
+export function hasSufficientTopicCoverage(
+  rows: ClassifiedCandidateRow[],
+  topics: string[],
+  minimumPerTopic = 5,
+): boolean {
+  if (topics.length === 0 || minimumPerTopic <= 0) return false;
+  const coverage = getTopicCoverage(rows, topics);
+  return Object.values(coverage).every((count) => count >= minimumPerTopic);
 }
