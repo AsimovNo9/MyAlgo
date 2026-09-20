@@ -434,16 +434,29 @@ export function buildFeedResponse(
       ruleSummary.push('outside selected algorithm topics');
     }
 
-    const reasonBits = [
-      matchedTopics.length > 0 ? `Matched ${matchedTopics.join(', ')} topics.` : 'No strong topic match.',
-      ruleSummary.length > 0 ? `Rules boosted it: ${ruleSummary.join('; ')}.` : 'No matching rule adjustments.',
-      feedbackSummary.length > 0 ? `Feedback: ${feedbackSummary.join('; ')}.` : 'No explicit user feedback yet.',
-      scoreContributors.length > 0 ? `Weight contributions: ${scoreContributors.join('; ')}.` : 'No weight contributions.',
-    ];
+    const lane = visible
+      ? video.source_kind === 'discovery'
+        ? 'discovery'
+        : hasTopicWeights && eligibleMatchedTopics.length === 0
+          ? 'explore'
+          : 'matched'
+      : undefined;
+    const preferenceBits = [
+      matchedTopics.length > 0 ? `Strong match for ${matchedTopics.join(', ')}.` : 'No strong topic match.',
+      lane === 'discovery' ? 'This is a discovery recommendation from a new source.' : null,
+      lane === 'explore' ? 'This is an exploratory recommendation outside your strongest topics.' : null,
+      preferredLanguage && video.language === preferredLanguage ? `Matches your ${preferredLanguage} language preference.` : null,
+      preferredFormats.has(video.format?.toLowerCase() ?? '') ? `Matches your ${video.format} format preference.` : null,
+      ruleSummary.length > 0 ? `Your rules affected it: ${ruleSummary.join('; ')}.` : null,
+      feedbackSummary.length > 0 ? `Your feedback affected it: ${feedbackSummary.join('; ')}.` : null,
+      learnedBoost > 0 ? 'It is similar to content you responded positively to.' : null,
+      learnedBoost < 0 ? 'It reflects a learned preference from your past feedback.' : null,
+      scoreContributors.some((contributor) => contributor.startsWith('freshness')) ? 'It is relatively fresh.' : null,
+    ].filter((bit): bit is string => bit !== null);
 
     const reason = visible
-      ? `Ranked because ${reasonBits.join(' ')}`
-      : `Filtered because ${[...feedbackSummary, ...ruleSummary].join('; ') || 'no explicit override was matched.'}`;
+      ? preferenceBits.join(' ')
+      : `Filtered because ${[...feedbackSummary, ...ruleSummary].join('; ') || 'it did not match your current preferences.'}`;
 
     return {
       id: video.id ?? video.external_id,
@@ -457,13 +470,7 @@ export function buildFeedResponse(
       reason,
       matched_topics: matchedTopics,
       source_kind: video.source_kind ?? null,
-      lane: visible
-        ? video.source_kind === 'discovery'
-          ? 'discovery'
-          : hasTopicWeights && eligibleMatchedTopics.length === 0
-            ? 'explore'
-            : 'matched'
-        : undefined,
+      lane,
     };
   });
 
