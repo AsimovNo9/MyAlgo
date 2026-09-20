@@ -166,7 +166,8 @@ personal-algorithm/
 ### Web app (Next.js on Vercel)
 - **Dashboard** — same rule/weight editor as the options page (shares components + `shared-types`); lets a user configure preferences before even installing the extension, useful for onboarding.
 - **API routes** — stateless serverless functions, nothing persistent to patch or restart.
-  - `/api/feed` — pulls cached subscription content, scores it against the user's active algorithm, returns ranked + filtered list.
+  - `/api/feed` — reads the cached candidate pool, scores it against the user's active algorithm, and returns ranked + filtered content. It does not trigger YouTube Search or RSS retrieval.
+  - `/api/algorithms/activate` and sync jobs — coordinate shared-pool reuse, approved RSS ingestion, subscription refresh, and bounded YouTube Search gap filling before feed reads.
   - `/api/classify` — internal job: for new content_items, calls the Anthropic API to tag topic/type/quality, stores the result.
   - `/api/feedback` — records not-interested / more-like-this / never-show events for future scoring adjustments.
 
@@ -204,13 +205,6 @@ sequenceDiagram
     BG->>API: GET /api/feed (auth token)
     API->>DB: fetch active algorithm + rules
     API->>DB: fetch cached content_items + classifications
-    alt new content since last fetch
-        API->>YT: fetch latest subscription uploads
-        YT-->>API: video metadata
-        API->>AI: classify new items
-        AI-->>API: topic/type/quality scores
-        API->>DB: upsert content_items + classifications
-    end
     API->>API: score + rank per user's weights/rules
     API-->>BG: ranked feed (video_id, score, visible)
     BG-->>CS: apply to page
@@ -220,6 +214,19 @@ sequenceDiagram
     BG->>API: POST /api/feedback
     API->>DB: store feedback_event, adjust future scoring
 ```
+
+  Candidate retrieval runs separately during algorithm activation and scheduled sync:
+
+  ```mermaid
+  flowchart LR
+    ACT[Activation or sync job] --> POOL[Reuse shared classified pool]
+    POOL --> RSS[Poll approved RSS seed channels]
+    RSS --> GAP[Measure topic coverage]
+    GAP --> SEARCH[Bounded YouTube Search gap filling]
+    SEARCH --> ENRICH[Classify and enrich]
+    ENRICH --> STORE[(content_items + classifications)]
+    STORE --> FEED[/api/feed and extension ranking/]
+  ```
 
 ## 9. Database Schema
 

@@ -53,6 +53,23 @@ This is the minimum product definition for a real personalized recommendation en
 5. **Reranking** — score aligned items and suppress duplicates or off-topic items.
 6. **Feedback loop** — likes, dislikes, hide, and “less like this” update the taste profile.
 
+### MVP retrieval decision
+
+Candidate generation is a separate sync/activation concern, not part of `/api/feed` or page mutation handling. Approved RSS and the shared classified pool provide primary coverage; YouTube Search is bounded gap filling. Keep the current maximum of five queries and five results per query until coverage, quota, latency, and deduplication metrics justify an increase.
+
+The first candidate-generation coordinator should report:
+
+```text
+pool size before retrieval
+items reused from the shared pool
+items ingested from RSS
+Search queries attempted and results returned
+deduplicated candidate count
+classification coverage
+```
+
+This makes retrieval quality measurable independently from reranking quality.
+
 ### Scope guardrails for MVP
 
 - Keep classification text-first and metadata-driven.

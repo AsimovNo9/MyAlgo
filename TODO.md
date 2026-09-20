@@ -16,12 +16,18 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 
 ## Recommendation-engine architecture actions
 - [ ] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
+- [ ] Add a standalone candidate-generation coordinator with source budgets, coverage metrics, deduplication, and provenance.
 - [ ] Add candidate generation from subscriptions, liked videos, creator queries, topic queries, and freshness searches rather than only ranking fetched content.
 - [ ] Add a query planner that expands user preferences into multiple retrieval queries instead of a single broad keyword string.
 - [ ] Keep language and format as first-class ranking dimensions instead of treating them as generic tags.
 - [ ] Keep classification text-first and metadata-driven; defer image models until they solve a real gap.
 - [ ] Add a discovery lane separate from strong matches so the feed mixes relevance and exploration without turning into a bubble.
 - [ ] Add a “why am I seeing this” explanation layer that uses user-preference reasoning instead of raw implementation strings.
+
+### Recommender steering decision
+- The next recommender implementation is candidate generation and source orchestration, not image classification or a larger ranking model.
+- RSS and the shared pool are the primary coverage sources; YouTube Search fills measured gaps within the existing quota budget.
+- The feed and page-ranking paths must never trigger retrieval directly.
 
 ## Immediate next actions
 - [x] Stabilize the YouTube ranking trigger flow and remove the re-trigger refresh loop
@@ -74,6 +80,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a periodic shared search job to discover new candidate channels for the seed catalog
 - [x] Queue discovered channels as pending review instead of automatically polluting the approved RSS catalog
 - [x] Reuse the shared content pool before triggering RSS or cold-start discovery
+- [ ] Return candidate-pool coverage and source contribution metrics from activation/sync
 - [x] Add bounded cold-start discovery with per-topic weekly deduplication and high-confidence auto-approval
 - [ ] Add admin/user review UI to approve or reject discovered channels
 - [ ] Set the CRON_SECRET production environment variable and verify the cron job runs
