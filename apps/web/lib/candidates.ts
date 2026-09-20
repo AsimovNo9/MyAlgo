@@ -103,3 +103,15 @@ export function hasSufficientTopicCoverage(
   const coverage = getTopicCoverage(rows, topics);
   return Object.values(coverage).every((count) => count >= minimumPerTopic);
 }
+
+export function summarizeActivationCoverage(
+  rows: ClassifiedCandidateRow[],
+  topics: string[],
+  minimumPerTopic = 5,
+) {
+  return {
+    poolCount: rows.length,
+    topicCoverage: getTopicCoverage(rows, topics),
+    sufficient: hasSufficientTopicCoverage(rows, topics, minimumPerTopic),
+  };
+}

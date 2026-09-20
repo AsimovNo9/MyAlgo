@@ -5,9 +5,10 @@ import { syncSeedChannelContent } from '@/lib/seed-channels';
 import { runColdStartTopicDiscovery } from '@/lib/channel-discovery';
 import type { Algorithm } from '@repo/shared-types';
 import { getEligibleTopicNames } from '@/lib/feed';
+import { summarizeActivationCoverage, type ClassifiedCandidateRow } from '@/lib/candidates';
 import { activateAlgorithm } from '@/lib/data';
 
-const MINIMUM_POOL_ITEMS = 15;
+const MINIMUM_POOL_ITEMS_PER_TOPIC = 5;
 
 type PoolRow = { classifications?: { topics?: string[] | null } | Array<{ topics?: string[] | null }> | null };
 
@@ -18,12 +19,14 @@ function topicMatchesPool(row: PoolRow, topics: string[]): boolean {
 }
 
 async function countSharedPool(client: Awaited<ReturnType<typeof createSupabaseServerClient>>, topics: string[]) {
-  if (!client) return 0;
+  if (!client) return { poolCount: 0, topicCoverage: {}, sufficient: false };
   const { data } = await client
     .from('content_items')
     .select('classifications(topics)')
     .limit(200);
-  return (data ?? []).filter((row) => topicMatchesPool(row as PoolRow, topics)).length;
+  const rows = (data ?? []) as PoolRow[];
+  const matchingRows = rows.filter((row) => topicMatchesPool(row, topics));
+  return summarizeActivationCoverage(matchingRows, topics, MINIMUM_POOL_ITEMS_PER_TOPIC);
 }
 
 export async function POST(request: Request) {
@@ -44,20 +47,20 @@ export async function POST(request: Request) {
   if (!activation.ok) return NextResponse.json({ error: activation.error }, { status: 500 });
 
   const topics = [...getEligibleTopicNames(algorithm as Algorithm)];
-  let poolCount = await countSharedPool(client, topics);
-  if (poolCount >= MINIMUM_POOL_ITEMS) {
-    return NextResponse.json({ ok: true, tier: 0, poolCount, rss: false, coldStart: false, candidatePool: null });
+  let coverage = await countSharedPool(client, topics);
+  if (coverage.sufficient) {
+    return NextResponse.json({ ok: true, tier: 0, poolCount: coverage.poolCount, topicCoverage: coverage.topicCoverage, rss: false, coldStart: false, candidatePool: null });
   }
 
   const rss = await syncSeedChannelContent();
-  poolCount = await countSharedPool(client, topics);
-  if (poolCount >= MINIMUM_POOL_ITEMS) {
-    return NextResponse.json({ ok: true, tier: 1, poolCount, rss, coldStart: false, candidatePool: rss.candidatePool ?? null });
+  coverage = await countSharedPool(client, topics);
+  if (coverage.sufficient) {
+    return NextResponse.json({ ok: true, tier: 1, poolCount: coverage.poolCount, topicCoverage: coverage.topicCoverage, rss, coldStart: false, candidatePool: rss.candidatePool ?? null });
   }
 
   const coldStart = await runColdStartTopicDiscovery(topics);
   const postDiscoveryRss = coldStart.approved > 0 ? await syncSeedChannelContent() : null;
-  poolCount = await countSharedPool(client, topics);
+  coverage = await countSharedPool(client, topics);
 
-  return NextResponse.json({ ok: true, tier: 2, poolCount, rss, coldStart, postDiscoveryRss, candidatePool: postDiscoveryRss?.candidatePool ?? rss.candidatePool ?? null });
+  return NextResponse.json({ ok: true, tier: 2, poolCount: coverage.poolCount, topicCoverage: coverage.topicCoverage, rss, coldStart, postDiscoveryRss, candidatePool: postDiscoveryRss?.candidatePool ?? rss.candidatePool ?? null });
 }
