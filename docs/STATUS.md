@@ -1,7 +1,7 @@
 # Personal Algorithm Status
 
 **Status date:** 2026-09-20
-**Authority:** This document is the canonical implementation and verification summary. Product requirements live in [personal-algorithm-requirements-architecture-todo.md](personal-algorithm-requirements-architecture-todo.md); execution tasks live in [../TODO.md](../TODO.md).
+**Authority:** This document is the canonical implementation and verification summary. Recommendation requirements, architecture, delivery order, and acceptance criteria live in [RECOMMENDER.md](RECOMMENDER.md); execution tasks live in [../TODO.md](../TODO.md).
 
 ## Status Vocabulary
 

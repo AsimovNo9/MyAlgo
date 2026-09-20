@@ -60,6 +60,8 @@ These are the unresolved items from the production safety review. The implementa
 - [ ] Verify extension pause/resume, mode switching, source controls, and stale-cache fallback in a real browser.
 
 ## Recommendation-engine architecture actions
+
+The authoritative recommender roadmap and acceptance criteria are in [docs/RECOMMENDER.md](docs/RECOMMENDER.md). The checked items below are historical execution notes; do not add new recommender requirements here.
 - [x] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
 - [x] Add a standalone candidate-generation coordinator with source budgets, coverage metrics, deduplication, and provenance.
 - [x] Add learned creator-query retrieval; explicit `creator:`/`channel:` queries, subscriptions, liked videos, topic queries, RSS, bounded Search, and dedicated freshness queries are implemented.
@@ -70,9 +72,7 @@ These are the unresolved items from the production safety review. The implementa
 - [x] Add a “why am I seeing this” explanation layer that uses user-preference reasoning instead of raw implementation strings.
 
 ### Recommender steering decision
-- The next recommender implementation is candidate generation and source orchestration, not image classification or a larger ranking model.
-- RSS and the shared pool are the primary coverage sources; YouTube Search fills measured gaps within the existing quota budget.
-- The feed and page-ranking paths must never trigger retrieval directly.
+- Follow the phased sequence in [docs/RECOMMENDER.md](docs/RECOMMENDER.md), beginning with quality baselines and production safety gates.
 
 ## Immediate next actions
 - [x] Stabilize the YouTube ranking trigger flow and remove the re-trigger refresh loop
