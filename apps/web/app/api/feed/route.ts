@@ -3,6 +3,7 @@ import { buildFeedResponse, normalizeClassificationRecord, type FeedCandidate } 
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
+import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
 import type { FeedSourceFilters } from '@repo/shared-types';
 
 async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
@@ -132,8 +133,9 @@ export async function GET(request: Request) {
     ? algorithms.find((algorithm) => algorithm.name.trim().toLowerCase() === requestedMode)
     : null) ?? algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0] ?? null;
   const feedbackSignals = await fetchFeedbackSignalsForUser(userId);
+  const activitySignals = await fetchActivitySignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
-  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters });
+  const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters, activitySignals });
 
   if (activeAlgorithm?.id) {
     await persistFeedCacheForUser(userId, activeAlgorithm.id, response.items);
