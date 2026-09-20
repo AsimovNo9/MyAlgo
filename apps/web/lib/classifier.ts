@@ -32,7 +32,13 @@ function classifyDeterministically(title: string, catalog: ConceptCatalogEntry[]
   );
 
   for (const concept of catalog) {
-    const terms = [concept.canonicalName, ...concept.aliases, ...concept.intents];
+    const terms = [
+      concept.canonicalName,
+      ...concept.aliases,
+      ...concept.intents,
+      ...(concept.entities ?? []),
+      ...(concept.positivePhrases ?? []),
+    ];
     if (terms.some((term) => matchesWholePhrase(normalizedTitle, term))) {
       matchedTopics.push(concept.canonicalName);
     }

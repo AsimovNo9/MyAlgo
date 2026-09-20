@@ -130,6 +130,7 @@ create table public.content_concepts (
   confidence numeric not null check (confidence >= 0 and confidence <= 1),
   source text not null check (source in ('deterministic', 'graph', 'embedding', 'llm')),
   model_version text not null,
+  concept_version integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (content_item_id, concept_id)
