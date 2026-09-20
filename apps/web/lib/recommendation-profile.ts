@@ -82,20 +82,17 @@ function normalizeQuery(value: string): string {
 }
 
 function buildTopicQueries(profile: RecommendationProfile, topic: string, catalog: ConceptCatalogEntry[] = []): RecommendationQuery[] {
-  const lowerTopic = topic.toLowerCase();
-  const supportsAliasExpansion = /\b(game|gaming|esports|design|ux design|product design)\b/.test(lowerTopic);
   const terms = resolveTopicConceptTerms(topic, profile.goal, catalog)
-    .filter((term) => term.toLowerCase() !== lowerTopic);
-  const ruleAliases = terms.filter((term) => profile.positiveRuleTerms.some((rule) => rule.toLowerCase() === term.toLowerCase()));
-  const aliasTerms = supportsAliasExpansion ? [...new Set([...ruleAliases, ...terms])] : [];
+    .filter((term) => term.toLowerCase() !== topic.toLowerCase());
+  const aliasTerms = [...new Set(terms)];
 
   return [
-    ...aliasTerms.map((term) => ({ text: term, lane: 'alias' as const, topics: [topic] })),
     ...profile.preferredFormats.map((format) => ({
       text: `${topic} ${format}`,
       lane: 'format' as const,
       topics: [topic],
     })),
+    ...aliasTerms.map((term) => ({ text: term, lane: 'alias' as const, topics: [topic] })),
   ];
 }
 
