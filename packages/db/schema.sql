@@ -203,3 +203,13 @@ create policy "authenticated users can read seed channels" on public.topic_seed_
   for select using (auth.uid() is not null);
 create policy "authenticated users can insert seed channels" on public.topic_seed_channels
   for insert with check (auth.uid() is not null);
+
+create table public.topic_discovery_runs (
+  topic text primary key,
+  last_run_at timestamptz not null default now(),
+  candidate_count integer not null default 0
+);
+
+alter table public.topic_discovery_runs enable row level security;
+create policy "authenticated users can read discovery runs" on public.topic_discovery_runs
+  for select using (auth.uid() is not null);

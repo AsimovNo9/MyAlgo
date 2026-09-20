@@ -24,3 +24,14 @@ test('rankChannelCandidates orders candidates by confidence', () => {
 
   assert.deepEqual(ranked.map((candidate) => candidate.channelId), ['high', 'low']);
 });
+
+test('scoreChannelCandidate makes high-confidence topic matches eligible for auto-approval', () => {
+  const confidence = scoreChannelCandidate(
+    'Computer Vision',
+    'Computer Vision Research Lab',
+    'Computer vision image models and research',
+    1000000,
+  );
+
+  assert.ok(confidence >= 0.75);
+});

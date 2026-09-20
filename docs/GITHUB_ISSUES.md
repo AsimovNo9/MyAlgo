@@ -178,3 +178,7 @@ Subscriptions-only sourcing has a real gap: a niche "Work" algorithm (e.g. nucle
 - A review UI for the pending channels produced by the periodic shared `search.list` job; discovery now runs through `/api/seed-channels/discover` and queues candidates without auto-approving them.
 - Dedicated "pin this channel" UI using `channel_id` instead of name matching.
 - A UI for browsing/curating the seed-channel catalog (currently API-only).
+
+## 16. Tiered algorithm activation
+
+`POST /api/algorithms/activate` now applies the shared-pool strategy: reuse existing classified content first, burst approved RSS channels if the pool is thin, then run a weekly-deduplicated cold-start search and auto-approve only high-confidence channels before RSS syncing. The response includes the tier and counts so the client can show instant results followed by background enrichment.

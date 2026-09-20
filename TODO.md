@@ -62,6 +62,8 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a shared Vercel Cron job to poll seed channels, replacing per-user background discovery search
 - [x] Add a periodic shared search job to discover new candidate channels for the seed catalog
 - [x] Queue discovered channels as pending review instead of automatically polluting the approved RSS catalog
+- [x] Reuse the shared content pool before triggering RSS or cold-start discovery
+- [x] Add bounded cold-start discovery with per-topic weekly deduplication and high-confidence auto-approval
 - [ ] Add admin/user review UI to approve or reject discovered channels
 - [ ] Set the CRON_SECRET production environment variable and verify the cron job runs
 

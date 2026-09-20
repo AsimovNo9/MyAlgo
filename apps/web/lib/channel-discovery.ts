@@ -11,6 +11,8 @@ export type ChannelDiscoveryCandidate = {
 
 const MAX_TOPICS_PER_RUN = 5;
 const MAX_RESULTS_PER_TOPIC = 10;
+const DISCOVERY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTO_APPROVE_CONFIDENCE = 0.75;
 
 function normalize(value: string): string {
   return value.trim().toLowerCase();
@@ -146,4 +148,54 @@ export async function discoverAndQueueSeedChannels() {
   }
 
   return { ok: true, discovered, candidates: candidates.length };
+}
+
+export async function runColdStartTopicDiscovery(topics: string[]) {
+  const { createSupabaseAdminClient } = await import('./supabase/server');
+  const client = createSupabaseAdminClient();
+  if (!client) return { ran: false, discovered: 0, approved: 0, reason: 'admin_client_unavailable' };
+
+  const normalizedTopics = [...new Set(topics.map((topic) => topic.trim()).filter(Boolean))].slice(0, MAX_TOPICS_PER_RUN);
+  let discovered = 0;
+  let approved = 0;
+  let ran = false;
+
+  for (const topic of normalizedTopics) {
+    const { data: previousRun } = await client
+      .from('topic_discovery_runs')
+      .select('last_run_at')
+      .eq('topic', topic)
+      .maybeSingle();
+    if (previousRun && Date.now() - new Date(previousRun.last_run_at).getTime() < DISCOVERY_COOLDOWN_MS) {
+      continue;
+    }
+
+    ran = true;
+    const candidates = await discoverChannelCandidates([topic]);
+    discovered += candidates.length;
+
+    for (const candidate of candidates) {
+      const status = candidate.confidence >= AUTO_APPROVE_CONFIDENCE ? 'approved' : 'pending';
+      const { error } = await client.from('topic_seed_channels').upsert({
+        topic: candidate.topic,
+        channel_id: candidate.channelId,
+        source: 'discovered_via_search',
+        status,
+        confidence: candidate.confidence,
+        channel_name: candidate.channelName,
+        channel_description: candidate.channelDescription,
+        subscriber_count: candidate.subscriberCount,
+        discovered_at: new Date().toISOString(),
+      }, { onConflict: 'topic,channel_id' });
+      if (!error && status === 'approved') approved += 1;
+    }
+
+    await client.from('topic_discovery_runs').upsert({
+      topic,
+      last_run_at: new Date().toISOString(),
+      candidate_count: candidates.length,
+    });
+  }
+
+  return { ran, discovered, approved };
 }
