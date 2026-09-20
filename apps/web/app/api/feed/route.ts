@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { buildFeedResponse, normalizeClassificationRecord, type FeedCandidate } from '@/lib/feed';
+import { buildFeedResponse, normalizeClassificationRecord, summarizeFeedGeneration, type FeedCandidate } from '@/lib/feed';
+import { redactSensitiveValues } from '@/lib/logging';
 import { getCurrentUserIdFromServer } from '@/lib/server-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
@@ -113,6 +114,7 @@ async function persistFeedCacheForUser(
 }
 
 export async function GET(request: Request) {
+  const startedAt = Date.now();
   const userId = await getCurrentUserIdFromServer();
 
   if (!userId) {
@@ -136,6 +138,11 @@ export async function GET(request: Request) {
   const activitySignals = await fetchActivitySignalsForUser(userId);
   const liveItems = await fetchRecentContentForUser();
   const response = buildFeedResponse(activeAlgorithm, feedbackSignals, liveItems.length > 0 ? liveItems : undefined, { sourceFilters, activitySignals });
+  console.info('Feed generation summary', redactSensitiveValues({
+    userId,
+    algorithmId: activeAlgorithm?.id ?? null,
+    ...summarizeFeedGeneration(response, liveItems, Date.now() - startedAt),
+  }));
 
   if (activeAlgorithm?.id) {
     await persistFeedCacheForUser(userId, activeAlgorithm.id, response.items);

@@ -37,6 +37,15 @@ export type FeedCandidate = {
   topics?: string[];
 };
 
+export type FeedGenerationSummary = {
+  candidateCount: number;
+  visibleCount: number;
+  hiddenCount: number;
+  laneCounts: Record<'matched' | 'discovery' | 'explore', number>;
+  sourceCounts: Record<string, number>;
+  durationMs: number;
+};
+
 const demoVideos: FeedCandidate[] = [
   {
     id: 'content-1',
@@ -497,5 +506,31 @@ export function buildFeedResponse(
     generatedAt: new Date().toISOString(),
     algorithmId: algorithm?.id,
     items,
+  };
+}
+
+export function summarizeFeedGeneration(
+  response: FeedResponse,
+  candidates: FeedCandidate[],
+  durationMs: number,
+): FeedGenerationSummary {
+  const laneCounts: FeedGenerationSummary['laneCounts'] = { matched: 0, discovery: 0, explore: 0 };
+  const sourceCounts: Record<string, number> = {};
+
+  for (const item of response.items) {
+    if (item.lane) laneCounts[item.lane] += 1;
+  }
+  for (const candidate of candidates) {
+    const source = candidate.source_kind ?? 'unknown';
+    sourceCounts[source] = (sourceCounts[source] ?? 0) + 1;
+  }
+
+  return {
+    candidateCount: candidates.length,
+    visibleCount: response.items.filter((item) => item.visible).length,
+    hiddenCount: response.items.filter((item) => !item.visible).length,
+    laneCounts,
+    sourceCounts,
+    durationMs: Math.max(0, Math.round(durationMs)),
   };
 }
