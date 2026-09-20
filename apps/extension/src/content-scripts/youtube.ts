@@ -8,7 +8,6 @@ const videoSelectors = [
   'ytd-grid-video-renderer',
   'ytd-compact-video-renderer',
   'ytd-reel-item-renderer',
-  'ytd-rich-section-renderer',
 ];
 
 type RankedFeedItem = {
@@ -52,7 +51,7 @@ const normalizeText = (value: string) => normalizeYouTubeText(value).toLowerCase
 
 const clearExtensionPresentation = () => {
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
-    element.style.display = '';
+    element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     element.style.order = '';
@@ -203,7 +202,7 @@ const applyRankedFeed = () => {
   const knownElements = getVideoElements();
 
   knownElements.forEach((element) => {
-    element.style.display = '';
+    element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     element.style.order = '';
@@ -213,13 +212,19 @@ const applyRankedFeed = () => {
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
     if (!item) {
+      element.style.setProperty('display', 'none', 'important');
+      element.dataset.personalAlgorithmScore = 'unmatched';
       element.querySelector('[data-personal-algorithm-badge]')?.remove();
       return;
     }
 
     const score = item.score ?? 0;
     const shouldHide = item.visible === false || score < 52;
-    element.style.display = shouldHide ? 'none' : '';
+    if (shouldHide) {
+      element.style.setProperty('display', 'none', 'important');
+    } else {
+      element.style.removeProperty('display');
+    }
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
     element.dataset.personalAlgorithmScore = String(score);
@@ -288,7 +293,8 @@ const rankCurrentPage = async () => {
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
       applyRankedFeed();
-      showStatus(`${requestMode}: ranked ${response.feed.length} videos`);
+      const visibleCount = response.feed.filter((item: RankedFeedItem) => item.visible !== false && (item.score ?? 0) >= 52).length;
+      showStatus(`${requestMode}: ${visibleCount} shown · ${response.feed.length - visibleCount} hidden`);
     } else {
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
     }
