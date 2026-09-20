@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens } from './auth.ts';
 import { buildConceptCatalog, buildConceptsApiResponse, buildStoredOrDerivedAlgorithmIntentProfile } from './concepts.ts';
-import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, getRankingTopicWeights, normalizeClassificationRecord } from './feed.ts';
+import { buildFeedResponse, diversifyFeedItems, getEligibleTopicNames, getRankingTopicWeights, normalizeClassificationRecord, summarizeFeedGeneration } from './feed.ts';
 import { fetchWithRetry } from './http.ts';
 import { inferPageCandidateTopics } from './page-relevance.ts';
 import { redactSensitiveValues } from './logging.ts';
@@ -38,6 +38,31 @@ test('buildFeedResponse hard-filters known language and format conflicts', () =>
 
   assert.deepEqual(feed.items.map((item) => item.external_id), ['good', 'unknown']);
   assert.equal(feed.items.some((item) => item.reason?.includes('language mismatch')), false);
+});
+
+test('summarizeFeedGeneration returns metrics without content identifiers', () => {
+  const response = buildFeedResponse(
+    { name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { external_id: 'matched-id', title: 'AI tutorial', source_kind: 'subscription', topics: ['AI'] },
+      { external_id: 'discovery-id', title: 'AI guide', source_kind: 'discovery', topics: ['AI'] },
+    ],
+  );
+  const summary = summarizeFeedGeneration(response, [
+    { external_id: 'matched-id', title: 'AI tutorial', source_kind: 'subscription', topics: ['AI'] },
+    { external_id: 'discovery-id', title: 'AI guide', source_kind: 'discovery', topics: ['AI'] },
+  ], 12.7);
+
+  assert.deepEqual(summary, {
+    candidateCount: 2,
+    visibleCount: 2,
+    hiddenCount: 0,
+    laneCounts: { matched: 1, discovery: 1, explore: 0 },
+    sourceCounts: { subscription: 1, discovery: 1 },
+    durationMs: 13,
+  });
+  assert.equal(JSON.stringify(summary).includes('matched-id'), false);
 });
 
 test('getEligibleTopicNames prevents low-weight secondary topics from admitting content', () => {

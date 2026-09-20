@@ -98,7 +98,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Check rule precedence and feedback weighting in production conditions
 - [ ] Review empty-state and fallback feed behavior
 - [ ] Confirm classification quality for live content and tune heuristics if needed
-- [ ] Add observability around scoring decisions and feed generation
+- [x] Add metrics-only observability around scoring decisions and feed generation
 - [x] Add a visible “why this item was ranked” explanation for each feed item, including matched topics, rule effects, and feedback adjustments
 - [x] Add bounded format-aware discovery queries for user-defined algorithm goals
 - [x] Add canonical topic concepts, aliases, and semantic intent resolution for user-defined topics
