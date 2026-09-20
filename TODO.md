@@ -105,7 +105,7 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [x] Add a generic algorithm intent profile for arbitrary concepts beyond hand-coded defaults
 - [x] Add tracked Supabase migration for concept catalog and algorithm intent profiles with RLS
 - [x] Expose persisted concept catalog + algorithm intent profiles through the API layer
-- [ ] Add AI disambiguation only for low-confidence semantic matches
+- [x] Add AI disambiguation only for low-confidence semantic matches
 
 ## Extension and browser experience
 - [x] Package the Chrome extension for local Edge testing

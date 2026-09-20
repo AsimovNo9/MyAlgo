@@ -5,6 +5,7 @@ export type ClassificationResult = {
   content_type: string;
   language: string | null;
   format: string | null;
+  confidence: number;
   quality_score: number;
   reasoning: string;
 };
@@ -68,6 +69,7 @@ function classifyDeterministically(title: string): ClassificationResult {
     content_type: contentType,
     language,
     format,
+    confidence: matchedTopics.length > 0 ? 0.82 : 0.2,
     quality_score: Math.round(qualityScore),
     reasoning: matchedTopics.length
       ? `Matched ${matchedTopics.join(', ')} based on the title's subject signals.`
@@ -85,6 +87,7 @@ function parseAiClassification(payload: unknown): ClassificationResult | null {
     content_type?: unknown;
     language?: unknown;
     format?: unknown;
+    confidence?: unknown;
     quality_score?: unknown;
     reasoning?: unknown;
   };
@@ -108,6 +111,9 @@ function parseAiClassification(payload: unknown): ClassificationResult | null {
     format: typeof candidate.format === 'string' && candidate.format.trim().length > 0
       ? candidate.format.trim().toLowerCase()
       : null,
+    confidence: Number.isFinite(Number(candidate.confidence))
+      ? Math.min(1, Math.max(0, Number(candidate.confidence)))
+      : 0.7,
     quality_score: Math.round(Math.min(100, Math.max(0, qualityScore))),
     reasoning: typeof candidate.reasoning === 'string' && candidate.reasoning.trim().length > 0
       ? candidate.reasoning.trim()
@@ -148,7 +154,7 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
         model: 'claude-3-5-haiku-latest',
         max_tokens: 180,
         temperature: 0,
-        system: 'Classify content conservatively. Return only JSON with topics (array of short strings), content_type, language (two-letter code or null), format (short format label or null), quality_score from 0 to 100, and reasoning.',
+        system: 'Classify content conservatively. Return only JSON with topics (array of short strings), content_type, language (two-letter code or null), format (short format label or null), confidence from 0 to 1, quality_score from 0 to 100, and reasoning.',
         messages: [{
           role: 'user',
           content: `Classify this title:\n${title.slice(0, 500)}`,
@@ -170,7 +176,7 @@ async function classifyWithAnthropic(title: string): Promise<ClassificationResul
 
 export async function classifyContent(title: string): Promise<ClassificationResult> {
   const deterministic = classifyDeterministically(title);
-  if (deterministic.topics.length > 0 && deterministic.topics[0] !== 'General') {
+  if (deterministic.confidence >= 0.7) {
     return deterministic;
   }
 

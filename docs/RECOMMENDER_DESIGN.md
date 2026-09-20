@@ -594,7 +594,8 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Recompute profile affinities from feedback and observed activity.
 - [x] Add a user-facing taste calibration flow using the existing feed and feedback APIs.
 - [x] Expose a user-facing learned-profile summary without returning raw activity history.
-- [ ] Evaluate semantic or visual classification only where calibration data demonstrates a text-first gap.
+- [x] Add confidence-aware semantic disambiguation only for low-confidence text classification.
+- [ ] Evaluate visual classification only where calibration data demonstrates a text-first gap.
 
 ## 18. Architecture decision record: retrieval before sophistication
 
