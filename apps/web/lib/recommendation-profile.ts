@@ -13,7 +13,7 @@ export type RecommendationProfile = {
   preferredFormats: string[];
 };
 
-export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format';
+export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'freshness';
 
 export type RecommendationQuery = {
   text: string;
@@ -75,6 +75,24 @@ function buildTopicQueries(profile: RecommendationProfile, topic: string): Recom
   ];
 }
 
+function buildIntentQueries(profile: RecommendationProfile): RecommendationQuery[] {
+  const format = profile.preferredFormats[0] ?? 'guide';
+  return profile.intents.map((intent) => ({
+    text: `${intent} ${format}`,
+    lane: 'intent' as const,
+    topics: profile.explicitTopics,
+  }));
+}
+
+function buildFreshnessQueries(profile: RecommendationProfile): RecommendationQuery[] {
+  const format = profile.preferredFormats[0] ?? 'guide';
+  return profile.explicitTopics.map((topic) => ({
+    text: `${topic} latest ${format}`,
+    lane: 'freshness' as const,
+    topics: [topic],
+  }));
+}
+
 export function buildRecommendationQueries(
   profile: RecommendationProfile,
   limit = defaultQueryLimit,
@@ -105,6 +123,14 @@ export function buildRecommendationQueries(
       planned.push(topicQueries[cursor]);
       hasMore = true;
     }
+  }
+
+  const additionalQueries = [...buildIntentQueries(profile), ...buildFreshnessQueries(profile)];
+  for (const query of additionalQueries) {
+    if (planned.length >= limit) {
+      break;
+    }
+    planned.push(query);
   }
 
   const seen = new Set<string>();

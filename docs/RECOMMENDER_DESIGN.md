@@ -536,6 +536,7 @@ This is the smallest change that moves the product from "rank the current pool" 
 - [x] Keep query generation deterministic and independent of network or database access.
 - [x] Preserve the existing `buildDiscoveryQueries` API while routing it through the planner.
 - [x] Add tests for multi-topic coverage, aliases, negative rules, deduplication, and query limits.
+- [x] Add bounded intent and freshness query lanes after the core topic queries.
 
 ### Milestone 2: Unified candidate retrieval
 
