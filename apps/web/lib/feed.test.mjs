@@ -353,7 +353,7 @@ test('buildFeedResponse boosts more-like-this feedback without changing visibili
   assert.ok(baselineItem && boostedItem);
   assert.equal(boostedItem.visible, true);
   assert.equal(boostedItem.score, baselineItem.score + 18);
-  assert.match(boostedItem.reason ?? '', /more_like_this feedback/);
+  assert.match(boostedItem.reason ?? '', /responded positively|feedback/i);
 });
 
 test('buildFeedResponse applies learned preferences across candidate facets', () => {
@@ -366,7 +366,55 @@ test('buildFeedResponse applies learned preferences across candidate facets', ()
   const feed = buildFeedResponse(algorithm, [{ external_id: 'liked', eventType: 'more_like_this' }], candidates);
 
   assert.equal(feed.items[0].external_id, 'liked');
-  assert.match(feed.items[0].reason ?? '', /learned preference/);
+  assert.match(feed.items[0].reason ?? '', /responded positively|learned preference/i);
+});
+
+test('buildFeedResponse explains visible items using user preferences', () => {
+  const feed = buildFeedResponse(
+    {
+      id: 'alg-explanation',
+      name: 'Learning',
+      language: 'en',
+      preferred_formats: ['tutorial'],
+      topic_weights: [{ topic: 'AI', weight: 90 }],
+      rules: [{ type: 'priority', condition_text: 'AI agents' }],
+    },
+    [],
+    [{
+      id: 'explained',
+      external_id: 'explained',
+      title: 'AI agents tutorial',
+      topics: ['AI'],
+      language: 'en',
+      format: 'tutorial',
+      source_kind: 'discovery',
+    }],
+  );
+
+  assert.match(feed.items[0].reason ?? '', /Strong match for AI/);
+  assert.match(feed.items[0].reason ?? '', /discovery recommendation/);
+  assert.match(feed.items[0].reason ?? '', /language preference/);
+  assert.match(feed.items[0].reason ?? '', /format preference/);
+  assert.match(feed.items[0].reason ?? '', /Your rules affected it/);
+});
+
+test('buildFeedResponse labels visible items by matched, discovery, and explore lane', () => {
+  const algorithm = { id: 'alg-lanes', name: 'Work', topic_weights: [], rules: [] };
+  const feed = buildFeedResponse(algorithm, [], [
+    { id: 'subscribed', external_id: 'subscribed', title: 'Subscribed item', source_kind: 'subscription', topics: ['General'] },
+    { id: 'discovered', external_id: 'discovered', title: 'Discovered item', source_kind: 'discovery', topics: ['General'] },
+  ]);
+
+  assert.equal(feed.items.find((item) => item.external_id === 'subscribed')?.lane, 'matched');
+  assert.equal(feed.items.find((item) => item.external_id === 'discovered')?.lane, 'discovery');
+
+  const exploratoryFeed = buildFeedResponse(
+    { id: 'alg-explore', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'experimental' }] },
+    [],
+    [{ id: 'explore', external_id: 'explore', title: 'Experimental documentary', topics: [], candidate_relevance: 'unmatched' }],
+  );
+
+  assert.equal(exploratoryFeed.items[0].lane, 'explore');
 });
 
 test('buildFeedResponse falls back to title-derived topics when classifications are empty', () => {

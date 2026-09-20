@@ -582,8 +582,8 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Separate topic, channel, publisher, language, format, creator, and source facets in classification.
 - [x] Add hard eligibility checks for explicit language, format, source, and exclusion rules.
 - [x] Add learned topic, channel, creator, format, language, and source affinities.
-- [ ] Allocate results into matched, discovery, and explore lanes.
-- [ ] Replace raw classifier labels in explanations with preference-based reasons.
+- [x] Allocate visible results into matched, discovery, and explore lanes; keep exploration opt-in through explicit overrides until a configurable mix is added.
+- [x] Replace raw classifier labels in explanations with preference-based reasons.
 
 ### Milestone 4: Learning loop and calibration
 
