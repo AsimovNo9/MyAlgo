@@ -2,7 +2,8 @@ export type MessageType =
   | 'GET_FEED'
   | 'SET_MODE'
   | 'OPEN_OPTIONS'
-  | 'FEEDBACK';
+  | 'FEEDBACK'
+  | 'ACTIVITY';
 
 export interface RuntimeMessage<T = unknown> {
   type: MessageType;

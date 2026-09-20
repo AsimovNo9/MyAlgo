@@ -91,7 +91,7 @@ const refreshFeed = async (mode?: string) => {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, payload } = message as { type: string; payload?: { mode?: string; algorithmId?: string; enabled?: boolean; contentItemId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
+  const { type, payload } = message as { type: string; payload?: { mode?: string; algorithmId?: string; enabled?: boolean; contentItemId?: string; externalId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
@@ -191,6 +191,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     void setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
     sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
+    return true;
+  }
+
+  if (type === EXTENSION_MESSAGE_TYPES.ACTIVITY) {
+    void (async () => {
+      try {
+        const accessToken = await getExtensionAccessToken();
+        const response = await fetch(`${(await getApiBaseUrl()).replace(/\/$/, '')}/api/activity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ externalId: payload?.externalId, eventType: payload?.eventType }),
+        });
+        if (!response.ok) throw new Error(`Activity request failed: ${response.status}`);
+      } catch (error) {
+        console.error('Failed to send activity event', error);
+      }
+    })();
+    sendResponse({ ok: true, externalId: payload?.externalId, eventType: payload?.eventType });
     return true;
   }
 
