@@ -62,3 +62,4 @@ The next presentation-layer work is tracked in [EXTENSION_UX_PATHWAY.md](EXTENSI
 - #130 topic weight sliders and explicit normalization
 - #131 calibration UX and learning controls
 - #132 authenticated production extension demo and baseline
+- #136 accessible visual contract and visual-regression suite across extension surfaces

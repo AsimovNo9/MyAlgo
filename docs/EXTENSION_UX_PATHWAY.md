@@ -13,13 +13,23 @@ The supplied screenshots show three related surfaces:
 2. A calibration surface with large repeated cards and positive/negative feedback controls.
 3. The algorithm editor with a goal field, topic chips, numeric weights, and rule controls.
 
-The screenshots are evidence for this pathway, but image files were not available in the workspace to embed directly. When exported, place them in `docs/assets/extension-ux/` and add them here as:
+The screenshots are evidence for this pathway. The repository also contains four prototype SVGs in `docs/images/`:
 
 ```md
-![YouTube extension and Learning mode](assets/extension-ux/youtube-learning.png)
-![Taste calibration](assets/extension-ux/taste-calibration.png)
-![Algorithm editor](assets/extension-ux/algorithm-editor.png)
+![Algorithm editor prototype](images/algorithm.svg)
+![Extension popup prototype](images/extension.svg)
+![Personal Picks shelf prototype](images/feed.svg)
+![Taste calibration prototype](images/test-calibration.svg)
 ```
+
+The supplied raster screenshots were not available as workspace files. If exported later, place them in `docs/images/` beside these prototypes rather than creating a second UX document.
+
+### Prototype review decisions
+
+- Keep popup and injected surfaces theme-adaptive. The dark palette in the prototypes is a YouTube-dark example, not a product-wide requirement.
+- Use native YouTube CSS variables, parent tracks, and semantic data markers. Do not depend on copied internal renderer class names.
+- Treat calibration as explicit feedback that updates the persistent taste profile. It is not LLM training and must not expose raw model or vector internals.
+- Keep goal text, topic weights, and hard rules visibly separate. Goal text influences query planning and explanations; it does not replace explicit exclusions.
 
 ## Current status
 
@@ -122,10 +132,13 @@ Required structure:
 - Personal shelf inserted once per page generation.
 - Replacement cards match native media ratio, typography scale, spacing, and hover behavior.
 - Explanation appears on the personal shelf/card detail, not as repeated long text over every native card.
+- Use a horizontal, scroll-snap Personal Picks shelf only where the active YouTube surface supports it; otherwise inherit the native grid/list layout. Never introduce a second competing vertical feed.
 
 ### C. Local dashboard / algorithm editor
 
 **Goal usage:** The goal must be operational, not decorative. It should be used in query planning, format inference, semantic terms, and explanation text. Add a compact “goal is influencing retrieval” state with the generated query lanes visible in a debug/details drawer.
+
+The debug drawer may show bounded query text, selected lanes, concept names, and rule precedence. It must not show raw prompts, vector distances, model responses, database IDs, or provider payloads.
 
 **Topic weights:** Use sliders or steppers for each selected topic, with:
 
@@ -145,6 +158,8 @@ Required structure:
 - Avoid showing the same video twice in a calibration session.
 - Explain that feedback updates learned taste, while explicit topics and exclusions remain authoritative.
 - Add `Reset learned taste` and `Review learned signals` controls.
+- Use a stable 16:9 media region and fixed card tracks so feedback actions do not move as thumbnails load.
+- Use hover-only secondary actions only on pointer devices; keep controls keyboard and touch accessible.
 
 ## Persistent learning: current answer
 
@@ -186,6 +201,8 @@ Expand `youtube-fixtures.ts` and content-script tests for:
 - Goal changes affect query plans and are visible in the debug/details surface.
 - Weight changes affect ranking while never-show rules remain hard exclusions.
 - Learned preferences affect a historical candidate but cannot override explicit exclusions.
+- Theme-adaptive styles work in YouTube light and dark modes without changing card geometry.
+- SVG/prototype concepts are checked against implemented controls before UI work is accepted; prototypes are not runtime behavior.
 
 ### Manual production demo script
 
@@ -241,5 +258,6 @@ Expand `youtube-fixtures.ts` and content-script tests for:
 6. [#130](https://github.com/AsimovNo9/MyAlgo/issues/130) Topic weight sliders, explicit normalization, and rule separation.
 7. [#131](https://github.com/AsimovNo9/MyAlgo/issues/131) Calibration UX, learning explanation, reset/rebuild controls.
 8. [#132](https://github.com/AsimovNo9/MyAlgo/issues/132) Authenticated baseline and real-browser production demo.
+9. [#136](https://github.com/AsimovNo9/MyAlgo/issues/136) Accessible visual contract and visual-regression suite across extension surfaces.
 
 Each issue should remain independently testable and must not weaken hard exclusions or trigger retrieval from DOM mutations.
