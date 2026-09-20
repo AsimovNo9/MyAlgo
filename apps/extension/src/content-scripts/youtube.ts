@@ -393,6 +393,15 @@ const applyRankedFeed = () => {
       parent.appendChild(element);
     }
   }
+
+  const existingIds = new Set(cachedFeed.map((item) => item.external_id).filter(Boolean));
+  const replacements = personalPicks
+    .filter((item) => item.visible !== false && (item.score ?? 0) >= 52 && item.external_id && !existingIds.has(item.external_id))
+    .slice(0, replacementTargets.length);
+  replacementTargets.forEach((target, index) => {
+    const replacement = replacements[index];
+    if (replacement) target.parentElement?.insertBefore(createReplacementCard(replacement), target);
+  });
 };
 
 const rankCurrentPage = async () => {
@@ -434,14 +443,6 @@ const rankCurrentPage = async () => {
     }
   });
 
-  const existingIds = new Set(cachedFeed.map((item) => item.external_id).filter(Boolean));
-  const replacements = personalPicks
-    .filter((item) => item.visible !== false && (item.score ?? 0) >= 52 && item.external_id && !existingIds.has(item.external_id))
-    .slice(0, replacementTargets.length);
-  replacementTargets.forEach((target, index) => {
-    const replacement = replacements[index];
-    if (replacement) target.parentElement?.insertBefore(createReplacementCard(replacement), target);
-  });
 };
 
 const triggerRank = (reason: 'navigation' | 'mode' | 'manual' = 'manual') => {
