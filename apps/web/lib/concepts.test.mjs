@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildAlgorithmIntentProfile, resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
+import { buildAlgorithmIntentProfile, normalizeSemanticContextEntry, resolveTopicConcepts, resolveTopicConceptTerms } from './concepts.ts';
 
 test('resolveTopicConcepts expands gaming into canonical aliases and intents', () => {
   const resolved = resolveTopicConcepts('Gaming');
@@ -34,4 +34,31 @@ test('buildAlgorithmIntentProfile generalizes concept resolution beyond a single
   assert.equal(profile.aliases.includes('indie games'), true);
   assert.equal(profile.intents.some((intent) => intent.toLowerCase().includes('gameplay')), true);
   assert.equal(profile.semanticTerms.some((term) => term.toLowerCase().includes('gameplay')), true);
+});
+
+test('normalizeSemanticContextEntry produces a bounded pending, versioned import', () => {
+  assert.deepEqual(normalizeSemanticContextEntry({
+    canonicalName: 'Game Design',
+    aliases: ['game design', 'game design'],
+    entities: ['FromSoftware'],
+    positivePhrases: ['combat systems'],
+    negativePhrases: ['gacha spam'],
+    source: 'llm',
+    version: 3,
+    provenance: { source_document: 'review-1' },
+  }), {
+    canonical_name: 'Game Design',
+    aliases: ['game design'],
+    intents: [],
+    entities: ['FromSoftware'],
+    positive_phrases: ['combat systems'],
+    negative_phrases: ['gacha spam'],
+    description: null,
+    language: null,
+    source: 'llm',
+    status: 'pending',
+    provenance: { source_document: 'review-1' },
+    version: 3,
+  });
+  assert.equal(normalizeSemanticContextEntry({ canonical_name: '' }), null);
 });
