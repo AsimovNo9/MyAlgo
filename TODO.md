@@ -15,14 +15,14 @@ This file tracks launch-blocking work, production hardening, and follow-up tasks
 - [ ] Complete the production OAuth/session validation pass for the Google + YouTube provider tokens
 
 ## Recommendation-engine architecture actions
-- [ ] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
-- [ ] Add a standalone candidate-generation coordinator with source budgets, coverage metrics, deduplication, and provenance.
-- [ ] Add candidate generation from subscriptions, liked videos, creator queries, topic queries, and freshness searches rather than only ranking fetched content.
-- [ ] Add a query planner that expands user preferences into multiple retrieval queries instead of a single broad keyword string.
-- [ ] Keep language and format as first-class ranking dimensions instead of treating them as generic tags.
-- [ ] Keep classification text-first and metadata-driven; defer image models until they solve a real gap.
-- [ ] Add a discovery lane separate from strong matches so the feed mixes relevance and exploration without turning into a bubble.
-- [ ] Add a “why am I seeing this” explanation layer that uses user-preference reasoning instead of raw implementation strings.
+- [x] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
+- [x] Add a standalone candidate-generation coordinator with source budgets, coverage metrics, deduplication, and provenance.
+- [ ] Extend candidate generation with creator-query retrieval and dedicated freshness coverage; subscriptions, liked videos, topic queries, RSS, and bounded Search are implemented.
+- [x] Add a query planner that expands user preferences into multiple retrieval queries instead of a single broad keyword string.
+- [x] Keep language and format as first-class ranking dimensions instead of treating them as generic tags.
+- [x] Keep classification text-first and metadata-driven; defer image models until they solve a real gap.
+- [x] Add a discovery lane separate from strong matches so the feed mixes relevance and exploration without turning into a bubble.
+- [x] Add a “why am I seeing this” explanation layer that uses user-preference reasoning instead of raw implementation strings.
 
 ### Recommender steering decision
 - The next recommender implementation is candidate generation and source orchestration, not image classification or a larger ranking model.

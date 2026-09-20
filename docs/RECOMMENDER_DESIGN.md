@@ -558,7 +558,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 
 ### Milestone 1: Profile and query planner
 
-- [ ] Define the typed `RecommendationProfile`, query, facet, and provenance contracts.
+- [x] Define the typed `RecommendationProfile`, query, facet, and provenance contracts.
 - [x] Derive explicit topics, semantic terms, positive rules, negative rules, and format intent from an algorithm.
 - [x] Generate bounded, deduplicated, annotated queries across goal, topic, alias, intent, creator, format, and freshness lanes.
 - [x] Keep query generation deterministic and independent of network or database access.
@@ -595,7 +595,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Add a user-facing taste calibration flow using the existing feed and feedback APIs.
 - [x] Expose a user-facing learned-profile summary without returning raw activity history.
 - [x] Add confidence-aware semantic disambiguation only for low-confidence text classification.
-- [ ] Evaluate visual classification only where calibration data demonstrates a text-first gap.
+- [x] Evaluate visual classification only where calibration data demonstrates a text-first gap; no demonstrated gap exists yet, so visual classification remains deferred.
 
 ## 18. Architecture decision record: retrieval before sophistication
 
@@ -621,3 +621,14 @@ The current ranker can only select from `content_items` that already exist. A pe
 - Do not create a permanent taste-profile table now; request-time feedback-derived affinities are sufficient for the next retrieval slice.
 - Do not expand Search to hundreds of results per user; use RSS and shared pool coverage first.
 - Do not let YouTube's result order become the application ranking order.
+
+## 19. Classification evaluation decision
+
+The current evidence does not justify a visual classifier:
+
+- Text-first classification now covers topics, language, format, content type, quality, confidence, and semantic fallback.
+- Calibration, liked-video metadata, feedback, and extension activity now provide the signals needed to identify failures.
+- The feed has hard language/format constraints, source lanes, diversity, explanations, and observability metrics.
+- No measured failure category currently requires thumbnail or video-frame understanding.
+
+The next classification review should use production calibration outcomes and feed metrics. Add visual classification only if repeated, measurable errors remain after title, description, channel metadata, and low-confidence semantic disambiguation are exhausted.
