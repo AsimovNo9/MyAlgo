@@ -14,6 +14,8 @@ import type { ConceptCatalogEntry, ConceptRelationEntry } from './concepts.ts';
 import { buildContentConceptMatches, persistContentConceptMatches } from './content-concepts.ts';
 import { buildRecommendationQualityMetrics } from './recommendation-quality.ts';
 import { buildLearnedAffinityProfile, getStrongChannelAffinityTerms } from './learned-profile.ts';
+import { generateEmbedding } from './embeddings.ts';
+import { retrieveSimilarContent } from './vector-retrieval.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -40,6 +42,11 @@ export type YoutubeVideoMetadata = {
   comment_count: number | null;
   default_language: string | null;
   default_audio_language: string | null;
+};
+
+type VectorCandidateResult = {
+  items: YoutubeSubscriptionItem[];
+  matchedCount: number;
 };
 
 const fixtureItems: YoutubeSubscriptionItem[] = [
@@ -453,6 +460,58 @@ async function fetchYoutubeLikedItems(accessToken: string): Promise<YoutubeSubsc
   return mapYoutubeLikedItems(payload.items ?? []);
 }
 
+async function fetchVectorCandidates(
+  client: Awaited<ReturnType<typeof import('./supabase/server').createSupabaseServerClient>>,
+  algorithm: Algorithm | null,
+  catalog: ConceptCatalogEntry[],
+): Promise<VectorCandidateResult> {
+  if (!client) return { items: [], matchedCount: 0 };
+  const profile = buildRecommendationProfile(algorithm, catalog);
+  const queryText = [profile.goal, ...profile.explicitTopics, ...profile.semanticTerms].filter(Boolean).join('\n');
+  const embedding = await generateEmbedding(queryText);
+  if (!embedding) return { items: [], matchedCount: 0 };
+
+  const modelVersion = process.env.EMBEDDING_MODEL_VERSION?.trim() || process.env.EMBEDDING_MODEL?.trim() || null;
+  const matches = await retrieveSimilarContent(client, embedding, { threshold: 0.75, limit: 25, modelVersion: modelVersion ?? undefined });
+  if (matches.length === 0) return { items: [], matchedCount: 0 };
+
+  const { data, error } = await client
+    .from('content_items')
+    .select('id, external_id, title, channel_name, channel_id, channel_description, channel_subscriber_count, source_kind, published_at, classifications(topics, language, format, content_type)')
+    .in('id', matches.map((match) => match.content_item_id));
+  if (error || !data) return { items: [], matchedCount: matches.length };
+
+  const rowsById = new Map(data.map((row) => [row.id, row]));
+  const items = matches.flatMap((match) => {
+    const row = rowsById.get(match.content_item_id);
+    if (!row) return [];
+    const classification = Array.isArray(row.classifications) ? row.classifications[0] : row.classifications;
+    return [{
+      id: row.id,
+      external_id: row.external_id,
+      title: row.title,
+      channel_name: row.channel_name ?? 'Unknown channel',
+      channel_id: row.channel_id ?? null,
+      channel_description: row.channel_description ?? null,
+      channel_subscriber_count: row.channel_subscriber_count ?? null,
+      published_at: row.published_at ?? new Date().toISOString(),
+      topics: classification?.topics ?? [],
+      language: classification?.language ?? null,
+      format: classification?.format ?? null,
+      content_type: classification?.content_type ?? null,
+      semantic_similarity: match.similarity,
+      source_kind: 'discovery' as const,
+      provenance: createCandidateProvenance('semantic_vector', {
+        query: queryText,
+        query_lane: 'intent',
+        query_topics: profile.explicitTopics,
+      }),
+    }];
+  });
+
+  return { items, matchedCount: matches.length };
+}
+
 async function shouldRunYoutubeDiscovery(
   client: Awaited<ReturnType<typeof import('./supabase/server').createSupabaseServerClient>>,
   algorithm?: Algorithm | null,
@@ -666,9 +725,12 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     const metadata = discoveryMetadata.get(item.external_id);
     return metadata ? mergeYoutubeVideoMetadata(item, metadata) : item;
   });
+  const vectorResult = await fetchVectorCandidates(client, activeAlgorithm, conceptGraph.catalog);
+  const vectorItems = vectorResult.items;
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
     { source: 'youtube_search', items: discoveryItems },
+    { source: 'semantic_vector', items: vectorItems },
     { source: 'youtube_liked', items: likedItems },
   ]);
   const items = candidatePool.items;
@@ -751,6 +813,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     source: result.source,
     synced,
     discovered: discoveryItems.length,
+      vector: { matchedCount: vectorResult.matchedCount, addedCount: vectorItems.length },
     discovery: discoveryResult.metrics,
     liked: likedItems.length,
     classified,

@@ -31,6 +31,7 @@ function emptySourceCounts(): Record<CandidateRetrievalSource, number> {
     youtube_search: 0,
     youtube_rss: 0,
     youtube_liked: 0,
+    semantic_vector: 0,
   };
 }
 

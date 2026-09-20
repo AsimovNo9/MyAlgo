@@ -1,5 +1,4 @@
 import { fetchWithRetry } from './http.ts';
-import { createSupabaseAdminClient } from './supabase/server';
 
 const defaultEmbeddingModel = 'text-embedding-3-small';
 
@@ -29,6 +28,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
 export async function backfillContentEmbeddings(limit = 25) {
   let client;
   try {
+    const { createSupabaseAdminClient } = await import('./supabase/server.ts');
     client = createSupabaseAdminClient();
   } catch (error) {
     console.error('Embedding backfill Supabase initialization failed', error);
