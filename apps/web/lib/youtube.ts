@@ -1,6 +1,6 @@
 import type { Algorithm } from '@repo/shared-types';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
-import { buildDiscoveryQueryPlans, discoveryLimits } from './discovery.ts';
+import { buildDiscoveryQueryPlans, getDiscoveryLimits } from './discovery.ts';
 import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
@@ -222,17 +222,43 @@ async function fetchYoutubeRecentUploads(
   return uploads;
 }
 
-async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = [], learnedCreatorTerms: string[] = []): Promise<YoutubeSubscriptionItem[]> {
+export function getDiscoverySearchOrder(lane: string): 'relevance' | 'date' {
+  return lane === 'freshness' ? 'date' : 'relevance';
+}
+
+export type YoutubeDiscoveryMetrics = {
+  queriesAttempted: number;
+  queriesSucceeded: number;
+  resultsReturned: number;
+  qualifiedCandidateCount: number;
+  uniqueCandidateCount: number;
+  estimatedQuotaUnits: number;
+  laneCounts: Record<string, number>;
+};
+
+async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], relations: ConceptRelationEntry[] = [], learnedCreatorTerms: string[] = []): Promise<{ items: YoutubeSubscriptionItem[]; metrics: YoutubeDiscoveryMetrics }> {
   const discoveryItems: YoutubeSubscriptionItem[] = [];
+  const limits = getDiscoveryLimits();
+  const metrics: YoutubeDiscoveryMetrics = {
+    queriesAttempted: 0,
+    queriesSucceeded: 0,
+    resultsReturned: 0,
+    qualifiedCandidateCount: 0,
+    uniqueCandidateCount: 0,
+    estimatedQuotaUnits: 0,
+    laneCounts: {},
+  };
   const language = buildRecommendationProfile(algorithm, catalog).language;
 
-  for (const plan of buildDiscoveryQueryPlans(algorithm, catalog, relations, learnedCreatorTerms)) {
+  for (const plan of buildDiscoveryQueryPlans(algorithm, catalog, relations, learnedCreatorTerms).slice(0, limits.maxQueriesPerSync)) {
     const query = plan.text;
+    metrics.queriesAttempted += 1;
+    metrics.laneCounts[plan.lane] = (metrics.laneCounts[plan.lane] ?? 0) + 1;
     const params = new URLSearchParams({
       part: 'snippet',
       type: 'video',
-      maxResults: String(discoveryLimits.maxResultsPerQuery),
-      order: 'date',
+      maxResults: String(limits.maxResultsPerQuery),
+      order: getDiscoverySearchOrder(plan.lane),
       q: query,
     });
     if (plan.lane === 'freshness') {
@@ -250,10 +276,13 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
       continue;
     }
 
+    metrics.queriesSucceeded += 1;
+
     const payload = (await response.json()) as {
       items?: Array<{ id?: { videoId?: string }; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; publishedAt?: string } }>;
     };
 
+    metrics.resultsReturned += payload.items?.length ?? 0;
     for (const item of payload.items ?? []) {
       const videoId = item.id?.videoId;
       const title = item.snippet?.title;
@@ -279,7 +308,11 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
     }
   }
 
-  return [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
+  const uniqueItems = [...new Map(discoveryItems.map((item) => [item.external_id, item])).values()];
+  metrics.qualifiedCandidateCount = discoveryItems.length;
+  metrics.uniqueCandidateCount = uniqueItems.length;
+  metrics.estimatedQuotaUnits = metrics.queriesAttempted * 100;
+  return { items: uniqueItems, metrics };
 }
 
 export function mapYoutubeLikedItems(rawItems: unknown[]): YoutubeSubscriptionItem[] {
@@ -539,7 +572,10 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const learnedProfile = buildLearnedAffinityProfile([...result.items, ...likedItems] as never[], feedbackSignals);
   const learnedCreatorTerms = getStrongChannelAffinityTerms(learnedProfile);
   const shouldDiscover = !!accessToken && await shouldRunYoutubeDiscovery(client, activeAlgorithm);
-  const discoveryItems = shouldDiscover ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations, learnedCreatorTerms) : [];
+  const discoveryResult = shouldDiscover
+    ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations, learnedCreatorTerms)
+    : { items: [], metrics: null };
+  const discoveryItems = discoveryResult.items;
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
     { source: 'youtube_search', items: discoveryItems },
@@ -616,6 +652,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
     source: result.source,
     synced,
     discovered: discoveryItems.length,
+    discovery: discoveryResult.metrics,
     liked: likedItems.length,
     classified,
     candidatePool: candidatePool.metrics,
