@@ -3,6 +3,8 @@
 **Status date:** 2026-09-20
 **Authority:** This document is the canonical implementation and verification summary. Recommendation requirements, architecture, delivery order, and acceptance criteria live in [RECOMMENDER.md](RECOMMENDER.md); execution tasks live in [../TODO.md](../TODO.md).
 
+Future post-milestone planning is split across [FUTURE_ROADMAP_V2.md](FUTURE_ROADMAP_V2.md), [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md), and [DEPLOYMENT_AND_SCALING_V2.md](DEPLOYMENT_AND_SCALING_V2.md). These are target-state documents, not claims about the current implementation. Compliance and viability remains governed by [Compliance_and_Viability.md](Compliance_and_Viability.md).
+
 ## Status Vocabulary
 
 - **Implemented**: the relevant code, migration, or documentation exists in the repository.
