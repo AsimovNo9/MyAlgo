@@ -345,7 +345,8 @@ async function shouldRunYoutubeDiscovery(
   const { data, error } = await client
     .from('content_items')
     .select('classifications(topics)')
-    .limit(200);
+    .order('fetched_at', { ascending: false })
+    .limit(50);
 
   if (error || !data) {
     return true;

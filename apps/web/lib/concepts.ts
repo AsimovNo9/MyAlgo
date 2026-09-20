@@ -246,6 +246,14 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalo
     .sort((left, right) => right.weight - left.weight)
     .map((item) => item.topic.trim());
 
+  const algorithmName = algorithm?.name?.trim() ?? '';
+  if (algorithmName && !canonicalTopics.some((topic) => normalizeTopic(topic) === normalizeTopic(algorithmName))) {
+    const algorithmConcept = resolveTopicConcepts(algorithmName, catalog);
+    if (algorithmConcept.aliases.length > 0 || algorithmConcept.intents.length > 0) {
+      canonicalTopics.unshift(algorithmName);
+    }
+  }
+
   const aliases = new Set<string>();
   const intents = new Set<string>();
   const semanticTerms = new Set<string>();

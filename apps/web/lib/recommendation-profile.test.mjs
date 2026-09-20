@@ -35,6 +35,22 @@ test('buildRecommendationProfile creates explicit creator query terms', () => {
   assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.lane === 'creator' && /Digital Foundry/i.test(query.text)), true);
 });
 
+test('buildRecommendationProfile keeps a recognized algorithm name as a retrieval topic', () => {
+  const profile = buildRecommendationProfile({
+    name: 'Gaming',
+    goal_text: 'Learn about the latest games',
+    topic_weights: [
+      { topic: 'Forza', weight: 20 },
+      { topic: 'Elden Ring', weight: 50 },
+      { topic: 'Game news', weight: 50 },
+    ],
+    rules: [],
+  });
+
+  assert.equal(profile.explicitTopics.includes('Gaming'), true);
+  assert.equal(buildRecommendationQueries(profile, 5).some((query) => query.topics.includes('Gaming')), true);
+});
+
 test('buildRecommendationProfile prefers explicit language and formats over inferred defaults', () => {
   const profile = buildRecommendationProfile({
     name: 'Gaming',
