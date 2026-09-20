@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { Algorithm, AlgorithmActivationResponse, AlgorithmPayload, RuleType, TopicWeight } from '@repo/shared-types';
+import type { Algorithm, AlgorithmActivationResponse, AlgorithmPayload, FeedItem, RuleType, TopicWeight } from '@repo/shared-types';
 
 type Preset = {
   name: string;
@@ -158,6 +158,9 @@ export default function AlgorithmsPage() {
   const [customTopicText, setCustomTopicText] = useState('');
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [activationStatus, setActivationStatus] = useState<string | null>(null);
+  const [calibrationItems, setCalibrationItems] = useState<FeedItem[]>([]);
+  const [calibrationLoading, setCalibrationLoading] = useState(false);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchAlgorithms();
@@ -172,6 +175,21 @@ export default function AlgorithmsPage() {
   };
 
   const activeAlgorithm = algorithms.find((algorithm) => algorithm.is_active) ?? algorithms[0];
+  const activeAlgorithmName = activeAlgorithm?.name;
+
+  useEffect(() => {
+    if (!activeAlgorithmName) return;
+    setCalibrationLoading(true);
+    setCalibrationError(null);
+    void fetch(`/api/feed?mode=${encodeURIComponent(activeAlgorithmName)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load calibration candidates.');
+        const data = await response.json() as { items?: FeedItem[] };
+        setCalibrationItems((data.items ?? []).slice(0, 8));
+      })
+      .catch((error) => setCalibrationError(error instanceof Error ? error.message : 'Unable to load calibration candidates.'))
+      .finally(() => setCalibrationLoading(false));
+  }, [activeAlgorithmName]);
 
   const hasRule = useMemo(
     () => (condition_text: string) => form.rules.some((rule) => rule.condition_text.toLowerCase() === condition_text.toLowerCase()),
@@ -357,6 +375,20 @@ export default function AlgorithmsPage() {
       setDeleteError(error instanceof Error ? error.message : 'Unable to delete algorithm.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleCalibrationFeedback = async (item: FeedItem, eventType: 'more_like_this' | 'not_interested') => {
+    setCalibrationItems((current) => current.filter((candidate) => candidate.external_id !== item.external_id));
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentItemId: item.external_id, eventType }),
+      });
+      if (!response.ok) throw new Error('Unable to save calibration feedback.');
+    } catch (error) {
+      setCalibrationError(error instanceof Error ? error.message : 'Unable to save calibration feedback.');
     }
   };
 
@@ -762,6 +794,34 @@ export default function AlgorithmsPage() {
           >
             {saving ? 'Saving…' : 'Save algorithm'}
           </button>
+        </div>
+      </section>
+
+      <section style={{ background: 'linear-gradient(180deg, rgba(15,118,110,0.96) 0%, rgba(17,94,89,0.96) 100%)', borderRadius: 24, padding: 20, color: '#f0fdfa', boxShadow: '0 14px 30px rgba(15,118,110,0.18)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.75 }}>Teach your algorithm</div>
+            <h2 style={{ margin: '5px 0 4px', letterSpacing: '-0.04em' }}>Calibrate your taste</h2>
+            <p style={{ margin: 0, color: '#ccfbf1', fontSize: 14 }}>Give quick feedback on a few candidates to sharpen this algorithm.</p>
+          </div>
+          <span style={{ fontSize: 12, color: '#99f6e4' }}>{calibrationItems.length} left</span>
+        </div>
+        {calibrationLoading ? <p style={{ color: '#ccfbf1' }}>Loading candidates…</p> : null}
+        {calibrationError ? <p style={{ color: '#fecaca' }}>{calibrationError}</p> : null}
+        {!calibrationLoading && calibrationItems.length === 0 ? <p style={{ color: '#ccfbf1' }}>No calibration candidates are ready yet. Activate an algorithm to build the pool.</p> : null}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginTop: 16 }}>
+          {calibrationItems.map((item) => (
+            <article key={item.external_id} style={{ display: 'grid', gap: 10, padding: 14, borderRadius: 16, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(204,251,241,0.2)' }}>
+              <div style={{ minHeight: 58 }}>
+                <strong style={{ display: 'block', lineHeight: 1.35 }}>{item.title}</strong>
+                <span style={{ display: 'block', marginTop: 5, color: '#99f6e4', fontSize: 12 }}>{item.channel_name ?? 'Unknown channel'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => void handleCalibrationFeedback(item, 'more_like_this')} style={{ flex: 1, border: 0, borderRadius: 10, padding: '8px 10px', background: '#ccfbf1', color: '#115e59', cursor: 'pointer', fontWeight: 800 }}>More like this</button>
+                <button type="button" onClick={() => void handleCalibrationFeedback(item, 'not_interested')} style={{ flex: 1, border: '1px solid rgba(254,202,202,0.55)', borderRadius: 10, padding: '8px 10px', background: 'transparent', color: '#fee2e2', cursor: 'pointer', fontWeight: 800 }}>Not for me</button>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
