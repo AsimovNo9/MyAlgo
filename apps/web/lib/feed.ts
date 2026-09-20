@@ -9,6 +9,12 @@ export type FeedFeedbackSignal = {
   eventType: 'not_interested' | 'more_like_this' | 'never_show_channel';
 };
 
+export type FeedActivitySignal = {
+  external_id: string;
+  eventType: 'opened' | 'watch_progress' | 'completed' | 'skipped' | 'revisited';
+  watchSeconds?: number | null;
+};
+
 export type FeedCandidate = {
   id?: string;
   external_id: string;
@@ -279,7 +285,7 @@ export function buildFeedResponse(
   algorithm?: Algorithm | null,
   feedbackSignals: FeedFeedbackSignal[] = [],
   candidateItems: FeedCandidate[] = demoVideos,
-  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters } = {},
+  options: { includeHidden?: boolean; sourceFilters?: FeedSourceFilters; activitySignals?: FeedActivitySignal[] } = {},
 ): FeedResponse {
   const weights = new Map(getRankingTopicWeights(algorithm).map((item) => [item.topic.toLowerCase(), item.weight]));
   const hasTopicWeights = weights.size > 0;
@@ -290,7 +296,7 @@ export function buildFeedResponse(
   const sourceFilters = options.sourceFilters ?? {};
   const signalMap = new Map<string, FeedFeedbackSignal[]>();
   const blockedChannelIds = new Set<string>();
-  const learnedProfile = buildLearnedAffinityProfile(candidateItems, feedbackSignals);
+  const learnedProfile = buildLearnedAffinityProfile(candidateItems, feedbackSignals, options.activitySignals);
 
   for (const signal of feedbackSignals) {
     const existing = signalMap.get(signal.external_id) ?? [];

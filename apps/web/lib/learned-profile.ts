@@ -1,4 +1,4 @@
-import type { FeedCandidate, FeedFeedbackSignal } from './feed.ts';
+import type { FeedActivitySignal, FeedCandidate, FeedFeedbackSignal } from './feed.ts';
 
 export type LearnedAffinityProfile = {
   topics: Map<string, number>;
@@ -26,6 +26,14 @@ function signalValue(eventType: FeedFeedbackSignal['eventType']): number {
   return eventType === 'more_like_this' ? 1 : -1;
 }
 
+function activityValue(signal: FeedActivitySignal): number {
+  if (signal.eventType === 'completed') return 0.7;
+  if (signal.eventType === 'revisited') return 0.3;
+  if (signal.eventType === 'opened') return 0.12;
+  if (signal.eventType === 'skipped') return -0.45;
+  return Math.min(0.5, Math.max(0, Number(signal.watchSeconds ?? 0) / 600));
+}
+
 function addCandidateAffinity(profile: LearnedAffinityProfile, candidate: FeedCandidate, strength: number) {
   for (const topic of candidate.topics ?? []) addSignal(profile.topics, topic, strength * 0.35);
   addSignal(profile.channels, candidate.channel_id ?? candidate.channel_name, strength * 0.5);
@@ -37,6 +45,7 @@ function addCandidateAffinity(profile: LearnedAffinityProfile, candidate: FeedCa
 export function buildLearnedAffinityProfile(
   candidates: FeedCandidate[],
   signals: FeedFeedbackSignal[],
+  activitySignals: FeedActivitySignal[] = [],
 ): LearnedAffinityProfile {
   const profile = emptyProfile();
   const candidatesById = new Map(candidates.map((candidate) => [candidate.external_id, candidate]));
@@ -53,6 +62,12 @@ export function buildLearnedAffinityProfile(
     if (!candidate) continue;
 
     addCandidateAffinity(profile, candidate, value);
+  }
+
+  for (const signal of activitySignals) {
+    const candidate = candidatesById.get(signal.external_id);
+    if (!candidate) continue;
+    addCandidateAffinity(profile, candidate, activityValue(signal));
   }
 
   return profile;
