@@ -26,8 +26,20 @@ export type YoutubeSubscriptionItem = {
   external_id: string;
   published_at?: string;
   topics?: string[];
+  metadata?: YoutubeVideoMetadata;
   source_kind?: 'subscription' | 'discovery' | 'liked';
   provenance?: CandidateProvenance;
+};
+
+export type YoutubeVideoMetadata = {
+  tags: string[];
+  category_id: string | null;
+  duration_seconds: number | null;
+  view_count: number | null;
+  like_count: number | null;
+  comment_count: number | null;
+  default_language: string | null;
+  default_audio_language: string | null;
 };
 
 const fixtureItems: YoutubeSubscriptionItem[] = [
@@ -224,6 +236,78 @@ async function fetchYoutubeRecentUploads(
 
 export function getDiscoverySearchOrder(lane: string): 'relevance' | 'date' {
   return lane === 'freshness' ? 'date' : 'relevance';
+}
+
+export function parseYoutubeDuration(duration?: string | null): number | null {
+  const match = duration?.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+  if (!match) return null;
+  const [, hours, minutes, seconds] = match;
+  return Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(seconds ?? 0);
+}
+
+export function mergeYoutubeVideoMetadata(item: YoutubeSubscriptionItem, metadata: YoutubeVideoMetadata & { description?: string | null; channel_name?: string | null; channel_id?: string | null; published_at?: string | null }): YoutubeSubscriptionItem {
+  return {
+    ...item,
+    description: metadata.description ?? item.description ?? null,
+    channel_name: metadata.channel_name ?? item.channel_name,
+    channel_id: metadata.channel_id ?? item.channel_id ?? null,
+    published_at: metadata.published_at ?? item.published_at,
+    metadata: {
+      tags: metadata.tags,
+      category_id: metadata.category_id,
+      duration_seconds: metadata.duration_seconds,
+      view_count: metadata.view_count,
+      like_count: metadata.like_count,
+      comment_count: metadata.comment_count,
+      default_language: metadata.default_language,
+      default_audio_language: metadata.default_audio_language,
+    },
+  };
+}
+
+async function fetchYoutubeVideoMetadata(accessToken: string, videoIds: string[]): Promise<Map<string, YoutubeVideoMetadata & { description?: string | null; channel_name?: string | null; channel_id?: string | null; published_at?: string | null }>> {
+  const metadataByVideoId = new Map<string, YoutubeVideoMetadata & { description?: string | null; channel_name?: string | null; channel_id?: string | null; published_at?: string | null }>();
+  const uniqueVideoIds = [...new Set(videoIds.filter(Boolean))].slice(0, 100);
+
+  for (let index = 0; index < uniqueVideoIds.length; index += 50) {
+    const ids = uniqueVideoIds.slice(index, index + 50);
+    const params = new URLSearchParams({ part: 'snippet,contentDetails,statistics', id: ids.join(',') });
+    const response = await fetchWithRetry(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      console.error('Failed to enrich YouTube discovery metadata', response.status, await response.text());
+      continue;
+    }
+
+    const payload = await response.json() as {
+      items?: Array<{
+        id?: string;
+        snippet?: { title?: string; description?: string; tags?: string[]; categoryId?: string; channelId?: string; channelTitle?: string; publishedAt?: string; defaultLanguage?: string; defaultAudioLanguage?: string };
+        contentDetails?: { duration?: string };
+        statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
+      }>;
+    };
+    for (const video of payload.items ?? []) {
+      if (!video.id) continue;
+      metadataByVideoId.set(video.id, {
+        tags: video.snippet?.tags ?? [],
+        category_id: video.snippet?.categoryId ?? null,
+        duration_seconds: parseYoutubeDuration(video.contentDetails?.duration),
+        view_count: video.statistics?.viewCount ? Number(video.statistics.viewCount) : null,
+        like_count: video.statistics?.likeCount ? Number(video.statistics.likeCount) : null,
+        comment_count: video.statistics?.commentCount ? Number(video.statistics.commentCount) : null,
+        default_language: video.snippet?.defaultLanguage ?? null,
+        default_audio_language: video.snippet?.defaultAudioLanguage ?? null,
+        description: video.snippet?.description ?? null,
+        channel_name: video.snippet?.channelTitle ?? null,
+        channel_id: video.snippet?.channelId ?? null,
+        published_at: video.snippet?.publishedAt ?? null,
+      });
+    }
+  }
+
+  return metadataByVideoId;
 }
 
 export type YoutubeDiscoveryMetrics = {
@@ -575,7 +659,13 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
   const discoveryResult = shouldDiscover
     ? await fetchYoutubeDiscoveryItems(accessToken!, activeAlgorithm, conceptGraph.catalog, conceptGraph.relations, learnedCreatorTerms)
     : { items: [], metrics: null };
-  const discoveryItems = discoveryResult.items;
+  const discoveryMetadata = accessToken && discoveryResult.items.length > 0
+    ? await fetchYoutubeVideoMetadata(accessToken, discoveryResult.items.map((item) => item.external_id))
+    : new Map();
+  const discoveryItems = discoveryResult.items.map((item) => {
+    const metadata = discoveryMetadata.get(item.external_id);
+    return metadata ? mergeYoutubeVideoMetadata(item, metadata) : item;
+  });
   const candidatePool = assembleCandidatePool([
     { source: 'youtube_subscription', items: result.items },
     { source: 'youtube_search', items: discoveryItems },
@@ -623,7 +713,16 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
 
     synced += 1;
 
-    const classification = await classifyContent(`${item.title} ${item.description ?? ''} ${item.channel_name ?? ''}`, conceptGraph.catalog);
+    const classificationText = [
+      item.title,
+      item.description,
+      item.channel_name,
+      item.metadata?.tags.join(' '),
+      item.metadata?.category_id,
+    ].filter(Boolean).join(' ');
+    const classification = await classifyContent(classificationText, conceptGraph.catalog, {
+      language: item.metadata?.default_language ?? item.metadata?.default_audio_language,
+    });
     const { error: classificationError } = await client.from('classifications').upsert(
       {
         content_item_id: contentRow.id,

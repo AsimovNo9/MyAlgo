@@ -20,6 +20,12 @@ test('classifyContent detects known script languages without treating Latin cont
   assert.equal(classification.format, 'review');
 });
 
+test('classifyContent uses a provider language hint when script detection is inconclusive', async () => {
+  const classification = await classifyContent('A practical systems overview', [], { language: 'en-US' });
+
+  assert.equal(classification.language, 'en');
+});
+
 test('classifyContent falls back to General when semantic AI is not configured', async () => {
   const previousKey = process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
