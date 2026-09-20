@@ -398,6 +398,21 @@ test('buildFeedResponse explains approved direct and related concepts', () => {
   assert.match(feed.items[0].reason ?? '', /approved concept "Gaming"/i);
 });
 
+test('buildFeedResponse uses semantic similarity as a bounded ranking signal', () => {
+  const feed = buildFeedResponse(
+    { name: 'AI', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [] },
+    [],
+    [
+      { external_id: 'semantic-match', title: 'AI systems', topics: ['AI'], base_score: 60, semantic_similarity: 0.95 },
+      { external_id: 'keyword-match', title: 'AI overview', topics: ['AI'], base_score: 50, semantic_similarity: 0 },
+      { external_id: 'excluded', title: 'AI systems', topics: ['AI'], base_score: 100, semantic_similarity: 1, language: 'ja' },
+    ],
+  );
+
+  assert.deepEqual(feed.items.map((item) => item.external_id), ['semantic-match', 'keyword-match']);
+  assert.match(feed.items[0].reason ?? '', /semantically close/i);
+});
+
 test('buildFeedResponse boosts more-like-this feedback without changing visibility', () => {
   const algorithm = { id: 'alg-feedback-boost', name: 'Work', topic_weights: [], rules: [] };
   const candidates = [

@@ -25,6 +25,7 @@ These are the unresolved items from the production safety review. The implementa
 - [ ] Set `OAUTH_TOKEN_ENCRYPTION_KEY` in Vercel and local deployment environments.
 - [ ] Reconnect the approved Google account so tokens created by the previous plaintext implementation are replaced with encrypted values.
 - [ ] Complete production Google OAuth sign-in from a clean browser session.
+- [ ] Fix deployed browser Supabase configuration: set valid `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel.
 - [ ] Verify `/api/oauth/youtube/connect` persists encrypted access and refresh tokens.
 - [ ] Verify access-token refresh after expiry and encrypted refresh-token rotation.
 - [ ] Verify extension sign-in, bearer authentication, sign-out, and session restoration against the deployed API.
@@ -33,7 +34,7 @@ These are the unresolved items from the production safety review. The implementa
 
 ### Database and deployment safety
 
-- [ ] Confirm every pending Supabase migration, including the concept graph migration, is applied to the production project.
+- [x] Confirm concept graph, content concept, and pgvector migrations are applied to the production project.
 - [ ] Verify RLS isolation with two separate production users across algorithms, feed cache, feedback, activity, OAuth connections, and intent profiles.
 - [ ] Set `CRON_SECRET` in production and verify unauthorized seed discovery/sync requests return `401`.
 - [ ] Verify authorized cron requests execute successfully and record source/coverage metrics.
@@ -47,6 +48,7 @@ These are the unresolved items from the production safety review. The implementa
 - [ ] Add uptime monitoring for `/api/health` and alerting for failed cron/sync runs.
 - [ ] Confirm deployment logs contain only redacted token diagnostics and no provider credentials.
 - [ ] Compare production semantic-ranking metrics against the flat-label baseline before increasing semantic score weight.
+- [x] Add offline regression coverage for semantic similarity ordering and hard-exclusion precedence.
 
 ### Live extension behavior
 
@@ -60,7 +62,7 @@ These are the unresolved items from the production safety review. The implementa
 ## Recommendation-engine architecture actions
 - [x] Build a user taste profile with explicit preferences, learned affinities, source affinity, language, format, and negative signals.
 - [x] Add a standalone candidate-generation coordinator with source budgets, coverage metrics, deduplication, and provenance.
-- [ ] Extend candidate generation with creator-query retrieval and dedicated freshness coverage; subscriptions, liked videos, topic queries, RSS, and bounded Search are implemented.
+- [x] Add learned creator-query retrieval; explicit `creator:`/`channel:` queries, subscriptions, liked videos, topic queries, RSS, bounded Search, and dedicated freshness queries are implemented.
 - [x] Add a query planner that expands user preferences into multiple retrieval queries instead of a single broad keyword string.
 - [x] Keep language and format as first-class ranking dimensions instead of treating them as generic tags.
 - [x] Keep classification text-first and metadata-driven; defer image models until they solve a real gap.
@@ -168,10 +170,11 @@ These are the unresolved items from the production safety review. The implementa
 - [x] Verify rotated values are set in Vercel/local environments and redeploy
 - [x] Implement AES-256-GCM encryption for YouTube OAuth tokens at rest
 - [ ] Set `OAUTH_TOKEN_ENCRYPTION_KEY` in production and verify encrypted persistence/refresh with a real account
-- [ ] Configure `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_MODEL_VERSION` in production.
+- [ ] Configure `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_MODEL_VERSION` in Vercel production.
 - [x] Verify the pgvector migration and `match_content_embeddings` RPC in the production Supabase project.
 - [ ] Run an authorized `/api/embeddings/backfill` job and verify model-versioned rows are created.
-- [ ] Run `node scripts/verify-production-pgvector.mjs` after applying migrations; current production check found `concept_relations`, `content_concepts`, `content_embeddings`, `concept_embeddings`, and `match_content_embeddings` missing.
+- [ ] Run the authorized `/api/embeddings/status` check before and after backfill; confirm provider configuration and stored row count without exposing secrets.
+- [x] Run `node scripts/verify-production-pgvector.mjs` after applying migrations; production tables and RPC return `200`.
 - [ ] Run `node scripts/collect-production-baseline.mjs` with an authenticated `SUPABASE_ACCESS_TOKEN` and record aggregate feed/rank metrics without exporting content identifiers.
 - [ ] Confirm secrets are never included in the browser extension bundle
 - [ ] Review access patterns for service-role usage and server-only code

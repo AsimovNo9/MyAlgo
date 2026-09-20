@@ -154,13 +154,13 @@ See [Issue #20](https://github.com/AsimovNo9/MyAlgo/issues/20). The first implem
 
 ## 12. Add semantic topic concepts and intent resolution
 
-**Status:** Partially implemented locally. Deterministic concepts, aliases, intent profiles, and the initial concept graph migration exist; database catalog loading, content concept matches, embeddings, and graph-aware LLM context remain planned.
+**Status:** Implemented locally and partially verified in production. Deterministic concepts, aliases, intent profiles, catalog loading, content concept matches, pgvector schema/RPC, and graph-aware LLM context exist; Vercel embedding configuration, backfill, and quality measurement remain open.
 
 See [Issue #22](https://github.com/AsimovNo9/MyAlgo/issues/22). This is the next semantic layer: Supabase pgvector concepts, aliases, embeddings, structured intent, and low-confidence AI disambiguation with deterministic fallback.
 
 ## 13. Persist semantic concept catalogs and algorithm intent profiles
 
-**Status:** Implemented and locally schema-verified. Production migration application and catalog write/read smoke tests remain open.
+**Status:** Implemented and production schema-verified. Concept catalog, content-concept, and pgvector migrations/RPC are deployed; production data backfill and user-facing semantic quality remain open.
 
 The tracked Supabase migration creates the canonical concept catalog and per-algorithm intent profiles with RLS. `GET /api/concepts` now exposes both persisted catalog entries and user-scoped profiles; future work is low-confidence AI disambiguation and production validation of the API path.
 

@@ -49,8 +49,8 @@ Reload the extension after every build. The extension popup supports Google sign
 - The local web app must be running for the local API URL to work.
 - The deployed app includes `/api/rank`; live-page ranking still requires an authenticated production smoke test with the extension.
 - Production deploys happen only from version tags (`v*`) through `.github/workflows/release.yml`; ordinary pushes to `main` run CI without deploying.
-- Discovery currently uses bounded YouTube Search queries and metadata classification. It is not yet a full semantic/RAG system.
-- The planned semantic layer uses Supabase `pgvector` for canonical concepts, aliases, embeddings, and cached algorithm intent. See GitHub issues #20 and #22.
+- Discovery uses bounded graph-aware YouTube Search queries and metadata classification; pgvector is now deployed, while embedding backfill and production quality baselines remain open.
+- The semantic layer uses Supabase `pgvector` for canonical concepts, aliases, embeddings, and cached algorithm intent. See [docs/STATUS.md](STATUS.md) for current verification state.
 - The content script displays a temporary diagnostic pill on YouTube. It reports whether cards were found, ranked, or rejected by the API.
 - Supabase OAuth for the extension requires an allowed redirect URL in the form `https://EXTENSION_ID.chromiumapp.org/supabase-auth`.
 
@@ -66,4 +66,4 @@ node --test packages/db/schema.test.mjs
 
 ## First task for a new developer
 
-Start with the current gates in [STATUS.md](STATUS.md): complete the production Google OAuth, YouTube sync, token refresh, RLS isolation, and authenticated `/api/rank` smoke test. Then implement database-backed concept catalog loading with deterministic fallback. Do not start pgvector or broad LLM enrichment before the semantic contracts and evaluation fixtures are complete.
+Start with the current gates in [STATUS.md](STATUS.md): configure Vercel embedding variables, deploy the hardened backfill route, run the authorized production backfill, then complete production OAuth and authenticated `/api/feed`/`/api/rank` smoke tests. Do not add visual models or broad LLM enrichment before quality baselines exist.

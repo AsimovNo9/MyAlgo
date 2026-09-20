@@ -24,8 +24,9 @@ export function buildRecommendationQueryPlans(
   algorithmRevision = 'current',
   catalog: ConceptCatalogEntry[] = [],
   relations: ConceptRelationEntry[] = [],
+  includeFreshness = false,
 ): RecommendationQueryPlan[] {
-  return buildRecommendationQueries(profile, limit, catalog, relations).map((query) => ({
+  return buildRecommendationQueries(profile, limit, catalog, relations, includeFreshness).map((query) => ({
     ...query,
     algorithmRevision,
   }));
@@ -47,12 +48,15 @@ function normalizeFormats(formats?: string[]): string[] {
   return [...new Set((formats ?? []).map((format) => format.trim().toLowerCase()).filter(Boolean))];
 }
 
-export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = []): RecommendationProfile {
+export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], learnedCreatorTerms: string[] = []): RecommendationProfile {
   const intentProfile = buildAlgorithmIntentProfile(algorithm, catalog);
   const rules = algorithm?.rules ?? [];
   const positiveRuleTerms = rules
     .filter((rule) => rule.type !== 'never_show' && rule.condition_text.trim().length > 0)
     .map((rule) => rule.condition_text.trim());
+  const creatorTerms = positiveRuleTerms
+    .map((term) => term.match(/^(?:creator|channel)\s*:\s*(.+)$/i)?.[1]?.trim() ?? '')
+    .filter(Boolean);
   const negativeRuleTerms = rules
     .filter((rule) => rule.type === 'never_show' && rule.condition_text.trim().length > 0)
     .map((rule) => rule.condition_text.trim());
@@ -69,6 +73,7 @@ export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog
     positiveRuleTerms,
     negativeRuleTerms,
     preferredFormats: explicitFormats.length > 0 ? explicitFormats : inferPreferredFormats(goal, positiveRuleTerms),
+    creatorTerms: [...new Set([...creatorTerms, ...learnedCreatorTerms])],
   };
 }
 
@@ -130,6 +135,7 @@ export function buildRecommendationQueries(
   limit = defaultQueryLimit,
   catalog: ConceptCatalogEntry[] = [],
   relations: ConceptRelationEntry[] = [],
+  includeFreshness = false,
 ): RecommendationQuery[] {
   if (limit <= 0 || profile.explicitTopics.length === 0) {
     return [];
@@ -139,6 +145,12 @@ export function buildRecommendationQueries(
   if (profile.goal) {
     planned.push({ text: profile.goal, lane: 'goal', topics: profile.explicitTopics });
   }
+
+  planned.push(...profile.creatorTerms.map((creator) => ({
+    text: `${creator} ${profile.preferredFormats[0] ?? ''}`.trim(),
+    lane: 'creator' as const,
+    topics: [],
+  })));
 
   planned.push(...buildGraphQueries(profile, catalog, relations));
 
@@ -159,6 +171,14 @@ export function buildRecommendationQueries(
       planned.push(topicQueries[cursor]);
       hasMore = true;
     }
+  }
+
+  if (includeFreshness) {
+    planned.push(...profile.explicitTopics.map((topic) => ({
+      text: `${topic} latest`,
+      lane: 'freshness' as const,
+      topics: [topic],
+    })));
   }
 
   const seen = new Set<string>();

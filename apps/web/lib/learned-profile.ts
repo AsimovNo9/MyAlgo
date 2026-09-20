@@ -89,3 +89,10 @@ export function getCandidateLearnedAffinity(
 
   return Math.max(-1, Math.min(1, topicAffinity + channelAffinity + formatAffinity + languageAffinity + sourceAffinity));
 }
+
+export function getStrongChannelAffinityTerms(profile: LearnedAffinityProfile, threshold = 0.25): string[] {
+  return [...profile.channels.entries()]
+    .filter(([, value]) => value >= threshold)
+    .sort((left, right) => right[1] - left[1])
+    .map(([channel]) => channel);
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildLearnedAffinityProfile, getCandidateLearnedAffinity } from './learned-profile.ts';
+import { buildLearnedAffinityProfile, getCandidateLearnedAffinity, getStrongChannelAffinityTerms } from './learned-profile.ts';
 
 test('buildLearnedAffinityProfile derives bounded positive affinities from more-like-this feedback', () => {
   const candidate = {
@@ -23,6 +23,15 @@ test('buildLearnedAffinityProfile derives bounded positive affinities from more-
   assert.equal(profile.languages.get('en'), 0.4);
   assert.equal(profile.sources.get('discovery'), 0.25);
   assert.equal(getCandidateLearnedAffinity(profile, candidate), 1);
+});
+
+test('getStrongChannelAffinityTerms returns only bounded positive creator signals', () => {
+  const profile = buildLearnedAffinityProfile([
+    { external_id: 'liked', title: 'Liked', channel_name: 'Preferred Creator', topics: ['AI'], source_kind: 'liked' },
+    { external_id: 'other', title: 'Other', channel_name: 'Other Creator', topics: ['AI'], source_kind: 'subscription' },
+  ], []);
+
+  assert.deepEqual(getStrongChannelAffinityTerms(profile), ['preferred creator']);
 });
 
 test('negative feedback lowers learned affinity without exceeding bounds', () => {
