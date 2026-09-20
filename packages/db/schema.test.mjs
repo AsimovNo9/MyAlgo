@@ -66,6 +66,10 @@ const tasteProfileMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920095000_add_taste_profile_affinities.sql'),
   'utf8',
 );
+const feedCacheSemanticPathMigration = fs.readFileSync(
+  path.join(packageDirectory, '../../supabase/migrations/20260920096000_add_feed_cache_semantic_path.sql'),
+  'utf8',
+);
 const classificationConfidenceMigration = fs.readFileSync(
   path.join(packageDirectory, '../../supabase/migrations/20260920080000_add_classification_confidence.sql'),
   'utf8',
@@ -179,6 +183,11 @@ test('durable taste profile affinities are bounded, versioned, and protected by 
   assert.match(tasteProfileMigration, /create table if not exists public\.taste_profile_affinities/i);
   assert.match(tasteProfileMigration, /alter table public\.taste_profile_affinities enable row level security/i);
   assert.match(tasteProfileMigration, /auth\.uid\(\) = user_id/i);
+});
+
+test('feed cache tracks approved semantic explanation paths without raw model data', () => {
+  assert.match(schema, /create table public\.feed_cache[\s\S]*semantic_path jsonb/i);
+  assert.match(feedCacheSemanticPathMigration, /add column if not exists semantic_path jsonb/i);
 });
 
 test('classification confidence is bounded and tracked in schema and migration', () => {

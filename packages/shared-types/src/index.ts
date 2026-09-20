@@ -42,6 +42,11 @@ export interface FeedItem {
   visible: boolean;
   reason?: string;
   matched_topics?: string[];
+  semantic_path?: Array<{
+    concept: string;
+    relation_type: string | null;
+    confidence: number;
+  }>;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   lane?: 'matched' | 'discovery' | 'explore';
 }

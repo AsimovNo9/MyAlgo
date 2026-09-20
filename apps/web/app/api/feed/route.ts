@@ -7,7 +7,7 @@ import { loadApprovedConceptGraph } from '@/lib/semantic-catalog';
 import { fetchFeedbackSignalsForUser } from '@/lib/feedback-signals';
 import { fetchActivitySignalsForUser } from '@/lib/activity-signals';
 import { learnedAffinityProfileFromRows } from '@/lib/learned-profile';
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { FeedItem, FeedSourceFilters } from '@repo/shared-types';
 
 async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
   const client = await createSupabaseServerClient();
@@ -54,7 +54,7 @@ async function fetchRecentContentForUser(): Promise<FeedCandidate[]> {
 async function persistFeedCacheForUser(
   userId: string,
   algorithmId: string,
-  items: { external_id: string; score: number; visible: boolean }[],
+  items: { external_id: string; score: number; visible: boolean; semantic_path?: FeedItem['semantic_path'] }[],
 ) {
   const client = await createSupabaseServerClient();
   if (!client) {
@@ -91,6 +91,7 @@ async function persistFeedCacheForUser(
         score: item.score,
         rank: index + 1,
         visible: item.visible,
+        semantic_path: item.semantic_path ?? null,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
