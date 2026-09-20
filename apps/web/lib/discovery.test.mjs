@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
+import { buildDiscoveryQueries, buildDiscoveryQueryPlans, discoveryLimits } from './discovery.ts';
+
+test('buildDiscoveryQueryPlans preserves query lane, topics, and algorithm revision', () => {
+  const plans = buildDiscoveryQueryPlans({
+    id: 'algorithm-gaming',
+    name: 'Gaming',
+    goal_text: 'Nintendo RPG analysis',
+    topic_weights: [{ topic: 'Gaming', weight: 90 }],
+    rules: [],
+  });
+
+  assert.equal(plans[0].algorithmRevision, 'algorithm-gaming');
+  assert.equal(plans[0].lane, 'goal');
+  assert.deepEqual(plans[0].topics, ['Gaming']);
+});
 
 test('buildDiscoveryQueries derives one query per strong topic alongside the goal', () => {
   const queries = buildDiscoveryQueries({

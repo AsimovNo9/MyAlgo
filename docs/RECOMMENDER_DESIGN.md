@@ -560,7 +560,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 
 - [ ] Define the typed `RecommendationProfile`, query, facet, and provenance contracts.
 - [x] Derive explicit topics, semantic terms, positive rules, negative rules, and format intent from an algorithm.
-- [ ] Generate bounded, deduplicated, annotated queries across goal, topic, alias, intent, creator, format, and freshness lanes.
+- [x] Generate bounded, deduplicated, annotated queries across goal, topic, alias, intent, creator, format, and freshness lanes.
 - [x] Keep query generation deterministic and independent of network or database access.
 - [x] Preserve the existing `buildDiscoveryQueries` API while routing it through the planner.
 - [x] Add tests for multi-topic coverage, aliases, negative rules, deduplication, and query limits.

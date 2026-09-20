@@ -22,7 +22,22 @@ export type RecommendationQuery = {
   topics: string[];
 };
 
+export type RecommendationQueryPlan = RecommendationQuery & {
+  algorithmRevision: string;
+};
+
 const defaultQueryLimit = 5;
+
+export function buildRecommendationQueryPlans(
+  profile: RecommendationProfile,
+  limit = defaultQueryLimit,
+  algorithmRevision = 'current',
+): RecommendationQueryPlan[] {
+  return buildRecommendationQueries(profile, limit).map((query) => ({
+    ...query,
+    algorithmRevision,
+  }));
+}
 
 function inferPreferredFormats(goal: string, positiveRuleTerms: string[]): string[] {
   const text = `${goal} ${positiveRuleTerms.join(' ')}`;

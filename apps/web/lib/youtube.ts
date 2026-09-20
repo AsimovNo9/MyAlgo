@@ -1,6 +1,6 @@
 import type { Algorithm } from '@repo/shared-types';
 import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type GoogleProviderTokenBundle } from './auth.ts';
-import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
+import { buildDiscoveryQueryPlans, discoveryLimits } from './discovery.ts';
 import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
 import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
@@ -220,7 +220,8 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
   const discoveryItems: YoutubeSubscriptionItem[] = [];
   const language = buildRecommendationProfile(algorithm).language;
 
-  for (const query of buildDiscoveryQueries(algorithm)) {
+  for (const plan of buildDiscoveryQueryPlans(algorithm)) {
+    const query = plan.text;
     const params = new URLSearchParams({
       part: 'snippet',
       type: 'video',
@@ -259,7 +260,12 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
         published_at: item.snippet?.publishedAt ?? new Date().toISOString(),
         topics: [],
         source_kind: 'discovery',
-        provenance: createCandidateProvenance('youtube_search', { query, channel_id: item.snippet?.channelId ?? null }),
+        provenance: createCandidateProvenance('youtube_search', {
+          query,
+          query_lane: plan.lane,
+          query_topics: plan.topics,
+          channel_id: item.snippet?.channelId ?? null,
+        }),
       });
     }
   }
