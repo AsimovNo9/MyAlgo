@@ -457,6 +457,13 @@ export function buildFeedResponse(
       reason,
       matched_topics: matchedTopics,
       source_kind: video.source_kind ?? null,
+      lane: visible
+        ? video.source_kind === 'discovery'
+          ? 'discovery'
+          : hasTopicWeights && eligibleMatchedTopics.length === 0
+            ? 'explore'
+            : 'matched'
+        : undefined,
     };
   });
 

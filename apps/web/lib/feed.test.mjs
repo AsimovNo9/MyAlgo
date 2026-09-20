@@ -369,6 +369,25 @@ test('buildFeedResponse applies learned preferences across candidate facets', ()
   assert.match(feed.items[0].reason ?? '', /learned preference/);
 });
 
+test('buildFeedResponse labels visible items by matched, discovery, and explore lane', () => {
+  const algorithm = { id: 'alg-lanes', name: 'Work', topic_weights: [], rules: [] };
+  const feed = buildFeedResponse(algorithm, [], [
+    { id: 'subscribed', external_id: 'subscribed', title: 'Subscribed item', source_kind: 'subscription', topics: ['General'] },
+    { id: 'discovered', external_id: 'discovered', title: 'Discovered item', source_kind: 'discovery', topics: ['General'] },
+  ]);
+
+  assert.equal(feed.items.find((item) => item.external_id === 'subscribed')?.lane, 'matched');
+  assert.equal(feed.items.find((item) => item.external_id === 'discovered')?.lane, 'discovery');
+
+  const exploratoryFeed = buildFeedResponse(
+    { id: 'alg-explore', name: 'Work', topic_weights: [{ topic: 'AI', weight: 90 }], rules: [{ type: 'always_show', condition_text: 'experimental' }] },
+    [],
+    [{ id: 'explore', external_id: 'explore', title: 'Experimental documentary', topics: [], candidate_relevance: 'unmatched' }],
+  );
+
+  assert.equal(exploratoryFeed.items[0].lane, 'explore');
+});
+
 test('buildFeedResponse falls back to title-derived topics when classifications are empty', () => {
   const algorithm = {
     id: 'alg-2',
