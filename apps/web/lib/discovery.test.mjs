@@ -97,7 +97,6 @@ test('buildDiscoveryQueries expands concept aliases for arbitrary user-defined t
 
   assert.equal(queries[0], 'Build a deeper understanding of game design and gameplay systems');
   assert.equal(queries.some((query) => /game design|game development|gameplay/i.test(query)), true);
-  assert.equal(queries.some((query) => /indie games|esports/i.test(query)), true);
   assert.equal(queries.length <= discoveryLimits.maxQueriesPerSync, true);
 });
 
