@@ -1,4 +1,5 @@
 import { fetchChannelRssItems } from './rss.ts';
+import { buildCandidateRawMetadata, normalizeRssCandidate } from './candidates.ts';
 
 export type SeedChannelRow = { topic: string; channel_id: string; status?: 'pending' | 'approved' | 'rejected' };
 
@@ -59,17 +60,19 @@ export async function syncSeedChannelContent() {
     const items = (await fetchChannelRssItems(channelId)).slice(0, MAX_ITEMS_PER_CHANNEL);
 
     for (const item of items) {
+      const candidate = normalizeRssCandidate(item, channelId);
       const { data: contentRow, error: upsertError } = await client
         .from('content_items')
         .upsert(
           {
             source: 'youtube',
-            external_id: item.videoId,
-            title: item.title,
-            channel_name: item.channelName ?? 'Unknown channel',
+            external_id: candidate.external_id,
+            title: candidate.title,
+            channel_name: candidate.channel_name,
             channel_id: channelId,
             source_kind: 'discovery',
-            published_at: item.publishedAt ? new Date(item.publishedAt) : new Date(),
+            published_at: candidate.published_at ? new Date(candidate.published_at) : new Date(),
+            raw_metadata: buildCandidateRawMetadata(candidate),
           },
           { onConflict: 'source,external_id' },
         )
@@ -93,7 +96,7 @@ export async function syncSeedChannelContent() {
         continue;
       }
 
-      const detected = await classifyContent(`${item.title} ${item.description ?? ''} ${item.channelName ?? ''}`);
+      const detected = await classifyContent(`${candidate.title} ${candidate.description ?? ''} ${candidate.channel_name}`);
       const { error: classificationError } = await client.from('classifications').upsert(
         {
           content_item_id: contentRow.id,

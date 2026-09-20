@@ -3,6 +3,7 @@ import { extractGoogleProviderTokens, summarizeGoogleProviderTokens, type Google
 import { buildDiscoveryQueries, discoveryLimits } from './discovery.ts';
 import { fetchWithRetry } from './http.ts';
 import { redactSensitiveValues } from './logging.ts';
+import { buildCandidateRawMetadata, createCandidateProvenance, type CandidateProvenance } from './candidates.ts';
 
 export type YoutubeSubscriptionItem = {
   id: string;
@@ -16,6 +17,7 @@ export type YoutubeSubscriptionItem = {
   published_at?: string;
   topics?: string[];
   source_kind?: 'subscription' | 'discovery';
+  provenance?: CandidateProvenance;
 };
 
 const fixtureItems: YoutubeSubscriptionItem[] = [
@@ -88,6 +90,7 @@ export function mapYoutubeSubscriptionItems(rawItems: unknown[]): YoutubeSubscri
       external_id: externalId,
       published_at: publishedAt,
       topics: [],
+      provenance: createCandidateProvenance('youtube_subscription'),
     });
   }
 
@@ -200,6 +203,8 @@ async function fetchYoutubeRecentUploads(
         external_id: videoId,
         published_at: video.snippet?.publishedAt ?? new Date().toISOString(),
         topics: [],
+        source_kind: 'subscription',
+        provenance: createCandidateProvenance('youtube_subscription', { channel_id: channelId }),
       });
     }
   }
@@ -246,6 +251,7 @@ async function fetchYoutubeDiscoveryItems(accessToken: string, algorithm?: Algor
         published_at: item.snippet?.publishedAt ?? new Date().toISOString(),
         topics: [],
         source_kind: 'discovery',
+        provenance: createCandidateProvenance('youtube_search', { query, channel_id: item.snippet?.channelId ?? null }),
       });
     }
   }
@@ -447,6 +453,7 @@ export async function syncYoutubeSubscriptionsForUser(userId: string) {
           channel_subscriber_count: channelSubscriberCount,
           source_kind: item.source_kind ?? 'subscription',
           published_at: item.published_at ? new Date(item.published_at) : new Date(),
+          raw_metadata: buildCandidateRawMetadata(item),
         },
         { onConflict: 'source,external_id' },
       )
