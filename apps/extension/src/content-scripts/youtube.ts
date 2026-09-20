@@ -119,6 +119,14 @@ const getVideoSourceFlags = (element: HTMLElement) => {
   };
 };
 
+const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => {
+  if (!externalId || externalId.startsWith('title:')) return;
+  chrome.runtime.sendMessage({
+    type: 'ACTIVITY',
+    payload: { externalId, eventType },
+  });
+};
+
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
@@ -399,6 +407,8 @@ window.addEventListener('load', () => {
   scheduleInitialRank();
 });
 window.addEventListener('yt-navigate-finish', () => {
+  const currentVideoId = extractYouTubeVideoId(window.location.href);
+  if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   triggerRank('navigation');
 });
 window.addEventListener('yt-page-data-updated', () => {
@@ -407,3 +417,9 @@ window.addEventListener('yt-page-data-updated', () => {
 window.addEventListener('popstate', () => {
   triggerRank('navigation');
 });
+
+document.addEventListener('click', (event) => {
+  const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(videoLinkSelector) : null;
+  const videoId = target ? extractYouTubeVideoId(target.href) : undefined;
+  if (videoId) sendActivity(videoId, 'opened');
+}, true);

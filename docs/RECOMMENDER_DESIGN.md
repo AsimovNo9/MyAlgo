@@ -590,7 +590,7 @@ The coordinator should run only from activation or sync jobs. `/api/feed` and pa
 - [x] Import liked-video metadata when the OAuth scope permits it.
 - [x] Use liked-video facets as bounded positive evidence in the derived taste profile.
 - [x] Add privacy-bounded activity ingestion and storage for opens, revisits, completion, skips, and watch duration.
-- [ ] Emit activity events from the extension after the server contract is stable.
+- [x] Emit privacy-bounded opened and revisited activity events from the extension.
 - [ ] Recompute profile affinities from feedback and observed activity.
 - [ ] Add a user-facing taste calibration flow.
 - [ ] Evaluate semantic or visual classification only where text-first metadata leaves a demonstrated gap.
