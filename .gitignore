@@ -3,21 +3,16 @@ node_modules/
 .pnpm-store/
 
 # Build outputs
-.next/
 *.tsbuildinfo
 out/
 dist/
 build/
 coverage/
-.vercel/
 
 # Environment files
 .env
 .env.*
 !.env.example
-
-# Supabase local artifacts
-supabase/.temp/
 
 # Logs
 npm-debug.log*
