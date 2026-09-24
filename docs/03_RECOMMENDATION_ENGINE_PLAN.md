@@ -44,6 +44,21 @@ Questions that must be answered before graph UX work is considered complete:
 
 The API is not used to seed the graph.
 
+### Home recommendation context
+
+The Home page is a second P0 observation stream. Store visible recommendation
+cards as `surfaced` context with position and section metadata. Do not infer that
+the user likes a topic merely because YouTube showed it. Correlate a surfaced
+item with a later click or rendered-history match to produce an observable
+sequence:
+
+```text
+surfaced → clicked → watched
+```
+
+Repeatedly surfaced but unobserved items are a future avoidance/negative-signal
+research question, not an automatic P0 preference update.
+
 ## Content understanding
 
 Prefer a layered approach:

@@ -7,6 +7,9 @@ export const STORAGE_KEYS = {
   HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
   HISTORY_METRICS: 'personal-algorithm-history-metrics',
+  HOME_OBSERVATION_ENABLED: 'personal-algorithm-home-observation-enabled',
+  HOME_OBSERVATIONS: 'personal-algorithm-home-observations',
+  HOME_METRICS: 'personal-algorithm-home-metrics',
 } as const;
 
 export async function getStorage<T>(key: string, fallback: T): Promise<T> {

@@ -46,6 +46,25 @@ interface Evidence {
 }
 ```
 
+### Observation kinds and confidence
+
+```ts
+type EvidenceKind =
+  | "watched"
+  | "surfaced"
+  | "explicit_positive"
+  | "explicit_negative";
+```
+
+- `watched`: primary behavioral bootstrap evidence from rendered history.
+- `surfaced`: weak contextual observation from the Home page, never direct taste
+  evidence.
+- `explicit_positive` and `explicit_negative`: highest-confidence user input.
+
+A Home recommendation stores position, section, observation time, and outcome.
+Its outcome starts as `unobserved`, then may become `clicked` or `watched` when
+the same video is later observed through a user interaction or rendered history.
+
 ### Graph node
 
 ```ts
@@ -171,6 +190,9 @@ A connector owns:
 - interaction observation
 - feed enforcement
 - platform-specific UI behavior
+
+For YouTube P0, the connector has separate history and Home ingestion paths.
+They share stable video IDs for correlation but retain independent provenance.
 
 YouTube is the first connector.
 
