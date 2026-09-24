@@ -48,6 +48,22 @@ The graph must not be constructed from YouTube API Data.
 
 This is an intentional compliance boundary. It is not a claim that browser-observed YouTube data is automatically unrestricted; that remains subject to applicable terms, privacy requirements, and legal review.
 
+### P0 browser-signal semantics
+
+P0 observes two distinct browser signals and must not conflate them:
+
+```text
+History observation       → watched evidence       → bootstrap input
+Home recommendation       → surfaced observation  → contextual input
+Explicit user feedback    → explicit evidence     → highest-confidence input
+```
+
+`watched` is behavioral evidence and can support initial graph inference.
+`surfaced` means only that YouTube displayed an item; it must not, by itself,
+raise preference weight or imply user interest. The system may correlate a
+surfaced item with a later click or watched-history observation without claiming
+knowledge of YouTube's private ranking logic.
+
 ## 6. Local-first
 
 MVP learning and graph storage should remain local where technically practical.

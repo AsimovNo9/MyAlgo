@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
+import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
 import { youtubePageFixtures } from './youtube-fixtures.ts';
 import { youtubeConnector } from '../connectors/youtube.ts';
@@ -43,6 +45,109 @@ test('extractYouTubeLinkTitle prefers accessible title attributes', () => {
   assert.equal(extractYouTubeLinkTitle({ title: '  ', ariaLabel: null, textContent: '  Text fallback  ' }), 'Text fallback');
   assert.equal(extractYouTubeLinkTitle({ title: null, ariaLabel: null, textContent: null }), '');
   assert.equal(normalizeYouTubeText('  spaced\n title '), 'spaced title');
+});
+
+test('history extraction keeps minimal visible evidence and tracks rejected rows', () => {
+  const observedAt = '2026-09-24T12:00:00.000Z';
+  const observation = collectHistoryEvidence([
+    {
+      href: '/watch?v=history-1',
+      title: '  Local-first design  ',
+      creator: ' MyAlgo channel ',
+      historyTimestamp: 'Watched 2 days ago',
+    },
+    { href: '/watch?v=history-1', title: 'Duplicate row' },
+    { href: '/watch?v=history-2', title: 'Injected row', injected: true },
+    { href: '/watch?v=missing-title', title: ' ' },
+    { href: '/@channel', title: 'Not a video' },
+  ], observedAt);
+
+  assert.deepEqual(observation.evidence, [{
+    externalId: 'history-1',
+    title: 'Local-first design',
+    creator: 'MyAlgo channel',
+    historyTimestamp: 'Watched 2 days ago',
+    observedAt,
+    provenance: 'youtube_history_dom',
+  }]);
+  assert.deepEqual(observation.metrics, {
+    observedCandidates: 5,
+    usableEvidence: 1,
+    duplicateCandidates: 1,
+    missingVideoId: 1,
+    missingTitle: 1,
+    injectedCandidates: 1,
+  });
+});
+
+test('history extraction runs only on the rendered YouTube history page', () => {
+  assert.equal(isYouTubeHistoryPage('/feed/history'), true);
+  assert.equal(isYouTubeHistoryPage('/feed/history/'), true);
+  assert.equal(isYouTubeHistoryPage('/'), false);
+  assert.equal(isYouTubeHistoryPage('/feed/subscriptions'), false);
+});
+
+test('Home extraction records surfaced context without inferring preference', () => {
+  const observedAt = '2026-09-24T12:00:00.000Z';
+  const observation = collectRecommendationObservations([
+    { href: '/watch?v=home-1', title: 'Woodworking guide', creator: 'Maker', section: 'Recommended' },
+    { href: '/watch?v=home-1', title: 'Duplicate card' },
+    { href: '/watch?v=injected', title: 'MyAlgo card', injected: true },
+    { href: '/watch?v=missing-title', title: '' },
+  ], observedAt);
+
+  assert.deepEqual(observation.observations, [{
+    externalId: 'home-1',
+    title: 'Woodworking guide',
+    creator: 'Maker',
+    position: 0,
+    section: 'Recommended',
+    observedAt,
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
+  }]);
+  assert.equal(observation.metrics.usableObservations, 1);
+  assert.equal(observation.metrics.duplicateCandidates, 1);
+  assert.equal(observation.metrics.injectedCandidates, 1);
+  assert.equal(observation.metrics.missingTitle, 1);
+});
+
+test('Home observations become contextual outcomes only after user interaction', () => {
+  const observations = collectRecommendationObservations([
+    { href: '/watch?v=home-1', title: 'Woodworking guide' },
+    { href: '/watch?v=home-2', title: 'Crypto news' },
+  ], '2026-09-24T12:00:00.000Z').observations;
+
+  const clicked = applyRecommendationOutcome(observations, 'home-1', 'clicked');
+  const watched = applyRecommendationOutcome(clicked, 'home-1', 'watched');
+
+  assert.equal(clicked[0].outcome, 'clicked');
+  assert.equal(watched[0].outcome, 'watched');
+  assert.equal(watched[1].outcome, 'unobserved');
+});
+
+test('repeated Home observation retains a correlated interaction outcome', () => {
+  const first = collectRecommendationObservations([
+    { href: '/watch?v=home-1', title: 'Woodworking guide' },
+  ], '2026-09-24T12:00:00.000Z').observations;
+  const watched = applyRecommendationOutcome(first, 'home-1', 'watched');
+  const repeated = collectRecommendationObservations([
+    { href: '/watch?v=home-1', title: 'Woodworking guide', section: 'Recommended' },
+  ], '2026-09-25T12:00:00.000Z').observations;
+
+  const merged = mergeRecommendationObservations(watched, repeated);
+
+  assert.equal(merged[0].outcome, 'watched');
+  assert.equal(merged[0].section, 'Recommended');
+  assert.equal(merged[0].observedAt, '2026-09-25T12:00:00.000Z');
+});
+
+test('Home extraction runs only on the YouTube landing page', () => {
+  assert.equal(isYouTubeHomePage('/'), true);
+  assert.equal(isYouTubeHomePage(''), true);
+  assert.equal(isYouTubeHomePage('/feed/history'), false);
+  assert.equal(isYouTubeHomePage('/results'), false);
 });
 
 test('deduplication keeps the first valid candidate per video ID', () => {

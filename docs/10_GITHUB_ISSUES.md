@@ -29,6 +29,23 @@ Acceptance criteria:
 - infinite scroll
 - no collection of MyAlgo-injected cards
 
+For the Home surface, store recommendation appearance as `surfaced` contextual
+evidence with position and section metadata. Do not treat appearance alone as a
+user preference.
+
+### [#174](https://github.com/AsimovNo9/MyAlgo/issues/174): Correlate surfaced recommendations with user behavior
+
+Correlate a Home `surfaced` observation with a later click and/or rendered
+history match by stable video ID. The resulting sequence distinguishes what
+YouTube displayed from what the user chose to watch:
+
+```text
+surfaced → clicked → watched
+```
+
+This is contextual evidence for future graph learning; repeated non-engagement
+is not an automatic negative preference in P0.
+
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary

@@ -13,6 +13,27 @@
 
 **Exit:** enough browser-observed evidence exists to construct a useful initial graph.
 
+### Watch-history DOM spike protocol
+
+The extension may observe rendered `/feed/history` rows only after the user
+enables the experimental history-bootstrap setting. The spike stores only:
+
+- stable YouTube video ID;
+- visible title and creator;
+- visible history timestamp when present;
+- observation time and `youtube_history_dom` provenance.
+
+Evidence remains local, is deduplicated by video ID, and is capped at 1,000
+records. The observer records local yield/failure counters for duplicate,
+injected, missing-ID, and missing-title rows. It must never send observations to
+a backend.
+
+Before this phase exits, run a real-browser session that scrolls a realistic
+history volume and record usable-evidence yield, pagination/infinite-scroll
+behavior, deleted/private/unavailable-item behavior, and selector failures.
+The browser fixture tests are a regression guard, not evidence that the live DOM
+is stable.
+
 ## Phase 1 — Local graph
 
 1. Evidence store
