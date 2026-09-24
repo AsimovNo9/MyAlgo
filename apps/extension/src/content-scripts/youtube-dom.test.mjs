@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
 import { youtubePageFixtures } from './youtube-fixtures.ts';
 import { youtubeConnector } from '../connectors/youtube.ts';
@@ -43,6 +44,46 @@ test('extractYouTubeLinkTitle prefers accessible title attributes', () => {
   assert.equal(extractYouTubeLinkTitle({ title: '  ', ariaLabel: null, textContent: '  Text fallback  ' }), 'Text fallback');
   assert.equal(extractYouTubeLinkTitle({ title: null, ariaLabel: null, textContent: null }), '');
   assert.equal(normalizeYouTubeText('  spaced\n title '), 'spaced title');
+});
+
+test('history extraction keeps minimal visible evidence and tracks rejected rows', () => {
+  const observedAt = '2026-09-24T12:00:00.000Z';
+  const observation = collectHistoryEvidence([
+    {
+      href: '/watch?v=history-1',
+      title: '  Local-first design  ',
+      creator: ' MyAlgo channel ',
+      historyTimestamp: 'Watched 2 days ago',
+    },
+    { href: '/watch?v=history-1', title: 'Duplicate row' },
+    { href: '/watch?v=history-2', title: 'Injected row', injected: true },
+    { href: '/watch?v=missing-title', title: ' ' },
+    { href: '/@channel', title: 'Not a video' },
+  ], observedAt);
+
+  assert.deepEqual(observation.evidence, [{
+    externalId: 'history-1',
+    title: 'Local-first design',
+    creator: 'MyAlgo channel',
+    historyTimestamp: 'Watched 2 days ago',
+    observedAt,
+    provenance: 'youtube_history_dom',
+  }]);
+  assert.deepEqual(observation.metrics, {
+    observedCandidates: 5,
+    usableEvidence: 1,
+    duplicateCandidates: 1,
+    missingVideoId: 1,
+    missingTitle: 1,
+    injectedCandidates: 1,
+  });
+});
+
+test('history extraction runs only on the rendered YouTube history page', () => {
+  assert.equal(isYouTubeHistoryPage('/feed/history'), true);
+  assert.equal(isYouTubeHistoryPage('/feed/history/'), true);
+  assert.equal(isYouTubeHistoryPage('/'), false);
+  assert.equal(isYouTubeHistoryPage('/feed/subscriptions'), false);
 });
 
 test('deduplication keeps the first valid candidate per video ID', () => {

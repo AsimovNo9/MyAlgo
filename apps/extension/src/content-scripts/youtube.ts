@@ -4,6 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
+import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
@@ -18,6 +19,7 @@ let rankQueued = false;
 let feedRequestGeneration = 0;
 let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
+let historyObservationTimer: number | undefined;
 let extensionEnabled = true;
 let lastCandidateSignature = '';
 let lastRankMode = '';
@@ -331,6 +333,26 @@ const collectCandidates = () => {
   return candidates;
 };
 
+const observeHistoryPage = () => {
+  if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
+  chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
+    if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
+    const observation = collectHistoryEvidenceFromDom(document);
+    chrome.runtime.sendMessage({
+      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+      payload: observation,
+    });
+  });
+};
+
+const scheduleHistoryObservation = () => {
+  if (historyObservationTimer !== undefined) window.clearTimeout(historyObservationTimer);
+  historyObservationTimer = window.setTimeout(() => {
+    historyObservationTimer = undefined;
+    observeHistoryPage();
+  }, 400);
+};
+
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
   removeReplacementCards();
@@ -604,6 +626,7 @@ window.addEventListener('yt-navigate-finish', () => {
   if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   refreshRecommendationShelf();
   triggerRank('navigation');
+  scheduleHistoryObservation();
 });
 window.addEventListener('yt-page-data-updated', () => {
   triggerRank('navigation');
@@ -628,6 +651,7 @@ const pageObserver = new MutationObserver((records) => {
   }));
 
   if (hasNativeVideoMutation) triggerRank('mutation');
+  if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
 });
 pageObserver.observe(document.documentElement, { childList: true, subtree: true });
 
@@ -636,3 +660,5 @@ document.addEventListener('click', (event) => {
   const videoId = target ? youtubeConnector.getExternalId(target.href) : undefined;
   if (videoId) sendActivity(videoId, 'opened');
 }, true);
+
+scheduleHistoryObservation();

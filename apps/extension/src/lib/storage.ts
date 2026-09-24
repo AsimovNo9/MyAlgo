@@ -4,6 +4,9 @@ export const STORAGE_KEYS = {
   FEED_CACHE: 'personal-algorithm-feed-cache',
   LAST_SYNC: 'personal-algorithm-last-sync',
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
+  HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
+  HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
+  HISTORY_METRICS: 'personal-algorithm-history-metrics',
 } as const;
 
 export async function getStorage<T>(key: string, fallback: T): Promise<T> {

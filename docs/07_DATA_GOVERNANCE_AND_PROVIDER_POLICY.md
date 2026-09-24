@@ -49,6 +49,15 @@ The product should avoid indefinite storage of raw provider data.
 
 Derived data is not automatically exempt from provider policy merely because it is mathematically transformed.
 
+### Experimental history-bootstrap retention
+
+The MVP history observer is disabled by default. When enabled, it stores a
+maximum of 1,000 locally observed evidence records, deduplicated by video ID.
+Each record contains only visible ID, title, creator, displayed history timestamp
+when available, observation time, and browser-DOM provenance. It does not send
+these records to a backend. Disabling the experiment stops further collection;
+the reset/delete controls must remove retained evidence before launch.
+
 ## Cloud processing
 
 MVP default:

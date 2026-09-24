@@ -3,7 +3,8 @@ export type MessageType =
   | 'SET_MODE'
   | 'OPEN_OPTIONS'
   | 'FEEDBACK'
-  | 'ACTIVITY';
+  | 'ACTIVITY'
+  | 'HISTORY_OBSERVATION';
 
 export interface RuntimeMessage<T = unknown> {
   type: MessageType;

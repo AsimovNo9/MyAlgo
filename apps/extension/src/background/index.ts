@@ -2,6 +2,7 @@ import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
+import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
 
 type PageCandidate = {
   external_id: string;
@@ -30,6 +31,9 @@ chrome.runtime.onInstalled.addListener(() => {
       includeShorts: true,
       includeLive: true,
     },
+    [STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED]: false,
+    [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
+    [STORAGE_KEYS.HISTORY_METRICS]: null,
   });
 });
 
@@ -55,7 +59,20 @@ async function recordLocalEvent(kind: 'activity' | 'feedback', payload: unknown)
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, payload } = message as { type: string; payload?: { mode?: string; algorithmId?: string; enabled?: boolean; contentItemId?: string; externalId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
+  const { type, payload } = message as {
+    type: string;
+    payload?: {
+      mode?: string;
+      algorithmId?: string;
+      enabled?: boolean;
+      contentItemId?: string;
+      externalId?: string;
+      eventType?: string;
+      sourceFilters?: FeedSourceFilters;
+      evidence?: unknown[];
+      metrics?: unknown;
+    };
+  };
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
@@ -131,6 +148,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === EXTENSION_MESSAGE_TYPES.ACTIVITY) {
     void recordLocalEvent('activity', payload);
     sendResponse({ ok: true, externalId: payload?.externalId, eventType: payload?.eventType });
+    return true;
+  }
+
+  if (type === EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION) {
+    void (async () => {
+      const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
+      const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
+      for (const item of historyEvidence) {
+        if (item?.externalId && item.title && item.provenance === 'youtube_history_dom') {
+          byExternalId.set(item.externalId, item);
+        }
+      }
+      const evidence = [...byExternalId.values()].slice(-1000);
+      await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
+      await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
+      sendResponse({ ok: true, storedEvidence: evidence.length });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
     return true;
   }
 
