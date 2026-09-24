@@ -3,13 +3,10 @@
   "name": "Personal Algorithm",
   "version": "0.1.0",
   "description": "Weighted topic preferences and always/never rules for your YouTube feed.",
-  "permissions": ["storage", "identity", "alarms"],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://*.youtube.com/*",
-    "https://youtube.com/*",
-    "https://my-algo-web.vercel.app/*",
-    "http://localhost:3000/*",
-    "http://localhost:3001/*"
+    "https://youtube.com/*"
   ],
   "action": {
     "default_title": "Personal Algorithm",

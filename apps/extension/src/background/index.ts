@@ -1,9 +1,22 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { activateAlgorithm, fetchAlgorithms, fetchFeed, getApiBaseUrl, rankPageCandidates, type PageCandidate } from '../lib/api-client';
-import { normalizeFeed } from '../lib/extension-helpers';
-import { getExtensionAccessToken, signInWithGoogle, signOutExtension } from '../lib/auth';
+import { youtubeConnector } from '../connectors/youtube';
+
+type PageCandidate = {
+  external_id: string;
+  title: string;
+  channel_name?: string | null;
+  is_short?: boolean;
+  is_live?: boolean;
+};
+
+type LocalFeedItem = PageCandidate & {
+  id: string;
+  score: number;
+  visible: boolean;
+  source_kind: null;
+};
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
@@ -18,77 +31,28 @@ chrome.runtime.onInstalled.addListener(() => {
       includeLive: true,
     },
   });
-  ensureYoutubeSyncAlarm();
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  ensureYoutubeSyncAlarm();
-});
-
-const YOUTUBE_SYNC_ALARM = 'personal-algorithm-youtube-sync';
-
-// The YouTube Data API quota (10,000 units/day) is shared across the whole project, not
-// per user. Each sync can run up to 5 search.list calls (~500 units), so this must stay
-// infrequent (once daily) rather than every few minutes, or a handful of active users
-// would exhaust the shared quota. A cheaper ingestion path (e.g. RSS polling for known
-// channels) is the durable fix; this alarm is a bounded stopgap until that exists.
-function ensureYoutubeSyncAlarm() {
-  chrome.alarms.get(YOUTUBE_SYNC_ALARM, (existing) => {
-    if (!existing) {
-      chrome.alarms.create(YOUTUBE_SYNC_ALARM, { periodInMinutes: 24 * 60, delayInMinutes: 1 });
-    }
-  });
+function rankLocalCandidates(candidates: PageCandidate[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
+  return candidates.map((candidate, index) => ({
+    ...candidate,
+    id: candidate.external_id,
+    score: Math.max(52, 100 - index),
+    visible: !(
+      (candidate.is_short && sourceFilters.includeShorts === false)
+      || (candidate.is_live && sourceFilters.includeLive === false)
+    ),
+    source_kind: null,
+  }));
 }
 
-// Runs the server-side subscription + discovery search for the active algorithm and
-// persists matching videos, so the cached feed reflects more than whatever is already synced.
-const syncYoutubeContent = async () => {
-  const accessToken = await getExtensionAccessToken();
-  if (!accessToken) {
-    return;
-  }
-
-  try {
-    const baseUrl = await getApiBaseUrl();
-    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/youtube/sync`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (!response.ok) {
-      throw new Error(`YouTube sync failed: ${response.status}`);
-    }
-
-    await refreshFeed();
-  } catch (error) {
-    console.error('Failed to sync YouTube content in the background', error);
-  }
-};
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === YOUTUBE_SYNC_ALARM) {
-    void syncYoutubeContent();
-  }
-});
-
-const refreshFeed = async (mode?: string) => {
-  try {
-    const selectedMode = mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
-    const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
-    const feedResponse = await fetchFeed(selectedMode, sourceFilters);
-    const normalizedFeed = normalizeFeed(feedResponse);
-    await setStorage(STORAGE_KEYS.FEED_CACHE, normalizedFeed);
-    await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
-    await setStorage('personal-algorithm-last-error', null);
-    return normalizedFeed;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch feed.';
-    await setStorage('personal-algorithm-last-error', message);
-    console.error('Failed to refresh extension feed', message);
-    return [];
-  }
-};
+async function recordLocalEvent(kind: 'activity' | 'feedback', payload: unknown): Promise<void> {
+  const events = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []);
+  await setStorage('personal-algorithm-local-events', [
+    ...events.slice(-199),
+    { kind, payload, recordedAt: new Date().toISOString() },
+  ]);
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const { type, payload } = message as { type: string; payload?: { mode?: string; algorithmId?: string; enabled?: boolean; contentItemId?: string; externalId?: string; eventType?: string; sourceFilters?: FeedSourceFilters } };
@@ -103,11 +67,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === 'RANK_PAGE') {
     void (async () => {
       try {
-        const mode = payload?.mode ?? await getStorage(STORAGE_KEYS.MODE, 'Work');
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
-        const ranked = await rankPageCandidates(mode, (payload as { candidates?: PageCandidate[] }).candidates ?? [], sourceFilters);
+        const ranked = rankLocalCandidates((payload as { candidates?: PageCandidate[] }).candidates ?? [], sourceFilters);
+        await setStorage(STORAGE_KEYS.FEED_CACHE, ranked);
+        await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
-        sendResponse({ ok: true, feed: normalizeFeed(ranked) });
+        sendResponse({ ok: true, feed: ranked });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
         await setStorage('personal-algorithm-last-error', message);
@@ -122,16 +87,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const nextMode = payload?.mode ?? 'Work';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
-      const algorithmId = payload?.algorithmId
-        ?? (await fetchAlgorithms()).find((algorithm) => algorithm.name === nextMode)?.id;
-      const activation = algorithmId ? await activateAlgorithm(algorithmId) : null;
-      await refreshFeed(nextMode);
-      const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
         : undefined));
-      sendResponse({ ok: true, activation });
-    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to activate algorithm.' }));
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
   }
 
@@ -139,13 +100,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const enabled = payload?.enabled !== false;
     void (async () => {
       await setStorage(STORAGE_KEYS.ENABLED, enabled);
-      const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled } }).catch(() => undefined)
         : undefined));
-      if (enabled) {
-        await refreshFeed();
-      }
     })();
     sendResponse({ ok: true, enabled });
     return true;
@@ -154,8 +112,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === 'SET_SOURCE_FILTERS') {
     void (async () => {
       await setStorage(STORAGE_KEYS.SOURCE_FILTERS, payload?.sourceFilters ?? {});
-      await refreshFeed();
-      const tabs = await chrome.tabs.query({ url: ['https://www.youtube.com/*', 'https://youtube.com/*'] });
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'SOURCE_FILTERS_CHANGED' }).catch(() => undefined)
         : undefined));
@@ -165,52 +122,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.FEEDBACK) {
-    void (async () => {
-      try {
-        const accessToken = await getExtensionAccessToken();
-        const response = await fetch(`${(await getApiBaseUrl()).replace(/\/$/, '')}/api/feedback`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({
-            contentItemId: payload?.contentItemId,
-            eventType: payload?.eventType,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Feedback request failed: ${response.status}`);
-        }
-      } catch (error) {
-        console.error('Failed to send feedback event', error);
-      }
-    })();
-
+    void recordLocalEvent('feedback', payload);
     void setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
     sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
     return true;
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.ACTIVITY) {
-    void (async () => {
-      try {
-        const accessToken = await getExtensionAccessToken();
-        const response = await fetch(`${(await getApiBaseUrl()).replace(/\/$/, '')}/api/activity`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({ externalId: payload?.externalId, eventType: payload?.eventType }),
-        });
-        if (!response.ok) throw new Error(`Activity request failed: ${response.status}`);
-      } catch (error) {
-        console.error('Failed to send activity event', error);
-      }
-    })();
+    void recordLocalEvent('activity', payload);
     sendResponse({ ok: true, externalId: payload?.externalId, eventType: payload?.eventType });
     return true;
   }
@@ -218,20 +137,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === EXTENSION_MESSAGE_TYPES.OPEN_OPTIONS) {
     void chrome.runtime.openOptionsPage();
     sendResponse({ ok: true });
-    return true;
-  }
-
-  if (type === 'SIGN_IN') {
-    void signInWithGoogle().then(async () => {
-      ensureYoutubeSyncAlarm();
-      await syncYoutubeContent();
-      sendResponse({ ok: true });
-    }).catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Sign-in failed.' }));
-    return true;
-  }
-
-  if (type === 'SIGN_OUT') {
-    void signOutExtension().then(() => sendResponse({ ok: true }));
     return true;
   }
 
@@ -243,18 +148,6 @@ chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) =
   sendResponse({ ok: true });
   return true;
 });
-
-const backgroundBootstrap = async () => {
-  const mode = await getStorage(STORAGE_KEYS.MODE, 'Work');
-  const feed = await getStorage(STORAGE_KEYS.FEED_CACHE, []);
-  ensureYoutubeSyncAlarm();
-  void syncYoutubeContent();
-  await refreshFeed(mode);
-
-  console.info('Personal Algorithm background ready', { mode, count: feed.length, apiBaseUrl: await getApiBaseUrl() });
-};
-
-void backgroundBootstrap();
 
 const message = createMessage(EXTENSION_MESSAGE_TYPES.GET_FEED, { algorithmId: 'demo' });
 console.info('Background service worker ready', message);

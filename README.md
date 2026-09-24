@@ -1,36 +1,33 @@
-# Personal Algorithm
+# MyAlgo — Interactive personal algorithm editor
 
-Personal Algorithm is a Chrome extension + web dashboard that lets a user define weighted topic preferences and always/never-show rules, then apply those preferences to their own YouTube feed via the official YouTube Data API.
+This repository has pivoted from the V3 local-first recommender plan to an
+interactive personal algorithm editor. MyAlgo models what shapes a user's feed,
+makes that model inspectable, and lets the user edit it.
 
-## Goals
-- Keep the stack lean and serverless for MVP usage.
-- Use Supabase Auth and Postgres to own user state and RLS.
-- Keep secrets entirely on the API side, never in the browser extension bundle.
-- Support a typed, shared contract between the extension and the Next.js API.
+## Canonical sources of truth
+- [docs/README.md](docs/README.md)
+- [docs/00_DECISIONS_AND_CONSISTENCY.md](docs/00_DECISIONS_AND_CONSISTENCY.md)
+- [docs/01_PRODUCT_AND_STRATEGY.md](docs/01_PRODUCT_AND_STRATEGY.md)
+- [docs/02_ARCHITECTURE_AND_DOMAIN_MODEL.md](docs/02_ARCHITECTURE_AND_DOMAIN_MODEL.md)
+- [docs/10_GITHUB_ISSUES.md](docs/10_GITHUB_ISSUES.md)
 
-## Stack
-- pnpm workspaces
-- Next.js (App Router) on Vercel
-- Supabase (Postgres + Auth + RLS)
-- Manifest V3 Extension with Vite + CRXJS + React
-- TypeScript everywhere
+## Current product direction
+The working product model is:
 
-## Folder structure
-- apps/extension
-- apps/web
-- packages/shared-types
-- packages/db
+- local Personal Algorithm Graph
+- account and feed observation with provenance
+- additive, explainable scoring and RecommendationTrace
+- graph edits that visibly control the feed
+- optional cloud sync, backup, billing, and managed inference only after value is proven
 
-## Core product flow
-1. The user configures a mode and set of topic weights in the dashboard or extension options page.
-2. The extension requests a ranked feed from the web API.
-3. The API fetches relevant content, applies weighting and rule logic, and returns a filtered feed.
-4. The extension updates the YouTube UI by ranking native cards and replacing rejected slots with marked personal recommendation cards when candidate metadata is available.
+## Repo structure
+- `apps/extension` — browser surface and connector layer
+- `packages/recommender-core` — source-independent graph, preference, trace, and evaluation contracts
+- `packages/shared-types` — extension-facing shared contracts
+- `docs` — active product, compliance, and execution documents
 
-## Notes
-- The canonical status matrix is [docs/STATUS.md](docs/STATUS.md). Architecture and deployment constraints are documented in [ARCHITECTURE.md](ARCHITECTURE.md) and [DEPLOYMENT_AND_SCALING.md](DEPLOYMENT_AND_SCALING.md).
-- Supabase schema RLS is defined in `packages/db/schema.sql`; deployable migrations live in `supabase/migrations`.
-- The extension ranking loop has been stabilized locally, and the active work is now production validation, live OAuth verification, and launch hardening rather than core extension bug fixing.
-- Product priority is production safety and semantic candidate coverage: strict relevance, useful empty states, source controls, replacement quality, then the database-backed concept catalog and measured semantic retrieval.
-- Start onboarding with [docs/ONBOARDING.md](docs/ONBOARDING.md) and the scoped backlog in [docs/GITHUB_ISSUES.md](docs/GITHUB_ISSUES.md).
-- Secrets are intentionally not embedded in the extension bundle.
+## Working plan
+1. Build the Personal Algorithm Graph and its local storage.
+2. Bootstrap and observe YouTube signals with provenance.
+3. Deliver the trace → edit → feed-change loop.
+4. Validate the product loop before widening scope.
