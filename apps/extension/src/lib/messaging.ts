@@ -2,6 +2,7 @@ import type { ExtensionMessage } from '@repo/shared-types';
 
 export const EXTENSION_MESSAGE_TYPES = {
   GET_FEED: 'GET_FEED',
+  GET_BEHAVIOR: 'GET_BEHAVIOR',
   FEED_UPDATE: 'FEED_UPDATE',
   SET_MODE: 'SET_MODE',
   OPEN_OPTIONS: 'OPEN_OPTIONS',
@@ -16,6 +17,7 @@ export type ExtensionMessageType = (typeof EXTENSION_MESSAGE_TYPES)[keyof typeof
 
 export type MessagePayloadMap = {
   [EXTENSION_MESSAGE_TYPES.GET_FEED]: { algorithmId?: string };
+  [EXTENSION_MESSAGE_TYPES.GET_BEHAVIOR]: { videoId?: string };
   [EXTENSION_MESSAGE_TYPES.FEED_UPDATE]: { feed: unknown[] };
   [EXTENSION_MESSAGE_TYPES.SET_MODE]: { mode: string };
   [EXTENSION_MESSAGE_TYPES.OPEN_OPTIONS]: undefined;
