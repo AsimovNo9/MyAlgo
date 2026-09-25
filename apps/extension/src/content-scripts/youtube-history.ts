@@ -79,15 +79,15 @@ export function collectHistoryEvidence(
     }
 
     const creator = normalizeYouTubeText(candidate.creator ?? '') || null;
-    if (creator) {
-      metrics.creatorPresent += 1;
-    }
 
     if (seen.has(externalId)) {
       metrics.duplicateCandidates += 1;
       continue;
     }
     seen.add(externalId);
+    if (creator) {
+      metrics.creatorPresent += 1;
+    }
 
     evidence.push({
       externalId,
