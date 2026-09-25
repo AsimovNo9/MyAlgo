@@ -28,36 +28,45 @@ Explain
 Enforce
 ```
 
-## Bootstrap
+## Bootstrap and live behavioral evidence
 
-The first technical spike is **watch-history DOM extraction**.
+The initial bootstrap spike is **watch-history DOM extraction**. History remains
+useful for seeding and fallback because it exposes rendered historical activity
+without relying on the YouTube Data API.
 
-Questions that must be answered before graph UX work is considered complete:
+For live sessions, the primary `watched` signal is temporal HTML media
+playback. The connector accumulates actual playback time for a video/player
+session and emits one watched observation after the deterministic threshold is
+reached. Paused, buffering, advertising, and seek jumps do not count. A recent
+selection may carry the exact contextual `exposureId` into the watched event;
+watching without a captured selection is still valid.
 
-- Can history be enumerated reliably?
-- Does pagination/infinite scrolling expose sufficient history?
-- What fields are available?
-- How many items can be collected in a realistic session?
-- Can timestamps be associated reliably?
-- What happens with unavailable/deleted items?
-- Is the resulting dataset semantically rich enough to seed useful concepts?
+The two sources have distinct provenance:
 
-The API is not used to seed the graph.
+```text
+Player playback → watched → primary live behavioral evidence
+History DOM     → watched → bootstrap/fallback evidence
+```
+
+Neither source directly implies preference. Both are raw behavioral evidence
+that the correlation layer can recompute into a deterministic timeline.
 
 ### Home recommendation context
 
 The Home page is a second P0 observation stream. Store visible recommendation
 cards as `surfaced` context with position and section metadata. Do not infer that
 the user likes a topic merely because YouTube showed it. Correlate a surfaced
-item with a later click or rendered-history match to produce an observable
+item with a later click and/or watched observation to produce an observable
 sequence:
 
 ```text
 surfaced → clicked → watched
 ```
 
-Repeatedly surfaced but unobserved items are a future avoidance/negative-signal
-research question, not an automatic P0 preference update.
+The correlation layer preserves raw events and does not invent a click, exposure,
+or preference. Repeatedly surfaced but unobserved items are a future
+avoidance/negative-signal research question, not an automatic P0 preference
+update.
 
 ## Content understanding
 
