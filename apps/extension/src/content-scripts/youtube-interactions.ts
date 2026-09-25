@@ -37,12 +37,18 @@ export type UserBehaviorObservation = SelectionObservation | WatchedObservation;
 const normalize = (value: string | null | undefined) =>
   value?.replace(/\s+/g, ' ').trim() || null;
 
-export function getYouTubeSurface(pathname: string): YouTubeSurface {
+export function getYouTubeSurface(pathname: string, card: Element | null = null): YouTubeSurface {
   if (pathname === '/' || pathname === '') return 'home';
   if (pathname === '/results') return 'search';
-  if (pathname === '/feed/subscriptions') return 'subscriptions';
+  if (pathname === '/feed/subscriptions' || pathname.startsWith('/feed/subscriptions/')) return 'subscriptions';
   if (pathname.startsWith('/shorts/')) return 'shorts';
   if (pathname === '/watch') return 'watch';
+
+  if (card?.closest('ytd-search')) return 'search';
+  if (card?.closest('ytd-browse[page-subtype="subscriptions"], ytd-browse[page-subtype="subscriptions-home"]')) return 'subscriptions';
+  if (card?.closest('ytd-watch-flexy')) return 'watch';
+  if (card?.closest('ytd-browse[page-subtype="home"], ytd-rich-grid-renderer')) return 'home';
+  if (card?.closest('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]')) return 'shorts';
   return 'other';
 }
 
