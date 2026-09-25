@@ -597,8 +597,63 @@ chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+const parseIsoDuration = (value: string | null): number | null => {
+  if (!value) return null;
+  const match = value.match(/^PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?$/);
+  if (!match) return null;
+  return (Number(match[1] ?? 0) * 3600) + (Number(match[2] ?? 0) * 60) + Number(match[3] ?? 0);
+};
+
+const enrichYouTubeVideo = async (candidate: { external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }) => {
+  const fallback = { ...candidate, enrichedAt: new Date().toISOString() };
+  try {
+    const url = youtubeConnector.getCanonicalUrl(candidate.external_id);
+    const response = await fetch(url, { credentials: 'same-origin' });
+    if (!response.ok) return fallback;
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const meta = (selector: string) => doc.querySelector<HTMLMetaElement>(selector)?.content?.trim() || null;
+    const title = meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title;
+    const description = meta('meta[name="description"]') ?? meta('meta[property="og:description"]');
+    const thumbnail = meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null;
+    const duration = parseIsoDuration(meta('meta[itemprop="duration"]'));
+    const publishedAt = meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]');
+    const viewCountRaw = meta('meta[itemprop="interactionCount"]');
+    const viewCount = viewCountRaw && /^\\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
+    const channelId = meta('meta[itemprop="channelId"]');
+    const channelName = meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null;
+    return {
+      ...fallback,
+      title,
+      channel_name: channelName,
+      channel_id: channelId,
+      thumbnail_url: thumbnail,
+      description: description?.slice(0, 1000) ?? null,
+      duration_seconds: duration,
+      published_at: publishedAt,
+      view_count: viewCount,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }>) => {
+  const results: unknown[] = [];
+  for (let index = 0; index < candidates.length; index += 3) {
+    const batch = candidates.slice(index, index + 3);
+    results.push(...await Promise.all(batch.map(enrichYouTubeVideo)));
+  }
+  return results;
+};
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
+  if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
+    const candidates = Array.isArray(message.payload?.candidates) ? message.payload.candidates : [];
+    void enrichYouTubeVideos(candidates).then((videos) => sendResponse({ ok: true, videos }));
+    return true;
+  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
