@@ -133,10 +133,12 @@ const syncShelfCardWidth = (cards: HTMLElement) => {
 const renderRecommendationShelf = (attempt = 0) => {
   if (!isCurrentInstance() || !extensionEnabled) return;
 
-  const feedContainer = document.querySelector<HTMLElement>(
-    'ytd-rich-grid-renderer #contents, ytd-two-column-browse-results-renderer #primary #contents, #contents',
+  const feedRenderer = document.querySelector<HTMLElement>(
+    'ytd-rich-grid-renderer, ytd-two-column-browse-results-renderer #primary',
   );
-  if (!feedContainer) {
+  const feedContents = feedRenderer?.querySelector<HTMLElement>('#contents');
+  const shelfHost = feedRenderer?.parentElement;
+  if (!feedRenderer || !feedContents || !shelfHost) {
     if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
     return;
   }
@@ -154,15 +156,15 @@ const renderRecommendationShelf = (attempt = 0) => {
   }
 
   let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
-  if (shelf && shelf.parentElement !== feedContainer) {
+  if (shelf && shelf.parentElement !== shelfHost) {
     shelf.remove();
     shelf = null;
   }
   if (!shelf) {
     shelf = document.createElement('section');
     shelf.dataset.personalAlgorithmShelf = 'true';
-    shelf.style.cssText = 'display:block;grid-column:1 / -1;flex:0 0 100%;width:100%;min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
-    feedContainer.prepend(shelf);
+    shelf.style.cssText = 'display:block;position:relative;clear:both;float:none;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden;contain:layout paint;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
+    shelfHost.insertBefore(shelf, feedRenderer);
   }
 
   shelf.replaceChildren();
@@ -172,7 +174,7 @@ const renderRecommendationShelf = (attempt = 0) => {
   shelf.appendChild(heading);
 
   const cards = document.createElement('div');
-  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;box-sizing:border-box;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;padding:0 16px 8px;';
+  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;scrollbar-width:none;padding:0 16px 8px;';
   syncShelfCardWidth(cards);
   for (const item of picks) {
     const card = document.createElement('a');
@@ -200,6 +202,7 @@ const renderRecommendationShelf = (attempt = 0) => {
 };
 
 const refreshRecommendationShelf = () => {
+  if (isYouTubeHistoryPage(location.pathname)) return;
   const requestGeneration = ++feedRequestGeneration;
   chrome.runtime.sendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
     if (
@@ -301,6 +304,7 @@ const collectCandidates = () => {
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
+      thumbnail_url: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
       ...getVideoSourceFlags(element),
     }))
     .filter((candidate) => candidate.title)
@@ -337,13 +341,12 @@ const collectCandidates = () => {
 
 const observeHistoryPage = () => {
   if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
-  chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
-    if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
-    const observation = collectHistoryEvidenceFromDom(document);
-    chrome.runtime.sendMessage({
-      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
-      payload: observation,
-    });
+
+  const observation = collectHistoryEvidenceFromDom(document);
+  if (observation.evidence.length === 0) return;
+  chrome.runtime.sendMessage({
+    type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+    payload: observation,
   });
 };
 
@@ -466,7 +469,7 @@ const scheduleLatestRank = () => {
 };
 
 const rankCurrentPage = async (requestGeneration: number) => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
   if (rankingInFlight) {
     rankQueued = true;
     return;
@@ -521,7 +524,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'manual') => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
@@ -545,7 +548,7 @@ const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'ma
 };
 
 const scheduleInitialRank = () => {
-  if (!extensionEnabled || !isCurrentInstance()) return;
+  if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
     if (!extensionEnabled || !isCurrentInstance()) return;
     const currentCandidates = collectCandidates();
@@ -570,8 +573,63 @@ chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+const parseIsoDuration = (value: string | null): number | null => {
+  if (!value) return null;
+  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!match) return null;
+  return (Number(match[1] ?? 0) * 3600) + (Number(match[2] ?? 0) * 60) + Number(match[3] ?? 0);
+};
+
+const enrichYouTubeVideo = async (candidate: { external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }) => {
+  const fallback = { ...candidate, enrichedAt: new Date().toISOString() };
+  try {
+    const url = youtubeConnector.getCanonicalUrl(candidate.external_id);
+    const response = await fetch(url, { credentials: 'same-origin' });
+    if (!response.ok) return fallback;
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const meta = (selector: string) => doc.querySelector<HTMLMetaElement>(selector)?.content?.trim() || null;
+    const title = meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title;
+    const description = meta('meta[name="description"]') ?? meta('meta[property="og:description"]');
+    const thumbnail = meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null;
+    const duration = parseIsoDuration(meta('meta[itemprop="duration"]'));
+    const publishedAt = meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]');
+    const viewCountRaw = meta('meta[itemprop="interactionCount"]');
+    const viewCount = viewCountRaw && /^\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
+    const channelId = meta('meta[itemprop="channelId"]');
+    const channelName = meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null;
+    return {
+      ...fallback,
+      title,
+      channel_name: channelName,
+      channel_id: channelId,
+      thumbnail_url: thumbnail,
+      description: description?.slice(0, 600) ?? null,
+      duration_seconds: duration,
+      published_at: publishedAt,
+      view_count: viewCount,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }>) => {
+  const results: unknown[] = [];
+  for (let index = 0; index < candidates.length; index += 3) {
+    const batch = candidates.slice(index, index + 3);
+    results.push(...await Promise.all(batch.map(enrichYouTubeVideo)));
+  }
+  return results;
+};
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
+  if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
+    const candidates = Array.isArray(message.payload?.candidates) ? message.payload.candidates : [];
+    void enrichYouTubeVideos(candidates).then((videos) => sendResponse({ ok: true, videos }));
+    return true;
+  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
@@ -647,16 +705,21 @@ window.addEventListener('yt-navigate-start', () => {
 window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
   if (currentVideoId) sendActivity(currentVideoId, 'revisited');
-  refreshRecommendationShelf();
-  triggerRank('navigation');
-  scheduleHistoryObservation();
+  if (isYouTubeHistoryPage(location.pathname)) {
+    scheduleHistoryObservation();
+  } else {
+    refreshRecommendationShelf();
+    triggerRank('navigation');
+    scheduleHomeRecommendationObservation();
+  }
   scheduleHomeRecommendationObservation();
 });
 window.addEventListener('yt-page-data-updated', () => {
   triggerRank('navigation');
 });
 window.addEventListener('popstate', () => {
-  triggerRank('navigation');
+  if (!isYouTubeHistoryPage(location.pathname)) triggerRank('navigation');
+  else scheduleHistoryObservation();
 });
 window.addEventListener('resize', () => {
   if (resizeTimer !== undefined) window.clearTimeout(resizeTimer);

@@ -55,6 +55,15 @@ export function Options() {
           Read visible YouTube History items to build local evidence
         </label>
         <p>When enabled, MyAlgo stores visible video IDs, titles, creators, displayed history timestamps, and page provenance only in this browser. You can disable this at any time; no history is sent to a server.</p>
+        {historyObservationEnabled && (
+          <button
+            type="button"
+            onClick={() => window.open('https://www.youtube.com/feed/history', '_blank', 'noopener,noreferrer')}
+            style={{ marginTop: 12, padding: '8px 12px' }}
+          >
+            Open YouTube History
+          </button>
+        )}
       </section>
 
       <section style={{ marginTop: 24 }}>

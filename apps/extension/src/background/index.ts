@@ -9,22 +9,122 @@ type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  thumbnail_url?: string | null;
   is_short?: boolean;
   is_live?: boolean;
 };
 
-type LocalFeedItem = PageCandidate & {
+type VideoRecord = PageCandidate & {
+  channel_id?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
+  published_at?: string | null;
+  view_count?: number | null;
+  enrichedAt: string;
+};
+
+type CandidatePoolItem = PageCandidate & {
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+type LocalFeedItem = CandidatePoolItem & {
   id: string;
   score: number;
   visible: boolean;
   source_kind: null;
 };
 
+const MAX_CANDIDATE_POOL_SIZE = 5000;
+const MAX_HISTORY_EVIDENCE = 10000;
+const MAX_FEED_CACHE_SIZE = 100;
+const MAX_VIDEO_STORE_SIZE = 2000;
+const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
+const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
+  if (!tabId || candidates.length === 0) return [];
+  const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const now = Date.now();
+  const missing = candidates
+    .filter((candidate) => {
+      const record = existing[candidate.external_id];
+      return !record || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
+    })
+    .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
+  if (missing.length === 0) return [];
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: 'ENRICH_YOUTUBE_VIDEOS',
+      payload: { candidates: missing },
+    });
+    const enriched = Array.isArray(response?.videos) ? response.videos as VideoRecord[] : [];
+    if (enriched.length === 0) return [];
+    for (const record of enriched) existing[record.external_id] = record;
+    const entries = Object.entries(existing)
+      .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
+      .slice(0, MAX_VIDEO_STORE_SIZE);
+    await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
+    return enriched;
+  } catch (error) {
+    console.warn('YouTube metadata enrichment skipped', error);
+    return [];
+  }
+}
+
+async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<CandidatePoolItem[]> {
+  const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  return pool.map((candidate) => {
+    const record = store[candidate.external_id];
+    if (!record) return candidate;
+    return { ...candidate, ...record, external_id: candidate.external_id, title: record.title || candidate.title };
+  });
+}
+
+async function mergeCandidatePool(candidates: PageCandidate[]): Promise<CandidatePoolItem[]> {
+  const existing = await getStorage<CandidatePoolItem[]>(
+    STORAGE_KEYS.FEED_CANDIDATE_POOL,
+    [],
+  );
+
+  const now = new Date().toISOString();
+  const byId = new Map<string, CandidatePoolItem>(
+    existing.map((candidate) => [candidate.external_id, candidate]),
+  );
+
+  for (const candidate of candidates) {
+    if (!candidate.external_id || !candidate.title) continue;
+
+    const previous = byId.get(candidate.external_id);
+    byId.set(candidate.external_id, {
+      ...previous,
+      ...candidate,
+      external_id: candidate.external_id,
+      title: candidate.title,
+      firstSeenAt: previous?.firstSeenAt ?? now,
+      lastSeenAt: now,
+    });
+  }
+
+  const pool = [...byId.values()]
+    .sort(
+      (a, b) =>
+        new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+    )
+    .slice(0, MAX_CANDIDATE_POOL_SIZE);
+
+  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  return pool;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
     [STORAGE_KEYS.ENABLED]: true,
     [STORAGE_KEYS.FEED_CACHE]: [],
+    [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
+    [STORAGE_KEYS.VIDEO_STORE]: {},
     [STORAGE_KEYS.LAST_SYNC]: null,
     [STORAGE_KEYS.SOURCE_FILTERS]: {
       subscribedOnly: false,
@@ -32,7 +132,6 @@ chrome.runtime.onInstalled.addListener(() => {
       includeShorts: true,
       includeLive: true,
     },
-    [STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED]: false,
     [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
     [STORAGE_KEYS.HISTORY_METRICS]: null,
     [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
@@ -41,7 +140,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-function rankLocalCandidates(candidates: PageCandidate[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
+function rankLocalCandidates(candidates: CandidatePoolItem[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
   return candidates.map((candidate, index) => ({
     ...candidate,
     id: candidate.external_id,
@@ -98,11 +197,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
-        const ranked = rankLocalCandidates((payload as { candidates?: PageCandidate[] }).candidates ?? [], sourceFilters);
-        await setStorage(STORAGE_KEYS.FEED_CACHE, ranked);
+        const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
+        const enrichedCandidates = await enrichVideosInTab(
+          _sender.tab?.id,
+          incomingCandidates,
+        );
+        const enrichmentById = new Map(enrichedCandidates.map((item) => [item.external_id, item]));
+        const candidatesWithMetadata = incomingCandidates.map((candidate) => ({
+          ...candidate,
+          ...(enrichmentById.get(candidate.external_id) ?? {}),
+        }));
+        const candidatePool = await hydrateCandidatePool(await mergeCandidatePool(candidatesWithMetadata));
+        const ranked = rankLocalCandidates(candidatePool, sourceFilters);
+        const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
+        await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
-        sendResponse({ ok: true, feed: ranked });
+        sendResponse({ ok: true, feed: feedCache, poolSize: candidatePool.length, enriched: enrichedCandidates.length });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
         await setStorage('personal-algorithm-last-error', message);
@@ -175,7 +286,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           byExternalId.set(item.externalId, item);
         }
       }
-      const evidence = [...byExternalId.values()].slice(-1000);
+      const evidence = [...byExternalId.values()]
+        .sort(
+          (a, b) =>
+            new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime(),
+        )
+        .slice(0, MAX_HISTORY_EVIDENCE);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
