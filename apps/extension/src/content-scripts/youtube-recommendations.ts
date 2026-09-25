@@ -1,4 +1,4 @@
-import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
+import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
 
 export type RecommendationObservation = {
   externalId: string;
@@ -85,11 +85,11 @@ export function collectRecommendationObservations(
 }
 
 export function collectRecommendationObservationsFromDom(document: Document, observedAt = new Date().toISOString()) {
-  const cards = Array.from(document.querySelectorAll<HTMLElement>('ytd-rich-item-renderer, ytd-rich-grid-media'));
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('ytd-rich-item-renderer, ytd-rich-grid-media, yt-lockup-view-model'));
   const candidates = cards.map((card) => {
     const link = card.querySelector<HTMLAnchorElement>(videoLinkSelector);
     const titleNode = card.querySelector<HTMLElement>('#video-title, #video-title-link, a[title][href*="/watch"], a[aria-label][href*="/watch"]');
-    const creatorNode = card.querySelector<HTMLElement>('#channel-name, ytd-channel-name, .ytd-channel-name');
+    const creator = extractYouTubeCreator(card);
     const sectionNode = card.closest<HTMLElement>('ytd-rich-section-renderer')?.querySelector<HTMLElement>('#title, h2, h3');
     return {
       href: link?.href ?? '',
@@ -98,7 +98,7 @@ export function collectRecommendationObservationsFromDom(document: Document, obs
         ariaLabel: titleNode?.getAttribute('aria-label'),
         textContent: titleNode?.textContent,
       }),
-      creator: creatorNode?.textContent,
+      creator,
       section: sectionNode?.textContent,
       injected: Boolean(card.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
     };
