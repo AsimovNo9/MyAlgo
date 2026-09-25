@@ -314,19 +314,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         .slice(0, MAX_HISTORY_EVIDENCE);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
-      await Promise.all(historyEvidence.map(async (item) => {
-        await correlateRecommendationOutcome(item.externalId, 'watched');
-        const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
-        const watched = {
-          videoId: item.externalId,
-          exposureId: null,
-          kind: 'watched' as const,
-          source: 'history' as const,
-          observedAt: item.observedAt,
-          provenance: 'youtube_history_dom' as const,
-        };
-        await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, watched].slice(-MAX_SELECTION_EVENTS));
+      await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
+      const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+      const watchedEvents = historyEvidence.map((item) => ({
+        videoId: item.externalId,
+        exposureId: null,
+        kind: 'watched' as const,
+        source: 'history' as const,
+        observedAt: item.observedAt,
+        provenance: 'youtube_history_dom' as const,
       }));
+      const existingKeys = new Set(existingEvents.map((event) => event.kind + '|' + event.videoId + '|' + event.observedAt));
+      const newWatchedEvents = watchedEvents.filter((event) => !existingKeys.has(event.kind + '|' + event.videoId + '|' + event.observedAt));
+      await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, ...newWatchedEvents].slice(-MAX_SELECTION_EVENTS));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
     return true;
