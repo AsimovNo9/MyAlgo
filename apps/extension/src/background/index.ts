@@ -64,33 +64,9 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   console.info('[MyAlgo] history reconciliation raw evidence loaded', {
     historyCount: historyEvidence.length,
   });
-  const storedEvidence = await personalAlgorithmStore.listEvidence();
-  console.info('[MyAlgo] history reconciliation normalized evidence loaded', {
-    evidenceCount: storedEvidence.length,
-  });
-  const historyRecords = storedEvidence.filter((record) => (
-    record.evidence.kind === 'interaction'
-    && record.evidence.interaction === 'watched'
-    && record.evidence.provenance.mechanism === 'history_dom'
-  ));
-  const canonicalIds = new Set(historyEvidence.map((item) => createHistoryEvidenceId(item.externalId)));
-  const legacyHistoryIds = historyRecords
-    .filter((record) => !canonicalIds.has(record.id))
-    .map((record) => record.id);
-
-  console.info('[MyAlgo] history reconciliation plan', {
-    historyRecords: historyRecords.length,
-    canonicalHistoryIds: canonicalIds.size,
-    legacyHistoryIds: legacyHistoryIds.length,
-  });
-
-  await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
-  console.info('[MyAlgo] history reconciliation legacy cleanup complete', {
-    deleted: legacyHistoryIds.length,
-  });
-
-  await Promise.all(historyEvidence.map((item) => persistNormalizedEvidence(
-    toNormalizedInteraction({
+  const normalizedInputs = historyEvidence.map((item) => ({
+    id: createHistoryEvidenceId(item.externalId),
+    evidence: toNormalizedInteraction({
       videoId: item.externalId,
       exposureId: null,
       title: item.title,
@@ -101,8 +77,15 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
       observedAt: item.observedAt,
       provenance: 'youtube_history_dom',
     }),
-    createHistoryEvidenceId(item.externalId),
-  )));
+    confidence: 1,
+  }));
+
+  const result = await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
+  console.info('[MyAlgo] history reconciliation complete', {
+    removed: result.removed,
+    upserted: result.upserted,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  });
 }
 
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
