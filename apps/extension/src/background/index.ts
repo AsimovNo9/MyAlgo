@@ -57,6 +57,36 @@ async function persistNormalizedEvidence(
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
+async function reconcileStoredHistoryEvidence(): Promise<void> {
+  const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+  const storedEvidence = await personalAlgorithmStore.listEvidence();
+  const historyRecords = storedEvidence.filter((record) => (
+    record.evidence.kind === 'interaction'
+    && record.evidence.interaction === 'watched'
+    && record.evidence.provenance.mechanism === 'history_dom'
+  ));
+  const canonicalIds = new Set(historyEvidence.map((item) => createHistoryEvidenceId(item.externalId)));
+
+  await Promise.all(historyRecords
+    .filter((record) => !canonicalIds.has(record.id))
+    .map((record) => personalAlgorithmStore.deleteEvidence(record.id)));
+
+  await Promise.all(historyEvidence.map((item) => persistNormalizedEvidence(
+    toNormalizedInteraction({
+      videoId: item.externalId,
+      exposureId: null,
+      title: item.title,
+      creator: item.creator,
+      historyTimestamp: item.historyTimestamp,
+      kind: 'watched',
+      source: 'history',
+      observedAt: item.observedAt,
+      provenance: 'youtube_history_dom',
+    }),
+    createHistoryEvidenceId(item.externalId),
+  )));
+}
+
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (!tabId || candidates.length === 0) return [];
   const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
@@ -132,6 +162,10 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
   await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
   return pool;
 }
+
+void reconcileStoredHistoryEvidence().catch((error) => {
+  console.warn('Stored History evidence reconciliation skipped', error);
+});
 
 chrome.runtime.onInstalled.addListener(() => {
   void personalAlgorithmStore.initialize();
