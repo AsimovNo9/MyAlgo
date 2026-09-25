@@ -457,7 +457,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
       await Promise.all(watchedEvents.map((event) => persistNormalizedEvidence(
         toNormalizedInteraction(event),
-        createHistoryEvidenceId(event.externalId),
+        createHistoryEvidenceId(event.videoId),
       )));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
