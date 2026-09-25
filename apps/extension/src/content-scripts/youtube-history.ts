@@ -84,9 +84,35 @@ export function collectHistoryEvidence(
 }
 
 export function collectHistoryEvidenceFromDom(document: Document, observedAt = new Date().toISOString()) {
-  const rows = Array.from(document.querySelectorAll<HTMLElement>(
+  const knownRows = Array.from(document.querySelectorAll<HTMLElement>(
     'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer',
   ));
+
+  const linkRows = Array.from(document.querySelectorAll<HTMLAnchorElement>(
+    'a[href*="/watch?v="], a[href*="/shorts/"]',
+  ))
+    .map((link) => {
+      const knownRow = link.closest(
+        'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer',
+      ) as HTMLElement | null;
+      if (knownRow) return knownRow;
+
+      let current: HTMLElement | null = link.parentElement;
+      for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
+        const hasVideoLink = current.querySelector('a[href*="/watch?v="], a[href*="/shorts/"]');
+        const hasTitleNode = current.querySelector(
+          '#video-title, #video-title-link, yt-formatted-string#video-title, a[title], a[aria-label]',
+        );
+        const text = normalizeYouTubeText(current.textContent ?? '');
+        if (hasVideoLink && hasTitleNode && text.length > 12 && text.length < 1200) {
+          return current;
+        }
+      }
+      return null;
+    })
+    .filter((row): row is HTMLElement => Boolean(row));
+
+  const rows = Array.from(new Set([...knownRows, ...linkRows]));
   const candidates = rows.map((row) => {
     const link = row.querySelector<HTMLAnchorElement>([
       videoLinkSelector,
