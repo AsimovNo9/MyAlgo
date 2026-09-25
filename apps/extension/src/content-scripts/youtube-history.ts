@@ -71,11 +71,17 @@ export function collectHistoryEvidence(
       continue;
     }
 
-    if (title === 'Watch') {
+    if (rawTitle === 'Watch') {
       metrics.placeholderTitles += 1;
+      continue;
     }
-    if (/\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i.test(title)) {
+    if (/\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i.test(rawTitle)) {
       metrics.durationSuffixedTitles += 1;
+    }
+    const title = rawTitle.replace(/\s+\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i, '').trim();
+    if (!title) {
+      metrics.missingTitle += 1;
+      continue;
     }
 
     const creator = normalizeYouTubeText(candidate.creator ?? '') || null;
