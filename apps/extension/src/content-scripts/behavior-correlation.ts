@@ -46,7 +46,9 @@ function correlateSelection(
   clicked: SelectionObservation,
 ): RecommendationObservation | undefined {
   if (clicked.exposureId) {
-    const exact = surfaced.find((item) => getRecommendationExposureId(item) === clicked.exposureId);
+    const exact = surfaced.find((item) =>
+      item.externalId === clicked.videoId && getRecommendationExposureId(item) === clicked.exposureId
+    );
     if (exact) return exact;
   }
 
