@@ -1,3 +1,5 @@
+import type { ExposureEvidence } from '@repo/shared-types';
+import { youtubeConnector } from '../connectors/youtube.ts';
 import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
 import { createExposureId } from './youtube-interactions.ts';
 
@@ -147,4 +149,20 @@ export function mergeRecommendationObservations(
     });
   }
   return [...byExposureId.values()].slice(-limit);
+}
+
+export function toNormalizedExposure(observation: RecommendationObservation): ExposureEvidence {
+  return youtubeConnector.createExposure({
+    exposureId: observation.exposureId,
+    externalId: observation.externalId,
+    surface: 'home',
+    section: observation.section,
+    position: observation.position,
+    observedAt: observation.observedAt,
+    mechanism: 'home_dom',
+    metadata: youtubeConnector.normalizeMetadata({
+      title: observation.title,
+      creatorName: observation.creator,
+    }),
+  });
 }
