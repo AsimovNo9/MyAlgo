@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { toNormalizedInteraction, createSelectionObservation } from './youtube-interactions.ts';
-import { toNormalizedExposure } from './youtube-recommendations.ts';
+import { collectRecommendationObservations, toNormalizedExposure } from './youtube-recommendations.ts';
 
 test('YouTube connector maps content identity and exposure without leaking YouTube IDs into the contract', () => {
   const exposure = toNormalizedExposure({
@@ -75,6 +75,18 @@ test('selection and player-style watch evidence map to generic interactions', ()
   assert.equal(watch.metrics?.playedSeconds, 30.2);
 });
 
+
+test('Home recommendation observations reject placeholder titles', () => {
+  const result = collectRecommendationObservations([
+    { href: 'https://www.youtube.com/watch?v=placeholder', title: 'Watch', creator: null },
+    { href: 'https://www.youtube.com/watch?v=real123', title: 'Real video', creator: 'Creator' },
+  ], '2026-09-25T20:01:30.000Z');
+
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0].externalId, 'real123');
+  assert.equal(result.observations[0].title, 'Real video');
+  assert.equal(result.metrics.missingTitle, 1);
+});
 
 test('History watched evidence preserves title and creator metadata', () => {
   const watched = toNormalizedInteraction({
