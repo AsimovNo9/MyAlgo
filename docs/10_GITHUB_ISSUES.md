@@ -57,6 +57,19 @@ is not an automatic negative preference in P0.
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary
 
+### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts
+
+Freeze the boundary between provider-specific connectors and the source-neutral recommendation domain before #148 and #151.
+
+Implementation requirements:
+
+- shared `ContentIdentity`, `ExposureEvidence`, `InteractionEvidence`, `ContentMetadata`, and `EvidenceProvenance` contracts;
+- YouTube connector mapping for Home exposure, selection, player watch, and History fallback evidence;
+- deterministic behavior correlation over normalized evidence;
+- no preference inference, graph learning, scoring, or cross-source identity resolution in the connector contract.
+
+The full contract is documented in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTOR_CONTRACT.md`.
+
 ## P1 — Local Personal Algorithm Graph
 
 ### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph
