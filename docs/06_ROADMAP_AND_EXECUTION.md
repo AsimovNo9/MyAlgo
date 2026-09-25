@@ -7,7 +7,7 @@
 1. Validate watch-history DOM extraction. **Completed (#156).**
 2. Validate live-feed candidate extraction and user selection capture. **Completed (#150, PR #180).**
 3. Validate deterministic behavioral correlation. **Completed (#174, implementation merged).**
-4. Validate temporal player playback evidence. **Implemented and live-validated (#183, PR #184).**
+4. Validate temporal player playback evidence. **Completed (#183, PR #184).**
 5. Confirm data can remain local for MVP.
 6. Document observed-data retention/deletion.
 7. Verify Chrome permission scope.
@@ -87,8 +87,7 @@ selection `exposureId`, and used `youtube_player_telemetry` provenance.
 
 CI workflow run 313 passed for commit `ab4310088023883384ae9d5c1b9b97d15627be73`.
 
-#150, #174, and the temporal-watch implementation are now implementation
-foundations rather than active spikes. #183 remains open until PR #184 is merged.
+#150, #174, and #183 are now implementation foundations rather than active spikes.
 
 ## Connector contract gate
 
@@ -99,10 +98,14 @@ connector-specific observation
           ↓
 source-neutral evidence contract
           ↓
+normalized correlation boundary
+          ↓
 #148 evidence store / Personal Algorithm Graph
           ↓
 #151 deterministic scorer / trace
 ```
+
+The remaining gate before #148 is to ensure reusable correlation APIs consume normalized `ExposureEvidence` / `InteractionEvidence` rather than expose YouTube-shaped inputs to future connectors. YouTube-specific adaptation may remain at the connector boundary.
 
 Additional connectors should implement the same contract rather than introducing platform-specific concepts into the graph or scorer.
 
