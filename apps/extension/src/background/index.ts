@@ -86,7 +86,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-function rankLocalCandidates(candidates: PageCandidate[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
+function rankLocalCandidates(candidates: CandidatePoolItem[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
   return candidates.map((candidate, index) => ({
     ...candidate,
     id: candidate.external_id,
