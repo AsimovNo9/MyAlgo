@@ -49,7 +49,10 @@ function correlateSelection(
     const exact = surfaced.find((item) =>
       item.externalId === clicked.videoId && getRecommendationExposureId(item) === clicked.exposureId
     );
-    if (exact) return exact;
+    // An explicit exposure ID is authoritative. If it is present but does not
+    // match this video's surfaced evidence, do not weaken the identity boundary
+    // by falling back to video-only correlation.
+    return exact;
   }
 
   const candidates = surfaced.filter((item) => item.externalId === clicked.videoId);
