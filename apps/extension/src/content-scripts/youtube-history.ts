@@ -1,4 +1,4 @@
-import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
+import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
 
 export type HistoryEvidence = {
   externalId: string;
@@ -65,8 +65,8 @@ export function collectHistoryEvidence(
       continue;
     }
 
-    const title = normalizeYouTubeText(candidate.title ?? '');
-    if (!title) {
+    const rawTitle = normalizeYouTubeText(candidate.title ?? '');
+    if (!rawTitle) {
       metrics.missingTitle += 1;
       continue;
     }
@@ -108,7 +108,7 @@ export function collectHistoryEvidence(
 
 export function collectHistoryEvidenceFromDom(document: Document, observedAt = new Date().toISOString()) {
   const knownRows = Array.from(document.querySelectorAll<HTMLElement>(
-    'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer',
+    'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer, yt-lockup-view-model',
   ));
 
   const linkRows = Array.from(document.querySelectorAll<HTMLAnchorElement>(
@@ -116,7 +116,7 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
   ))
     .map((link) => {
       const knownRow = link.closest(
-        'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer',
+        'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer, yt-lockup-view-model',
       ) as HTMLElement | null;
       if (knownRow) return knownRow;
 
@@ -146,7 +146,7 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
       'a[href*="/shorts/"]',
     ].join(','));
     const titleNode = row.querySelector<HTMLElement>('#video-title, #video-title-link, a[title][href*="/watch"], a[aria-label][href*="/watch"]');
-    const creatorNode = row.querySelector<HTMLElement>('#channel-name, ytd-channel-name, .ytd-channel-name');
+    const creator = extractYouTubeCreator(row);
     const timestampNode = row.querySelector<HTMLElement>('#metadata-line span:last-child, #metadata span:last-child, ytd-video-meta-block span:last-child');
 
     return {
@@ -156,7 +156,7 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
         ariaLabel: titleNode?.getAttribute('aria-label'),
         textContent: titleNode?.textContent,
       }),
-      creator: creatorNode?.textContent,
+      creator,
       historyTimestamp: timestampNode?.textContent,
       injected: Boolean(row.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
     };
