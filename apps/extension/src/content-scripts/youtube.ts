@@ -343,6 +343,13 @@ const observeHistoryPage = () => {
   if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
 
   const observation = collectHistoryEvidenceFromDom(document);
+  console.info('Personal Algorithm history extraction diagnostic', {
+    observedAt: observation.evidence[0]?.observedAt ?? new Date().toISOString(),
+    scrollTop: Math.round(window.scrollY),
+    viewportHeight: Math.round(window.innerHeight),
+    scrollHeight: Math.round(document.documentElement.scrollHeight),
+    metrics: observation.metrics,
+  });
   if (observation.evidence.length === 0) return;
   chrome.runtime.sendMessage({
     type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
