@@ -30,6 +30,7 @@ export type HistoryWatchedObservation = {
   exposureId: string | null;
   title: string;
   creator: string | null;
+  historyTimestamp: string | null;
   sessionId?: never;
   kind: 'watched';
   source: 'history';
