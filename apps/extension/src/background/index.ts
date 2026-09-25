@@ -403,6 +403,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const watchedEvents = historyEvidence.map((item) => ({
         videoId: item.externalId,
         exposureId: null,
+        title: item.title,
+        creator: item.creator,
         kind: 'watched' as const,
         source: 'history' as const,
         observedAt: item.observedAt,
