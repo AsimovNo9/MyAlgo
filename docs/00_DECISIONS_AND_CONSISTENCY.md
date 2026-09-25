@@ -49,6 +49,12 @@ The graph must not be constructed from YouTube API Data.
 For live YouTube playback, `watched` is derived from temporal HTML media
 playback evidence rather than requiring a visit to the rendered History page.
 History remains a separate bootstrap/fallback source with its own provenance.
+The rendered History UI does not expose a stable watched-at timestamp to the
+collector, so History evidence uses the video ID as its stable content-level
+identity and retains DOM card order as relative recency (position 0 is the
+newest observed card). Repeated scans update that evidence rather than creating
+new watch events from collector observation time. This intentionally does not
+claim event-level replay counts from the History DOM.
 A watch session accumulates actual media-time deltas while playback is active;
 pause, buffering, advertising, and seek jumps do not count toward the threshold.
 
