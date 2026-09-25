@@ -55,6 +55,7 @@ test('selection and player-style watch evidence map to generic interactions', ()
     provenance: { connector: 'youtube', mechanism: 'user_interaction' },
     sessionId: null,
     metrics: undefined,
+    metadata: null,
   });
 
   const watch = youtubeConnector.createInteraction({
