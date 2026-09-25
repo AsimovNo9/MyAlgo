@@ -9,6 +9,7 @@ type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  thumbnail_url?: string | null;
   is_short?: boolean;
   is_live?: boolean;
 };
