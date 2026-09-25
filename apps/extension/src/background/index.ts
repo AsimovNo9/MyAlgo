@@ -7,6 +7,9 @@ import { mergeRecommendationObservations, type RecommendationObservation, type R
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
 import type { TemporalWatchObservation } from '../content-scripts/youtube-watch';
 import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behavior-correlation';
+import { toNormalizedInteraction } from '../content-scripts/youtube-interactions';
+import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
+import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 
 type PageCandidate = {
   external_id: string;
@@ -45,6 +48,14 @@ const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
+
+async function persistNormalizedEvidence(
+  evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
+  id: string,
+): Promise<void> {
+  await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
+}
 
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (!tabId || candidates.length === 0) return [];
@@ -123,6 +134,7 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
 }
 
 chrome.runtime.onInstalled.addListener(() => {
+  void personalAlgorithmStore.initialize();
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
     [STORAGE_KEYS.ENABLED]: true,
@@ -298,6 +310,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await persistNormalizedEvidence(
+        toNormalizedInteraction(observation),
+        `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`,
+      );
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
@@ -334,6 +350,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await persistNormalizedEvidence(
+        toNormalizedInteraction(observation),
+        `interaction:watched:${observation.videoId}:${observation.sessionId}`,
+      );
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store temporal watch observation.' }));
@@ -370,6 +390,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const existingKeys = new Set(existingEvents.map((event) => event.kind + '|' + event.videoId + '|' + event.observedAt));
       const newWatchedEvents = watchedEvents.filter((event) => !existingKeys.has(event.kind + '|' + event.videoId + '|' + event.observedAt));
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, ...newWatchedEvents].slice(-MAX_SELECTION_EVENTS));
+      await Promise.all(newWatchedEvents.map((event) => persistNormalizedEvidence(
+        toNormalizedInteraction(event),
+        `interaction:watched:${event.videoId}:${event.observedAt}`,
+      )));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
     return true;
@@ -385,6 +409,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const observations = mergeRecommendationObservations(existing, validIncoming);
       await setStorage(STORAGE_KEYS.HOME_OBSERVATIONS, observations);
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
+      await Promise.all(validIncoming.map((observation) => persistNormalizedEvidence(
+        toNormalizedExposure(observation),
+        `exposure:${observation.exposureId}`,
+      )));
       sendResponse({ ok: true, storedObservations: observations.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' }));
     return true;
