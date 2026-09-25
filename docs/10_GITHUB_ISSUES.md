@@ -17,21 +17,28 @@ Acceptance criteria:
 - document failure cases
 - measure usable evidence yield
 
-### [#150](https://github.com/AsimovNo9/MyAlgo/issues/150): Validate live-feed candidate extraction
+### [#150](https://github.com/AsimovNo9/MyAlgo/issues/150): Observe live-feed candidates and Home recommendation context — **completed**
 
-Acceptance criteria:
+Completed and merged in PR #180 on 2026-09-25.
 
-- Home
-- Search
-- Subscriptions
-- Shorts
-- navigation
-- infinite scroll
-- no collection of MyAlgo-injected cards
+Implemented:
 
-For the Home surface, store recommendation appearance as `surfaced` contextual
-evidence with position and section metadata. Do not treat appearance alone as a
-user preference.
+- Home, Search, Subscriptions, Shorts, navigation, and infinite-scroll observation.
+- Stable YouTube `videoId` plus contextual `exposureId`.
+- Home appearances recorded as `surfaced` contextual evidence with section/position metadata.
+- Document-level click, auxclick, and keyboard selection capture with source/provenance.
+- Bounded local behavior-event storage.
+- MyAlgo-generated UI excluded from behavioral evidence.
+- Navigation and autoplay are not treated as clicks.
+- Duplicate keyboard/click selections suppressed.
+- Modern YouTube lockup cards supported.
+- Invalidated extension contexts safely tolerated after extension reload/update.
+- Live validation confirmed real selection events with stable IDs, timestamps, provenance, and exposure context across Home/Search/Subscriptions/Shorts.
+- CI passed before merge.
+
+Known limitation: some YouTube layouts still resolve to `surface: "other"` when the DOM does not expose a reliable surface container. The underlying event remains valid; this is a classification limitation rather than a selection-capture failure.
+
+`surfaced` remains contextual evidence. #150 does not infer preference, weight clicks/watches, build graph nodes, or score candidates. Those decisions remain downstream in #174/#148/#151.
 
 ### [#174](https://github.com/AsimovNo9/MyAlgo/issues/174): Correlate surfaced recommendations with user behavior
 
