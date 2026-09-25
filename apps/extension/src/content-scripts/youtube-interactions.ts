@@ -148,7 +148,7 @@ export function createSelectionObservation(
 
 
 export function toNormalizedInteraction(event: UserBehaviorObservation): InteractionEvidence {
-  if (event.kind !== 'watched') {
+  if (event.kind === 'click' || event.kind === 'auxclick' || event.kind === 'keyboard') {
     return youtubeConnector.createInteraction({
       externalId: event.videoId,
       exposureId: event.exposureId,

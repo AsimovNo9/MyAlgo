@@ -54,7 +54,8 @@ Watched evidence can come from either of two explicit sources:
 
 The correlation contract is unchanged by the temporal-watch collector. Live
 validation and CI completed; the implementation remains evidence/correlation only
-and does not score, rank, or infer preference.
+and does not score, rank, or infer preference. The reusable correlation primitive
+is source-neutral; provider-specific behavior remains an adapter concern.
 
 ### [#183](https://github.com/AsimovNo9/MyAlgo/issues/183): Add deterministic temporal playback evidence for watched behavior — **completed**
 
