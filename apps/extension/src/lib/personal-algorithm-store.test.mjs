@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const backing = new Map();
+let setCalls = 0;
 
 const storage = {
   async get(keys) {
@@ -10,6 +11,7 @@ const storage = {
       .map((key) => [key, backing.get(key)]));
   },
   async set(values) {
+    setCalls += 1;
     Object.entries(values).forEach(([key, value]) => backing.set(key, value));
   },
   async remove(keys) {
@@ -33,6 +35,7 @@ const exposure = {
 
 test('local store persists normalized evidence and graph content nodes across restart', async () => {
   backing.clear();
+  setCalls = 0;
   const first = new LocalPersonalAlgorithmStore(storage);
   const record = await first.upsertEvidence({
     evidence: exposure,
@@ -49,6 +52,42 @@ test('local store persists normalized evidence and graph content nodes across re
   const persisted = await restarted.getEvidence('evidence-1');
   assert.equal(persisted?.retention.policy, 'until_expiry');
   assert.equal((await restarted.getGraph()).nodes[0].label, 'Test video');
+});
+
+test('history reconciliation replaces legacy history evidence in one storage write', async () => {
+  backing.clear();
+  setCalls = 0;
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  const historyEvidence = (id, title) => ({
+    kind: 'interaction',
+    content: { source: 'youtube', externalId: id },
+    exposureId: null,
+    interaction: 'watched',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: { connector: 'youtube', mechanism: 'history_dom' },
+    metadata: { title, creatorName: 'History creator' },
+  });
+
+  await store.upsertEvidence({ evidence: historyEvidence('legacy-1', 'Legacy 1') }, 'interaction:watched:legacy-1:2026-09-25T10:00:00.000Z');
+  await store.upsertEvidence({ evidence: historyEvidence('legacy-2', 'Legacy 2') }, 'interaction:watched:legacy-2:2026-09-25T10:01:00.000Z');
+  const writesBeforeReconcile = setCalls;
+
+  const result = await store.reconcileHistoryEvidence([
+    { id: 'interaction:watched:legacy-1:history', evidence: historyEvidence('legacy-1', 'Canonical 1') },
+    { id: 'interaction:watched:legacy-2:history', evidence: historyEvidence('legacy-2', 'Canonical 2') },
+  ]);
+
+  assert.deepEqual(result, { removed: 2, upserted: 2 });
+  assert.equal(setCalls, writesBeforeReconcile + 1);
+  assert.deepEqual(
+    (await store.listEvidence()).map((record) => record.id).sort(),
+    [
+      'interaction:watched:legacy-1:history',
+      'interaction:watched:legacy-2:history',
+    ],
+  );
+  assert.equal((await store.getGraph()).nodes.length, 2);
 });
 
 test('local store supports evidence CRUD, targeted deletion, graph edits, revisions, and export', async () => {
