@@ -155,8 +155,9 @@ scoring / ranking
 ## Phase 1 — Local graph
 
 1. Evidence store
-2. evidence-backed graph nodes/edges
-3. graph visualization
+2. evidence-backed semantic graph materialization
+3. graph review/export surface
+4. graph visualization
 4. deterministic additive scorer
 5. scoring trace
 
