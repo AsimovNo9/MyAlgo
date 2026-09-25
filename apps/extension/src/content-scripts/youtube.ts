@@ -352,41 +352,6 @@ const observeHistoryPage = () => {
   });
 };
 
-const observeHistoryPage = () => {
-  if (
-    !isCurrentInstance()
-    || !isYouTubeHistoryPage(location.pathname)
-    || historyScanInFlight
-  ) {
-    return;
-  }
-
-  chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
-    if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
-
-    historyScanInFlight = true;
-
-    void scanYouTubeHistory(document, {
-      maxBatches: 100,
-      stableRounds: 4,
-      delayMs: 800,
-      onBatch: async (observation) => {
-        await new Promise<void>((resolve) => {
-          chrome.runtime.sendMessage(
-            {
-              type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
-              payload: observation,
-            },
-            () => resolve(),
-          );
-        });
-      },
-    }).finally(() => {
-      historyScanInFlight = false;
-    });
-  });
-};
-
 const scheduleHistoryObservation = () => {
   if (historyObservationTimer !== undefined) window.clearTimeout(historyObservationTimer);
   historyObservationTimer = window.setTimeout(() => {
