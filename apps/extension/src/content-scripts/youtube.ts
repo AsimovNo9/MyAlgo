@@ -758,13 +758,7 @@ const emitTemporalWatch = (ended = false) => {
 const attachTemporalWatchObserver = () => {
   if (!isCurrentInstance()) return;
   const video = getActiveWatchVideo();
-  if (!video) {
-    if (watchedVideo) {
-      watchedVideo = null;
-      watchSession = null;
-    }
-    return;
-  }
+  if (!video) return;
   if (video === watchedVideo) return;
 
   watchedVideo = video;
