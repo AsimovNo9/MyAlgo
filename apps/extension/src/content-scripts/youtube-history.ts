@@ -85,10 +85,17 @@ export function collectHistoryEvidence(
 
 export function collectHistoryEvidenceFromDom(document: Document, observedAt = new Date().toISOString()) {
   const rows = Array.from(document.querySelectorAll<HTMLElement>(
-    'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer',
+    'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer',
   ));
   const candidates = rows.map((row) => {
-    const link = row.querySelector<HTMLAnchorElement>(videoLinkSelector);
+    const link = row.querySelector<HTMLAnchorElement>([
+      videoLinkSelector,
+      'a#thumbnail[href]',
+      'a#video-title-link[href]',
+      'a#video-title[href]',
+      'a[href*="/watch?v="]',
+      'a[href*="/shorts/"]',
+    ].join(','));
     const titleNode = row.querySelector<HTMLElement>('#video-title, #video-title-link, a[title][href*="/watch"], a[aria-label][href*="/watch"]');
     const creatorNode = row.querySelector<HTMLElement>('#channel-name, ytd-channel-name, .ytd-channel-name');
     const timestampNode = row.querySelector<HTMLElement>('#metadata-line span:last-child, #metadata span:last-child, ytd-video-meta-block span:last-child');
