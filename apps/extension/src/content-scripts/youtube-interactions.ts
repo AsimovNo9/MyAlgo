@@ -176,15 +176,19 @@ export function toNormalizedInteraction(event: UserBehaviorObservation): Interac
     });
   }
 
-  return youtubeConnector.createInteraction({
-    externalId: event.videoId,
-    exposureId: event.exposureId,
-    interaction: 'watched',
-    observedAt: event.observedAt,
-    mechanism: 'history_dom',
-    metadata: youtubeConnector.normalizeMetadata({
-      title: event.title,
-      creatorName: event.creator,
-    }),
-  });
+  if (event.kind === 'watched' && event.source === 'history') {
+    return youtubeConnector.createInteraction({
+      externalId: event.videoId,
+      exposureId: event.exposureId,
+      interaction: 'watched',
+      observedAt: event.observedAt,
+      mechanism: 'history_dom',
+      metadata: youtubeConnector.normalizeMetadata({
+        title: event.title,
+        creatorName: event.creator,
+      }),
+    });
+  }
+
+  throw new Error('Unsupported user behavior observation');
 }
