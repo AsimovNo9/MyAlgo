@@ -381,6 +381,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (type === 'PERSONAL_ALGORITHM_BACKFILL_HISTORY_METADATA') {
+    void (async () => {
+      const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      await Promise.all(historyEvidence.map((item) => persistNormalizedEvidence(
+        toNormalizedInteraction({
+          videoId: item.externalId,
+          exposureId: null,
+          title: item.title,
+          creator: item.creator,
+          kind: 'watched',
+          source: 'history',
+          observedAt: item.observedAt,
+          provenance: 'youtube_history_dom',
+        }),
+        `interaction:watched:${item.externalId}:${item.observedAt}`,
+      )));
+      const graph = await personalAlgorithmStore.rebuildGraphFromEvidence();
+      sendResponse({ ok: true, historyCount: historyEvidence.length, graph });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to backfill history metadata.',
+    }));
+    return true;
+  }
+
   if (type === EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION) {
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
