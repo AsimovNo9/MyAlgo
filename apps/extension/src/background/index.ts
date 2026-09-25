@@ -4,6 +4,7 @@ import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { applyRecommendationOutcome, mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
+import type { SelectionObservation } from '../content-scripts/youtube-interactions';
 
 type PageCandidate = {
   external_id: string;
@@ -40,6 +41,7 @@ const MAX_HISTORY_EVIDENCE = 10000;
 const MAX_FEED_CACHE_SIZE = 100;
 const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
+const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
@@ -137,6 +139,7 @@ chrome.runtime.onInstalled.addListener(() => {
     [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
     [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
     [STORAGE_KEYS.HOME_METRICS]: null,
+    [STORAGE_KEYS.SELECTION_EVENTS]: [],
   });
 });
 
@@ -276,6 +279,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (type === EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION) {
+    void (async () => {
+      const observation = payload?.observation as SelectionObservation | undefined;
+      if (!observation?.videoId || observation.provenance !== 'youtube_user_interaction') {
+        sendResponse({ ok: false, error: 'Invalid selection observation.' });
+        return;
+      }
+      const existing = await getStorage<SelectionObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+      const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
+      await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await correlateRecommendationOutcome(observation.videoId, 'clicked');
+      await recordLocalEvent('selection', observation);
+      sendResponse({ ok: true, storedEvents: events.length });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
+    return true;
+  }
+
   if (type === EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION) {
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
@@ -294,7 +314,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         .slice(0, MAX_HISTORY_EVIDENCE);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
-      await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
+      await Promise.all(historyEvidence.map(async (item) => {
+        await correlateRecommendationOutcome(item.externalId, 'watched');
+        const existingEvents = await getStorage<SelectionObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+        const watched = {
+          videoId: item.externalId,
+          exposureId: null,
+          kind: 'watched' as const,
+          source: 'history' as const,
+          observedAt: item.observedAt,
+          provenance: 'youtube_history_dom' as const,
+        };
+        await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, watched].slice(-MAX_SELECTION_EVENTS) as unknown as SelectionObservation[]);
+      }));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
     return true;
