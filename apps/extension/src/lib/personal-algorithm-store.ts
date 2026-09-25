@@ -7,7 +7,7 @@ import type {
   PersonalAlgorithmState,
   UserGraphEdit,
 } from '@repo/shared-types';
-import type { NormalizedEvidence } from '@repo/shared-types';
+import type { ContentMetadata, NormalizedEvidence } from '@repo/shared-types';
 
 export type LocalStateStorage = {
   get(keys: string[]): Promise<Record<string, unknown>>;
@@ -54,6 +54,39 @@ const makeId = (prefix: string): string => {
 
 const contentNodeId = (source: string, externalId: string) =>
   `content:${encodeURIComponent(source)}:${encodeURIComponent(externalId)}`;
+
+const CONTENT_METADATA_KEYS: (keyof ContentMetadata)[] = [
+  'title',
+  'creatorId',
+  'creatorName',
+  'description',
+  'durationSeconds',
+  'publishedAt',
+  'language',
+  'format',
+  'contentType',
+];
+
+const getContentMetadata = (attributes: Record<string, unknown>): ContentMetadata | null => {
+  const metadata = attributes.metadata;
+  if (!metadata || typeof metadata !== 'object') return null;
+  return metadata as ContentMetadata;
+};
+
+const mergeContentMetadata = (
+  existing: ContentMetadata | null,
+  incoming: ContentMetadata,
+): ContentMetadata => {
+  const merged: Partial<ContentMetadata> = { ...(existing ?? {}) };
+  for (const key of CONTENT_METADATA_KEYS) {
+    const value = incoming[key];
+    if (value !== undefined && value !== null && (typeof value !== 'string' || value.trim() !== '')) {
+      merged[key] = value as never;
+    }
+  }
+  if (!merged.title) merged.title = incoming.title;
+  return merged as ContentMetadata;
+};
 
 const createEmptyState = (): PersonalAlgorithmState => ({
   schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
@@ -374,7 +407,11 @@ export class LocalPersonalAlgorithmStore {
         (node) => !(node.provenance === 'inferred' && node.kind === 'creator'),
       );
 
-      for (const record of state.evidence) {
+      const records = [...state.evidence].sort((a, b) =>
+        a.evidence.observedAt.localeCompare(b.evidence.observedAt) || a.id.localeCompare(b.id),
+      );
+
+      for (const record of records) {
         this.ensureContentNode(state, record.evidence);
         if (record.evidence.kind !== 'exposure') continue;
 
@@ -430,8 +467,25 @@ export class LocalPersonalAlgorithmStore {
   private ensureContentNode(state: PersonalAlgorithmState, evidence: NormalizedEvidence): void {
     const identity = evidence.content;
     const id = contentNodeId(identity.source, identity.externalId);
-    if (state.graph.nodes.some((node) => node.id === id)) return;
-    const title = evidence.kind === 'exposure' ? evidence.metadata?.title : undefined;
+    const existing = state.graph.nodes.find((node) => node.id === id);
+
+    if (existing) {
+      if (existing.kind !== 'content') return;
+      const metadata = evidence.kind === 'exposure' ? evidence.metadata : null;
+      if (!metadata) return;
+      const mergedMetadata = mergeContentMetadata(
+        getContentMetadata(existing.attributes),
+        metadata,
+      );
+      const nextTitle = mergedMetadata?.title?.trim();
+      if (nextTitle && existing.label === identity.externalId) existing.label = nextTitle;
+      if (mergedMetadata) existing.attributes = { ...existing.attributes, metadata: mergedMetadata };
+      existing.updatedAt = nowIso();
+      return;
+    }
+
+    const metadata = evidence.kind === 'exposure' ? evidence.metadata : null;
+    const title = metadata?.title?.trim();
     const timestamp = nowIso();
     state.graph.nodes.push({
       id,
@@ -440,7 +494,7 @@ export class LocalPersonalAlgorithmStore {
       content: identity,
       provenance: 'explicit',
       confidence: null,
-      attributes: {},
+      attributes: metadata ? { metadata } : {},
       createdAt: timestamp,
       updatedAt: timestamp,
     });
