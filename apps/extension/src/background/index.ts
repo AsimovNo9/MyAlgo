@@ -57,6 +57,19 @@ async function persistNormalizedEvidence(
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
+function createHistoryEventKey(item: Pick<HistoryEvidence, 'externalId' | 'historyTimestamp' | 'observedAt'>): string {
+  const timestamp = item.historyTimestamp?.trim();
+  return timestamp
+    ? 'history|watched|' + item.externalId + '|' + timestamp
+    : 'history|watched|' + item.externalId + '|' + item.observedAt;
+}
+
+function createHistoryEvidenceId(item: Pick<HistoryEvidence, 'externalId' | 'historyTimestamp' | 'observedAt'>): string {
+  return 'interaction:watched:' + item.externalId + ':history:' + encodeURIComponent(
+    item.historyTimestamp?.trim() || item.observedAt,
+  );
+}
+
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (!tabId || candidates.length === 0) return [];
   const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
@@ -390,12 +403,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           exposureId: null,
           title: item.title,
           creator: item.creator,
+          historyTimestamp: item.historyTimestamp,
           kind: 'watched',
           source: 'history',
           observedAt: item.observedAt,
           provenance: 'youtube_history_dom',
         }),
-        `interaction:watched:${item.externalId}:${item.observedAt}`,
+        createHistoryEvidenceId(item),
       )));
       const graph = await personalAlgorithmStore.rebuildGraphFromEvidence();
       sendResponse({ ok: true, historyCount: historyEvidence.length, graph });
@@ -430,17 +444,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         exposureId: null,
         title: item.title,
         creator: item.creator,
+        historyTimestamp: item.historyTimestamp,
         kind: 'watched' as const,
         source: 'history' as const,
         observedAt: item.observedAt,
         provenance: 'youtube_history_dom' as const,
       }));
-      const existingKeys = new Set(existingEvents.map((event) => event.kind + '|' + event.videoId + '|' + event.observedAt));
-      const newWatchedEvents = watchedEvents.filter((event) => !existingKeys.has(event.kind + '|' + event.videoId + '|' + event.observedAt));
+      const existingKeys = new Set(existingEvents.map((event) => (
+        event.kind === 'watched' && event.source === 'history'
+          ? createHistoryEventKey({
+              externalId: event.videoId,
+              historyTimestamp: event.historyTimestamp,
+              observedAt: event.observedAt,
+            })
+          : event.kind + '|' + event.videoId + '|' + event.observedAt
+      )));
+      const newWatchedEvents = watchedEvents.filter((event) => !existingKeys.has(createHistoryEventKey({
+        externalId: event.videoId,
+        historyTimestamp: event.historyTimestamp,
+        observedAt: event.observedAt,
+      })));
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, ...newWatchedEvents].slice(-MAX_SELECTION_EVENTS));
       await Promise.all(newWatchedEvents.map((event) => persistNormalizedEvidence(
         toNormalizedInteraction(event),
-        `interaction:watched:${event.videoId}:${event.observedAt}`,
+        createHistoryEvidenceId({
+          externalId: event.videoId,
+          historyTimestamp: event.historyTimestamp,
+          observedAt: event.observedAt,
+        }),
       )));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
