@@ -13,18 +13,63 @@ type PageCandidate = {
   is_live?: boolean;
 };
 
-type LocalFeedItem = PageCandidate & {
+type CandidatePoolItem = PageCandidate & {
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+type LocalFeedItem = CandidatePoolItem & {
   id: string;
   score: number;
   visible: boolean;
   source_kind: null;
 };
 
+const MAX_CANDIDATE_POOL_SIZE = 5000;
+const MAX_HISTORY_EVIDENCE = 10000;
+
+async function mergeCandidatePool(candidates: PageCandidate[]): Promise<CandidatePoolItem[]> {
+  const existing = await getStorage<CandidatePoolItem[]>(
+    STORAGE_KEYS.FEED_CANDIDATE_POOL,
+    [],
+  );
+
+  const now = new Date().toISOString();
+  const byId = new Map<string, CandidatePoolItem>(
+    existing.map((candidate) => [candidate.external_id, candidate]),
+  );
+
+  for (const candidate of candidates) {
+    if (!candidate.external_id || !candidate.title) continue;
+
+    const previous = byId.get(candidate.external_id);
+    byId.set(candidate.external_id, {
+      ...previous,
+      ...candidate,
+      external_id: candidate.external_id,
+      title: candidate.title,
+      firstSeenAt: previous?.firstSeenAt ?? now,
+      lastSeenAt: now,
+    });
+  }
+
+  const pool = [...byId.values()]
+    .sort(
+      (a, b) =>
+        new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+    )
+    .slice(0, MAX_CANDIDATE_POOL_SIZE);
+
+  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  return pool;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
     [STORAGE_KEYS.ENABLED]: true,
     [STORAGE_KEYS.FEED_CACHE]: [],
+    [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
     [STORAGE_KEYS.LAST_SYNC]: null,
     [STORAGE_KEYS.SOURCE_FILTERS]: {
       subscribedOnly: false,
@@ -98,11 +143,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
-        const ranked = rankLocalCandidates((payload as { candidates?: PageCandidate[] }).candidates ?? [], sourceFilters);
+        const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
+        const candidatePool = await mergeCandidatePool(incomingCandidates);
+        const ranked = rankLocalCandidates(candidatePool, sourceFilters);
         await setStorage(STORAGE_KEYS.FEED_CACHE, ranked);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
-        sendResponse({ ok: true, feed: ranked });
+        sendResponse({ ok: true, feed: ranked, poolSize: candidatePool.length });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
         await setStorage('personal-algorithm-last-error', message);
@@ -175,7 +222,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           byExternalId.set(item.externalId, item);
         }
       }
-      const evidence = [...byExternalId.values()].slice(-1000);
+      const evidence = [...byExternalId.values()]
+        .sort(
+          (a, b) =>
+            new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime(),
+        )
+        .slice(0, MAX_HISTORY_EVIDENCE);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
