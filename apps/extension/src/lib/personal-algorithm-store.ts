@@ -23,7 +23,8 @@ export type EvidenceInput = {
 };
 
 const DEFAULT_STATE_KEY = 'personal-algorithm-state';
-const PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
+const PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
+const LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
 
 const nowIso = () => new Date().toISOString();
 
@@ -64,11 +65,43 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
       && Array.isArray(candidate.graph.userEdits)
       && Array.isArray(candidate.graph.revisions)
       && Number.isInteger(candidate.graph.currentRevision)) {
-    return candidate as PersonalAlgorithmState;
+    return {
+      schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
+      evidence: candidate.evidence,
+      graph: {
+        ...candidate.graph,
+        edges: candidate.graph.edges.map((edge) => ({
+          ...edge,
+          evidenceIds: Array.isArray((edge as GraphEdge).evidenceIds)
+            ? [...new Set((edge as GraphEdge).evidenceIds.filter((id) => typeof id === 'string' && id.length > 0))]
+            : [],
+        })),
+      },
+    };
   }
 
-  // Version 0/unknown data is intentionally not guessed into the graph. A future
-  // migration should be added here once an older persisted schema exists.
+  if (candidate.schemaVersion === LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION
+      && Array.isArray(candidate.evidence)
+      && candidate.graph
+      && Array.isArray(candidate.graph.nodes)
+      && Array.isArray(candidate.graph.edges)
+      && Array.isArray(candidate.graph.userEdits)
+      && Array.isArray(candidate.graph.revisions)
+      && Number.isInteger(candidate.graph.currentRevision)) {
+    return {
+      schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
+      evidence: candidate.evidence,
+      graph: {
+        ...candidate.graph,
+        edges: candidate.graph.edges.map((edge) => ({
+          ...edge,
+          evidenceIds: [],
+        })),
+      },
+    };
+  }
+
+  // Unknown or malformed versions are intentionally not guessed into the graph.
   return createEmptyState();
 };
 
@@ -87,7 +120,8 @@ export class LocalPersonalAlgorithmStore {
     if (this.state) return;
     const result = await this.storage.get([this.key]);
     this.state = migrateState(result[this.key]);
-    if (result[this.key] == null || (result[this.key] as { schemaVersion?: number })?.schemaVersion !== PERSONAL_ALGORITHM_SCHEMA_VERSION) {
+    const rawVersion = (result[this.key] as { schemaVersion?: number } | undefined)?.schemaVersion;
+    if (result[this.key] == null || rawVersion !== PERSONAL_ALGORITHM_SCHEMA_VERSION) {
       await this.persist();
     }
   }
@@ -145,24 +179,51 @@ export class LocalPersonalAlgorithmStore {
     return this.mutate((state) => {
       const before = state.evidence.length;
       state.evidence = state.evidence.filter((item) => item.id !== id);
-      return state.evidence.length !== before;
+      if (state.evidence.length === before) return false;
+
+      state.graph.edges = state.graph.edges
+        .map((edge) => ({ ...edge, evidenceIds: edge.evidenceIds.filter((evidenceId) => evidenceId !== id) }))
+        .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+      return true;
     });
   }
 
   async deleteEvidenceForContent(source: string, externalId: string): Promise<number> {
     return this.mutate((state) => {
-      const before = state.evidence.length;
-      state.evidence = state.evidence.filter(
-        (item) => item.evidence.content.source !== source
-          || item.evidence.content.externalId !== externalId,
+      const removedIds = new Set(
+        state.evidence
+          .filter((item) => item.evidence.content.source === source && item.evidence.content.externalId === externalId)
+          .map((item) => item.id),
       );
-      return before - state.evidence.length;
+      if (removedIds.size === 0) return 0;
+
+      state.evidence = state.evidence.filter((item) => !removedIds.has(item.id));
+      state.graph.edges = state.graph.edges
+        .map((edge) => ({
+          ...edge,
+          evidenceIds: edge.evidenceIds.filter((evidenceId) => !removedIds.has(evidenceId)),
+        }))
+        .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+      return removedIds.size;
     });
   }
 
   async getGraph(): Promise<PersonalAlgorithmGraph> {
     const state = await this.getState();
     return structuredClone(state.graph);
+  }
+
+  async getEvidenceForEdge(edgeId: string): Promise<EvidenceRecord[]> {
+    const state = await this.getState();
+    const edge = state.graph.edges.find((item) => item.id === edgeId);
+    if (!edge) return [];
+    const evidenceById = new Map(state.evidence.map((item) => [item.id, item]));
+    return edge.evidenceIds
+      .map((id) => evidenceById.get(id))
+      .filter((record): record is EvidenceRecord => Boolean(record))
+      .map((record) => structuredClone(record));
   }
 
   async upsertNode(node: Omit<GraphNode, 'createdAt' | 'updatedAt'> & Partial<Pick<GraphNode, 'createdAt' | 'updatedAt'>>): Promise<GraphNode> {
@@ -201,11 +262,22 @@ export class LocalPersonalAlgorithmStore {
 
   async upsertEdge(edge: Omit<GraphEdge, 'createdAt' | 'updatedAt'> & Partial<Pick<GraphEdge, 'createdAt' | 'updatedAt'>>): Promise<GraphEdge> {
     return this.mutate((state) => {
+      const evidenceIds = [...new Set(edge.evidenceIds.filter((id) => typeof id === 'string' && id.length > 0))];
+      if (edge.provenance === 'inferred' && evidenceIds.length === 0) {
+        throw new Error('Inferred graph edges must reference supporting evidence');
+      }
+
+      const missingEvidenceIds = evidenceIds.filter((id) => !state.evidence.some((record) => record.id === id));
+      if (missingEvidenceIds.length > 0) {
+        throw new Error(`Graph edge references unknown evidence: ${missingEvidenceIds.join(', ')}`);
+      }
+
       const timestamp = nowIso();
       const existingIndex = state.graph.edges.findIndex((item) => item.id === edge.id);
       const previous = existingIndex >= 0 ? state.graph.edges[existingIndex] : null;
       const next: GraphEdge = {
         ...edge,
+        evidenceIds,
         confidence: edge.confidence == null ? null : clampConfidence(edge.confidence),
         createdAt: previous?.createdAt ?? edge.createdAt ?? timestamp,
         updatedAt: timestamp,
