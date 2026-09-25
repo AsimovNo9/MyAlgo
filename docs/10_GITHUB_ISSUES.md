@@ -138,6 +138,10 @@ Still intentionally excluded from #148:
 
 Those remain downstream work. The next graph-layer work should build semantic entities/relationships and then a separately specified preference-inference layer rather than treating every `watched` record as a preference.
 
+### History persistence and reconciliation regression coverage
+
+PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
+
 ### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime
 
 ### [#151](https://github.com/AsimovNo9/MyAlgo/issues/151): Implement deterministic additive scoring and reproducible trace
