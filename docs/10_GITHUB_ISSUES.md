@@ -76,7 +76,7 @@ Automated tests and real-browser validation are complete. PR #184 was merged; #1
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary
 
-### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **implementation in PR #188**
+### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **completed in PR #188**
 
 Freeze the boundary between provider-specific connectors and the source-neutral recommendation domain before #148 and #151.
 
@@ -91,7 +91,7 @@ The full contract is documented in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTO
 
 ## P1 — Local Personal Algorithm Graph
 
-### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph — **implementation in PR #191**
+### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph — **completed in PR #191**
 
 PR #191 continues the #148 implementation with an evidence-backed graph relationship boundary.
 
