@@ -65,4 +65,56 @@ export const youtubeConnector = {
   mapPresentationEvent(event) {
     return event;
   },
+  identifyContent(externalId) {
+    return {
+      source: 'youtube',
+      externalId,
+    };
+  },
+  normalizeMetadata(input) {
+    return {
+      title: normalizeYouTubeText(input.title ?? ''),
+      creatorId: normalizeYouTubeText(input.creatorId ?? '') || null,
+      creatorName: normalizeYouTubeText(input.creatorName ?? '') || null,
+      description: normalizeYouTubeText(input.description ?? '') || null,
+      durationSeconds: Number.isFinite(input.durationSeconds)
+        ? Math.max(0, Number(input.durationSeconds))
+        : null,
+      publishedAt: input.publishedAt ?? null,
+      language: normalizeYouTubeText(input.language ?? '') || null,
+      format: normalizeYouTubeText(input.format ?? '') || null,
+      contentType: normalizeYouTubeText(input.contentType ?? '') || null,
+    };
+  },
+  createExposure(input) {
+    return {
+      kind: 'exposure',
+      exposureId: input.exposureId,
+      content: this.identifyContent(input.externalId),
+      surface: input.surface,
+      section: input.section ?? null,
+      position: input.position ?? null,
+      observedAt: input.observedAt,
+      provenance: {
+        connector: 'youtube',
+        mechanism: input.mechanism,
+      },
+      metadata: input.metadata ?? null,
+    };
+  },
+  createInteraction(input) {
+    return {
+      kind: 'interaction',
+      content: this.identifyContent(input.externalId),
+      exposureId: input.exposureId ?? null,
+      interaction: input.interaction,
+      observedAt: input.observedAt,
+      provenance: {
+        connector: 'youtube',
+        mechanism: input.mechanism,
+      },
+      sessionId: input.sessionId ?? null,
+      metrics: input.metrics,
+    };
+  },
 } satisfies PageProviderConnector;
