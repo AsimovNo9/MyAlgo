@@ -1,5 +1,11 @@
-import type { RecommendationObservation } from './youtube-recommendations.ts';
-import type { SelectionObservation, UserBehaviorObservation, WatchedObservation } from './youtube-interactions.ts';
+import type { ExposureEvidence, InteractionEvidence } from '@repo/shared-types';
+import { toNormalizedExposure, type RecommendationObservation } from './youtube-recommendations.ts';
+import {
+  toNormalizedInteraction,
+  type SelectionObservation,
+  type UserBehaviorObservation,
+  type WatchedObservation,
+} from './youtube-interactions.ts';
 import { createExposureId } from './youtube-interactions.ts';
 
 export type BehaviorCorrelationKind =
@@ -42,20 +48,21 @@ const getRecommendationExposureId = (observation: RecommendationObservation): st
   });
 
 function correlateSelection(
-  surfaced: RecommendationObservation[],
-  clicked: SelectionObservation,
-): RecommendationObservation | undefined {
+  surfaced: ExposureEvidence[],
+  clicked: InteractionEvidence,
+): ExposureEvidence | undefined {
   if (clicked.exposureId) {
     const exact = surfaced.find((item) =>
-      item.externalId === clicked.videoId && getRecommendationExposureId(item) === clicked.exposureId
+      item.content.externalId === clicked.content.externalId
+      && item.exposureId === clicked.exposureId
     );
     // An explicit exposure ID is authoritative. If it is present but does not
     // match this video's surfaced evidence, do not weaken the identity boundary
-    // by falling back to video-only correlation.
+    // by falling back to content-only correlation.
     return exact;
   }
 
-  const candidates = surfaced.filter((item) => item.externalId === clicked.videoId);
+  const candidates = surfaced.filter((item) => item.content.externalId === clicked.content.externalId);
   if (candidates.length === 0) return undefined;
 
   const atOrBefore = candidates
@@ -68,58 +75,70 @@ export function correlateBehavior(
   surfaced: RecommendationObservation[],
   interactions: UserBehaviorObservation[],
 ): BehaviorTimeline[] {
-  const surfacedByVideo = new Map<string, RecommendationObservation[]>();
-  const clickedByVideo = new Map<string, SelectionObservation[]>();
-  const watchedByVideo = new Map<string, WatchedObservation[]>();
+  // Convert provider-shaped observations once at the connector boundary. The
+  // correlation algorithm below only reasons over source-neutral evidence.
+  const normalizedSurfaced = surfaced
+    .filter((observation) => observation.externalId && observation.evidenceKind === 'surfaced')
+    .map(toNormalizedExposure);
+  const normalizedInteractions = interactions
+    .filter((event) => event.videoId)
+    .map(toNormalizedInteraction);
 
-  for (const observation of surfaced) {
-    if (!observation.externalId || observation.evidenceKind !== 'surfaced') continue;
-    const list = surfacedByVideo.get(observation.externalId) ?? [];
+  const surfacedByContent = new Map<string, ExposureEvidence[]>();
+  const clickedByContent = new Map<string, InteractionEvidence[]>();
+  const watchedByContent = new Map<string, InteractionEvidence[]>();
+
+  for (const observation of normalizedSurfaced) {
+    const list = surfacedByContent.get(observation.content.externalId) ?? [];
     list.push(observation);
-    surfacedByVideo.set(observation.externalId, list);
+    surfacedByContent.set(observation.content.externalId, list);
   }
 
-  for (const event of interactions) {
-    if (!event.videoId) continue;
-    if (event.kind === 'watched') {
-      const list = watchedByVideo.get(event.videoId) ?? [];
-      list.push(event);
-      watchedByVideo.set(event.videoId, list);
-    } else {
-      const list = clickedByVideo.get(event.videoId) ?? [];
-      list.push(event);
-      clickedByVideo.set(event.videoId, list);
-    }
+  for (const event of normalizedInteractions) {
+    const target = event.interaction === 'watched' ? watchedByContent : clickedByContent;
+    const list = target.get(event.content.externalId) ?? [];
+    list.push(event);
+    target.set(event.content.externalId, list);
   }
 
   const videoIds = [...new Set([
-    ...surfacedByVideo.keys(),
-    ...clickedByVideo.keys(),
-    ...watchedByVideo.keys(),
+    ...surfacedByContent.keys(),
+    ...clickedByContent.keys(),
+    ...watchedByContent.keys(),
   ])].sort();
 
   return videoIds.map((videoId) => {
-    const videoSurfaced = sortEvents(surfacedByVideo.get(videoId) ?? []);
-    const clicked = sortEvents(clickedByVideo.get(videoId) ?? []);
-    const watched = sortEvents(watchedByVideo.get(videoId) ?? []);
+    const videoSurfaced = sortEvents(surfaced.filter((item) =>
+      item.externalId === videoId && item.evidenceKind === 'surfaced'
+    ));
+    const clicked = sortEvents(interactions.filter((event) =>
+      event.videoId === videoId && event.kind !== 'watched'
+    )) as SelectionObservation[];
+    const watched = sortEvents(interactions.filter((event) =>
+      event.videoId === videoId && event.kind === 'watched'
+    )) as WatchedObservation[];
+
+    const normalizedSurfacedForVideo = sortEvents(surfacedByContent.get(videoId) ?? []);
+    const normalizedClicked = sortEvents(clickedByContent.get(videoId) ?? []);
+    const normalizedWatched = sortEvents(watchedByContent.get(videoId) ?? []);
     const correlations: BehaviorCorrelation[] = [];
 
-    for (const click of clicked) {
-      const match = correlateSelection(videoSurfaced, click);
+    for (const click of normalizedClicked) {
+      const match = correlateSelection(normalizedSurfacedForVideo, click);
       if (match) {
         correlations.push({
           kind: 'surfaced_clicked',
           videoId,
           surfacedAt: match.observedAt,
-          surfacedExposureId: getRecommendationExposureId(match),
+          surfacedExposureId: match.exposureId,
           clickedAt: click.observedAt,
           clickedExposureId: click.exposureId,
         });
       }
     }
 
-    for (const watch of watched) {
-      for (const click of clicked.filter((event) => event.observedAt <= watch.observedAt)) {
+    for (const watch of normalizedWatched) {
+      for (const click of normalizedClicked.filter((event) => event.observedAt <= watch.observedAt)) {
         correlations.push({
           kind: 'clicked_watched',
           videoId,
@@ -128,12 +147,12 @@ export function correlateBehavior(
           watchedAt: watch.observedAt,
         });
       }
-      for (const exposure of videoSurfaced.filter((item) => item.observedAt <= watch.observedAt)) {
+      for (const exposure of normalizedSurfacedForVideo.filter((item) => item.observedAt <= watch.observedAt)) {
         correlations.push({
           kind: 'surfaced_watched',
           videoId,
           surfacedAt: exposure.observedAt,
-          surfacedExposureId: getRecommendationExposureId(exposure),
+          surfacedExposureId: exposure.exposureId,
           watchedAt: watch.observedAt,
         });
       }
