@@ -6,10 +6,12 @@
 
 1. Validate watch-history DOM extraction. **Completed (#156).**
 2. Validate live-feed candidate extraction and user selection capture. **Completed (#150, PR #180).**
-3. Confirm data can remain local for MVP.
-4. Document observed-data retention/deletion.
-5. Verify Chrome permission scope.
-6. Verify YouTube API remains display-only.
+3. Validate deterministic behavioral correlation. **Completed (#174, implementation merged).**
+4. Validate temporal player playback evidence. **Implemented and live-validated (#183, PR #184).**
+5. Confirm data can remain local for MVP.
+6. Document observed-data retention/deletion.
+7. Verify Chrome permission scope.
+8. Verify YouTube API remains display-only.
 
 **Exit:** enough browser-observed evidence exists to construct a useful initial graph.
 
@@ -43,14 +45,50 @@ surfaced (YouTube decision)
     ↓
 clicked (user selection, when present)
     ↓
-watched (later history evidence, when available)
+watched (temporal player evidence, when available)
 ```
 
 The selection layer is document-level so it survives YouTube DOM replacement, records click/auxclick/keyboard provenance, preserves surface/section/position where the DOM permits it, and excludes MyAlgo-generated UI from its own evidence stream. Navigation and autoplay are deliberately not interpreted as clicks.
 
 Live validation confirmed real local selection events with stable IDs, timestamps, provenance, and exposure context. CI passed and PR #180 was merged. Some YouTube layouts still produce `surface: "other"` when the DOM does not expose a reliable surface container; this does not invalidate the underlying event evidence.
 
-#150 is now an implementation foundation rather than an active spike. #174 is the next behavioral-evidence layer: correlate these observations into deterministic surfaced → clicked → watched sequences without yet inferring preference.
+### Deterministic behavioral correlation (#174)
+
+Implemented in the correlation layer and validated against the raw evidence contract.
+The derived timeline is recomputable from retained surfaced, clicked, and watched
+events. Exact `exposureId` matches are authoritative; no event is invented merely
+to make a correlation succeed; events never cross video IDs; and chronological
+serialization is deterministic.
+
+### Temporal player watch evidence (#183)
+
+The player collector creates one session per active video/player instance and
+accumulates actual media-time deltas while playback is active.
+
+Semantics:
+
+- paused and buffering time does not count;
+- ad playback does not count;
+- seek jumps do not count;
+- one watched observation is emitted per session;
+- the default threshold is 30 seconds;
+- videos shorter than 60 seconds use the lower of 30 seconds and 50% of duration;
+- natural completion is a terminal watched condition for short videos;
+- a preceding captured selection may supply the exact `exposureId`;
+- watching without a selection remains valid with a null `exposureId`;
+- History remains bootstrap/fallback evidence with distinct provenance.
+
+Automated tests cover threshold accumulation, pause/resume, seek exclusion,
+short-video completion, duplicate suppression, session reset, exposure propagation,
+and no-click watches. Live validation on 2026-09-25 produced two independent click
+→ watched chains without visiting History; each emitted exactly one player watched
+event after approximately 30 seconds of accumulated playback, preserved the exact
+selection `exposureId`, and used `youtube_player_telemetry` provenance.
+
+CI workflow run 313 passed for commit `ab4310088023883384ae9d5c1b9b97d15627be73`.
+
+#150, #174, and the temporal-watch implementation are now implementation
+foundations rather than active spikes. #183 remains open until PR #184 is merged.
 
 ## Phase 1 — Local graph
 
@@ -135,7 +173,7 @@ Phase 7 is the point at which MyAlgo can stop treating the current YouTube DOM a
 
 ### Retrieval architecture
 
-```
+```text
 user model
     ↓
 retrieval planner
@@ -178,7 +216,7 @@ The system should not treat a retrieved item as personalized merely because it c
 
 A useful explanation should be possible at the item level, for example:
 
-```
+```text
 WHY IS THIS HERE?
 
 Related to interests     42%
@@ -195,7 +233,7 @@ A local multimodal model is **not an MVP prerequisite**. It should be introduced
 
 ### Video understanding pipeline
 
-```
+```text
 YouTube video
   title
   description / metadata
@@ -224,7 +262,7 @@ The multimodal model should primarily be an **enrichment/classification componen
 
 A useful representation is multi-label and probabilistic:
 
-```
+```text
 gaming          0.99
 Elden Ring      0.98
 RPG             0.94
@@ -235,7 +273,7 @@ entertainment   0.88
 
 The user model can then maintain semantic affinities such as:
 
-```
+```text
 gaming          0.86
 soulslike       0.94
 Elden Ring      0.97
@@ -271,7 +309,7 @@ Embeddings should support semantic relatedness, such as recognizing that interes
 
 Ranking can then combine:
 
-```
+```text
 topic_affinity
 + entity_affinity
 + semantic_similarity
@@ -289,7 +327,7 @@ Do not train a general-purpose multimodal model from scratch.
 
 A practical research path is:
 
-```
+```text
 large multimodal teacher
         ↓
 structured semantic profiles + embeddings
@@ -309,7 +347,7 @@ Candidate families to benchmark include SmolVLM, SigLIP/SigLIP2, and larger Qwen
 
 The most valuable eventual training data is user-specific behavior:
 
-```
+```text
 video representation
 + user representation
 + actual behavior
@@ -386,7 +424,7 @@ MyAlgo should not assume that a prompt-driven custom feed is equivalent to an in
 
 The intended combination is:
 
-```
+```text
 local ownership
 + inspectable personal representation
 + editable objectives
