@@ -171,6 +171,87 @@ test('rebuildGraphFromEvidence materializes deterministic creator nodes and evid
   assert.deepEqual(afterDelete.unsupportedEdgeIds, []);
 });
 
+
+test('content nodes preserve and hydrate normalized metadata without creating semantic topic nodes', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: {
+        title: 'Metadata title',
+        description: 'Description',
+        durationSeconds: 120,
+        creatorName: 'Creator One',
+      },
+    },
+  }, 'metadata-1');
+
+  const first = (await store.getGraph()).nodes[0];
+  assert.equal(first.label, 'Metadata title');
+  assert.deepEqual(first.attributes.metadata, {
+    title: 'Metadata title',
+    description: 'Description',
+    durationSeconds: 120,
+    creatorName: 'Creator One',
+  });
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'yt-1|home||1',
+      metadata: {
+        title: 'Metadata title',
+        creatorId: 'creator-1',
+        creatorName: 'Creator One',
+        publishedAt: '2026-09-25T09:00:00.000Z',
+      },
+    },
+  }, 'metadata-2');
+
+  const graph = await store.getGraph();
+  assert.equal(graph.nodes.length, 1);
+  assert.equal(graph.nodes[0].kind, 'content');
+  assert.equal(graph.nodes[0].label, 'Metadata title');
+  assert.equal(graph.nodes[0].attributes.metadata.creatorId, 'creator-1');
+  assert.equal(graph.nodes[0].attributes.metadata.description, 'Description');
+  assert.equal(graph.nodes[0].attributes.metadata.publishedAt, '2026-09-25T09:00:00.000Z');
+});
+
+test('rebuild hydrates content labels and metadata from exposure evidence', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: undefined,
+    },
+  }, 'bare');
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'yt-1|home||1',
+      observedAt: '2026-09-25T10:01:00.000Z',
+      metadata: {
+        title: 'Recovered title',
+        creatorName: 'Recovered creator',
+        contentType: 'video',
+      },
+    },
+  }, 'hydrated');
+
+  const graph = await store.rebuildGraphFromEvidence();
+  const content = graph.nodes.find((node) => node.id === 'content:youtube:yt-1');
+  assert.equal(content?.label, 'Recovered title');
+  assert.deepEqual(content?.attributes.metadata, {
+    title: 'Recovered title',
+    creatorName: 'Recovered creator',
+    contentType: 'video',
+  });
+});
+
 test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
