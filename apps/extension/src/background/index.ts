@@ -156,7 +156,7 @@ function rankLocalCandidates(candidates: CandidatePoolItem[], sourceFilters: Fee
   }));
 }
 
-async function recordLocalEvent(kind: 'activity' | 'feedback', payload: unknown): Promise<void> {
+async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', payload: unknown): Promise<void> {
   const events = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []);
   await setStorage('personal-algorithm-local-events', [
     ...events.slice(-199),
