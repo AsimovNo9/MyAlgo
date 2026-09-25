@@ -56,12 +56,15 @@ const safeSendMessage = (
   }
 };
 
-const safeStorageGet = (keys: string[]) => {
-  if (!isExtensionContextValid()) return Promise.resolve<Record<string, unknown>>({});
+const safeStorageGet = (keys: string[]): Promise<Record<string, unknown>> => {
+  if (!isExtensionContextValid()) return Promise.resolve({});
   try {
-    return chrome.storage.local.get(keys).catch(() => ({}));
+    return chrome.storage.local
+      .get(keys)
+      .then((result) => result as Record<string, unknown>)
+      .catch(() => ({}));
   } catch {
-    return Promise.resolve<Record<string, unknown>>({});
+    return Promise.resolve({});
   }
 };
 
