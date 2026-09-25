@@ -49,3 +49,19 @@ export function extractYouTubeLinkTitle(attributes: { title?: string | null; ari
       .find((value) => typeof value === 'string' && value.trim().length > 0) ?? '',
   );
 }
+
+
+export function extractYouTubeShortsTitle(element: Element): string | null {
+  const values = Array.from(element.querySelectorAll<HTMLElement>(
+    'a[href*="/shorts/"][title], a[href*="/shorts/"][aria-label], a[href*="/shorts/"]',
+  ))
+    .flatMap((node) => [
+      node.getAttribute('title'),
+      node.getAttribute('aria-label'),
+      node.textContent,
+    ])
+    .map((value) => normalizeYouTubeText(value ?? ''))
+    .filter((value) => value && !/^watch$/i.test(value) && !/^go to channel\s+/i.test(value));
+
+  return values[0] ?? null;
+}
