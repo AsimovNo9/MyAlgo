@@ -1,3 +1,5 @@
+import type { InteractionEvidence } from '@repo/shared-types';
+import { youtubeConnector } from '../connectors/youtube.ts';
 import { extractYouTubeVideoId } from './youtube-dom.ts';
 
 export type YouTubeSurface = 'home' | 'search' | 'subscriptions' | 'shorts' | 'watch' | 'other';
@@ -142,4 +144,41 @@ export function createSelectionObservation(
     observedAt,
     provenance: 'youtube_user_interaction',
   };
+}
+
+
+export function toNormalizedInteraction(event: UserBehaviorObservation): InteractionEvidence {
+  if (event.kind === 'click') {
+    return youtubeConnector.createInteraction({
+      externalId: event.videoId,
+      exposureId: event.exposureId,
+      interaction: 'clicked',
+      observedAt: event.observedAt,
+      mechanism: 'user_interaction',
+    });
+  }
+
+  if (event.source === 'player') {
+    return youtubeConnector.createInteraction({
+      externalId: event.videoId,
+      exposureId: event.exposureId,
+      interaction: 'watched',
+      observedAt: event.observedAt,
+      mechanism: 'player_telemetry',
+      sessionId: event.sessionId,
+      metrics: {
+        playedSeconds: event.playedSeconds,
+        ...(event.durationSeconds == null ? {} : { durationSeconds: event.durationSeconds }),
+        thresholdSeconds: event.thresholdSeconds,
+      },
+    });
+  }
+
+  return youtubeConnector.createInteraction({
+    externalId: event.videoId,
+    exposureId: event.exposureId,
+    interaction: 'watched',
+    observedAt: event.observedAt,
+    mechanism: 'history_dom',
+  });
 }
