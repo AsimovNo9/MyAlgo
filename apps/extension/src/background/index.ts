@@ -171,7 +171,7 @@ historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  void personalAlgorithmStore.initialize();
+  void historyReconciliationReady.then(() => personalAlgorithmStore.initialize());
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
     [STORAGE_KEYS.ENABLED]: true,
@@ -233,21 +233,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   };
 
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
-    void personalAlgorithmStore.reviewGraph()
+    void historyReconciliationReady.then(() => personalAlgorithmStore.reviewGraph())
       .then((review) => sendResponse({ ok: true, review }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to review Personal Algorithm Graph.' }));
     return true;
   }
 
   if (type === 'PERSONAL_ALGORITHM_REBUILD') {
-    void personalAlgorithmStore.rebuildGraphFromEvidence()
+    void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
       .then((graph) => sendResponse({ ok: true, graph }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to rebuild Personal Algorithm Graph.' }));
     return true;
   }
 
   if (type === 'PERSONAL_ALGORITHM_EXPORT') {
-    void personalAlgorithmStore.exportStateJson()
+    void historyReconciliationReady.then(() => personalAlgorithmStore.exportStateJson())
       .then((json) => sendResponse({ ok: true, json }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to export Personal Algorithm Graph.' }));
     return true;
