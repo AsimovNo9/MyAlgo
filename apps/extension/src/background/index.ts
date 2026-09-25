@@ -281,7 +281,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION) {
     void (async () => {
-      const observation = payload?.observation as SelectionObservation | undefined;
+      const observation = (payload as { observation?: unknown } | undefined)?.observation as SelectionObservation | undefined;
       if (!observation?.videoId || observation.provenance !== 'youtube_user_interaction') {
         sendResponse({ ok: false, error: 'Invalid selection observation.' });
         return;
