@@ -63,7 +63,7 @@ export function collectRecommendationObservations(
       continue;
     }
     const title = normalizeYouTubeText(candidate.title ?? '');
-    if (!title) {
+    if (!title || title === 'Watch') {
       metrics.missingTitle += 1;
       continue;
     }
