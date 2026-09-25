@@ -95,7 +95,7 @@ export function getCardPosition(card: Element | null, videoSelector: string): nu
 export function getSelectionFromTarget(
   target: Element | null,
   videoSelector: string,
-  surface: YouTubeSurface,
+  surfaceOrPathname: YouTubeSurface | string,
 ): { videoId: string; exposure: CandidateExposure; source: SelectionSource } | null {
   if (!target || target.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')) {
     return null;
@@ -109,6 +109,9 @@ export function getSelectionFromTarget(
 
   const card = link.closest(videoSelector);
   const section = getSurfaceSection(card);
+  const surface = ['home', 'search', 'subscriptions', 'shorts', 'watch'].includes(surfaceOrPathname)
+    ? surfaceOrPathname as YouTubeSurface
+    : getYouTubeSurface(surfaceOrPathname, card);
   const position = getCardPosition(card, videoSelector);
   const exposure: CandidateExposure = {
     videoId,
