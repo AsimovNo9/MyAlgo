@@ -23,6 +23,26 @@ export function extractYouTubeVideoId(href: string): string | undefined {
   }
 }
 
+export function extractYouTubeCreator(element: Element): string | null {
+  const channelLabel = element
+    .querySelector<HTMLElement>('[aria-label^="Go to channel "]')
+    ?.getAttribute('aria-label')
+    ?.match(/^Go to channel\\s+(.+)$/)?.[1];
+
+  if (channelLabel) return normalizeYouTubeText(channelLabel) || null;
+
+  const metadataRow = element.querySelector<HTMLElement>(
+    '.ytContentMetadataViewModelMetadataRow',
+  );
+  const creatorText = metadataRow
+    ?.querySelector<HTMLElement>(
+      '.ytContentMetadataViewModelMetadataText:not(.ytContentMetadataViewModelMetadataTextLastPart)',
+    )
+    ?.textContent;
+
+  return normalizeYouTubeText(creatorText ?? '') || null;
+}
+
 export function extractYouTubeLinkTitle(attributes: { title?: string | null; ariaLabel?: string | null; textContent?: string | null }): string {
   return normalizeYouTubeText(
     [attributes.title, attributes.ariaLabel, attributes.textContent]
