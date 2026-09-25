@@ -9,6 +9,7 @@ export const EXTENSION_MESSAGE_TYPES = {
   ACTIVITY: 'ACTIVITY',
   HISTORY_OBSERVATION: 'HISTORY_OBSERVATION',
   RECOMMENDATION_OBSERVATION: 'RECOMMENDATION_OBSERVATION',
+  SELECTION_OBSERVATION: 'SELECTION_OBSERVATION',
 } as const;
 
 export type ExtensionMessageType = (typeof EXTENSION_MESSAGE_TYPES)[keyof typeof EXTENSION_MESSAGE_TYPES];
@@ -22,6 +23,7 @@ export type MessagePayloadMap = {
   [EXTENSION_MESSAGE_TYPES.ACTIVITY]: { externalId: string; eventType: 'opened' | 'revisited' };
   [EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION]: { evidence: unknown[]; metrics: unknown };
   [EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION]: { observations: unknown[]; metrics: unknown };
+  [EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION]: { observation: unknown };
 };
 
 export function createMessage<T extends ExtensionMessageType>(

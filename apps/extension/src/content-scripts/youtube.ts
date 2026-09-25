@@ -6,6 +6,7 @@ import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
+import { createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions';
 
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
@@ -26,6 +27,8 @@ let extensionEnabled = true;
 let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
+let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
+
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
 document.documentElement.setAttribute(instanceAttribute, instanceId);
@@ -298,7 +301,7 @@ const getVideoSourceFlags = (element: HTMLElement) => {
 
 const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => {
   if (!externalId || externalId.startsWith('title:')) return;
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     type: 'ACTIVITY',
     payload: { externalId, eventType: youtubeConnector.mapPresentationEvent(eventType) },
   });
@@ -747,7 +750,7 @@ window.addEventListener('yt-navigate-start', () => {
 });
 window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
-  if (currentVideoId) sendActivity(currentVideoId, 'revisited');
+    if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   if (isYouTubeHistoryPage(location.pathname)) {
     scheduleHistoryObservation();
   } else {
@@ -786,10 +789,34 @@ const pageObserver = new MutationObserver((records) => {
 });
 pageObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-document.addEventListener('click', (event) => {
-  const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(videoLinkSelector) : null;
-  const videoId = target ? youtubeConnector.getExternalId(target.href) : undefined;
-  if (videoId) sendActivity(videoId, 'opened');
+const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'auxclick' | 'keyboard') => {
+  if (!isCurrentInstance() || !extensionEnabled) return;
+  const target = event.target instanceof Element ? event.target : null;
+  const selection = getSelectionFromTarget(target, videoSelectors.join(','), location.pathname);
+  if (!selection || selection.videoId.startsWith('title:')) return;
+  const observation = createSelectionObservation(selection, kind);
+  const now = Date.now();
+  const signature = `${observation.videoId}|${observation.exposureId ?? ''}`;
+  if (
+    lastSelectionInteraction &&
+    lastSelectionInteraction.signature === signature &&
+    lastSelectionInteraction.kind !== kind &&
+    now - lastSelectionInteraction.at < 750
+  ) {
+    return;
+  }
+  lastSelectionInteraction = { signature, kind, at: now };
+  safeSendMessage({
+    type: EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION,
+    payload: { observation },
+  });
+};
+
+document.addEventListener('click', (event) => recordSelection(event, 'click'), true);
+document.addEventListener('auxclick', (event) => recordSelection(event, 'auxclick'), true);
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  recordSelection(event, 'keyboard');
 }, true);
 
 scheduleHistoryObservation();

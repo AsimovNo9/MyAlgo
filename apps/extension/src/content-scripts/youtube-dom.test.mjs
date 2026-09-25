@@ -7,6 +7,7 @@ import { applyRecommendationOutcome, collectRecommendationObservations, isYouTub
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
 import { youtubePageFixtures } from './youtube-fixtures.ts';
 import { youtubeConnector } from '../connectors/youtube.ts';
+import { createExposureId, createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions.ts';
 
 test('extractYouTubeVideoId handles watch URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/watch?v=abc123'), 'abc123');
@@ -237,6 +238,64 @@ test('source filters hide only disabled provider formats', () => {
   assert.equal(shouldHideForSourceFilters({ is_short: true }, { includeShorts: true }), false);
   assert.equal(shouldHideForSourceFilters({ is_live: true }, { includeLive: false }), true);
   assert.equal(shouldHideForSourceFilters({}, { includeShorts: false, includeLive: false }), false);
+});
+
+test('selection observations keep stable video identity separate from exposure context', () => {
+  assert.equal(getYouTubeSurface('/'), 'home');
+  assert.equal(getYouTubeSurface('/results'), 'search');
+  assert.equal(getYouTubeSurface('/feed/subscriptions'), 'subscriptions');
+  assert.equal(getYouTubeSurface('/feed/subscriptions/videos'), 'subscriptions');
+  assert.equal(getYouTubeSurface('/shorts/abc'), 'shorts');
+
+  const subscriptionsCard = { closest: (selector) => selector.includes('page-subtype="subscriptions"') ? {} : null };
+  const searchCard = { closest: (selector) => selector === 'ytd-search' ? {} : null };
+  const homeCard = { closest: (selector) => selector.includes('page-subtype="home"') ? {} : null };
+  const unknownCard = { closest: () => null };
+  assert.equal(getYouTubeSurface('/some-spa-route', subscriptionsCard), 'subscriptions');
+  assert.equal(getYouTubeSurface('/some-spa-route', searchCard), 'search');
+  assert.equal(getYouTubeSurface('/some-spa-route', homeCard), 'home');
+  assert.equal(getYouTubeSurface('/some-spa-route', unknownCard), 'other');
+  assert.equal(
+    createExposureId({ videoId: 'abc', surface: 'home', section: 'Recommended', position: 7 }),
+    'abc|home|Recommended|7',
+  );
+  assert.notEqual(
+    createExposureId({ videoId: 'abc', surface: 'home', section: 'Recommended', position: 7 }),
+    createExposureId({ videoId: 'abc', surface: 'search', section: 'Results', position: 2 }),
+  );
+});
+
+test('selection observation captures nested user selection and excludes MyAlgo UI', () => {
+  globalThis.document = { querySelectorAll: () => [] };
+
+  const link = {
+    href: 'https://www.youtube.com/watch?v=selected-1',
+    closest: () => null,
+  };
+  const target = {
+    closest: (selector) => selector.includes('/watch') ? link : null,
+  };
+  const selection = getSelectionFromTarget(target, 'ytd-rich-item-renderer', 'home');
+
+  assert.equal(selection.videoId, 'selected-1');
+  assert.equal(selection.exposure.position, null);
+  assert.equal(selection.exposure.exposureId, 'selected-1|home||');
+  assert.equal(selection.source, 'card');
+
+  const excludedTarget = {
+    closest: (selector) => selector.includes('data-personal-algorithm-shelf') ? {} : null,
+  };
+  assert.equal(getSelectionFromTarget(excludedTarget, 'ytd-rich-item-renderer', 'home'), null);
+
+  const observation = createSelectionObservation(selection, 'click', '2026-09-25T16:00:00.000Z');
+  assert.deepEqual(observation, {
+    videoId: 'selected-1',
+    exposureId: 'selected-1|home||',
+    kind: 'click',
+    source: 'card',
+    observedAt: '2026-09-25T16:00:00.000Z',
+    provenance: 'youtube_user_interaction',
+  });
 });
 
 test('YouTube connector declares bounded presentation and normalized provider behavior', () => {
