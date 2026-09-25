@@ -252,6 +252,35 @@ test('rebuild hydrates content labels and metadata from exposure evidence', asyn
   });
 });
 
+test('history interaction metadata hydrates content nodes and creator relationships', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'history-1' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-09-25T10:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: {
+        title: 'History title',
+        creatorName: 'History creator',
+      },
+    },
+  }, 'history-1');
+
+  const graph = await store.rebuildGraphFromEvidence();
+  const content = graph.nodes.find((node) => node.id === 'content:youtube:history-1');
+  assert.equal(content?.label, 'History title');
+  assert.equal(content?.attributes.metadata.creatorName, 'History creator');
+
+  const edge = graph.edges.find((item) => item.relation === 'created_by');
+  assert.equal(edge?.sourceNodeId, 'content:youtube:history-1');
+  assert.equal(edge?.evidenceIds.includes('history-1'), true);
+});
+
 test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
