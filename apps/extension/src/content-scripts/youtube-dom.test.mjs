@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
 import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
@@ -98,6 +98,28 @@ test('history observability measures creator coverage and title anomalies withou
   assert.equal(observation.metrics.durationSuffixedTitles, 1);
   assert.equal(observation.metrics.placeholderTitles, 1);
   assert.equal(observation.evidence[1].title, 'Video title');
+});
+
+test('history extraction removes the full compound duration suffix', () => {
+  const observation = collectHistoryEvidence([
+    { href: '/watch?v=duration-1', title: 'Why C++ can never be replaced 5 minutes, 34 seconds', creator: 'Creator' },
+  ]);
+
+  assert.equal(observation.evidence[0].title, 'Why C++ can never be replaced');
+  assert.equal(observation.metrics.durationSuffixedTitles, 1);
+});
+
+test('Shorts title extraction ignores generic Watch placeholders', () => {
+  const element = {
+    querySelectorAll: (selector) => selector.includes('[title]')
+      ? [
+          { getAttribute: (name) => name === 'title' ? 'Watch' : null, textContent: 'Watch' },
+          { getAttribute: (name) => name === 'aria-label' ? 'A real Shorts title' : null, textContent: '' },
+        ]
+      : [],
+  };
+
+  assert.equal(extractYouTubeShortsTitle(element), 'A real Shorts title');
 });
 
 test('modern YouTube creator metadata prefers the channel aria-label', () => {
