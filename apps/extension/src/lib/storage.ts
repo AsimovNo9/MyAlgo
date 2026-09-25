@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
   FEED_CANDIDATE_POOL: 'personal-algorithm-feed-candidate-pool',
+  VIDEO_STORE: 'personal-algorithm-video-store',
   LAST_SYNC: 'personal-algorithm-last-sync',
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
   HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
