@@ -1,4 +1,4 @@
-import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
+import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
 
 export type RecommendationObservation = {
   externalId: string;
@@ -88,16 +88,23 @@ export function collectRecommendationObservationsFromDom(document: Document, obs
   const cards = Array.from(document.querySelectorAll<HTMLElement>('ytd-rich-item-renderer, ytd-rich-grid-media, yt-lockup-view-model'));
   const candidates = cards.map((card) => {
     const link = card.querySelector<HTMLAnchorElement>(videoLinkSelector);
-    const titleNode = card.querySelector<HTMLElement>('#video-title, #video-title-link, a[title][href*="/watch"], a[aria-label][href*="/watch"]');
+    const titleNode = card.querySelector<HTMLElement>('#video-title, #video-title-link, a[title][href*="/watch"], a[aria-label][href*="/watch"], a[title][href*="/shorts/"], a[aria-label][href*="/shorts/"]');
+    const isShort = Boolean(link?.href.includes('/shorts/'));
     const creator = extractYouTubeCreator(card);
     const sectionNode = card.closest<HTMLElement>('ytd-rich-section-renderer')?.querySelector<HTMLElement>('#title, h2, h3');
     return {
       href: link?.href ?? '',
-      title: extractYouTubeLinkTitle({
-        title: titleNode?.getAttribute('title'),
-        ariaLabel: titleNode?.getAttribute('aria-label'),
-        textContent: titleNode?.textContent,
-      }),
+      title: isShort
+        ? extractYouTubeShortsTitle(card) ?? extractYouTubeLinkTitle({
+            title: titleNode?.getAttribute('title'),
+            ariaLabel: titleNode?.getAttribute('aria-label'),
+            textContent: titleNode?.textContent,
+          })
+        : extractYouTubeLinkTitle({
+            title: titleNode?.getAttribute('title'),
+            ariaLabel: titleNode?.getAttribute('aria-label'),
+            textContent: titleNode?.textContent,
+          }),
       creator,
       section: sectionNode?.textContent,
       injected: Boolean(card.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
