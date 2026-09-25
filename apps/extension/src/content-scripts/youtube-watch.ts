@@ -124,8 +124,9 @@ export function isWatchThresholdReached(
 export function createTemporalWatchObservation(
   state: WatchSessionState,
   observedAt: string,
+  ended = false,
 ): TemporalWatchObservation | null {
-  if (state.emitted || !isWatchThresholdReached(state)) return null;
+  if (state.emitted || !isWatchThresholdReached(state, ended)) return null;
 
   return {
     videoId: state.videoId,
