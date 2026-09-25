@@ -362,17 +362,11 @@ export class LocalPersonalAlgorithmStore {
 
   async rebuildGraphFromEvidence(): Promise<PersonalAlgorithmGraph> {
     return this.mutate((state) => {
-      const derivedCreatorNodeIds = new Set(
-        state.graph.edges
-          .filter((edge) => edge.provenance === 'inferred' && edge.relation === 'created_by')
-          .map((edge) => edge.targetNodeId),
-      );
-
       state.graph.edges = state.graph.edges.filter(
         (edge) => !(edge.provenance === 'inferred' && edge.relation === 'created_by'),
       );
       state.graph.nodes = state.graph.nodes.filter(
-        (node) => !(node.provenance === 'inferred' && node.kind === 'creator' && derivedCreatorNodeIds.has(node.id)),
+        (node) => !(node.provenance === 'inferred' && node.kind === 'creator'),
       );
 
       for (const record of state.evidence) {
