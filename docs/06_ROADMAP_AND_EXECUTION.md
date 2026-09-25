@@ -109,6 +109,25 @@ The reusable correlation boundary is now source-neutral: `correlateEvidence` con
 
 Additional connectors should implement the same contract rather than introducing platform-specific concepts into the graph or scorer.
 
+
+### Local evidence store and Personal Algorithm Graph (#148)
+
+Implementation now has a versioned browser-local state boundary in `apps/extension/src/lib/personal-algorithm-store.ts`.
+
+The v1 state contains:
+
+- normalized `EvidenceRecord` entries with source-neutral evidence, confidence, retention policy, and expiry metadata;
+- explicit content graph nodes keyed by `source + externalId`;
+- graph nodes and edges with explicit versus inferred provenance;
+- user edit records and monotonically increasing graph revisions;
+- export-ready serialization of the complete local state;
+- reset and targeted evidence deletion operations;
+- a migration boundary that rejects unknown schemas into a safe empty v1 state rather than guessing at data shape.
+
+Connector observations continue to be retained in the existing raw event stores for compatibility, while normalized exposure/interaction evidence is also persisted into the graph state. YouTube API enrichment remains outside this path.
+
+The store is intentionally local and source-neutral. It does not infer preferences, score candidates, resolve identities across sources, or make API-derived graph decisions. Those responsibilities remain downstream in #151 and the retrieval/enforcement phases.
+
 ## Phase 1 — Local graph
 
 1. Evidence store
