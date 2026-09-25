@@ -160,7 +160,7 @@ export function toNormalizedInteraction(event: UserBehaviorObservation): Interac
     });
   }
 
-  if (event.source === 'player') {
+  if (event.kind === 'watched' && event.source === 'player') {
     return youtubeConnector.createInteraction({
       externalId: event.videoId,
       exposureId: event.exposureId,
