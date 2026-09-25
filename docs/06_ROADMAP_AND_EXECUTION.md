@@ -128,7 +128,7 @@ The current schema is **v2** and contains:
 - an explicit v1 → v2 migration that preserves existing evidence and graph nodes while initializing legacy edge evidence references to an empty list;
 - safe reset for unknown or malformed schemas rather than guessing at data shape.
 
-Connector observations continue to be retained in the existing raw event stores for compatibility, while normalized exposure/interaction evidence is also persisted into the local state. YouTube History records such as `interaction:watched:<videoId>:<timestamp>` remain behavioral evidence with `youtube + history_dom` provenance; they are not preference edges.
+Connector observations continue to be retained in the existing raw event stores for compatibility, while normalized exposure/interaction evidence is also persisted into the local state. Canonical YouTube History evidence uses `interaction:watched:<videoId>:history` IDs with `youtube + history_dom` provenance. The record is content-level bootstrap/fallback evidence, not an authoritative replay event or preference edge.
 
 The store remains intentionally local and source-neutral. It does not infer preferences, score candidates, resolve identities across sources, or make API-derived graph decisions. The evidence-backed edge model is a prerequisite for those downstream layers because any future inferred preference relationship must be able to explain which observations support it.
 
@@ -155,11 +155,11 @@ scoring / ranking
 ## Phase 1 — Local graph
 
 1. Evidence store
-2. evidence-backed semantic graph materialization
-3. graph review/export surface
-4. graph visualization
-4. deterministic additive scorer
-5. scoring trace
+2. Evidence-backed semantic graph materialization
+3. Graph review/export surface
+4. Graph visualization
+5. Deterministic additive scorer
+6. Scoring trace
 
 **Exit:** an item can be traced through the graph and score contributions exactly reproduced.
 
