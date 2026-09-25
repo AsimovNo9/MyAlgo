@@ -1,4 +1,4 @@
-import { youtubeConnector } from '../connectors/youtube';
+import { extractYouTubeVideoId } from './youtube-dom.ts';
 
 export type YouTubeSurface = 'home' | 'search' | 'subscriptions' | 'shorts' | 'watch' | 'other';
 
@@ -98,7 +98,7 @@ export function getSelectionFromTarget(
   const link = target.closest<HTMLAnchorElement>('a[href*="/watch?v="], a[href*="/shorts/"]');
   if (!link) return null;
 
-  const videoId = youtubeConnector.getExternalId(link.href);
+  const videoId = extractYouTubeVideoId(link.href);
   if (!videoId) return null;
 
   const card = link.closest(videoSelector);
