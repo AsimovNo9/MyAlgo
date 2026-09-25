@@ -301,4 +301,4 @@ export type {
   PersonalAlgorithmState,
   UserGraphEdit,
 } from './personal-algorithm';
-export { PERSONAL_ALGORITHM_SCHEMA_VERSION, createEmptyGraph } from './personal-algorithm.ts';
+export { PERSONAL_ALGORITHM_SCHEMA_VERSION, createEmptyGraph } from './personal-algorithm';
