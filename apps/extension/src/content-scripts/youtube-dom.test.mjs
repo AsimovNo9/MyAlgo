@@ -244,7 +244,17 @@ test('selection observations keep stable video identity separate from exposure c
   assert.equal(getYouTubeSurface('/'), 'home');
   assert.equal(getYouTubeSurface('/results'), 'search');
   assert.equal(getYouTubeSurface('/feed/subscriptions'), 'subscriptions');
+  assert.equal(getYouTubeSurface('/feed/subscriptions/videos'), 'subscriptions');
   assert.equal(getYouTubeSurface('/shorts/abc'), 'shorts');
+
+  const subscriptionsCard = { closest: (selector) => selector.includes('page-subtype="subscriptions"') ? {} : null };
+  const searchCard = { closest: (selector) => selector === 'ytd-search' ? {} : null };
+  const homeCard = { closest: (selector) => selector.includes('page-subtype="home"') ? {} : null };
+  const unknownCard = { closest: () => null };
+  assert.equal(getYouTubeSurface('/some-spa-route', subscriptionsCard), 'subscriptions');
+  assert.equal(getYouTubeSurface('/some-spa-route', searchCard), 'search');
+  assert.equal(getYouTubeSurface('/some-spa-route', homeCard), 'home');
+  assert.equal(getYouTubeSurface('/some-spa-route', unknownCard), 'other');
   assert.equal(
     createExposureId({ videoId: 'abc', surface: 'home', section: 'Recommended', position: 7 }),
     'abc|home|Recommended|7',
