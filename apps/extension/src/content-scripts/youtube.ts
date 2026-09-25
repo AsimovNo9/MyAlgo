@@ -27,6 +27,7 @@ let extensionEnabled = true;
 let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
+let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
@@ -795,6 +796,17 @@ const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'aux
   const selection = getSelectionFromTarget(target, videoSelectors.join(','), surface);
   if (!selection || selection.videoId.startsWith('title:')) return;
   const observation = createSelectionObservation(selection, kind);
+  const now = Date.now();
+  const signature = `${observation.videoId}|${observation.exposureId ?? ''}`;
+  if (
+    lastSelectionInteraction &&
+    lastSelectionInteraction.signature === signature &&
+    lastSelectionInteraction.kind !== kind &&
+    now - lastSelectionInteraction.at < 750
+  ) {
+    return;
+  }
+  lastSelectionInteraction = { signature, kind, at: now };
   safeSendMessage({
     type: EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION,
     payload: { observation },
