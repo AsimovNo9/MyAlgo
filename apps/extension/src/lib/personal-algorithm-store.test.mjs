@@ -127,6 +127,48 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   assert.equal((await store.getGraph()).currentRevision, 0);
 });
 
+test('rebuildGraphFromEvidence materializes deterministic creator nodes and evidence-backed edges', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Video A', creatorId: 'creator-1', creatorName: 'Creator One' },
+    },
+  }, 'evidence-a');
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'yt-2|home||1',
+      content: { source: 'youtube', externalId: 'yt-2' },
+      metadata: { title: 'Video B', creatorId: 'creator-1', creatorName: 'Creator One' },
+    },
+  }, 'evidence-b');
+
+  const first = await store.rebuildGraphFromEvidence();
+  const second = await store.rebuildGraphFromEvidence();
+  assert.deepEqual(second.nodes.map((node) => [node.id, node.kind]).sort(), first.nodes.map((node) => [node.id, node.kind]).sort());
+
+  const creatorEdges = second.edges.filter((edge) => edge.relation === 'created_by');
+  assert.equal(creatorEdges.length, 2);
+  assert.deepEqual(
+    creatorEdges.map((edge) => edge.evidenceIds).sort(),
+    [['evidence-a'], ['evidence-b']],
+  );
+
+  const review = await store.reviewGraph();
+  assert.equal(review.inferredEdgeCount, 2);
+  assert.equal(review.inferredEdgesWithSupport, 2);
+  assert.equal(review.inferredEdgesWithoutSupport, 0);
+  assert.equal(review.edgesByRelation.created_by, 2);
+  assert.equal(review.nodesByKind.creator, 1);
+
+  await store.deleteEvidence('evidence-a');
+  const afterDelete = await store.reviewGraph();
+  assert.equal(afterDelete.inferredEdgeCount, 1);
+  assert.deepEqual(afterDelete.unsupportedEdgeIds, []);
+});
+
 test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
