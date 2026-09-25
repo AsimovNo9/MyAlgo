@@ -28,6 +28,8 @@ export type SelectionObservation = {
 export type HistoryWatchedObservation = {
   videoId: string;
   exposureId: string | null;
+  title: string;
+  creator: string | null;
   sessionId?: never;
   kind: 'watched';
   source: 'history';
