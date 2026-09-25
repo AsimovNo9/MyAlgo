@@ -34,7 +34,7 @@ export const youtubeConnector = {
   ],
   videoLinkSelector,
   presentation: {
-    candidateLimit: 80,
+    candidateLimit: 1000,
     minimumVisibleScore: 52,
     shelfBatchSize: 6,
     shelfDomLimit: 18,
