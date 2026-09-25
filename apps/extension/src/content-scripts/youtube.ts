@@ -32,6 +32,39 @@ document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 
+const isExtensionContextValid = () => {
+  try {
+    return Boolean(chrome.runtime?.id);
+  } catch {
+    return false;
+  }
+};
+
+const safeSendMessage = (
+  message: unknown,
+  callback?: (response: any) => void,
+) => {
+  if (!isExtensionContextValid()) return false;
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) return;
+      callback?.(response);
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const safeStorageGet = (keys: string[]) => {
+  if (!isExtensionContextValid()) return Promise.resolve<Record<string, unknown>>({});
+  try {
+    return chrome.storage.local.get(keys).catch(() => ({}));
+  } catch {
+    return Promise.resolve<Record<string, unknown>>({});
+  }
+};
+
 const showStatus = (message: string, error = false, paused = false) => {
   if (!isCurrentInstance()) return;
   let status = document.querySelector<HTMLElement>('[data-personal-algorithm-status]');
@@ -204,7 +237,7 @@ const renderRecommendationShelf = (attempt = 0) => {
 const refreshRecommendationShelf = () => {
   if (isYouTubeHistoryPage(location.pathname)) return;
   const requestGeneration = ++feedRequestGeneration;
-  chrome.runtime.sendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
+  safeSendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
     if (
       !isCurrentInstance()
       || !extensionEnabled
@@ -351,7 +384,7 @@ const observeHistoryPage = () => {
     metrics: observation.metrics,
   });
   if (observation.evidence.length === 0) return;
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
     payload: observation,
   });
@@ -367,10 +400,10 @@ const scheduleHistoryObservation = () => {
 
 const observeHomeRecommendations = () => {
   if (!isCurrentInstance() || !isYouTubeHomePage(location.pathname)) return;
-  chrome.storage.local.get([STORAGE_KEYS.HOME_OBSERVATION_ENABLED], (result) => {
+  safeStorageGet([STORAGE_KEYS.HOME_OBSERVATION_ENABLED]).then((result) => {
     if (result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
     const observation = collectRecommendationObservationsFromDom(document);
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       type: EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION,
       payload: observation,
     });
@@ -489,7 +522,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
   rankingInFlight = true;
   showStatus(`Personal Algorithm: ranking ${candidates.length} videos`);
-  const result = await chrome.storage.local.get(['personal-algorithm-mode']);
+  const result = await safeStorageGet(['personal-algorithm-mode']);
   if (!isCurrentInstance()) {
     rankingInFlight = false;
     return;
@@ -507,7 +540,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
     return;
   }
   const requestMode = activeMode;
-  chrome.runtime.sendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
+  safeSendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
     rankingInFlight = false;
     if (!isCurrentInstance() || isRenderGenerationStale(requestGeneration, rankGeneration)) {
       if (isCurrentInstance() && extensionEnabled) scheduleLatestRank();
@@ -565,7 +598,7 @@ const scheduleInitialRank = () => {
   }, 1500);
 };
 
-chrome.storage.local.get([STORAGE_KEYS.ENABLED]).then((result) => {
+safeStorageGet([STORAGE_KEYS.ENABLED]).then((result) => {
   extensionEnabled = result[STORAGE_KEYS.ENABLED] !== false;
   if (!extensionEnabled) {
     clearExtensionPresentation();
@@ -576,7 +609,7 @@ chrome.storage.local.get([STORAGE_KEYS.ENABLED]).then((result) => {
   scheduleInitialRank();
 });
 
-chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
+safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
 });
 
@@ -660,7 +693,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
-    void chrome.storage.local.get([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
+    void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
       sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
       refreshRecommendationShelf();
       triggerRank('mode');
@@ -687,7 +720,7 @@ const registerFeedbackHandlers = () => {
       const contentItemId = card ? getVideoId(card) : '';
       const eventType = label.includes('more like this') ? 'more_like_this' : label.includes('never show') ? 'never_show_channel' : 'not_interested';
 
-      chrome.runtime.sendMessage({
+      safeSendMessage({
         type: 'FEEDBACK',
         payload: { contentItemId, eventType },
       });
