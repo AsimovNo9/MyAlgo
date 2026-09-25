@@ -52,6 +52,22 @@ Live validation confirmed real local selection events with stable IDs, timestamp
 
 #150 is now an implementation foundation rather than an active spike. #174 is the next behavioral-evidence layer: correlate these observations into deterministic surfaced → clicked → watched sequences without yet inferring preference.
 
+## Connector contract gate
+
+Before implementing the local evidence store and graph, the provider boundary is frozen through #187.
+
+```text
+connector-specific observation
+          ↓
+source-neutral evidence contract
+          ↓
+#148 evidence store / Personal Algorithm Graph
+          ↓
+#151 deterministic scorer / trace
+```
+
+Additional connectors should implement the same contract rather than introducing platform-specific concepts into the graph or scorer.
+
 ## Phase 1 — Local graph
 
 1. Evidence store
