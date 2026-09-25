@@ -119,6 +119,8 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   );
 
   const exported = await store.exportState();
+  const exportedJson = await store.exportStateJson();
+  assert.equal(JSON.parse(exportedJson).schemaVersion, 2);
   assert.equal(exported.schemaVersion, 2);
   assert.equal(exported.graph.nodes.some((item) => item.id === 'topic:testing'), true);
 
