@@ -73,3 +73,30 @@ test('selection and player-style watch evidence map to generic interactions', ()
   assert.equal(watch.sessionId, 'abc123|player|1');
   assert.equal(watch.metrics?.playedSeconds, 30.2);
 });
+
+
+test('History watched evidence preserves title and creator metadata', () => {
+  const watched = toNormalizedInteraction({
+    videoId: 'history123',
+    exposureId: null,
+    title: 'History video',
+    creator: 'History creator',
+    kind: 'watched',
+    source: 'history',
+    observedAt: '2026-09-25T20:01:00.000Z',
+    provenance: 'youtube_history_dom',
+  });
+
+  assert.equal(watched.interaction, 'watched');
+  assert.deepEqual(watched.metadata, {
+    title: 'History video',
+    creatorId: null,
+    creatorName: 'History creator',
+    description: null,
+    durationSeconds: null,
+    publishedAt: null,
+    language: null,
+    format: null,
+    contentType: null,
+  });
+});
