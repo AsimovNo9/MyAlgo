@@ -301,7 +301,7 @@ const getVideoSourceFlags = (element: HTMLElement) => {
 
 const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => {
   if (!externalId || externalId.startsWith('title:')) return;
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     type: 'ACTIVITY',
     payload: { externalId, eventType: youtubeConnector.mapPresentationEvent(eventType) },
   });
