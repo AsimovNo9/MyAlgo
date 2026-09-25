@@ -4,7 +4,7 @@ import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { applyRecommendationOutcome, mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
-import type { SelectionObservation } from '../content-scripts/youtube-interactions';
+import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
 
 type PageCandidate = {
   external_id: string;
@@ -286,7 +286,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ ok: false, error: 'Invalid selection observation.' });
         return;
       }
-      const existing = await getStorage<SelectionObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+      const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
       await correlateRecommendationOutcome(observation.videoId, 'clicked');
@@ -316,7 +316,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       await Promise.all(historyEvidence.map(async (item) => {
         await correlateRecommendationOutcome(item.externalId, 'watched');
-        const existingEvents = await getStorage<SelectionObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+        const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
         const watched = {
           videoId: item.externalId,
           exposureId: null,
@@ -325,7 +325,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           observedAt: item.observedAt,
           provenance: 'youtube_history_dom' as const,
         };
-        await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, watched].slice(-MAX_SELECTION_EVENTS) as unknown as SelectionObservation[]);
+        await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, watched].slice(-MAX_SELECTION_EVENTS));
       }));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
