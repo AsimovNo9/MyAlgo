@@ -4,7 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { isYouTubeHistoryPage, scanYouTubeHistory } from './youtube-history';
+import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 
 const videoSelectors = youtubeConnector.cardSelectors;
@@ -338,7 +338,19 @@ const collectCandidates = () => {
   return candidates;
 };
 
-let historyScanInFlight = false;
+const observeHistoryPage = () => {
+  if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
+
+  chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
+    if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
+    const observation = collectHistoryEvidenceFromDom(document);
+    if (observation.evidence.length === 0) return;
+    chrome.runtime.sendMessage({
+      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+      payload: observation,
+    });
+  });
+};
 
 const observeHistoryPage = () => {
   if (
