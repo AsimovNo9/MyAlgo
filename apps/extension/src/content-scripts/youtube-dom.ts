@@ -27,7 +27,7 @@ export function extractYouTubeCreator(element: Element): string | null {
   const channelLabel = element
     .querySelector<HTMLElement>('[aria-label^="Go to channel "]')
     ?.getAttribute('aria-label')
-    ?.match(/^Go to channel\\s+(.+)$/)?.[1];
+    ?.match(/^Go to channel\s+(.+)$/)?.[1];
 
   if (channelLabel) return normalizeYouTubeText(channelLabel) || null;
 
