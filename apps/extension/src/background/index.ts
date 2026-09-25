@@ -2,7 +2,7 @@ import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
-import { mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
+import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
 import type { TemporalWatchObservation } from '../content-scripts/youtube-watch';
@@ -59,10 +59,6 @@ async function persistNormalizedEvidence(
 
 function createHistoryEventKey(item: Pick<HistoryEvidence, 'externalId'>): string {
   return 'history|watched|' + item.externalId;
-}
-
-function createHistoryEvidenceId(item: Pick<HistoryEvidence, 'externalId'>): string {
-  return 'interaction:watched:' + item.externalId + ':history';
 }
 
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
@@ -414,7 +410,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           observedAt: item.observedAt,
           provenance: 'youtube_history_dom',
         }),
-        createHistoryEvidenceId(item),
+        createHistoryEvidenceId(item.externalId),
       )));
       const graph = await personalAlgorithmStore.rebuildGraphFromEvidence();
       sendResponse({ ok: true, historyCount: historyEvidence.length, graph });
@@ -465,7 +461,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
       await Promise.all(watchedEvents.map((event) => persistNormalizedEvidence(
         toNormalizedInteraction(event),
-        createHistoryEvidenceId(event),
+        createHistoryEvidenceId(event.externalId),
       )));
       sendResponse({ ok: true, storedEvidence: evidence.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
