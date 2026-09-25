@@ -415,8 +415,6 @@ export class LocalPersonalAlgorithmStore {
         this.ensureContentNode(state, record.evidence);
         const metadata = record.evidence.metadata;
         if (!metadata) continue;
-
-        if (record.evidence.kind !== 'exposure') continue;
         const creatorKey = metadata?.creatorId ?? metadata?.creatorName;
         if (!creatorKey) continue;
 
