@@ -23,6 +23,17 @@ export type SelectionObservation = {
   provenance: 'youtube_user_interaction';
 };
 
+export type WatchedObservation = {
+  videoId: string;
+  exposureId: string | null;
+  kind: 'watched';
+  source: 'history';
+  observedAt: string;
+  provenance: 'youtube_history_dom';
+};
+
+export type UserBehaviorObservation = SelectionObservation | WatchedObservation;
+
 const normalize = (value: string | null | undefined) =>
   value?.replace(/\s+/g, ' ').trim() || null;
 
