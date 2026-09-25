@@ -52,7 +52,7 @@ Derived data is not automatically exempt from provider policy merely because it 
 ### Experimental history-bootstrap retention
 
 The MVP history observer is disabled by default. When enabled, it stores a
-maximum of 1,000 locally observed evidence records, deduplicated by video ID.
+maximum of 10,000 locally observed evidence records, deduplicated by video ID. The normalized graph state reconciles the current History snapshot by stable video ID; legacy observation-time-keyed records are replaced rather than retained.
 Each record contains only visible ID, title, creator, displayed history timestamp
 when available, observation time, and browser-DOM provenance. It does not send
 these records to a backend. Disabling the experiment stops further collection;
