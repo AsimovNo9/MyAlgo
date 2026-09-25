@@ -75,10 +75,10 @@ export function collectHistoryEvidence(
       metrics.placeholderTitles += 1;
       continue;
     }
-    if (/\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i.test(rawTitle)) {
+    if (/\b\d+\s+(?:seconds?|minutes?|hours?)(?:\s*,\s*\d+\s+(?:seconds?|minutes?|hours?))*\s*(?:ago)?$/i.test(rawTitle)) {
       metrics.durationSuffixedTitles += 1;
     }
-    const title = rawTitle.replace(/\s+\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i, '').trim();
+    const title = rawTitle.replace(/\s+\b\d+\s+(?:seconds?|minutes?|hours?)(?:\s*,\s*\d+\s+(?:seconds?|minutes?|hours?))*\s*(?:ago)?$/i, '').trim();
     if (!title) {
       metrics.missingTitle += 1;
       continue;
