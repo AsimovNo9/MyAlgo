@@ -57,10 +57,6 @@ async function persistNormalizedEvidence(
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
-function createHistoryEventKey(item: Pick<HistoryEvidence, 'externalId'>): string {
-  return 'history|watched|' + item.externalId;
-}
-
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (!tabId || candidates.length === 0) return [];
   const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
