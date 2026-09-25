@@ -94,6 +94,7 @@ test('History watched evidence preserves title and creator metadata', () => {
     exposureId: null,
     title: 'History video',
     creator: 'History creator',
+    historyTimestamp: 'Watched 2 days ago',
     kind: 'watched',
     source: 'history',
     observedAt: '2026-09-25T20:01:00.000Z',
