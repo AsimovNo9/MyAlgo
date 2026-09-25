@@ -137,7 +137,8 @@ const renderRecommendationShelf = (attempt = 0) => {
     'ytd-rich-grid-renderer, ytd-two-column-browse-results-renderer #primary',
   );
   const feedContents = feedRenderer?.querySelector<HTMLElement>('#contents');
-  if (!feedRenderer || !feedContents) {
+  const shelfHost = feedRenderer?.parentElement;
+  if (!feedRenderer || !feedContents || !shelfHost) {
     if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
     return;
   }
@@ -155,15 +156,15 @@ const renderRecommendationShelf = (attempt = 0) => {
   }
 
   let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
-  if (shelf && shelf.parentElement !== feedRenderer) {
+  if (shelf && shelf.parentElement !== shelfHost) {
     shelf.remove();
     shelf = null;
   }
   if (!shelf) {
     shelf = document.createElement('section');
     shelf.dataset.personalAlgorithmShelf = 'true';
-    shelf.style.cssText = 'display:block;position:relative;clear:both;width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
-    feedRenderer.insertBefore(shelf, feedContents);
+    shelf.style.cssText = 'display:block;position:relative;clear:both;float:none;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden;contain:layout paint;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
+    shelfHost.insertBefore(shelf, feedRenderer);
   }
 
   shelf.replaceChildren();
@@ -173,7 +174,7 @@ const renderRecommendationShelf = (attempt = 0) => {
   shelf.appendChild(heading);
 
   const cards = document.createElement('div');
-  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;box-sizing:border-box;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;padding:0 16px 8px;';
+  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;scrollbar-width:none;padding:0 16px 8px;';
   syncShelfCardWidth(cards);
   for (const item of picks) {
     const card = document.createElement('a');
