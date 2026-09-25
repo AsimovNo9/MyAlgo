@@ -217,13 +217,14 @@ source-neutral correlation (`correlateEvidence`)
       ↓
 #148 evidence store + Personal Algorithm Graph
       ↓
+evidence-backed graph relationships
+      ↓
 #151 deterministic scorer + trace
       ↓
 additional connectors
 ```
 
 The contract does not implement graph storage, preference inference, scoring, ranking, or cross-platform identity resolution.
-
 
 ## Browser inspection and debugging
 
@@ -253,18 +254,53 @@ The storage inspection command is intentionally source-neutral at the evidence b
 
 Normalized evidence crosses the connector boundary into the browser-local Personal Algorithm state:
 
-```
+```text
 ExposureEvidence / InteractionEvidence
             ↓
 LocalPersonalAlgorithmStore
             ↓
-versioned local state
+versioned local state (v2)
    ├── evidence records
    └── Personal Algorithm Graph
+            │
+            └── inferred edges → supporting evidence IDs
 ```
 
-The v1 local state retains source, observed time, external identity, provenance, confidence, and retention/expiry metadata for each evidence record. Graph content nodes preserve the same `ContentIdentity`; graph nodes and edges explicitly declare `explicit` or `inferred` provenance. User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later.
+The v2 local state retains source, observed time, external identity, provenance, confidence, and retention/expiry metadata for each evidence record. Graph content nodes preserve the same `ContentIdentity`. Graph nodes and edges explicitly declare `explicit` or `inferred` provenance. Every graph edge also stores `evidenceIds`; inferred edges must reference existing evidence records, making the relationship traceable and preventing unsupported inferred edges from entering the store.
 
-Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization. Schema version 1 has an explicit migration boundary; unknown versions are not heuristically interpreted.
+Evidence deletion removes its references from graph edges. Inferred edges with no remaining support are removed rather than left as unsupported claims. The store can resolve an edge back to its current supporting evidence records for future explanation and replay features.
+
+User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later.
+
+Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization. Schema version 2 has an explicit v1 → v2 migration that preserves existing evidence and graph nodes and initializes legacy edge support references to an empty list. Unknown versions are not heuristically interpreted.
 
 The store is evidence persistence, not preference inference. It does not assign recommendation weights, rank candidates, resolve cross-source identities, or consume YouTube Data API account/display data as observational evidence.
+
+## Graph evidence semantics
+
+The graph now distinguishes three layers:
+
+1. **Observed evidence** — immutable-in-meaning facts such as “video X was watched,” including provenance such as `youtube/history_dom`.
+2. **Graph relationships** — explicit or inferred relationships between graph nodes. Inferred relationships must name the evidence records that support them.
+3. **Preference inference** — a future downstream layer that may derive user-centered relations such as interest or avoidance from accumulated evidence and graph structure.
+
+For example:
+
+```text
+EvidenceRecord
+  interaction=watched
+  content=youtube:video-123
+  provenance=youtube/history_dom
+          │
+          ▼
+content:youtube:video-123
+          │
+          │ evidenceIds=[evidence-42]
+          ▼
+topic:distributed-systems
+          │
+          ▼
+future preference inference
+```
+
+The final arrow is deliberately outside #148. A watched History record is evidence; it is not itself a `user → prefers → topic` edge.
