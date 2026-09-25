@@ -161,9 +161,20 @@ test('Home extraction records surfaced context without inferring preference', ()
     provenance: 'youtube_home_dom',
     evidenceKind: 'surfaced',
     outcome: 'unobserved',
+  }, {
+    externalId: 'home-1',
+    exposureId: 'home-1|home||1',
+    title: 'Duplicate card',
+    creator: null,
+    position: 1,
+    section: null,
+    observedAt,
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
   }]);
-  assert.equal(observation.metrics.usableObservations, 1);
-  assert.equal(observation.metrics.duplicateCandidates, 1);
+  assert.equal(observation.metrics.usableObservations, 2);
+  assert.equal(observation.metrics.duplicateCandidates, 0);
   assert.equal(observation.metrics.injectedCandidates, 1);
   assert.equal(observation.metrics.missingTitle, 1);
 });
@@ -193,9 +204,14 @@ test('repeated Home observation retains a correlated interaction outcome', () =>
 
   const merged = mergeRecommendationObservations(watched, repeated);
 
-  assert.equal(merged[0].outcome, 'watched');
-  assert.equal(merged[0].section, 'Recommended');
-  assert.equal(merged[0].observedAt, '2026-09-25T12:00:00.000Z');
+  assert.equal(merged.length, 2);
+  const watchedExposure = merged.find((item) => item.outcome === 'watched');
+  const repeatedExposure = merged.find((item) => item.section === 'Recommended');
+  assert.equal(watchedExposure?.section, null);
+  assert.equal(watchedExposure?.observedAt, '2026-09-24T12:00:00.000Z');
+  assert.equal(repeatedExposure?.section, 'Recommended');
+  assert.equal(repeatedExposure?.outcome, 'unobserved');
+  assert.equal(repeatedExposure?.observedAt, '2026-09-25T12:00:00.000Z');
 });
 
 test('Home extraction runs only on the YouTube landing page', () => {
