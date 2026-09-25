@@ -219,3 +219,28 @@ additional connectors
 ```
 
 The contract does not implement graph storage, preference inference, scoring, ranking, or cross-platform identity resolution.
+
+
+## Browser inspection and debugging
+
+When investigating live extension evidence in Chrome, inspect the extension's local storage directly from a page or extension debugging context.
+
+For the selection and watch event stream, use:
+
+```js
+chrome.storage.local.get(
+  ["personal-algorithm-selection-events"],
+  (data) => {
+    const events = data["personal-algorithm-selection-events"];
+    console.table(events);
+  }
+);
+```
+
+This is an inspection aid only. It does not modify evidence or participate in the production evidence pipeline.
+
+Use it when validating connector behavior, temporal watch capture, exposure propagation, provenance, deduplication, or unexpected event sequences during live browser testing.
+
+If a runtime message such as `chrome.runtime.sendMessage(...)` is used to inspect extension behavior, run it from the extension service worker's DevTools console when the target handler belongs to the background context. A page/content-script console may not have a receiving extension context and can produce `Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.`
+
+The storage inspection command is intentionally source-neutral at the evidence boundary: it exposes the normalized event stream without requiring the debugger to understand YouTube-specific DOM or player internals.
