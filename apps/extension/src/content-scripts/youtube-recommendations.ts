@@ -76,7 +76,7 @@ export function collectRecommendationObservations(
     observations.push({
       externalId,
       exposureId,
-      title:
+      title,
       creator: normalizeYouTubeText(candidate.creator ?? '') || null,
       position,
       section,
