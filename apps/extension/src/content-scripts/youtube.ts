@@ -7,6 +7,14 @@ import type { FeedSourceFilters } from '@repo/shared-types';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 import { createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions';
+import {
+  advanceWatchSession,
+  createTemporalWatchObservation,
+  createWatchSession,
+  markWatchEmitted,
+  resetWatchSeek,
+  type WatchSessionState,
+} from './youtube-watch';
 
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
@@ -28,6 +36,10 @@ let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
 let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
+let pendingWatchExposure: { videoId: string; exposureId: string | null } | null = null;
+let watchedVideo: HTMLVideoElement | null = null;
+let watchSession: WatchSessionState | null = null;
+let watchSessionSequence = 0;
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
@@ -714,6 +726,118 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   triggerRank('mode');
 });
 
+const isWatchPage = () => location.pathname === '/watch' || location.pathname.startsWith('/shorts/');
+
+const isYouTubeAdShowing = () => Boolean(
+  document.querySelector('#movie_player.ad-showing, .html5-video-player.ad-showing'),
+);
+
+const getActiveWatchVideo = (): HTMLVideoElement | null => {
+  if (!isWatchPage() || isYouTubeAdShowing()) return null;
+  const player = document.querySelector<HTMLElement>('#movie_player, ytd-player .html5-video-player');
+  const video = player?.querySelector<HTMLVideoElement>('video.html5-main-video, video')
+    ?? document.querySelector<HTMLVideoElement>('video.html5-main-video');
+  return video;
+};
+
+const emitTemporalWatch = (ended = false) => {
+  if (!watchSession) return;
+  const observation = createTemporalWatchObservation(
+    watchSession,
+    new Date().toISOString(),
+    ended,
+  );
+  if (!observation) return;
+  watchSession = markWatchEmitted(watchSession);
+  safeSendMessage({
+    type: EXTENSION_MESSAGE_TYPES.WATCH_OBSERVATION,
+    payload: { observation },
+  });
+};
+
+const attachTemporalWatchObserver = () => {
+  if (!isCurrentInstance()) return;
+  const video = getActiveWatchVideo();
+  if (!video) {
+    if (watchedVideo) {
+      watchedVideo = null;
+      watchSession = null;
+    }
+    return;
+  }
+  if (video === watchedVideo) return;
+
+  watchedVideo = video;
+  const videoId = youtubeConnector.getExternalId(location.href);
+  if (!videoId) {
+    watchSession = null;
+    return;
+  }
+
+  const selectedExposure = pendingWatchExposure?.videoId === videoId
+    ? pendingWatchExposure.exposureId
+    : null;
+  if (pendingWatchExposure?.videoId === videoId) {
+    pendingWatchExposure = null;
+  }
+
+  watchSessionSequence += 1;
+  watchSession = createWatchSession({
+    videoId,
+    exposureId: selectedExposure,
+    sessionId: `${videoId}|player|${watchSessionSequence}`,
+    currentTime: video.currentTime,
+    durationSeconds: Number.isFinite(video.duration) ? video.duration : null,
+  });
+
+  const update = () => {
+    if (video !== watchedVideo || !watchSession) return;
+    watchSession = advanceWatchSession(watchSession, {
+      currentTime: video.currentTime,
+      durationSeconds: Number.isFinite(video.duration) ? video.duration : null,
+      isPlaying: !video.paused && !video.ended && !isYouTubeAdShowing(),
+      isSeeking: video.seeking,
+    });
+    emitTemporalWatch();
+  };
+
+  const onSeeking = () => {
+    if (!watchSession) return;
+    watchSession = {
+      ...advanceWatchSession(watchSession, {
+        currentTime: video.currentTime,
+        durationSeconds: Number.isFinite(video.duration) ? video.duration : null,
+        isPlaying: false,
+        isSeeking: true,
+      }),
+      seeking: true,
+    };
+  };
+
+  const onSeeked = () => {
+    if (!watchSession) return;
+    watchSession = resetWatchSeek(watchSession, video.currentTime);
+  };
+
+  const onEnded = () => {
+    if (!watchSession) return;
+    watchSession = advanceWatchSession(watchSession, {
+      currentTime: video.currentTime,
+      durationSeconds: Number.isFinite(video.duration) ? video.duration : null,
+      isPlaying: true,
+    });
+    emitTemporalWatch(true);
+  };
+
+  video.addEventListener('timeupdate', update);
+  video.addEventListener('playing', update);
+  video.addEventListener('pause', update);
+  video.addEventListener('waiting', update);
+  video.addEventListener('seeking', onSeeking);
+  video.addEventListener('seeked', onSeeked);
+  video.addEventListener('ended', onEnded);
+};
+
 const registerFeedbackHandlers = () => {
   const buttons = Array.from(document.querySelectorAll('button, ytd-menu-service-item-renderer')) as HTMLElement[];
 
@@ -740,8 +864,11 @@ window.addEventListener('load', () => {
   scheduleInitialRank();
   refreshRecommendationShelf();
   scheduleHomeRecommendationObservation();
+  attachTemporalWatchObserver();
 });
 window.addEventListener('yt-navigate-start', () => {
+  watchedVideo = null;
+  watchSession = null;
   rankGeneration += 1;
   cachedFeed = [];
   lastCandidateSignature = '';
@@ -749,6 +876,7 @@ window.addEventListener('yt-navigate-start', () => {
   clearExtensionPresentation(false);
 });
 window.addEventListener('yt-navigate-finish', () => {
+  attachTemporalWatchObserver();
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
     if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   if (isYouTubeHistoryPage(location.pathname)) {
@@ -786,8 +914,13 @@ const pageObserver = new MutationObserver((records) => {
   if (hasNativeVideoMutation) triggerRank('mutation');
   if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
   if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
+  attachTemporalWatchObserver();
 });
 pageObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+window.setInterval(() => {
+  if (isWatchPage()) attachTemporalWatchObserver();
+}, 1000);
 
 const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'auxclick' | 'keyboard') => {
   if (!isCurrentInstance() || !extensionEnabled) return;
@@ -806,6 +939,10 @@ const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'aux
     return;
   }
   lastSelectionInteraction = { signature, kind, at: now };
+  pendingWatchExposure = {
+    videoId: observation.videoId,
+    exposureId: observation.exposureId,
+  };
   safeSendMessage({
     type: EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION,
     payload: { observation },
