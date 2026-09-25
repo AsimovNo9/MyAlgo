@@ -4,7 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
+import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage, scanYouTubeHistory } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 
 const videoSelectors = youtubeConnector.cardSelectors;
@@ -335,14 +335,39 @@ const collectCandidates = () => {
   return candidates;
 };
 
+let historyScanInFlight = false;
+
 const observeHistoryPage = () => {
-  if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
+  if (
+    !isCurrentInstance()
+    || !isYouTubeHistoryPage(location.pathname)
+    || historyScanInFlight
+  ) {
+    return;
+  }
+
   chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
     if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
-    const observation = collectHistoryEvidenceFromDom(document);
-    chrome.runtime.sendMessage({
-      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
-      payload: observation,
+
+    historyScanInFlight = true;
+
+    void scanYouTubeHistory(document, {
+      maxBatches: 100,
+      stableRounds: 4,
+      delayMs: 800,
+      onBatch: async (observation) => {
+        await new Promise<void>((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+              payload: observation,
+            },
+            () => resolve(),
+          );
+        });
+      },
+    }).finally(() => {
+      historyScanInFlight = false;
     });
   });
 };
