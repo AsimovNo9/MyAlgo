@@ -32,6 +32,7 @@ const exposure = {
 };
 
 test('local store persists normalized evidence and graph content nodes across restart', async () => {
+  backing.clear();
   const first = new LocalPersonalAlgorithmStore(storage);
   const record = await first.upsertEvidence({
     evidence: exposure,
@@ -51,6 +52,7 @@ test('local store persists normalized evidence and graph content nodes across re
 });
 
 test('local store supports evidence CRUD, targeted deletion, graph edits, revisions, and export', async () => {
+  backing.clear();
   const store = new LocalPersonalAlgorithmStore(storage);
   const second = await store.upsertEvidence({
     evidence: {
@@ -60,7 +62,7 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
     },
   }, 'evidence-2');
 
-  await store.upsertEvidence({
+  const supporting = await store.upsertEvidence({
     evidence: {
       ...exposure,
       content: { source: 'youtube', externalId: 'yt-2' },
@@ -79,15 +81,19 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
     confidence: 1,
     attributes: {},
   });
-  await store.upsertEdge({
+  const edge = await store.upsertEdge({
     id: 'edge-1',
     sourceNodeId: node.id,
     targetNodeId: 'content:youtube:yt-1',
     relation: 'about',
     provenance: 'inferred',
     confidence: 0.8,
+    evidenceIds: [supporting.id],
     attributes: {},
   });
+
+  assert.deepEqual(edge.evidenceIds, [supporting.id]);
+  assert.deepEqual(await store.getEvidenceForEdge('edge-1'), [supporting]);
 
   const graph = await store.getGraph();
   assert.equal(graph.edges.length, 1);
@@ -95,8 +101,22 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   assert.equal(graph.userEdits.length, 2);
   assert.equal(graph.revisions.length, 2);
 
+  await assert.rejects(
+    store.upsertEdge({
+      id: 'edge-invalid',
+      sourceNodeId: node.id,
+      targetNodeId: 'content:youtube:yt-1',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.5,
+      evidenceIds: [],
+      attributes: {},
+    }),
+    /supporting evidence/,
+  );
+
   const exported = await store.exportState();
-  assert.equal(exported.schemaVersion, 1);
+  assert.equal(exported.schemaVersion, 2);
   assert.equal(exported.graph.nodes.some((item) => item.id === 'topic:testing'), true);
 
   await store.reset();
@@ -104,7 +124,56 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   assert.equal((await store.getGraph()).currentRevision, 0);
 });
 
-test('invalid or unknown schema versions migrate to a safe empty v1 state', async () => {
+test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
+  backing.clear();
+  backing.set('personal-algorithm-state', {
+    schemaVersion: 1,
+    evidence: [{
+      id: 'legacy-evidence',
+      evidence: exposure,
+      confidence: 1,
+      retainedAt: '2026-09-25T10:00:00.000Z',
+      retention: { policy: 'default', expiresAt: null },
+    }],
+    graph: {
+      nodes: [{
+        id: 'content:youtube:yt-1',
+        kind: 'content',
+        label: 'Test video',
+        content: exposure.content,
+        provenance: 'explicit',
+        confidence: null,
+        attributes: {},
+        createdAt: '2026-09-25T10:00:00.000Z',
+        updatedAt: '2026-09-25T10:00:00.000Z',
+      }],
+      edges: [{
+        id: 'legacy-edge',
+        sourceNodeId: 'topic:testing',
+        targetNodeId: 'content:youtube:yt-1',
+        relation: 'about',
+        provenance: 'explicit',
+        confidence: null,
+        attributes: {},
+        createdAt: '2026-09-25T10:00:00.000Z',
+        updatedAt: '2026-09-25T10:00:00.000Z',
+      }],
+      userEdits: [],
+      revisions: [],
+      currentRevision: 0,
+    },
+  });
+
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const state = await store.exportState();
+  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.evidence.length, 1);
+  assert.deepEqual(state.graph.edges[0].evidenceIds, []);
+  assert.equal(backing.get('personal-algorithm-state').schemaVersion, 2);
+});
+
+test('invalid or unknown schema versions migrate to a safe empty v2 state', async () => {
+  backing.clear();
   backing.set('personal-algorithm-state', {
     schemaVersion: 99,
     evidence: [{ corrupt: true }],
@@ -113,7 +182,7 @@ test('invalid or unknown schema versions migrate to a safe empty v1 state', asyn
 
   const store = new LocalPersonalAlgorithmStore(storage);
   const state = await store.exportState();
-  assert.equal(state.schemaVersion, 1);
+  assert.equal(state.schemaVersion, 2);
   assert.deepEqual(state.evidence, []);
   assert.equal(state.graph.currentRevision, 0);
 });
