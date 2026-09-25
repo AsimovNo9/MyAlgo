@@ -5,6 +5,7 @@ import { youtubeConnector } from '../connectors/youtube';
 import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { applyRecommendationOutcome, mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
+import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behavior-correlation';
 
 type PageCandidate = {
   external_id: string;
@@ -188,6 +189,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       metrics?: unknown;
     };
   };
+
+  if (type === EXTENSION_MESSAGE_TYPES.GET_BEHAVIOR) {
+    void (async () => {
+      const surfaced = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
+      const interactions = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+      const videoId = (payload as { videoId?: string } | undefined)?.videoId;
+      const behavior = videoId
+        ? getBehaviorForVideo(videoId, surfaced, interactions)
+        : correlateBehavior(surfaced, interactions);
+      sendResponse({ ok: true, behavior });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to correlate behavior.',
+    }));
+    return true;
+  }
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_FEED) {
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
