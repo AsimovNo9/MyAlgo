@@ -8,6 +8,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import { youtubePageFixtures } from './youtube-fixtures.ts';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { createExposureId, createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions.ts';
+import { correlateBehavior, getBehaviorForVideo } from './behavior-correlation.ts';
 
 test('extractYouTubeVideoId handles watch URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/watch?v=abc123'), 'abc123');
@@ -151,6 +152,7 @@ test('Home extraction records surfaced context without inferring preference', ()
 
   assert.deepEqual(observation.observations, [{
     externalId: 'home-1',
+    exposureId: 'home-1|home|Recommended|0',
     title: 'Woodworking guide',
     creator: 'Maker',
     position: 0,
@@ -159,9 +161,20 @@ test('Home extraction records surfaced context without inferring preference', ()
     provenance: 'youtube_home_dom',
     evidenceKind: 'surfaced',
     outcome: 'unobserved',
+  }, {
+    externalId: 'home-1',
+    exposureId: 'home-1|home||1',
+    title: 'Duplicate card',
+    creator: null,
+    position: 1,
+    section: null,
+    observedAt,
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
   }]);
-  assert.equal(observation.metrics.usableObservations, 1);
-  assert.equal(observation.metrics.duplicateCandidates, 1);
+  assert.equal(observation.metrics.usableObservations, 2);
+  assert.equal(observation.metrics.duplicateCandidates, 0);
   assert.equal(observation.metrics.injectedCandidates, 1);
   assert.equal(observation.metrics.missingTitle, 1);
 });
@@ -191,9 +204,14 @@ test('repeated Home observation retains a correlated interaction outcome', () =>
 
   const merged = mergeRecommendationObservations(watched, repeated);
 
-  assert.equal(merged[0].outcome, 'watched');
-  assert.equal(merged[0].section, 'Recommended');
-  assert.equal(merged[0].observedAt, '2026-09-25T12:00:00.000Z');
+  assert.equal(merged.length, 2);
+  const watchedExposure = merged.find((item) => item.outcome === 'watched');
+  const repeatedExposure = merged.find((item) => item.section === 'Recommended');
+  assert.equal(watchedExposure?.section, null);
+  assert.equal(watchedExposure?.observedAt, '2026-09-24T12:00:00.000Z');
+  assert.equal(repeatedExposure?.section, 'Recommended');
+  assert.equal(repeatedExposure?.outcome, 'unobserved');
+  assert.equal(repeatedExposure?.observedAt, '2026-09-25T12:00:00.000Z');
 });
 
 test('Home extraction runs only on the YouTube landing page', () => {
@@ -311,3 +329,204 @@ test('YouTube connector declares bounded presentation and normalized provider be
   assert.equal(youtubeConnector.presentation.shelfBatchSize <= youtubeConnector.presentation.shelfDomLimit, true);
   assert.equal(youtubeConnector.presentation.horizontalAspectRatio, '16 / 9');
 });
+
+test('behavior correlation preserves surfaced, clicked, and watched as separate evidence', () => {
+  const surfaced = [{
+    externalId: 'A',
+    exposureId: 'A|home|Recommended|7',
+    title: 'A',
+    creator: null,
+    position: 7,
+    section: 'Recommended',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
+  }];
+  const interactions = [
+    {
+      videoId: 'A',
+      exposureId: 'A|home|Recommended|7',
+      kind: 'click',
+      source: 'card',
+      observedAt: '2026-09-25T10:01:00.000Z',
+      provenance: 'youtube_user_interaction',
+    },
+    {
+      videoId: 'A',
+      exposureId: null,
+      kind: 'watched',
+      source: 'history',
+      observedAt: '2026-09-25T10:02:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+  ];
+
+  const timeline = getBehaviorForVideo('A', surfaced, interactions);
+  assert.equal(timeline.videoId, 'A');
+  assert.equal(timeline.surfaced.length, 1);
+  assert.equal(timeline.clicked.length, 1);
+  assert.equal(timeline.watched.length, 1);
+  assert.deepEqual(timeline.correlations.map((item) => item.kind), [
+    'surfaced_clicked',
+    'clicked_watched',
+    'surfaced_watched',
+  ]);
+});
+
+test('behavior correlation never invents a click or cross-video attribution', () => {
+  const surfaced = [
+    {
+      externalId: 'A',
+      exposureId: 'A|home|Recommended|1',
+      title: 'A',
+      creator: null,
+      position: 1,
+      section: 'Recommended',
+      observedAt: '2026-09-25T10:00:00.000Z',
+      provenance: 'youtube_home_dom',
+      evidenceKind: 'surfaced',
+      outcome: 'unobserved',
+    },
+    {
+      externalId: 'B',
+      exposureId: 'B|home|Recommended|2',
+      title: 'B',
+      creator: null,
+      position: 2,
+      section: 'Recommended',
+      observedAt: '2026-09-25T10:00:00.000Z',
+      provenance: 'youtube_home_dom',
+      evidenceKind: 'surfaced',
+      outcome: 'unobserved',
+    },
+  ];
+  const interactions = [
+    {
+      videoId: 'A',
+      exposureId: null,
+      kind: 'watched',
+      source: 'history',
+      observedAt: '2026-09-25T10:01:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+    {
+      videoId: 'B',
+      exposureId: 'A|home|Recommended|1',
+      kind: 'click',
+      source: 'card',
+      observedAt: '2026-09-25T10:02:00.000Z',
+      provenance: 'youtube_user_interaction',
+    },
+  ];
+
+  const timelines = correlateBehavior(surfaced, interactions);
+  const a = timelines.find((item) => item.videoId === 'A');
+  const b = timelines.find((item) => item.videoId === 'B');
+  assert.equal(a.clicked.length, 0);
+  assert.equal(a.watched.length, 1);
+  assert.equal(a.correlations.some((item) => item.kind === 'surfaced_clicked'), false);
+  assert.equal(b.clicked.length, 1);
+  assert.equal(b.correlations.some((item) => item.kind === 'surfaced_clicked'), false);
+});
+
+test('behavior correlation prefers exact exposure and falls back to video identity deterministically', () => {
+  const surfaced = [
+    {
+      externalId: 'A',
+      exposureId: 'A|home|Recommended|1',
+      title: 'A',
+      creator: null,
+      position: 1,
+      section: 'Recommended',
+      observedAt: '2026-09-25T10:00:00.000Z',
+      provenance: 'youtube_home_dom',
+      evidenceKind: 'surfaced',
+      outcome: 'unobserved',
+    },
+    {
+      externalId: 'A',
+      exposureId: 'A|home|For You|5',
+      title: 'A',
+      creator: null,
+      position: 5,
+      section: 'For You',
+      observedAt: '2026-09-25T10:03:00.000Z',
+      provenance: 'youtube_home_dom',
+      evidenceKind: 'surfaced',
+      outcome: 'unobserved',
+    },
+  ];
+  const click = {
+    videoId: 'A',
+    exposureId: 'A|home|For You|5',
+    kind: 'click',
+    source: 'card',
+    observedAt: '2026-09-25T10:04:00.000Z',
+    provenance: 'youtube_user_interaction',
+  };
+  const fallbackClick = { ...click, exposureId: null, observedAt: '2026-09-25T10:02:00.000Z' };
+
+  const exact = getBehaviorForVideo('A', surfaced, [click]);
+  const fallback = getBehaviorForVideo('A', surfaced, [fallbackClick]);
+  assert.equal(exact.correlations[0].surfacedExposureId, 'A|home|For You|5');
+  assert.equal(fallback.correlations[0].surfacedExposureId, 'A|home|Recommended|1');
+});
+
+test('behavior correlation preserves repeated clicks and does not depend on ambient time', () => {
+  const surfaced = [{
+    externalId: 'A',
+    exposureId: 'A|home|Recommended|1',
+    title: 'A',
+    creator: null,
+    position: 1,
+    section: 'Recommended',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
+  }];
+  const interactions = [
+    {
+      videoId: 'A',
+      exposureId: 'A|home|Recommended|1',
+      kind: 'click',
+      source: 'card',
+      observedAt: '2026-09-25T10:01:00.000Z',
+      provenance: 'youtube_user_interaction',
+    },
+    {
+      videoId: 'A',
+      exposureId: 'A|home|Recommended|1',
+      kind: 'click',
+      source: 'keyboard',
+      observedAt: '2026-09-25T10:01:01.000Z',
+      provenance: 'youtube_user_interaction',
+    },
+  ];
+  const first = correlateBehavior(surfaced, interactions);
+  const second = correlateBehavior(JSON.parse(JSON.stringify(surfaced)), JSON.parse(JSON.stringify(interactions)));
+  assert.equal(first[0].clicked.length, 2);
+  assert.deepEqual(first, second);
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
+});
+
+test('autoplay-like navigation and missing events remain absent from correlation output', () => {
+  const surfaced = [{
+    externalId: 'A',
+    exposureId: 'A|home|Recommended|1',
+    title: 'A',
+    creator: null,
+    position: 1,
+    section: 'Recommended',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
+  }];
+  const timeline = getBehaviorForVideo('A', surfaced, []);
+  assert.equal(timeline.clicked.length, 0);
+  assert.equal(timeline.watched.length, 0);
+  assert.deepEqual(timeline.correlations, []);
+});
+
