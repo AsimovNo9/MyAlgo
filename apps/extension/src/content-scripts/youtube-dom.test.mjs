@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
 import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
@@ -92,13 +92,22 @@ test('history observability measures creator coverage and title anomalies withou
     { href: '/watch?v=creator-1', title: 'Duplicate with creator', creator: 'Creator A' },
   ], '2026-09-25T10:00:00.000Z');
 
-  assert.equal(observation.evidence.length, 3);
+  assert.equal(observation.evidence.length, 2);
   assert.equal(observation.metrics.creatorPresent, 1);
-  assert.equal(observation.metrics.creatorCoverageRate, 0.3333);
+  assert.equal(observation.metrics.creatorCoverageRate, 0.5);
   assert.equal(observation.metrics.durationSuffixedTitles, 1);
   assert.equal(observation.metrics.placeholderTitles, 1);
-  assert.equal(observation.evidence[1].title, 'Video title 5 minutes');
-  assert.equal(observation.evidence[2].title, 'Watch');
+  assert.equal(observation.evidence[1].title, 'Video title');
+});
+
+test('modern YouTube creator metadata prefers the channel aria-label', () => {
+  const element = {
+    querySelector: (selector) => selector.startsWith('[aria-label^="Go to channel "]')
+      ? { getAttribute: () => 'Go to channel G-Worldwide TV' }
+      : null,
+  };
+
+  assert.equal(extractYouTubeCreator(element), 'G-Worldwide TV');
 });
 
 test('history extraction runs only on the rendered YouTube history page', () => {
