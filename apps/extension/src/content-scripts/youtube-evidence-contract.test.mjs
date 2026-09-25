@@ -3,7 +3,7 @@ import test from 'node:test';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { toNormalizedInteraction, createSelectionObservation } from './youtube-interactions.ts';
 import { collectRecommendationObservations, toNormalizedExposure } from './youtube-recommendations.ts';
-import { collectHistoryEvidence, mergeHistoryEvidence } from './youtube-history.ts';
+import { collectHistoryEvidence, createHistoryEvidenceId, mergeHistoryEvidence } from './youtube-history.ts';
 
 test('YouTube connector maps content identity and exposure without leaking YouTube IDs into the contract', () => {
   const exposure = toNormalizedExposure({
@@ -116,6 +116,11 @@ test('History watched evidence preserves title and creator metadata', () => {
   });
 });
 
+
+test('History evidence identity is stable across collector observation times', () => {
+  assert.equal(createHistoryEvidenceId('MefXQvGTYtE'), 'interaction:watched:MefXQvGTYtE:history');
+  assert.equal(createHistoryEvidenceId('MefXQvGTYtE'), createHistoryEvidenceId('MefXQvGTYtE'));
+});
 
 test('History collection preserves newest-to-oldest card order', () => {
   const result = collectHistoryEvidence([
