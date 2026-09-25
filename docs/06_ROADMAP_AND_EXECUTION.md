@@ -24,7 +24,9 @@ The extension may observe rendered `/feed/history` rows only after the user enab
 
 Evidence remains local, is deduplicated by video ID, and is capped at 1,000 records. The observer records local yield/failure counters for duplicate, injected, missing-ID, and missing-title rows. It must never send observations to a backend.
 
-Before this phase exits, run a real-browser session that scrolls a realistic history volume and record usable-evidence yield, pagination/infinite-scroll behavior, deleted/private/unavailable-item behavior, and selector failures. The browser fixture tests are a regression guard, not evidence that the live DOM is stable.
+Completed validation: a real-browser session across multiple history scroll depths established that modern history cards expose creator metadata and that the initial creator gap was caused by selectors rather than virtualization/hydration. History titles are normalized at extraction, literal `Watch` placeholders are excluded/classified, repeated observations are deduplicated, and the resulting evidence remains local. Shorts Home observations now preserve real titles when available, although creator metadata can remain null on Shorts-specific rows. The browser fixture tests remain a regression guard rather than evidence that the live DOM is permanently stable.
+
+The extension also tolerates stale content scripts after an extension update by safely ignoring invalidated runtime/storage calls. A YouTube reload is still required after an extension update to establish the new content-script context.
 
 ## Phase 1 — Local graph
 
