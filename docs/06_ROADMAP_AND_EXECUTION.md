@@ -150,7 +150,7 @@ preference inference
 scoring / ranking
 ```
 
-#148 currently stops before preference inference. A future preference layer should consume retained evidence and graph relationships rather than treating every `watched` event as an unconditional preference.
+#148 currently stops before preference inference. A future preference layer should consume retained evidence and graph relationships rather than treating every `watched` event as an unconditional preference. For validation before that layer exists, #148 exposes complete JSON export plus a deterministic graph-review summary; #170 can later turn those same read-only surfaces into a user-facing graph inspector.
 
 ## Phase 1 — Local graph
 
