@@ -1,6 +1,6 @@
 import type { ContentIdentity, NormalizedEvidence } from './evidence';
 
-export const PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
+export const PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
 
 export type EvidenceRetentionPolicy = 'default' | 'until_expiry' | 'indefinite';
 
@@ -38,6 +38,7 @@ export type GraphEdge = {
   relation: string;
   provenance: GraphProvenance;
   confidence: number | null;
+  evidenceIds: string[];
   attributes: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
