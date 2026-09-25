@@ -91,7 +91,25 @@ The full contract is documented in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTO
 
 ## P1 — Local Personal Algorithm Graph
 
-### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph
+### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph — **implementation in PR**
+
+The v1 local state boundary is implemented in `LocalPersonalAlgorithmStore` and uses the source-neutral evidence contract from #187/PR #188.
+
+Implemented scope:
+
+- versioned browser-local state schema;
+- normalized evidence records with confidence and retention/expiry metadata;
+- content graph nodes keyed by source + external ID;
+- graph nodes/edges with explicit versus inferred provenance;
+- user-edit and graph-revision records;
+- evidence create/read/update/delete and targeted content deletion;
+- graph node/edge create/update/delete;
+- reset, restart-safe initialization, and export-ready serialization;
+- migration boundary for unknown/invalid schemas;
+- YouTube Home, selection, player-watch, and History observations persisted as normalized evidence while retaining existing raw compatibility stores.
+
+Not included in #148: preference inference, deterministic scoring, ranking, cross-source identity resolution, feed enforcement, or YouTube Data API graph bootstrap. Those remain downstream concerns.
+
 
 ### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime
 
