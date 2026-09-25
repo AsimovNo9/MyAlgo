@@ -182,5 +182,9 @@ export function toNormalizedInteraction(event: UserBehaviorObservation): Interac
     interaction: 'watched',
     observedAt: event.observedAt,
     mechanism: 'history_dom',
+    metadata: youtubeConnector.normalizeMetadata({
+      title: event.title,
+      creatorName: event.creator,
+    }),
   });
 }
