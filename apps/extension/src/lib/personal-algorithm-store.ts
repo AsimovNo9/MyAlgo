@@ -70,14 +70,13 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
 };
 
 export class LocalPersonalAlgorithmStore {
+  private readonly storage: LocalStateStorage;
   private readonly key: string;
   private state: PersonalAlgorithmState | null = null;
   private writeQueue: Promise<void> = Promise.resolve();
 
-  constructor(
-    private readonly storage: LocalStateStorage,
-    key = DEFAULT_STATE_KEY,
-  ) {
+  constructor(storage: LocalStateStorage, key = DEFAULT_STATE_KEY) {
+    this.storage = storage;
     this.key = key;
   }
 
