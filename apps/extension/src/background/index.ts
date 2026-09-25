@@ -322,7 +322,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const key = `player|watched|${observation.videoId}|${observation.sessionId}`;
       const existingKeys = new Set(existing
-        .filter((event) => event.kind === 'watched' && 'sessionId' in event && event.sessionId)
+        .filter((event): event is Extract<UserBehaviorObservation, { kind: 'watched' }> => (
+          event.kind === 'watched'
+          && 'sessionId' in event
+          && typeof event.sessionId === 'string'
+        ))
         .map((event) => `player|watched|${event.videoId}|${event.sessionId}`));
       if (existingKeys.has(key)) {
         sendResponse({ ok: true, storedEvents: existing.length, duplicate: true });
