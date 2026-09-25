@@ -7,10 +7,6 @@ import type {
   PersonalAlgorithmState,
   UserGraphEdit,
 } from '@repo/shared-types';
-import {
-  PERSONAL_ALGORITHM_SCHEMA_VERSION,
-  createEmptyGraph,
-} from '@repo/shared-types';
 import type { NormalizedEvidence } from '@repo/shared-types';
 
 export type LocalStateStorage = {
@@ -27,6 +23,7 @@ export type EvidenceInput = {
 };
 
 const DEFAULT_STATE_KEY = 'personal-algorithm-state';
+const PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
 
 const nowIso = () => new Date().toISOString();
 
@@ -46,7 +43,13 @@ const contentNodeId = (source: string, externalId: string) =>
 const createEmptyState = (): PersonalAlgorithmState => ({
   schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
   evidence: [],
-  graph: createEmptyGraph(),
+  graph: {
+    nodes: [],
+    edges: [],
+    userEdits: [],
+    revisions: [],
+    currentRevision: 0,
+  },
 });
 
 const migrateState = (raw: unknown): PersonalAlgorithmState => {
