@@ -133,10 +133,11 @@ const syncShelfCardWidth = (cards: HTMLElement) => {
 const renderRecommendationShelf = (attempt = 0) => {
   if (!isCurrentInstance() || !extensionEnabled) return;
 
-  const feedContainer = document.querySelector<HTMLElement>(
-    'ytd-rich-grid-renderer #contents, ytd-two-column-browse-results-renderer #primary #contents, #contents',
+  const feedRenderer = document.querySelector<HTMLElement>(
+    'ytd-rich-grid-renderer, ytd-two-column-browse-results-renderer #primary',
   );
-  if (!feedContainer) {
+  const feedContents = feedRenderer?.querySelector<HTMLElement>('#contents');
+  if (!feedRenderer || !feedContents) {
     if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
     return;
   }
@@ -154,15 +155,15 @@ const renderRecommendationShelf = (attempt = 0) => {
   }
 
   let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
-  if (shelf && shelf.parentElement !== feedContainer) {
+  if (shelf && shelf.parentElement !== feedRenderer) {
     shelf.remove();
     shelf = null;
   }
   if (!shelf) {
     shelf = document.createElement('section');
     shelf.dataset.personalAlgorithmShelf = 'true';
-    shelf.style.cssText = 'display:block;grid-column:1 / -1;flex:0 0 100%;width:100%;min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
-    feedContainer.prepend(shelf);
+    shelf.style.cssText = 'display:block;position:relative;clear:both;width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
+    feedRenderer.insertBefore(shelf, feedContents);
   }
 
   shelf.replaceChildren();
@@ -301,6 +302,7 @@ const collectCandidates = () => {
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
+      thumbnail_url: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
       ...getVideoSourceFlags(element),
     }))
     .filter((candidate) => candidate.title)
