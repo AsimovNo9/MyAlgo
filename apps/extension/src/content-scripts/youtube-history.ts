@@ -192,13 +192,13 @@ export function mergeHistoryEvidence(
 ): HistoryEvidence[] {
   const byExternalId = new Map<string, HistoryEvidence>();
 
-  for (const item of existing) {
-    if (!item?.externalId) continue;
+  existing.forEach((item, index) => {
+    if (!item?.externalId) return;
     byExternalId.set(item.externalId, {
       ...item,
-      historyPosition: item.historyPosition ?? 0,
+      historyPosition: item.historyPosition ?? index,
     });
-  }
+  });
 
   for (const item of incoming) {
     if (!item?.externalId) continue;
