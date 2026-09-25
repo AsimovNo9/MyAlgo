@@ -248,3 +248,23 @@ Use it when validating connector behavior, temporal watch capture, exposure prop
 If a runtime message such as `chrome.runtime.sendMessage(...)` is used to inspect extension behavior, run it from the extension service worker's DevTools console when the target handler belongs to the background context. A page/content-script console may not have a receiving extension context and can produce `Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.`
 
 The storage inspection command is intentionally source-neutral at the evidence boundary: it exposes the normalized event stream without requiring the debugger to understand YouTube-specific DOM or player internals.
+
+## Local persistence boundary (#148)
+
+Normalized evidence crosses the connector boundary into the browser-local Personal Algorithm state:
+
+```
+ExposureEvidence / InteractionEvidence
+            ↓
+LocalPersonalAlgorithmStore
+            ↓
+versioned local state
+   ├── evidence records
+   └── Personal Algorithm Graph
+```
+
+The v1 local state retains source, observed time, external identity, provenance, confidence, and retention/expiry metadata for each evidence record. Graph content nodes preserve the same `ContentIdentity`; graph nodes and edges explicitly declare `explicit` or `inferred` provenance. User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later.
+
+Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization. Schema version 1 has an explicit migration boundary; unknown versions are not heuristically interpreted.
+
+The store is evidence persistence, not preference inference. It does not assign recommendation weights, rank candidates, resolve cross-source identities, or consume YouTube Data API account/display data as observational evidence.
