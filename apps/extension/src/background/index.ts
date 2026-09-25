@@ -38,6 +38,7 @@ type LocalFeedItem = CandidatePoolItem & {
 const MAX_CANDIDATE_POOL_SIZE = 5000;
 const MAX_HISTORY_EVIDENCE = 10000;
 const MAX_FEED_CACHE_SIZE = 100;
+const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 
@@ -63,7 +64,7 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
     for (const record of enriched) existing[record.external_id] = record;
     const entries = Object.entries(existing)
       .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
-      .slice(0, MAX_CANDIDATE_POOL_SIZE);
+      .slice(0, MAX_VIDEO_STORE_SIZE);
     await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
     return enriched;
   } catch (error) {
