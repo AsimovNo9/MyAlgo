@@ -286,3 +286,5 @@ export function normalizeSemanticConceptMatch(match: SemanticConceptMatch): Sema
     similarity: match.similarity == null ? null : clampSemanticConfidence(match.similarity),
   };
 }
+
+export type { ContentIdentity, ContentMetadata, EvidenceConnector, EvidenceProvenance, ExposureEvidence, InteractionEvidence, InteractionKind, NormalizedEvidence } from './evidence';
