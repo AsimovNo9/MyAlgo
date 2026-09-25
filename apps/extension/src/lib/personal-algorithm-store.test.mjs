@@ -65,13 +65,12 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   const supporting = await store.upsertEvidence({
     evidence: {
       ...exposure,
-      content: { source: 'youtube', externalId: 'yt-2' },
+      content: { source: 'youtube', externalId: 'yt-1' },
     },
   }, 'evidence-3');
 
   assert.equal((await store.deleteEvidence(second.id)), true);
   assert.equal(await store.getEvidence(second.id), null);
-  assert.equal(await store.deleteEvidenceForContent('youtube', 'yt-2'), 1);
 
   const node = await store.upsertNode({
     id: 'topic:testing',
@@ -100,6 +99,10 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   assert.equal(graph.currentRevision, 2);
   assert.equal(graph.userEdits.length, 2);
   assert.equal(graph.revisions.length, 2);
+
+  assert.equal((await store.deleteEvidence('evidence-3')), true);
+  assert.equal((await store.getGraph()).edges.length, 0);
+  assert.deepEqual(await store.getEvidenceForEdge('edge-1'), []);
 
   await assert.rejects(
     store.upsertEdge({
