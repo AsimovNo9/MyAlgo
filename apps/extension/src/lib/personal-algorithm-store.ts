@@ -55,9 +55,10 @@ const createEmptyState = (): PersonalAlgorithmState => ({
 
 const migrateState = (raw: unknown): PersonalAlgorithmState => {
   if (!raw || typeof raw !== 'object') return createEmptyState();
-  const candidate = raw as Partial<PersonalAlgorithmState> & { schemaVersion?: number };
+  const candidate = raw as Partial<PersonalAlgorithmState>;
+  const rawVersion = (raw as { schemaVersion?: number }).schemaVersion;
 
-  if (candidate.schemaVersion === PERSONAL_ALGORITHM_SCHEMA_VERSION
+  if (rawVersion === PERSONAL_ALGORITHM_SCHEMA_VERSION
       && Array.isArray(candidate.evidence)
       && candidate.graph
       && Array.isArray(candidate.graph.nodes)
@@ -80,7 +81,7 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
     };
   }
 
-  if (candidate.schemaVersion === LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION
+  if (rawVersion === LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION
       && Array.isArray(candidate.evidence)
       && candidate.graph
       && Array.isArray(candidate.graph.nodes)
