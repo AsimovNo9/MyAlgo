@@ -134,7 +134,7 @@ connector adapter
 ContentIdentity / ExposureEvidence / InteractionEvidence
 ```
 
-The core must not import YouTube selectors, YouTube DOM nodes, YouTube player state, or YouTube-specific provenance values.
+The core must not import YouTube selectors, YouTube DOM nodes, YouTube player state, or YouTube-specific provenance values. The reusable correlation implementation follows the same rule: it has no dependency on `youtube-*` modules or provider IDs.
 
 ## YouTube implementation
 
@@ -158,7 +158,9 @@ These mechanisms are evidence provenance, not preference semantics.
 
 ## Correlation boundary
 
-Behavior correlation converts provider-shaped observations at the connector boundary and performs its deterministic matching over normalized evidence.
+The reusable correlation primitive is source-neutral: `correlateEvidence(exposures, interactions)` consumes only `ExposureEvidence` and `InteractionEvidence` from `@repo/shared-types`. It compares `ContentIdentity.source + externalId`, preserves exact `exposureId` matches, applies deterministic content/time fallback when an interaction has no exposure ID, and emits only contextual correlations.
+
+The YouTube `behavior-correlation.ts` module is now an adapter around that primitive. It converts YouTube observations to normalized evidence before correlation and converts the generic timeline back to the legacy YouTube-shaped UI/background result. That adapter is a compatibility boundary, not the algorithm core.
 
 It may establish:
 
@@ -210,6 +212,8 @@ YouTube observation
 behavior correlation
       ↓
 source-neutral evidence / connector contract
+      ↓
+source-neutral correlation (`correlateEvidence`)
       ↓
 #148 evidence store + Personal Algorithm Graph
       ↓

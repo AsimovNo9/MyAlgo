@@ -54,7 +54,7 @@ Live validation confirmed real local selection events with stable IDs, timestamp
 
 ### Deterministic behavioral correlation (#174)
 
-Implemented in the correlation layer and validated against the raw evidence contract.
+Implemented in a source-neutral correlation primitive and a YouTube compatibility adapter. `correlateEvidence` consumes only normalized `ExposureEvidence` / `InteractionEvidence`; the adapter is responsible for translating YouTube observations into and out of that generic contract.
 The derived timeline is recomputable from retained surfaced, clicked, and watched
 events. Exact `exposureId` matches are authoritative; no event is invented merely
 to make a correlation succeed; events never cross video IDs; and chronological
@@ -105,7 +105,7 @@ normalized correlation boundary
 #151 deterministic scorer / trace
 ```
 
-The remaining gate before #148 is to ensure reusable correlation APIs consume normalized `ExposureEvidence` / `InteractionEvidence` rather than expose YouTube-shaped inputs to future connectors. YouTube-specific adaptation may remain at the connector boundary.
+The reusable correlation boundary is now source-neutral: `correlateEvidence` consumes normalized `ExposureEvidence` / `InteractionEvidence`, while YouTube-specific adaptation remains outside the core primitive. #148 can therefore consume the same evidence/correlation model without pretending future connectors are YouTube.
 
 Additional connectors should implement the same contract rather than introducing platform-specific concepts into the graph or scorer.
 
