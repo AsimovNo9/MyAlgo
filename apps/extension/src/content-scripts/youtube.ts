@@ -4,7 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage, scanYouTubeHistory } from './youtube-history';
+import { isYouTubeHistoryPage, scanYouTubeHistory } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 
 const videoSelectors = youtubeConnector.cardSelectors;
