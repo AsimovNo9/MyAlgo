@@ -492,6 +492,7 @@ test('behavior correlation preserves repeated clicks and does not depend on ambi
   const second = correlateBehavior(JSON.parse(JSON.stringify(surfaced)), JSON.parse(JSON.stringify(interactions)));
   assert.equal(first[0].clicked.length, 2);
   assert.deepEqual(first, second);
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
 });
 
 test('autoplay-like navigation and missing events remain absent from correlation output', () => {
