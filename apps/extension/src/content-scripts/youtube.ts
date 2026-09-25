@@ -36,7 +36,8 @@ let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
 let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
-let pendingWatchExposure: { videoId: string; exposureId: string | null } | null = null;
+const WATCH_SELECTION_INTENT_MAX_AGE_MS = 15_000;
+let pendingWatchExposure: { videoId: string; exposureId: string | null; observedAt: number } | null = null;
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
@@ -768,7 +769,9 @@ const attachTemporalWatchObserver = () => {
     return;
   }
 
-  const selectedExposure = pendingWatchExposure?.videoId === videoId
+  const pendingSelectionIsFresh = pendingWatchExposure
+    && Date.now() - pendingWatchExposure.observedAt <= WATCH_SELECTION_INTENT_MAX_AGE_MS;
+  const selectedExposure = pendingSelectionIsFresh && pendingWatchExposure?.videoId === videoId
     ? pendingWatchExposure.exposureId
     : null;
   if (pendingWatchExposure?.videoId === videoId) {
@@ -936,6 +939,7 @@ const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'aux
   pendingWatchExposure = {
     videoId: observation.videoId,
     exposureId: observation.exposureId,
+    observedAt: now,
   };
   safeSendMessage({
     type: EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION,
