@@ -5,6 +5,7 @@ export type HistoryEvidence = {
   title: string;
   creator: string | null;
   historyTimestamp: string | null;
+  historyPosition: number;
   observedAt: string;
   provenance: 'youtube_history_dom';
 };
@@ -14,6 +15,7 @@ export type HistoryObservationCandidate = {
   title?: string | null;
   creator?: string | null;
   historyTimestamp?: string | null;
+  position?: number;
   injected?: boolean;
 };
 
@@ -100,6 +102,7 @@ export function collectHistoryEvidence(
       title,
       creator,
       historyTimestamp: normalizeYouTubeText(candidate.historyTimestamp ?? '') || null,
+      historyPosition: candidate.position ?? evidence.length,
       observedAt,
       provenance: 'youtube_history_dom',
     });
@@ -142,7 +145,7 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
     .filter((row): row is HTMLElement => Boolean(row));
 
   const rows = Array.from(new Set([...knownRows, ...linkRows]));
-  const candidates = rows.map((row) => {
+  const candidates = rows.map((row, position) => {
     const link = row.querySelector<HTMLAnchorElement>([
       videoLinkSelector,
       'a#thumbnail[href]',
@@ -164,9 +167,55 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
       }),
       creator,
       historyTimestamp: timestampNode?.textContent,
+      position,
       injected: Boolean(row.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
     };
   });
 
   return collectHistoryEvidence(candidates, observedAt);
+}
+
+
+/**
+ * Reconciles the latest ordered History snapshot with the retained local
+ * History view. YouTube's rendered History does not expose a stable watched-at
+ * timestamp, so the video ID is the stable identity and DOM order is retained
+ * only as relative recency (0 = newest observed card).
+ *
+ * Repeated scans update the same video's metadata/position instead of creating
+ * another watch event. This matches the History UI's content-level representation
+ * and avoids treating collector observation time as watch-event identity.
+ */
+export function mergeHistoryEvidence(
+  existing: HistoryEvidence[],
+  incoming: HistoryEvidence[],
+): HistoryEvidence[] {
+  const byExternalId = new Map<string, HistoryEvidence>();
+
+  for (const item of existing) {
+    if (!item?.externalId) continue;
+    byExternalId.set(item.externalId, {
+      ...item,
+      historyPosition: item.historyPosition ?? 0,
+    });
+  }
+
+  for (const item of incoming) {
+    if (!item?.externalId) continue;
+    const previous = byExternalId.get(item.externalId);
+    byExternalId.set(item.externalId, {
+      ...previous,
+      ...item,
+      historyPosition: item.historyPosition,
+    });
+  }
+
+  const incomingIds = new Set(incoming.map((item) => item.externalId));
+  const merged = [
+    ...incoming.filter((item) => byExternalId.has(item.externalId)).map((item) => byExternalId.get(item.externalId)!),
+    ...[...byExternalId.values()].filter((item) => !incomingIds.has(item.externalId)),
+  ];
+
+  return merged
+    .sort((a, b) => a.historyPosition - b.historyPosition);
 }
