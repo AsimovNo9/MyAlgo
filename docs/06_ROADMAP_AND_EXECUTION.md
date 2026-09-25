@@ -4,8 +4,8 @@
 
 **Gate before graph UX investment.**
 
-1. Validate watch-history DOM extraction.
-2. Validate live-feed candidate extraction.
+1. Validate watch-history DOM extraction. **Completed (#156).**
+2. Validate live-feed candidate extraction and user selection capture. **Completed (#150, PR #180).**
 3. Confirm data can remain local for MVP.
 4. Document observed-data retention/deletion.
 5. Verify Chrome permission scope.
@@ -27,6 +27,30 @@ Evidence remains local, is deduplicated by video ID, and is capped at 1,000 reco
 Completed validation: a real-browser session across multiple history scroll depths established that modern history cards expose creator metadata and that the initial creator gap was caused by selectors rather than virtualization/hydration. History titles are normalized at extraction, literal `Watch` placeholders are excluded/classified, repeated observations are deduplicated, and the resulting evidence remains local. Shorts Home observations now preserve real titles when available, although creator metadata can remain null on Shorts-specific rows. The browser fixture tests remain a regression guard rather than evidence that the live DOM is permanently stable.
 
 The extension also tolerates stale content scripts after an extension update by safely ignoring invalidated runtime/storage calls. A YouTube reload is still required after an extension update to establish the new content-script context.
+
+### Live-feed candidate and selection observation (#150)
+
+Completed on 2026-09-25 and merged as PR #180. The implementation established the shared behavioral evidence boundary for later graph work:
+
+```text
+YouTube candidate
+    ↓
+stable videoId
+    ↓
+contextual exposureId
+    ↓
+surfaced (YouTube decision)
+    ↓
+clicked (user selection, when present)
+    ↓
+watched (later history evidence, when available)
+```
+
+The selection layer is document-level so it survives YouTube DOM replacement, records click/auxclick/keyboard provenance, preserves surface/section/position where the DOM permits it, and excludes MyAlgo-generated UI from its own evidence stream. Navigation and autoplay are deliberately not interpreted as clicks.
+
+Live validation confirmed real local selection events with stable IDs, timestamps, provenance, and exposure context. CI passed and PR #180 was merged. Some YouTube layouts still produce `surface: "other"` when the DOM does not expose a reliable surface container; this does not invalidate the underlying event evidence.
+
+#150 is now an implementation foundation rather than an active spike. #174 is the next behavioral-evidence layer: correlate these observations into deterministic surfaced → clicked → watched sequences without yet inferring preference.
 
 ## Phase 1 — Local graph
 
