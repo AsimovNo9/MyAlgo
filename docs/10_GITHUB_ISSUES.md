@@ -56,7 +56,7 @@ The correlation contract is unchanged by the temporal-watch collector. Live
 validation and CI completed; the implementation remains evidence/correlation only
 and does not score, rank, or infer preference.
 
-### [#183](https://github.com/AsimovNo9/MyAlgo/issues/183): Add deterministic temporal playback evidence for watched behavior — **implementation complete; PR pending merge**
+### [#183](https://github.com/AsimovNo9/MyAlgo/issues/183): Add deterministic temporal playback evidence for watched behavior — **completed**
 
 Implemented in PR #184. The collector:
 
@@ -69,14 +69,13 @@ Implemented in PR #184. The collector:
 - permits valid no-click watches with a null `exposureId`;
 - keeps History as bootstrap/fallback evidence with distinct provenance.
 
-Automated tests and real-browser validation are complete. PR #184 must be
-merged before this issue is closed.
+Automated tests and real-browser validation are complete. PR #184 was merged; #183 is closed.
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary
 
-### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts
+### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **implementation in PR #188**
 
 Freeze the boundary between provider-specific connectors and the source-neutral recommendation domain before #148 and #151.
 
