@@ -6,8 +6,9 @@
 ┌────────────────────────────────────────────┐
 │              YouTube Browser               │
 │                                            │
-│  Watch History DOM   Live Feed DOM         │
-└───────────────┬───────────────┬────────────┘
+│ Player Media   Watch History   Live Feed   │
+│  Telemetry         DOM           DOM       │
+└───────────────┬───────────────┬───────────┘
                 │               │
                 └───────┬───────┘
                         ▼
@@ -63,8 +64,30 @@ type EvidenceKind =
 - `explicit_positive` and `explicit_negative`: highest-confidence user input.
 
 A Home recommendation stores position, section, observation time, and outcome.
-Its outcome starts as `unobserved`, then may become `clicked` or `watched` when
-the same video is later observed through a user interaction or rendered history.
+Its outcome starts as `unobserved`, then may be correlated with a later click
+and/or watched observation. Player-derived watched evidence is the primary live
+signal; History-derived watched evidence remains available for bootstrap and
+fallback collection.
+
+### Temporal watched evidence
+
+The YouTube connector treats a player watch as a session-scoped observation.
+
+- A session belongs to one video/player instance.
+- Only forward media-time deltas observed while playback is active contribute to
+  `playedSeconds`.
+- Pause, buffering, advertising, and seek jumps do not count as playback time.
+- A watched observation is emitted at most once per session.
+- The default threshold is 30 seconds; videos shorter than 60 seconds use the
+  lower of 30 seconds and 50% of duration.
+- Natural completion is a terminal watched condition for short videos.
+- A preceding captured selection may supply the exact `exposureId`; a watch
+  without a selection remains valid with a null exposure ID.
+- The observation uses `youtube_player_telemetry` provenance and is retained
+  alongside history-derived observations rather than replacing them.
+
+The temporal collector is evidence collection only. It does not infer
+preference, assign a score, or change recommendation ranking.
 
 ### Graph node
 
@@ -185,6 +208,7 @@ The core graph is platform-agnostic.
 
 A connector owns:
 
+- player/media telemetry observation
 - DOM observation
 - history extraction
 - candidate extraction
@@ -196,6 +220,13 @@ For YouTube P0, the connector has separate player, history, and Home ingestion
 paths. Player playback is the primary live watched signal; History remains a
 bootstrap/fallback path. They share stable video IDs for correlation but retain
 independent provenance.
+
+```text
+Player telemetry ───────┐
+History DOM ────────────┼─→ watched evidence
+Home DOM ───────────────┼─→ surfaced evidence
+User interaction ──────┘─→ clicked evidence
+```
 
 YouTube is the first connector.
 

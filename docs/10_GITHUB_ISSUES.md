@@ -40,18 +40,37 @@ Known limitation: some YouTube layouts still resolve to `surface: "other"` when 
 
 `surfaced` remains contextual evidence. #150 does not infer preference, weight clicks/watches, build graph nodes, or score candidates. Those decisions remain downstream in #174/#148/#151.
 
-### [#174](https://github.com/AsimovNo9/MyAlgo/issues/174): Correlate surfaced recommendations with user behavior
+### [#174](https://github.com/AsimovNo9/MyAlgo/issues/174): Correlate surfaced recommendations with user behavior — **completed**
 
-Correlate a Home `surfaced` observation with a later click and/or rendered
-history match by stable video ID. The resulting sequence distinguishes what
-YouTube displayed from what the user chose to watch:
+Implemented in the deterministic correlation layer and validated against the retained
+raw event model. The layer preserves `surfaced`, `clicked`, and `watched`
+events, prefers exact `exposureId` matches, never crosses video IDs, and produces
+a deterministic recomputable timeline without inferring preference.
 
-```text
-surfaced → clicked → watched
-```
+Watched evidence can come from either of two explicit sources:
 
-This is contextual evidence for future graph learning; repeated non-engagement
-is not an automatic negative preference in P0.
+- `youtube_player_telemetry` — primary live playback evidence;
+- `youtube_history_dom` — bootstrap/fallback history evidence.
+
+The correlation contract is unchanged by the temporal-watch collector. Live
+validation and CI completed; the implementation remains evidence/correlation only
+and does not score, rank, or infer preference.
+
+### [#183](https://github.com/AsimovNo9/MyAlgo/issues/183): Add deterministic temporal playback evidence for watched behavior — **implementation complete; PR pending merge**
+
+Implemented in PR #184. The collector:
+
+- scopes a watch session to one video/player instance;
+- accumulates actual playback time;
+- excludes pause, buffering, advertising, and seek jumps;
+- emits at most one watched event per session;
+- uses a deterministic temporal threshold;
+- preserves an exact preceding `exposureId` when available;
+- permits valid no-click watches with a null `exposureId`;
+- keeps History as bootstrap/fallback evidence with distinct provenance.
+
+Automated tests and real-browser validation are complete. PR #184 must be
+merged before this issue is closed.
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review
 
@@ -123,6 +142,6 @@ Only after measured gaps:
 
 Confirm implementation never feeds YouTube API Data into graph derivation.
 
-### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and launch privacy review
+### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
 Finalize permissions, disclosures, privacy policy, retention, and deletion behavior.
