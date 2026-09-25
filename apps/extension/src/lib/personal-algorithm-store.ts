@@ -223,6 +223,50 @@ export class LocalPersonalAlgorithmStore {
     });
   }
 
+  async reconcileHistoryEvidence(inputs: Array<{ id: string; evidence: NormalizedEvidence; confidence?: number; retentionPolicy?: EvidenceRetentionPolicy; expiresAt?: string | null }>): Promise<{ removed: number; upserted: number }> {
+    return this.mutate((state) => {
+      const historyIds = new Set(
+        state.evidence
+          .filter((record) => (
+            record.evidence.kind === 'interaction'
+            && record.evidence.interaction === 'watched'
+            && record.evidence.provenance.mechanism === 'history_dom'
+          ))
+          .map((record) => record.id),
+      );
+
+      if (historyIds.size > 0) {
+        state.evidence = state.evidence.filter((record) => !historyIds.has(record.id));
+        state.graph.edges = state.graph.edges
+          .map((edge) => ({
+            ...edge,
+            evidenceIds: edge.evidenceIds.filter((evidenceId) => !historyIds.has(evidenceId)),
+          }))
+          .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+      }
+
+      const retainedAt = nowIso();
+      for (const input of inputs) {
+        const record: EvidenceRecord = {
+          id: input.id,
+          evidence: structuredClone(input.evidence),
+          confidence: clampConfidence(input.confidence ?? 1),
+          retainedAt,
+          retention: {
+            policy: input.retentionPolicy ?? 'default',
+            expiresAt: input.expiresAt ?? null,
+          },
+        };
+        const existingIndex = state.evidence.findIndex((item) => item.id === record.id);
+        if (existingIndex >= 0) state.evidence[existingIndex] = record;
+        else state.evidence.push(record);
+        this.ensureContentNode(state, record.evidence);
+      }
+
+      return { removed: historyIds.size, upserted: inputs.length };
+    });
+  }
+
   async deleteEvidence(id: string): Promise<boolean> {
     return this.mutate((state) => {
       const before = state.evidence.length;
