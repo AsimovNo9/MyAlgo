@@ -186,6 +186,10 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
  * another watch event. This matches the History UI's content-level representation
  * and avoids treating collector observation time as watch-event identity.
  */
+export function createHistoryEvidenceId(externalId: string): string {
+  return 'interaction:watched:' + externalId + ':history';
+}
+
 export function mergeHistoryEvidence(
   existing: HistoryEvidence[],
   incoming: HistoryEvidence[],
