@@ -3,7 +3,7 @@ import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
-import { applyRecommendationOutcome, mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
+import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
 import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behavior-correlation';
 
@@ -165,14 +165,6 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function correlateRecommendationOutcome(externalId: string, outcome: 'clicked' | 'watched'): Promise<void> {
-  const observations = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
-  await setStorage(
-    STORAGE_KEYS.HOME_OBSERVATIONS,
-    applyRecommendationOutcome(observations, externalId, outcome),
-  );
-}
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const { type, payload } = message as {
     type: string;
@@ -291,7 +283,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === EXTENSION_MESSAGE_TYPES.ACTIVITY) {
     void recordLocalEvent('activity', payload);
-    if (payload?.externalId) void correlateRecommendationOutcome(payload.externalId, 'clicked');
     sendResponse({ ok: true, externalId: payload?.externalId, eventType: payload?.eventType });
     return true;
   }
@@ -306,7 +297,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
-      await correlateRecommendationOutcome(observation.videoId, 'clicked');
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
@@ -331,7 +321,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         .slice(0, MAX_HISTORY_EVIDENCE);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
-      await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
       const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const watchedEvents = historyEvidence.map((item) => ({
         videoId: item.externalId,
