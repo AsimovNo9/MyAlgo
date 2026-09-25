@@ -325,6 +325,11 @@ export class LocalPersonalAlgorithmStore {
     return structuredClone(state);
   }
 
+  async exportStateJson(pretty = true): Promise<string> {
+    const state = await this.exportState();
+    return JSON.stringify(state, null, pretty ? 2 : 0);
+  }
+
   async reviewGraph(): Promise<GraphReview> {
     const state = await this.getState();
     const nodesByKind: Record<string, number> = {};
