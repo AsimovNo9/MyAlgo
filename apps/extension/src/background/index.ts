@@ -5,6 +5,7 @@ import { youtubeConnector } from '../connectors/youtube';
 import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
+import type { TemporalWatchObservation } from '../content-scripts/youtube-watch';
 import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behavior-correlation';
 
 type PageCandidate = {
@@ -300,6 +301,42 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
+    return true;
+  }
+
+  if (type === EXTENSION_MESSAGE_TYPES.WATCH_OBSERVATION) {
+    void (async () => {
+      const observation = (payload as { observation?: unknown } | undefined)?.observation as TemporalWatchObservation | undefined;
+      if (
+        !observation?.videoId
+        || observation.kind !== 'watched'
+        || observation.source !== 'player'
+        || observation.provenance !== 'youtube_player_telemetry'
+        || !observation.sessionId
+        || !Number.isFinite(observation.playedSeconds)
+        || observation.playedSeconds <= 0
+      ) {
+        sendResponse({ ok: false, error: 'Invalid temporal watch observation.' });
+        return;
+      }
+      const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
+      const key = `player|watched|${observation.videoId}|${observation.sessionId}`;
+      const existingKeys = new Set(existing
+        .filter((event): event is Extract<UserBehaviorObservation, { kind: 'watched' }> => (
+          event.kind === 'watched'
+          && 'sessionId' in event
+          && typeof event.sessionId === 'string'
+        ))
+        .map((event) => `player|watched|${event.videoId}|${event.sessionId}`));
+      if (existingKeys.has(key)) {
+        sendResponse({ ok: true, storedEvents: existing.length, duplicate: true });
+        return;
+      }
+      const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
+      await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await recordLocalEvent('selection', observation);
+      sendResponse({ ok: true, storedEvents: events.length });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store temporal watch observation.' }));
     return true;
   }
 
