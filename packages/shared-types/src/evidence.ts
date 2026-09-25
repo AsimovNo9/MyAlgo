@@ -51,6 +51,7 @@ export type InteractionEvidence = {
   provenance: EvidenceProvenance;
   sessionId?: string | null;
   metrics?: Record<string, number>;
+  metadata?: ContentMetadata | null;
 };
 
 export type NormalizedEvidence = ExposureEvidence | InteractionEvidence;
