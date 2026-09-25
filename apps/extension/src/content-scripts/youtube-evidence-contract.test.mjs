@@ -3,6 +3,7 @@ import test from 'node:test';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { toNormalizedInteraction, createSelectionObservation } from './youtube-interactions.ts';
 import { collectRecommendationObservations, toNormalizedExposure } from './youtube-recommendations.ts';
+import { collectHistoryEvidence, mergeHistoryEvidence } from './youtube-history.ts';
 
 test('YouTube connector maps content identity and exposure without leaking YouTube IDs into the contract', () => {
   const exposure = toNormalizedExposure({
@@ -113,4 +114,97 @@ test('History watched evidence preserves title and creator metadata', () => {
     format: null,
     contentType: null,
   });
+});
+
+
+test('History collection preserves newest-to-oldest card order', () => {
+  const result = collectHistoryEvidence([
+    { href: 'https://www.youtube.com/watch?v=newest', title: 'Newest', creator: 'A' },
+    { href: 'https://www.youtube.com/watch?v=older', title: 'Older', creator: 'B' },
+  ], '2026-09-25T20:01:00.000Z');
+
+  assert.deepEqual(result.evidence.map((item) => [item.externalId, item.historyPosition]), [
+    ['newest', 0],
+    ['older', 1],
+  ]);
+});
+
+test('History reconciliation is idempotent across repeated scans and tracks relative recency', () => {
+  const existing = [
+    {
+      externalId: 'older',
+      title: 'Older',
+      creator: 'B',
+      historyTimestamp: null,
+      historyPosition: 1,
+      observedAt: '2026-09-25T19:00:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+    {
+      externalId: 'newest',
+      title: 'Newest',
+      creator: 'A',
+      historyTimestamp: null,
+      historyPosition: 0,
+      observedAt: '2026-09-25T19:01:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+  ];
+
+  const repeatedScan = mergeHistoryEvidence(existing, [
+    {
+      ...existing[1],
+      historyPosition: 0,
+      observedAt: '2026-09-25T20:01:00.000Z',
+    },
+    {
+      ...existing[0],
+      historyPosition: 1,
+      observedAt: '2026-09-25T20:01:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(repeatedScan.map((item) => item.externalId), ['newest', 'older']);
+  assert.equal(repeatedScan.length, 2);
+  assert.equal(repeatedScan[0].observedAt, '2026-09-25T20:01:00.000Z');
+
+  const ids = new Set(repeatedScan.map((item) => item.externalId));
+  assert.equal(ids.size, 2);
+});
+
+test('History reconciliation represents a newly surfaced top card once', () => {
+  const existing = [
+    {
+      externalId: 'older',
+      title: 'Older',
+      creator: 'B',
+      historyTimestamp: null,
+      historyPosition: 0,
+      observedAt: '2026-09-25T19:00:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+  ];
+
+  const merged = mergeHistoryEvidence(existing, [
+    {
+      externalId: 'newest',
+      title: 'Newest',
+      creator: 'A',
+      historyTimestamp: null,
+      historyPosition: 0,
+      observedAt: '2026-09-25T20:02:00.000Z',
+      provenance: 'youtube_history_dom',
+    },
+    {
+      ...existing[0],
+      historyPosition: 1,
+      observedAt: '2026-09-25T20:02:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(merged.map((item) => [item.externalId, item.historyPosition]), [
+    ['newest', 0],
+    ['older', 1],
+  ]);
+  assert.equal(merged.length, 2);
 });
