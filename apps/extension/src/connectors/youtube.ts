@@ -19,6 +19,7 @@ export const youtubeConnector = {
     'ytd-grid-video-renderer',
     'ytd-compact-video-renderer',
     'ytd-reel-item-renderer',
+    'yt-lockup-view-model',
   ],
   titleSelectors: [
     '#video-title',
