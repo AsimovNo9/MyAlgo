@@ -114,6 +114,7 @@ Implemented scope:
 - v1 → v2 migration preserves existing evidence/nodes and initializes legacy edge evidence references safely;
 - unknown/invalid schemas reset to an empty current state;
 - YouTube Home, selection, player-watch, and History observations persisted as normalized evidence while retaining existing raw compatibility stores.
+- History scans reconciled by stable video identity, preserving newest-to-oldest DOM order as relative recency and preventing repeated scans from creating duplicate History watch evidence.
 
 Acceptance criteria:
 
@@ -125,6 +126,7 @@ Acceptance criteria:
 - [x] Keep browser-observed evidence and YouTube API account/display data separate.
 - [x] Provide a versioned schema and migration strategy, including v1 → v2 preservation.
 - [x] Cover create, read, update, delete, reset, restart, evidence-backed edges, and migration behavior with CI-validated tests.
+- [x] Reconcile repeated YouTube History scans idempotently without using collector observation time as watch-event identity.
 
 Still intentionally excluded from #148:
 
