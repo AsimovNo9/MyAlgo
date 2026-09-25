@@ -28,6 +28,9 @@ export type SelectionObservation = {
 export type HistoryWatchedObservation = {
   videoId: string;
   exposureId: string | null;
+  title: string;
+  creator: string | null;
+  historyTimestamp: string | null;
   sessionId?: never;
   kind: 'watched';
   source: 'history';
@@ -158,7 +161,7 @@ export function toNormalizedInteraction(event: UserBehaviorObservation): Interac
     });
   }
 
-  if (event.source === 'player') {
+  if (event.kind === 'watched' && event.source === 'player') {
     return youtubeConnector.createInteraction({
       externalId: event.videoId,
       exposureId: event.exposureId,
@@ -174,11 +177,19 @@ export function toNormalizedInteraction(event: UserBehaviorObservation): Interac
     });
   }
 
-  return youtubeConnector.createInteraction({
-    externalId: event.videoId,
-    exposureId: event.exposureId,
-    interaction: 'watched',
-    observedAt: event.observedAt,
-    mechanism: 'history_dom',
-  });
+  if (event.kind === 'watched' && event.source === 'history') {
+    return youtubeConnector.createInteraction({
+      externalId: event.videoId,
+      exposureId: event.exposureId,
+      interaction: 'watched',
+      observedAt: event.observedAt,
+      mechanism: 'history_dom',
+      metadata: youtubeConnector.normalizeMetadata({
+        title: event.title,
+        creatorName: event.creator,
+      }),
+    });
+  }
+
+  throw new Error('Unsupported user behavior observation');
 }

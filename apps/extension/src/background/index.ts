@@ -2,11 +2,14 @@ import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
-import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
+import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 import type { SelectionObservation, UserBehaviorObservation } from '../content-scripts/youtube-interactions';
 import type { TemporalWatchObservation } from '../content-scripts/youtube-watch';
 import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behavior-correlation';
+import { toNormalizedInteraction } from '../content-scripts/youtube-interactions';
+import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
+import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 
 type PageCandidate = {
   external_id: string;
@@ -45,6 +48,47 @@ const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
+let historyReconciliationReady: Promise<void> = Promise.resolve();
+
+async function persistNormalizedEvidence(
+  evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
+  id: string,
+): Promise<void> {
+  await historyReconciliationReady;
+  await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
+}
+
+async function reconcileStoredHistoryEvidence(): Promise<void> {
+  const startedAt = performance.now();
+  console.info('[MyAlgo] history reconciliation started');
+  const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+  console.info('[MyAlgo] history reconciliation raw evidence loaded', {
+    historyCount: historyEvidence.length,
+  });
+  const normalizedInputs = historyEvidence.map((item) => ({
+    id: createHistoryEvidenceId(item.externalId),
+    evidence: toNormalizedInteraction({
+      videoId: item.externalId,
+      exposureId: null,
+      title: item.title,
+      creator: item.creator,
+      historyTimestamp: item.historyTimestamp,
+      kind: 'watched',
+      source: 'history',
+      observedAt: item.observedAt,
+      provenance: 'youtube_history_dom',
+    }),
+    confidence: 1,
+  }));
+
+  const result = await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
+  console.info('[MyAlgo] history reconciliation complete', {
+    removed: result.removed,
+    upserted: result.upserted,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  });
+}
 
 async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (!tabId || candidates.length === 0) return [];
@@ -122,7 +166,12 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
   return pool;
 }
 
+historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
+  console.warn('Stored History evidence reconciliation skipped', error);
+});
+
 chrome.runtime.onInstalled.addListener(() => {
+  void historyReconciliationReady.then(() => personalAlgorithmStore.initialize());
   chrome.storage.local.set({
     [STORAGE_KEYS.MODE]: 'Work',
     [STORAGE_KEYS.ENABLED]: true,
@@ -136,7 +185,7 @@ chrome.runtime.onInstalled.addListener(() => {
       includeShorts: true,
       includeLive: true,
     },
-    [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
+    // Preserve persisted History evidence across extension installs/updates.
     [STORAGE_KEYS.HISTORY_METRICS]: null,
     [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
     [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
@@ -182,6 +231,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       metrics?: unknown;
     };
   };
+
+  if (type === 'PERSONAL_ALGORITHM_REVIEW') {
+    void historyReconciliationReady.then(() => personalAlgorithmStore.reviewGraph())
+      .then((review) => sendResponse({ ok: true, review }))
+      .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to review Personal Algorithm Graph.' }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_REBUILD') {
+    void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
+      .then((graph) => sendResponse({ ok: true, graph }))
+      .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to rebuild Personal Algorithm Graph.' }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_EXPORT') {
+    void historyReconciliationReady.then(() => personalAlgorithmStore.exportStateJson())
+      .then((json) => sendResponse({ ok: true, json }))
+      .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to export Personal Algorithm Graph.' }));
+    return true;
+  }
 
   if (type === EXTENSION_MESSAGE_TYPES.GET_BEHAVIOR) {
     void (async () => {
@@ -298,6 +368,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const existing = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await persistNormalizedEvidence(
+        toNormalizedInteraction(observation),
+        `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`,
+      );
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
@@ -334,48 +408,101 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       const events = [...existing, observation].slice(-MAX_SELECTION_EVENTS);
       await setStorage(STORAGE_KEYS.SELECTION_EVENTS, events);
+      await persistNormalizedEvidence(
+        toNormalizedInteraction(observation),
+        `interaction:watched:${observation.videoId}:${observation.sessionId}`,
+      );
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store temporal watch observation.' }));
     return true;
   }
 
+  if (type === 'PERSONAL_ALGORITHM_BACKFILL_HISTORY_METADATA') {
+    void (async () => {
+      await historyReconciliationReady;
+      const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const normalizedInputs = historyEvidence.map((item) => ({
+        id: createHistoryEvidenceId(item.externalId),
+        evidence: toNormalizedInteraction({
+          videoId: item.externalId,
+          exposureId: null,
+          title: item.title,
+          creator: item.creator,
+          historyTimestamp: item.historyTimestamp,
+          kind: 'watched',
+          source: 'history',
+          observedAt: item.observedAt,
+          provenance: 'youtube_history_dom',
+        }),
+        confidence: 1,
+      }));
+      await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
+      const graph = await personalAlgorithmStore.rebuildGraphFromEvidence();
+      sendResponse({ ok: true, historyCount: historyEvidence.length, graph });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to backfill history metadata.',
+    }));
+    return true;
+  }
+
   if (type === EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION) {
+    console.info('[MyAlgo] received history observation');
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
-      const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
-      for (const item of historyEvidence) {
-        if (item?.externalId && item.title && item.provenance === 'youtube_history_dom') {
-          byExternalId.set(item.externalId, item);
-        }
-      }
-      const evidence = [...byExternalId.values()]
-        .sort(
-          (a, b) =>
-            new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime(),
-        )
+      const validHistoryEvidence = historyEvidence.filter((item) => (
+        item?.externalId && item.title && item.provenance === 'youtube_history_dom'
+      ));
+      const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
         .slice(0, MAX_HISTORY_EVIDENCE);
+      console.info('[MyAlgo] history observation prepared', {
+        incoming: historyEvidence.length,
+        validIncoming: validHistoryEvidence.length,
+        existing: existing.length,
+        merged: evidence.length,
+      });
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
-      const watchedEvents = historyEvidence.map((item) => ({
+      const nonHistoryEvents = existingEvents.filter((event) => !(event.kind === 'watched' && event.source === 'history'));
+      const watchedEvents = evidence.map((item) => ({
         videoId: item.externalId,
         exposureId: null,
+        title: item.title,
+        creator: item.creator,
+        historyTimestamp: item.historyTimestamp,
         kind: 'watched' as const,
         source: 'history' as const,
         observedAt: item.observedAt,
         provenance: 'youtube_history_dom' as const,
       }));
-      const existingKeys = new Set(existingEvents.map((event) => event.kind + '|' + event.videoId + '|' + event.observedAt));
-      const newWatchedEvents = watchedEvents.filter((event) => !existingKeys.has(event.kind + '|' + event.videoId + '|' + event.observedAt));
-      await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [...existingEvents, ...newWatchedEvents].slice(-MAX_SELECTION_EVENTS));
+      await setStorage(STORAGE_KEYS.SELECTION_EVENTS, [
+        ...nonHistoryEvents,
+        ...watchedEvents,
+      ].slice(-MAX_SELECTION_EVENTS));
+      await historyReconciliationReady;
+      await personalAlgorithmStore.reconcileHistoryEvidence(
+        watchedEvents.map((event) => ({
+          id: createHistoryEvidenceId(event.videoId),
+          evidence: toNormalizedInteraction(event),
+          confidence: 1,
+        })),
+      );
+      console.info('[MyAlgo] history observation persisted', {
+        storedEvidence: evidence.length,
+      });
       sendResponse({ ok: true, storedEvidence: evidence.length });
-    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
+    })().catch((error) => {
+      console.error('[MyAlgo] history observation failed', error);
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' });
+    });
     return true;
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION) {
+    console.info('[MyAlgo] received recommendation observation');
     void (async () => {
       const incoming = Array.isArray(payload?.observations) ? payload.observations as RecommendationObservation[] : [];
       const existing = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
@@ -383,10 +510,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
       ));
       const observations = mergeRecommendationObservations(existing, validIncoming);
+      console.info('[MyAlgo] recommendation observation prepared', {
+        incoming: incoming.length,
+        validIncoming: validIncoming.length,
+        existing: existing.length,
+        merged: observations.length,
+      });
       await setStorage(STORAGE_KEYS.HOME_OBSERVATIONS, observations);
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
+      await Promise.all(validIncoming.map((observation) => persistNormalizedEvidence(
+        toNormalizedExposure(observation),
+        `exposure:${observation.exposureId}`,
+      )));
+      console.info('[MyAlgo] recommendation observation persisted', {
+        storedObservations: observations.length,
+      });
       sendResponse({ ok: true, storedObservations: observations.length });
-    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' }));
+    })().catch((error) => {
+      console.error('[MyAlgo] recommendation observation failed', error);
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' });
+    });
     return true;
   }
 

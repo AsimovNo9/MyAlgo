@@ -69,6 +69,7 @@ test('history extraction keeps minimal visible evidence and tracks rejected rows
     title: 'Local-first design',
     creator: 'MyAlgo channel',
     historyTimestamp: 'Watched 2 days ago',
+    historyPosition: 0,
     observedAt,
     provenance: 'youtube_history_dom',
   }]);

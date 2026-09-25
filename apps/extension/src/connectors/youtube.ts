@@ -118,6 +118,7 @@ export const youtubeConnector: PageProviderConnector = {
       },
       sessionId: input.sessionId ?? null,
       metrics: input.metrics,
+      metadata: input.metadata ?? null,
     };
   },
 } satisfies PageProviderConnector;

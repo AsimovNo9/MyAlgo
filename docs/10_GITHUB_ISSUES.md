@@ -91,7 +91,56 @@ The full contract is documented in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTO
 
 ## P1 — Local Personal Algorithm Graph
 
-### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph
+### [#148](https://github.com/AsimovNo9/MyAlgo/issues/148): Implement local evidence store and Personal Algorithm Graph — **implementation in PR #191**
+
+PR #191 continues the #148 implementation with an evidence-backed graph relationship boundary.
+
+Implemented scope:
+
+- versioned browser-local state schema, now v2;
+- normalized evidence records with confidence and retention/expiry metadata;
+- content graph nodes keyed by source + external ID;
+- graph nodes/edges with explicit versus inferred provenance;
+- `evidenceIds` on graph edges for exact supporting-evidence provenance;
+- inferred edges require at least one existing supporting evidence record;
+- deleting evidence removes its edge references and removes inferred edges that would otherwise have no support;
+- evidence lookup by graph edge for future explanation/replay;
+- user-edit and graph-revision records;
+- evidence create/read/update/delete and targeted content deletion;
+- graph node/edge create/update/delete;
+- deterministic semantic graph materialization from retained evidence for creator relationships;
+- deterministic graph-review summary for node/edge counts, semantic kinds/relations, and evidence-support coverage;
+- reset, restart-safe initialization, and export-ready serialization (`exportState()` / JSON);
+- v1 → v2 migration preserves existing evidence/nodes and initializes legacy edge evidence references safely;
+- unknown/invalid schemas reset to an empty current state;
+- YouTube Home, selection, player-watch, and History observations persisted as normalized evidence while retaining existing raw compatibility stores.
+- History scans reconciled by stable video identity, preserving newest-to-oldest DOM order as relative recency and preventing repeated scans from creating duplicate History watch evidence.
+
+Acceptance criteria:
+
+- [x] Store evidence with source, observed time, external reference, provenance, confidence, and retention/expiry metadata.
+- [x] Model graph nodes, edges, user edits, graph revisions, and explicit versus inferred provenance.
+- [x] Make inferred graph edges traceable to supporting evidence records.
+- [x] Remove stale inferred relationships when their supporting evidence is deleted.
+- [x] Support reset, targeted evidence deletion, graph export-ready serialization, and lifecycle-safe persistence.
+- [x] Keep browser-observed evidence and YouTube API account/display data separate.
+- [x] Provide a versioned schema and migration strategy, including v1 → v2 preservation.
+- [x] Cover create, read, update, delete, reset, restart, evidence-backed edges, and migration behavior with CI-validated tests.
+- [x] Reconcile repeated YouTube History scans idempotently without using collector observation time as watch-event identity.
+
+Still intentionally excluded from #148:
+
+- preference inference;
+- deterministic scoring/ranking;
+- cross-source identity resolution;
+- feed enforcement;
+- YouTube Data API graph bootstrap.
+
+Those remain downstream work. The next graph-layer work should build semantic entities/relationships and then a separately specified preference-inference layer rather than treating every `watched` record as a preference.
+
+### History persistence and reconciliation regression coverage
+
+PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
 
 ### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime
 

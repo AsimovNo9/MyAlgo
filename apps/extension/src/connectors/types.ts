@@ -76,5 +76,6 @@ export interface PageProviderConnector extends EvidenceConnector {
     mechanism: string;
     sessionId?: string | null;
     metrics?: Record<string, number>;
+    metadata?: ContentMetadata | null;
   }): InteractionEvidence;
 }

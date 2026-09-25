@@ -89,6 +89,12 @@ The YouTube connector treats a player watch as a session-scoped observation.
 The temporal collector is evidence collection only. It does not infer
 preference, assign a score, or change recommendation ranking.
 
+### History reconciliation
+
+The rendered YouTube History page is an ordered list of watched content, but the browser-visible cards do not provide a stable watched-at timestamp. The History collector therefore treats the YouTube video ID as the stable content-level identity and records the card's relative position (`0 = newest observed card`). Repeated scans are reconciled by video ID: metadata, observation time, and relative position are refreshed without creating another local History watch event. This prevents repeated DOM scans from turning collector observation time into false watch events.
+
+A History watch represented this way is therefore a bootstrap/fallback observation of the current History state, not an authoritative event log or replay counter. Live player telemetry remains the event/session-level source when the product needs actual playback behavior.
+
 ### Graph node
 
 ```ts
