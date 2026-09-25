@@ -270,7 +270,7 @@ The v2 local state retains source, observed time, external identity, provenance,
 
 Evidence deletion removes its references from graph edges. Inferred edges with no remaining support are removed rather than left as unsupported claims. The store can resolve an edge back to its current supporting evidence records for future explanation and replay features.
 
-User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later.
+User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later. The store also exposes a deterministic graph-review summary for development validation before a dedicated visualization UI exists.
 
 Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization. Schema version 2 has an explicit v1 → v2 migration that preserves existing evidence and graph nodes and initializes legacy edge support references to an empty list. Unknown versions are not heuristically interpreted.
 
