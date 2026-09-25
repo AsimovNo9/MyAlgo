@@ -5,7 +5,8 @@ export type MessageType =
   | 'FEEDBACK'
   | 'ACTIVITY'
   | 'HISTORY_OBSERVATION'
-  | 'RECOMMENDATION_OBSERVATION';
+  | 'RECOMMENDATION_OBSERVATION'
+  | 'SCAN_OBSERVATIONS';
 
 export interface RuntimeMessage<T = unknown> {
   type: MessageType;

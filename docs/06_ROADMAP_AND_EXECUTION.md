@@ -23,10 +23,16 @@ enables the experimental history-bootstrap setting. The spike stores only:
 - visible history timestamp when present;
 - observation time and `youtube_history_dom` provenance.
 
-Evidence remains local, is deduplicated by video ID, and is capped at 1,000
-records. The observer records local yield/failure counters for duplicate,
-injected, missing-ID, and missing-title rows. It must never send observations to
-a backend.
+Evidence remains local and is deduplicated by video ID without a silent record
+cap. A user-triggered History scan scrolls until YouTube stops extending the
+rendered history page; every eligible row encountered during the scan is stored.
+The observer records local yield/failure counters for duplicate, injected,
+missing-ID, and missing-title rows. It must never send observations to a backend.
+
+Home is an unbounded feed rather than a finite history list. The extension stores
+every unique Home card YouTube renders while the observer is enabled, plus a
+user-triggered snapshot of the current Home surface. It does not claim to collect
+an unknowable complete future Home feed.
 
 Before this phase exits, run a real-browser session that scrolls a realistic
 history volume and record usable-evidence yield, pagination/infinite-scroll

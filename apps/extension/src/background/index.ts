@@ -2,7 +2,7 @@ import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
-import type { HistoryEvidence, HistoryObservationMetrics } from '../content-scripts/youtube-history';
+import { mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { applyRecommendationOutcome, mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
 
 type PageCandidate = {
@@ -84,6 +84,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
+      surface?: 'history' | 'home';
     };
   };
 
@@ -169,13 +170,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
-      const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
-      for (const item of historyEvidence) {
-        if (item?.externalId && item.title && item.provenance === 'youtube_history_dom') {
-          byExternalId.set(item.externalId, item);
-        }
-      }
-      const evidence = [...byExternalId.values()].slice(-1000);
+      const evidence = mergeHistoryEvidence(existing, historyEvidence);
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       await Promise.all(historyEvidence.map((item) => correlateRecommendationOutcome(item.externalId, 'watched')));
@@ -196,6 +191,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
       sendResponse({ ok: true, storedObservations: observations.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' }));
+    return true;
+  }
+
+  if (type === EXTENSION_MESSAGE_TYPES.SCAN_OBSERVATIONS) {
+    void (async () => {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true, url: [...youtubeConnector.pageUrlPatterns] });
+      const tab = tabs[0];
+      if (!tab?.id || !payload?.surface) {
+        sendResponse({ ok: false, error: 'Open the matching YouTube page before starting a scan.' });
+        return;
+      }
+      await chrome.tabs.sendMessage(tab.id, { type: 'RUN_OBSERVATION_SCAN', payload: { surface: payload.surface } });
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to start observation scan.' }));
     return true;
   }
 

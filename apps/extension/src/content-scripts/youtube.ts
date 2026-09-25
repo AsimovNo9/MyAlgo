@@ -22,6 +22,7 @@ let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
+let historyScanInProgress = false;
 let extensionEnabled = true;
 let lastCandidateSignature = '';
 let lastRankMode = '';
@@ -375,6 +376,39 @@ const scheduleHomeRecommendationObservation = () => {
   }, 400);
 };
 
+const waitForObservationRender = (milliseconds: number) => new Promise<void>((resolve) => {
+  window.setTimeout(resolve, milliseconds);
+});
+
+const scanHistoryToEnd = async () => {
+  if (!isYouTubeHistoryPage(location.pathname)) {
+    showStatus('Personal Algorithm: open YouTube History before scanning', true);
+    return;
+  }
+  if (historyScanInProgress) return;
+
+  historyScanInProgress = true;
+  let stagnantScrolls = 0;
+  showStatus('Personal Algorithm: scanning YouTube History');
+  try {
+    while (stagnantScrolls < 4 && isCurrentInstance() && isYouTubeHistoryPage(location.pathname)) {
+      observeHistoryPage();
+      const previousHeight = document.documentElement.scrollHeight;
+      window.scrollTo({ top: previousHeight, behavior: 'auto' });
+      await waitForObservationRender(900);
+      observeHistoryPage();
+      if (document.documentElement.scrollHeight > previousHeight) {
+        stagnantScrolls = 0;
+      } else {
+        stagnantScrolls += 1;
+      }
+    }
+    showStatus('Personal Algorithm: History scan complete');
+  } finally {
+    historyScanInProgress = false;
+  }
+};
+
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
   removeReplacementCards();
@@ -600,6 +634,15 @@ chrome.runtime.onMessage.addListener((message) => {
       refreshRecommendationShelf();
       triggerRank('mode');
     });
+    return;
+  }
+  if (message?.type === 'RUN_OBSERVATION_SCAN') {
+    if (message.payload?.surface === 'history') {
+      void scanHistoryToEnd();
+    } else if (message.payload?.surface === 'home') {
+      observeHomeRecommendations();
+      showStatus('Personal Algorithm: Home snapshot collected');
+    }
     return;
   }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;

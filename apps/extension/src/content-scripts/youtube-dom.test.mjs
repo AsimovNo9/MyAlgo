@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
-import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
+import { collectHistoryEvidence, isYouTubeHistoryPage, mergeHistoryEvidence } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
 import { youtubePageFixtures } from './youtube-fixtures.ts';
@@ -87,6 +87,19 @@ test('history extraction runs only on the rendered YouTube history page', () => 
   assert.equal(isYouTubeHistoryPage('/feed/subscriptions'), false);
 });
 
+test('history merge retains every unique observed video without a silent cap', () => {
+  const records = Array.from({ length: 1_001 }, (_value, index) => ({
+    externalId: `history-${index}`,
+    title: `History ${index}`,
+    creator: null,
+    historyTimestamp: null,
+    observedAt: '2026-09-24T12:00:00.000Z',
+    provenance: 'youtube_history_dom',
+  }));
+
+  assert.equal(mergeHistoryEvidence([], records).length, 1_001);
+});
+
 test('Home extraction records surfaced context without inferring preference', () => {
   const observedAt = '2026-09-24T12:00:00.000Z';
   const observation = collectRecommendationObservations([
@@ -141,6 +154,22 @@ test('repeated Home observation retains a correlated interaction outcome', () =>
   assert.equal(merged[0].outcome, 'watched');
   assert.equal(merged[0].section, 'Recommended');
   assert.equal(merged[0].observedAt, '2026-09-25T12:00:00.000Z');
+});
+
+test('Home merge retains every unique rendered card without a silent cap', () => {
+  const records = Array.from({ length: 501 }, (_value, index) => ({
+    externalId: `home-${index}`,
+    title: `Home ${index}`,
+    creator: null,
+    position: index,
+    section: null,
+    observedAt: '2026-09-24T12:00:00.000Z',
+    provenance: 'youtube_home_dom',
+    evidenceKind: 'surfaced',
+    outcome: 'unobserved',
+  }));
+
+  assert.equal(mergeRecommendationObservations([], records).length, 501);
 });
 
 test('Home extraction runs only on the YouTube landing page', () => {

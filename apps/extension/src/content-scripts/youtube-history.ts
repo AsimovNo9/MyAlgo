@@ -108,3 +108,13 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
 
   return collectHistoryEvidence(candidates, observedAt);
 }
+
+export function mergeHistoryEvidence(existing: HistoryEvidence[], incoming: HistoryEvidence[]): HistoryEvidence[] {
+  const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
+  for (const evidence of incoming) {
+    if (evidence?.externalId && evidence.title && evidence.provenance === 'youtube_history_dom') {
+      byExternalId.set(evidence.externalId, evidence);
+    }
+  }
+  return [...byExternalId.values()];
+}

@@ -14,6 +14,8 @@ Acceptance criteria:
 - capture stable video identity
 - capture useful metadata
 - handle pagination/infinite scroll
+- user-triggered scan retains every eligible rendered history row until YouTube
+	stops extending the finite history surface; no silent record cap
 - document failure cases
 - measure usable evidence yield
 
@@ -32,6 +34,10 @@ Acceptance criteria:
 For the Home surface, store recommendation appearance as `surfaced` contextual
 evidence with position and section metadata. Do not treat appearance alone as a
 user preference.
+
+Retain every unique Home card that YouTube renders while observation is enabled.
+Home is unbounded, so this is an observed-feed record rather than a claim to
+capture an unknowable complete future Home feed.
 
 ### [#174](https://github.com/AsimovNo9/MyAlgo/issues/174): Correlate surfaced recommendations with user behavior
 

@@ -121,7 +121,6 @@ export function applyRecommendationOutcome(
 export function mergeRecommendationObservations(
   existing: RecommendationObservation[],
   incoming: RecommendationObservation[],
-  limit = 500,
 ): RecommendationObservation[] {
   const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
   for (const observation of incoming) {
@@ -133,5 +132,5 @@ export function mergeRecommendationObservations(
         : observation.outcome,
     });
   }
-  return [...byExternalId.values()].slice(-limit);
+  return [...byExternalId.values()];
 }
