@@ -288,3 +288,17 @@ export function normalizeSemanticConceptMatch(match: SemanticConceptMatch): Sema
 }
 
 export type { ContentIdentity, ContentMetadata, EvidenceConnector, EvidenceProvenance, ExposureEvidence, InteractionEvidence, InteractionKind, NormalizedEvidence } from './evidence';
+
+export type {
+  EvidenceRecord,
+  EvidenceRetentionPolicy,
+  GraphEdge,
+  GraphNode,
+  GraphNodeKind,
+  GraphProvenance,
+  GraphRevision,
+  PersonalAlgorithmGraph,
+  PersonalAlgorithmState,
+  UserGraphEdit,
+} from './personal-algorithm';
+export { PERSONAL_ALGORITHM_SCHEMA_VERSION, createEmptyGraph } from './personal-algorithm';
