@@ -108,6 +108,8 @@ Implemented scope:
 - user-edit and graph-revision records;
 - evidence create/read/update/delete and targeted content deletion;
 - graph node/edge create/update/delete;
+- deterministic semantic graph materialization from retained evidence for creator relationships;
+- deterministic graph-review summary for node/edge counts, semantic kinds/relations, and evidence-support coverage;
 - reset, restart-safe initialization, and export-ready serialization;
 - v1 → v2 migration preserves existing evidence/nodes and initializes legacy edge evidence references safely;
 - unknown/invalid schemas reset to an empty current state;
