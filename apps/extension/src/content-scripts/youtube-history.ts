@@ -24,6 +24,10 @@ export type HistoryObservationMetrics = {
   missingVideoId: number;
   missingTitle: number;
   injectedCandidates: number;
+  creatorPresent: number;
+  creatorCoverageRate: number;
+  durationSuffixedTitles: number;
+  placeholderTitles: number;
 };
 
 export function isYouTubeHistoryPage(pathname: string): boolean {
@@ -41,6 +45,10 @@ export function collectHistoryEvidence(
     missingVideoId: 0,
     missingTitle: 0,
     injectedCandidates: 0,
+    creatorPresent: 0,
+    creatorCoverageRate: 0,
+    durationSuffixedTitles: 0,
+    placeholderTitles: 0,
   };
   const seen = new Set<string>();
   const evidence: HistoryEvidence[] = [];
@@ -63,6 +71,18 @@ export function collectHistoryEvidence(
       continue;
     }
 
+    if (title === 'Watch') {
+      metrics.placeholderTitles += 1;
+    }
+    if (/\b\d+\s+(?:seconds?|minutes?|hours?)\s*(?:ago)?$/i.test(title)) {
+      metrics.durationSuffixedTitles += 1;
+    }
+
+    const creator = normalizeYouTubeText(candidate.creator ?? '') || null;
+    if (creator) {
+      metrics.creatorPresent += 1;
+    }
+
     if (seen.has(externalId)) {
       metrics.duplicateCandidates += 1;
       continue;
@@ -72,7 +92,7 @@ export function collectHistoryEvidence(
     evidence.push({
       externalId,
       title,
-      creator: normalizeYouTubeText(candidate.creator ?? '') || null,
+      creator,
       historyTimestamp: normalizeYouTubeText(candidate.historyTimestamp ?? '') || null,
       observedAt,
       provenance: 'youtube_history_dom',
@@ -80,6 +100,9 @@ export function collectHistoryEvidence(
   }
 
   metrics.usableEvidence = evidence.length;
+  metrics.creatorCoverageRate = evidence.length > 0
+    ? Number((metrics.creatorPresent / evidence.length).toFixed(4))
+    : 0;
   return { evidence, metrics };
 }
 
