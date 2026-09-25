@@ -22,6 +22,20 @@ export type EvidenceInput = {
   expiresAt?: string | null;
 };
 
+export type GraphReview = {
+  schemaVersion: number;
+  evidenceCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  nodesByKind: Record<string, number>;
+  edgesByRelation: Record<string, number>;
+  inferredEdgeCount: number;
+  inferredEdgesWithSupport: number;
+  inferredEdgesWithoutSupport: number;
+  evidenceBackedEdgeCount: number;
+  unsupportedEdgeIds: string[];
+};
+
 const DEFAULT_STATE_KEY = 'personal-algorithm-state';
 const PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
 const LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
@@ -309,6 +323,119 @@ export class LocalPersonalAlgorithmStore {
   async exportState(): Promise<PersonalAlgorithmState> {
     const state = await this.getState();
     return structuredClone(state);
+  }
+
+  async reviewGraph(): Promise<GraphReview> {
+    const state = await this.getState();
+    const nodesByKind: Record<string, number> = {};
+    for (const node of state.graph.nodes) {
+      nodesByKind[node.kind] = (nodesByKind[node.kind] ?? 0) + 1;
+    }
+
+    const edgesByRelation: Record<string, number> = {};
+    const evidenceIds = new Set(state.evidence.map((record) => record.id));
+    const inferredEdges = state.graph.edges.filter((edge) => edge.provenance === 'inferred');
+    const supportedInferredEdges = inferredEdges.filter((edge) => edge.evidenceIds.some((id) => evidenceIds.has(id)));
+    const unsupportedEdgeIds = inferredEdges
+      .filter((edge) => !edge.evidenceIds.some((id) => evidenceIds.has(id)))
+      .map((edge) => edge.id)
+      .sort();
+
+    for (const edge of state.graph.edges) {
+      edgesByRelation[edge.relation] = (edgesByRelation[edge.relation] ?? 0) + 1;
+    }
+
+    return {
+      schemaVersion: state.schemaVersion,
+      evidenceCount: state.evidence.length,
+      nodeCount: state.graph.nodes.length,
+      edgeCount: state.graph.edges.length,
+      nodesByKind,
+      edgesByRelation,
+      inferredEdgeCount: inferredEdges.length,
+      inferredEdgesWithSupport: supportedInferredEdges.length,
+      inferredEdgesWithoutSupport: unsupportedEdgeIds.length,
+      evidenceBackedEdgeCount: state.graph.edges.filter((edge) => edge.evidenceIds.length > 0).length,
+      unsupportedEdgeIds,
+    };
+  }
+
+  async rebuildGraphFromEvidence(): Promise<PersonalAlgorithmGraph> {
+    return this.mutate((state) => {
+      const existingNodes = state.graph.nodes.filter((node) => node.provenance === 'explicit' && node.kind !== 'content');
+      const existingEdges = state.graph.edges.filter((edge) => edge.provenance === 'explicit');
+      const contentNodes = new Map(
+        state.graph.nodes
+          .filter((node) => node.kind === 'content')
+          .map((node) => [node.id, node]),
+      );
+
+      for (const record of state.evidence) {
+        this.ensureContentNode(state, record.evidence);
+        const contentId = contentNodeId(record.evidence.content.source, record.evidence.content.externalId);
+        const contentNode = state.graph.nodes.find((node) => node.id === contentId);
+        if (record.evidence.kind !== 'exposure' || !record.evidence.metadata?.creatorId && !record.evidence.metadata?.creatorName) {
+          continue;
+        }
+
+        const creatorKey = record.evidence.metadata.creatorId ?? record.evidence.metadata.creatorName;
+        if (!creatorKey) continue;
+        const creatorNodeId = `creator:${encodeURIComponent(record.evidence.content.source)}:${encodeURIComponent(creatorKey)}`;
+        const creatorLabel = record.evidence.metadata.creatorName ?? creatorKey;
+        const creatorNode = state.graph.nodes.find((node) => node.id === creatorNodeId);
+        if (!creatorNode) {
+          const timestamp = nowIso();
+          state.graph.nodes.push({
+            id: creatorNodeId,
+            kind: 'creator',
+            label: creatorLabel,
+            provenance: 'inferred',
+            confidence: null,
+            attributes: { source: record.evidence.content.source },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+
+        const edgeId = `edge:created_by:${contentId}:${creatorNodeId}`;
+        const existingEdge = state.graph.edges.find((edge) => edge.id === edgeId);
+        if (existingEdge) {
+          existingEdge.evidenceIds = [...new Set([...existingEdge.evidenceIds, record.id])];
+          existingEdge.updatedAt = nowIso();
+        } else {
+          const timestamp = nowIso();
+          state.graph.edges.push({
+            id: edgeId,
+            sourceNodeId: contentId,
+            targetNodeId: creatorNodeId,
+            relation: 'created_by',
+            provenance: 'inferred',
+            confidence: record.confidence,
+            evidenceIds: [record.id],
+            attributes: {},
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+      }
+
+      const generatedCreatorIds = new Set(
+        state.graph.edges
+          .filter((edge) => edge.provenance === 'inferred' && edge.relation === 'created_by')
+          .map((edge) => edge.targetNodeId),
+      );
+      state.graph.edges = [
+        ...existingEdges,
+        ...state.graph.edges.filter((edge) => edge.provenance === 'inferred'),
+      ];
+      state.graph.nodes = [
+        ...existingNodes,
+        ...contentNodes.values(),
+        ...state.graph.nodes.filter((node) => node.provenance === 'inferred' && (node.kind !== 'creator' || generatedCreatorIds.has(node.id))),
+      ];
+
+      return structuredClone(state.graph);
+    });
   }
 
   private ensureContentNode(state: PersonalAlgorithmState, evidence: NormalizedEvidence): void {
