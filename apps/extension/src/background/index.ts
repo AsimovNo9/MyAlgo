@@ -132,7 +132,6 @@ chrome.runtime.onInstalled.addListener(() => {
       includeShorts: true,
       includeLive: true,
     },
-    [STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED]: false,
     [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
     [STORAGE_KEYS.HISTORY_METRICS]: null,
     [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
