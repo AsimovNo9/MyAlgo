@@ -202,6 +202,7 @@ const renderRecommendationShelf = (attempt = 0) => {
 };
 
 const refreshRecommendationShelf = () => {
+  if (isYouTubeHistoryPage(location.pathname)) return;
   const requestGeneration = ++feedRequestGeneration;
   chrome.runtime.sendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
     if (
@@ -341,14 +342,11 @@ const collectCandidates = () => {
 const observeHistoryPage = () => {
   if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
 
-  chrome.storage.local.get([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED], (result) => {
-    if (result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
-    const observation = collectHistoryEvidenceFromDom(document);
-    if (observation.evidence.length === 0) return;
-    chrome.runtime.sendMessage({
-      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
-      payload: observation,
-    });
+  const observation = collectHistoryEvidenceFromDom(document);
+  if (observation.evidence.length === 0) return;
+  chrome.runtime.sendMessage({
+    type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+    payload: observation,
   });
 };
 
@@ -471,7 +469,7 @@ const scheduleLatestRank = () => {
 };
 
 const rankCurrentPage = async (requestGeneration: number) => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
   if (rankingInFlight) {
     rankQueued = true;
     return;
@@ -526,7 +524,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'manual') => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
@@ -550,7 +548,7 @@ const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'ma
 };
 
 const scheduleInitialRank = () => {
-  if (!extensionEnabled || !isCurrentInstance()) return;
+  if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
     if (!extensionEnabled || !isCurrentInstance()) return;
     const currentCandidates = collectCandidates();
@@ -707,16 +705,21 @@ window.addEventListener('yt-navigate-start', () => {
 window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
   if (currentVideoId) sendActivity(currentVideoId, 'revisited');
-  refreshRecommendationShelf();
-  triggerRank('navigation');
-  scheduleHistoryObservation();
+  if (isYouTubeHistoryPage(location.pathname)) {
+    scheduleHistoryObservation();
+  } else {
+    refreshRecommendationShelf();
+    triggerRank('navigation');
+    scheduleHomeRecommendationObservation();
+  }
   scheduleHomeRecommendationObservation();
 });
 window.addEventListener('yt-page-data-updated', () => {
   triggerRank('navigation');
 });
 window.addEventListener('popstate', () => {
-  triggerRank('navigation');
+  if (!isYouTubeHistoryPage(location.pathname)) triggerRank('navigation');
+  else scheduleHistoryObservation();
 });
 window.addEventListener('resize', () => {
   if (resizeTimer !== undefined) window.clearTimeout(resizeTimer);
