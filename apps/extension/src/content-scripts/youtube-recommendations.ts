@@ -1,7 +1,9 @@
 import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
+import { createExposureId } from './youtube-interactions.ts';
 
 export type RecommendationObservation = {
   externalId: string;
+  exposureId: string;
   title: string;
   creator: string | null;
   position: number;
@@ -63,17 +65,21 @@ export function collectRecommendationObservations(
       metrics.missingTitle += 1;
       continue;
     }
-    if (seen.has(externalId)) {
+    const position = observations.length;
+    const section = normalizeYouTubeText(candidate.section ?? '') || null;
+    const exposureId = createExposureId({ videoId: externalId, surface: 'home', section, position });
+    if (seen.has(exposureId)) {
       metrics.duplicateCandidates += 1;
       continue;
     }
-    seen.add(externalId);
+    seen.add(exposureId);
     observations.push({
       externalId,
-      title,
+      exposureId,
+      title:
       creator: normalizeYouTubeText(candidate.creator ?? '') || null,
-      position: observations.length,
-      section: normalizeYouTubeText(candidate.section ?? '') || null,
+      position,
+      section,
       observedAt,
       provenance: 'youtube_home_dom',
       evidenceKind: 'surfaced',
@@ -130,15 +136,15 @@ export function mergeRecommendationObservations(
   incoming: RecommendationObservation[],
   limit = 500,
 ): RecommendationObservation[] {
-  const byExternalId = new Map(existing.map((item) => [item.externalId, item]));
+  const byExposureId = new Map(existing.map((item) => [item.exposureId || createExposureId({ videoId: item.externalId, surface: 'home', section: item.section, position: item.position }), item]));
   for (const observation of incoming) {
-    const previous = byExternalId.get(observation.externalId);
-    byExternalId.set(observation.externalId, {
+    const previous = byExposureId.get(observation.exposureId);
+    byExposureId.set(observation.exposureId, {
       ...observation,
       outcome: previous?.outcome && previous.outcome !== 'unobserved'
         ? previous.outcome
         : observation.outcome,
     });
   }
-  return [...byExternalId.values()].slice(-limit);
+  return [...byExposureId.values()].slice(-limit);
 }
