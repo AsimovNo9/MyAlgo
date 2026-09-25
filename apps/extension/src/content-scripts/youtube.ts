@@ -629,7 +629,7 @@ const enrichYouTubeVideo = async (candidate: { external_id: string; title: strin
       channel_name: channelName,
       channel_id: channelId,
       thumbnail_url: thumbnail,
-      description: description?.slice(0, 1000) ?? null,
+      description: description?.slice(0, 600) ?? null,
       duration_seconds: duration,
       published_at: publishedAt,
       view_count: viewCount,
