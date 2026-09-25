@@ -792,8 +792,7 @@ pageObserver.observe(document.documentElement, { childList: true, subtree: true 
 const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'auxclick' | 'keyboard') => {
   if (!isCurrentInstance() || !extensionEnabled) return;
   const target = event.target instanceof Element ? event.target : null;
-  const surface = getYouTubeSurface(location.pathname);
-  const selection = getSelectionFromTarget(target, videoSelectors.join(','), surface);
+  const selection = getSelectionFromTarget(target, videoSelectors.join(','), location.pathname);
   if (!selection || selection.videoId.startsWith('title:')) return;
   const observation = createSelectionObservation(selection, kind);
   const now = Date.now();
