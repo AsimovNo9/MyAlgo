@@ -58,18 +58,36 @@ async function persistNormalizedEvidence(
 }
 
 async function reconcileStoredHistoryEvidence(): Promise<void> {
+  const startedAt = performance.now();
+  console.info('[MyAlgo] history reconciliation started');
   const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+  console.info('[MyAlgo] history reconciliation raw evidence loaded', {
+    historyCount: historyEvidence.length,
+  });
   const storedEvidence = await personalAlgorithmStore.listEvidence();
+  console.info('[MyAlgo] history reconciliation normalized evidence loaded', {
+    evidenceCount: storedEvidence.length,
+  });
   const historyRecords = storedEvidence.filter((record) => (
     record.evidence.kind === 'interaction'
     && record.evidence.interaction === 'watched'
     && record.evidence.provenance.mechanism === 'history_dom'
   ));
   const canonicalIds = new Set(historyEvidence.map((item) => createHistoryEvidenceId(item.externalId)));
-
-  await Promise.all(historyRecords
+  const legacyHistoryIds = historyRecords
     .filter((record) => !canonicalIds.has(record.id))
-    .map((record) => personalAlgorithmStore.deleteEvidence(record.id)));
+    .map((record) => record.id);
+
+  console.info('[MyAlgo] history reconciliation plan', {
+    historyRecords: historyRecords.length,
+    canonicalHistoryIds: canonicalIds.size,
+    legacyHistoryIds: legacyHistoryIds.length,
+  });
+
+  await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
+  console.info('[MyAlgo] history reconciliation legacy cleanup complete', {
+    deleted: legacyHistoryIds.length,
+  });
 
   await Promise.all(historyEvidence.map((item) => persistNormalizedEvidence(
     toNormalizedInteraction({
@@ -452,6 +470,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION) {
+    console.info('[MyAlgo] received history observation');
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
@@ -460,6 +479,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       ));
       const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
         .slice(0, MAX_HISTORY_EVIDENCE);
+      console.info('[MyAlgo] history observation prepared', {
+        incoming: historyEvidence.length,
+        validIncoming: validHistoryEvidence.length,
+        existing: existing.length,
+        merged: evidence.length,
+      });
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
@@ -493,12 +518,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         toNormalizedInteraction(event),
         createHistoryEvidenceId(event.videoId),
       )));
+      console.info('[MyAlgo] history observation persisted', {
+        storedEvidence: evidence.length,
+      });
       sendResponse({ ok: true, storedEvidence: evidence.length });
-    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' }));
+    })().catch((error) => {
+      console.error('[MyAlgo] history observation failed', error);
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store history observation.' });
+    });
     return true;
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION) {
+    console.info('[MyAlgo] received recommendation observation');
     void (async () => {
       const incoming = Array.isArray(payload?.observations) ? payload.observations as RecommendationObservation[] : [];
       const existing = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
@@ -506,14 +538,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
       ));
       const observations = mergeRecommendationObservations(existing, validIncoming);
+      console.info('[MyAlgo] recommendation observation prepared', {
+        incoming: incoming.length,
+        validIncoming: validIncoming.length,
+        existing: existing.length,
+        merged: observations.length,
+      });
       await setStorage(STORAGE_KEYS.HOME_OBSERVATIONS, observations);
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
       await Promise.all(validIncoming.map((observation) => persistNormalizedEvidence(
         toNormalizedExposure(observation),
         `exposure:${observation.exposureId}`,
       )));
+      console.info('[MyAlgo] recommendation observation persisted', {
+        storedObservations: observations.length,
+      });
       sendResponse({ ok: true, storedObservations: observations.length });
-    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' }));
+    })().catch((error) => {
+      console.error('[MyAlgo] recommendation observation failed', error);
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store recommendation observation.' });
+    });
     return true;
   }
 
