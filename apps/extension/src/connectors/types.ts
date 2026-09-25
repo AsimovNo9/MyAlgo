@@ -1,3 +1,12 @@
+import type {
+  ContentIdentity,
+  ContentMetadata,
+  EvidenceConnector,
+  ExposureEvidence,
+  InteractionEvidence,
+  InteractionKind,
+} from '@repo/shared-types';
+
 export type ProviderCapabilities = {
   search: boolean;
   activity: boolean;
@@ -16,7 +25,7 @@ export type ProviderPresentationContract = {
   verticalAspectRatio: `${number} / ${number}`;
 };
 
-export interface PageProviderConnector {
+export interface PageProviderConnector extends EvidenceConnector {
   readonly id: string;
   readonly capabilities: ProviderCapabilities;
   readonly pageUrlPatterns: readonly string[];
@@ -37,4 +46,35 @@ export interface PageProviderConnector {
   normalizeText(value: string): string;
   getLinkTitle(attributes: { title?: string | null; ariaLabel?: string | null; textContent?: string | null }): string;
   mapPresentationEvent(event: 'opened' | 'revisited'): 'opened' | 'revisited';
+  identifyContent(externalId: string): ContentIdentity;
+  normalizeMetadata(input: {
+    title?: string | null;
+    creatorId?: string | null;
+    creatorName?: string | null;
+    description?: string | null;
+    durationSeconds?: number | null;
+    publishedAt?: string | null;
+    language?: string | null;
+    format?: string | null;
+    contentType?: string | null;
+  }): ContentMetadata;
+  createExposure(input: {
+    exposureId: string;
+    externalId: string;
+    surface: string;
+    section?: string | null;
+    position?: number | null;
+    observedAt: string;
+    mechanism: string;
+    metadata?: ContentMetadata | null;
+  }): ExposureEvidence;
+  createInteraction(input: {
+    externalId: string;
+    exposureId?: string | null;
+    interaction: InteractionKind;
+    observedAt: string;
+    mechanism: string;
+    sessionId?: string | null;
+    metrics?: Record<string, number>;
+  }): InteractionEvidence;
 }

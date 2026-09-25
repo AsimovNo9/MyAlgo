@@ -90,6 +90,22 @@ CI workflow run 313 passed for commit `ab4310088023883384ae9d5c1b9b97d15627be73`
 #150, #174, and the temporal-watch implementation are now implementation
 foundations rather than active spikes. #183 remains open until PR #184 is merged.
 
+## Connector contract gate
+
+Before implementing the local evidence store and graph, the provider boundary is frozen through #187.
+
+```text
+connector-specific observation
+          ↓
+source-neutral evidence contract
+          ↓
+#148 evidence store / Personal Algorithm Graph
+          ↓
+#151 deterministic scorer / trace
+```
+
+Additional connectors should implement the same contract rather than introducing platform-specific concepts into the graph or scorer.
+
 ## Phase 1 — Local graph
 
 1. Evidence store

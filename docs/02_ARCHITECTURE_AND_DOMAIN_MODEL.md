@@ -259,3 +259,32 @@ Do not permanently store raw provider/API payloads merely because they are conve
 The YouTube Data API is deliberately excluded from graph derivation at launch.
 
 If API use expands later, it must pass a dedicated policy review and may require a different architecture/permission path.
+
+
+## Source-neutral connector/evidence boundary
+
+The platform connector is an adapter boundary, not part of the Personal Algorithm domain.
+
+Provider-specific mechanics remain in the connector:
+
+- DOM and selectors;
+- provider IDs and URLs;
+- player/media telemetry;
+- history extraction;
+- navigation;
+- provider-specific provenance mechanisms;
+- presentation and feed enforcement.
+
+The connector maps those observations into source-neutral contracts:
+
+```text
+ContentIdentity
+ExposureEvidence
+InteractionEvidence
+ContentMetadata
+EvidenceProvenance
+```
+
+The evidence store, Personal Algorithm Graph, behavior correlation, scorer, and explanation layers must consume those normalized concepts rather than provider-specific IDs or event types.
+
+The full contract is defined in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTOR_CONTRACT.md`.
