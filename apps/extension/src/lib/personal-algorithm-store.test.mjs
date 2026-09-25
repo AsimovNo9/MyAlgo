@@ -90,6 +90,91 @@ test('history reconciliation replaces legacy history evidence in one storage wri
   assert.equal((await store.getGraph()).nodes.length, 2);
 });
 
+
+test('history reconciliation preserves unrelated evidence and is stable across repeated scans', async () => {
+  backing.clear();
+  setCalls = 0;
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({ evidence: exposure }, 'unrelated-exposure');
+
+  const historyEvidence = (videoId, title, creatorName = 'History creator') => ({
+    kind: 'interaction',
+    content: { source: 'youtube', externalId: videoId },
+    exposureId: null,
+    interaction: 'watched',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: { connector: 'youtube', mechanism: 'history_dom' },
+    metadata: { title, creatorName },
+  });
+
+  const inputs = [
+    { id: 'interaction:watched:history-a:history', evidence: historyEvidence('history-a', 'History A') },
+    { id: 'interaction:watched:history-b:history', evidence: historyEvidence('history-b', 'History B') },
+  ];
+
+  await store.reconcileHistoryEvidence(inputs);
+  const first = await store.listEvidence();
+  assert.deepEqual(first.map((record) => record.id).sort(), [
+    'interaction:watched:history-a:history',
+    'interaction:watched:history-b:history',
+    'unrelated-exposure',
+  ]);
+
+  await store.reconcileHistoryEvidence([
+    { ...inputs[0], evidence: historyEvidence('history-a', 'History A refreshed', 'Refreshed creator') },
+    inputs[1],
+  ]);
+
+  const second = await store.listEvidence();
+  assert.deepEqual(second.map((record) => record.id).sort(), [
+    'interaction:watched:history-a:history',
+    'interaction:watched:history-b:history',
+    'unrelated-exposure',
+  ]);
+  const refreshed = await store.getEvidence('interaction:watched:history-a:history');
+  assert.equal(refreshed?.evidence.metadata?.title, 'History A refreshed');
+  assert.equal(refreshed?.evidence.metadata?.creatorName, 'Refreshed creator');
+  assert.equal((await store.getGraph()).nodes.filter((node) => node.kind === 'content').length, 3);
+});
+
+test('history reconciliation removes unsupported inferred edges when legacy history records are replaced', async () => {
+  backing.clear();
+  setCalls = 0;
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  const historyEvidence = (videoId, title) => ({
+    kind: 'interaction',
+    content: { source: 'youtube', externalId: videoId },
+    exposureId: null,
+    interaction: 'watched',
+    observedAt: '2026-09-25T10:00:00.000Z',
+    provenance: { connector: 'youtube', mechanism: 'history_dom' },
+    metadata: { title, creatorName: 'History creator' },
+  });
+
+  await store.upsertEvidence({ evidence: historyEvidence('legacy-video', 'Legacy video') }, 'legacy-history');
+  await store.upsertEdge({
+    id: 'legacy-history-edge',
+    sourceNodeId: 'content:youtube:legacy-video',
+    targetNodeId: 'creator:history-creator',
+    relation: 'created_by',
+    provenance: 'inferred',
+    confidence: 1,
+    evidenceIds: ['legacy-history'],
+    attributes: {},
+  });
+
+  await store.reconcileHistoryEvidence([
+    { id: 'interaction:watched:canonical-video:history', evidence: historyEvidence('canonical-video', 'Canonical video') },
+  ]);
+
+  assert.equal(await store.getEvidence('legacy-history'), null);
+  assert.equal(await store.getEvidence('interaction:watched:canonical-video:history') !== null, true);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.id === 'legacy-history-edge'), false);
+  assert.equal((await store.getGraph()).nodes.some((node) => node.id === 'content:youtube:canonical-video'), true);
+});
+
 test('local store supports evidence CRUD, targeted deletion, graph edits, revisions, and export', async () => {
   backing.clear();
   const store = new LocalPersonalAlgorithmStore(storage);
