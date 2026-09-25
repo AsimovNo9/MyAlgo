@@ -1,6 +1,11 @@
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from '../content-scripts/youtube-dom.ts';
 import type { PageProviderConnector } from './types';
 
+const createYouTubeContentIdentity = (externalId: string) => ({
+  source: 'youtube',
+  externalId,
+});
+
 export const youtubeConnector = {
   id: 'youtube',
   capabilities: {
@@ -66,10 +71,7 @@ export const youtubeConnector = {
     return event;
   },
   identifyContent(externalId) {
-    return {
-      source: 'youtube',
-      externalId,
-    };
+    return createYouTubeContentIdentity(externalId);
   },
   normalizeMetadata(input) {
     return {
@@ -90,7 +92,7 @@ export const youtubeConnector = {
     return {
       kind: 'exposure',
       exposureId: input.exposureId,
-      content: this.identifyContent(input.externalId),
+      content: createYouTubeContentIdentity(input.externalId),
       surface: input.surface,
       section: input.section ?? null,
       position: input.position ?? null,
