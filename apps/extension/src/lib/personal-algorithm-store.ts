@@ -413,9 +413,10 @@ export class LocalPersonalAlgorithmStore {
 
       for (const record of records) {
         this.ensureContentNode(state, record.evidence);
-        if (record.evidence.kind !== 'exposure') continue;
-
         const metadata = record.evidence.metadata;
+        if (!metadata) continue;
+
+        if (record.evidence.kind !== 'exposure') continue;
         const creatorKey = metadata?.creatorId ?? metadata?.creatorName;
         if (!creatorKey) continue;
 
@@ -471,7 +472,7 @@ export class LocalPersonalAlgorithmStore {
 
     if (existing) {
       if (existing.kind !== 'content') return;
-      const metadata = evidence.kind === 'exposure' ? evidence.metadata : null;
+      const metadata = evidence.metadata ?? null;
       if (!metadata) return;
       const mergedMetadata = mergeContentMetadata(
         getContentMetadata(existing.attributes),
@@ -484,7 +485,7 @@ export class LocalPersonalAlgorithmStore {
       return;
     }
 
-    const metadata = evidence.kind === 'exposure' ? evidence.metadata : null;
+    const metadata = evidence.metadata ?? null;
     const title = metadata?.title?.trim();
     const timestamp = nowIso();
     state.graph.nodes.push({
