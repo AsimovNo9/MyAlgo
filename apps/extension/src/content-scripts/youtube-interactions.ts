@@ -23,14 +23,19 @@ export type SelectionObservation = {
   provenance: 'youtube_user_interaction';
 };
 
-export type WatchedObservation = {
+export type HistoryWatchedObservation = {
   videoId: string;
   exposureId: string | null;
+  sessionId?: never;
   kind: 'watched';
   source: 'history';
   observedAt: string;
   provenance: 'youtube_history_dom';
 };
+
+export type PlayerWatchedObservation = import('./youtube-watch.ts').TemporalWatchObservation;
+
+export type WatchedObservation = HistoryWatchedObservation | PlayerWatchedObservation;
 
 export type UserBehaviorObservation = SelectionObservation | WatchedObservation;
 

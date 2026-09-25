@@ -56,7 +56,8 @@ type EvidenceKind =
   | "explicit_negative";
 ```
 
-- `watched`: primary behavioral bootstrap evidence from rendered history.
+- `watched`: behavioral evidence from temporal player playback, with rendered
+  History retained as bootstrap/fallback evidence.
 - `surfaced`: weak contextual observation from the Home page, never direct taste
   evidence.
 - `explicit_positive` and `explicit_negative`: highest-confidence user input.
@@ -191,8 +192,10 @@ A connector owns:
 - feed enforcement
 - platform-specific UI behavior
 
-For YouTube P0, the connector has separate history and Home ingestion paths.
-They share stable video IDs for correlation but retain independent provenance.
+For YouTube P0, the connector has separate player, history, and Home ingestion
+paths. Player playback is the primary live watched signal; History remains a
+bootstrap/fallback path. They share stable video IDs for correlation but retain
+independent provenance.
 
 YouTube is the first connector.
 

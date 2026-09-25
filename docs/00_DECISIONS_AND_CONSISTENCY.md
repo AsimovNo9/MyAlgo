@@ -46,6 +46,12 @@ User input → graph input
 
 The graph must not be constructed from YouTube API Data.
 
+For live YouTube playback, `watched` is derived from temporal HTML media
+playback evidence rather than requiring a visit to the rendered History page.
+History remains a separate fallback/bootstrap source with its own provenance.
+A watch session accumulates actual media-time deltas while playback is active;
+pause, buffering, and seek jumps do not count toward the threshold.
+
 This is an intentional compliance boundary. It is not a claim that browser-observed YouTube data is automatically unrestricted; that remains subject to applicable terms, privacy requirements, and legal review.
 
 ### P0 browser-signal semantics
@@ -53,7 +59,8 @@ This is an intentional compliance boundary. It is not a claim that browser-obser
 P0 observes two distinct browser signals and must not conflate them:
 
 ```text
-History observation       → watched evidence       → bootstrap input
+Temporal player playback  → watched evidence       → primary live behavioral input
+History observation       → watched evidence       → bootstrap/fallback input
 Home recommendation       → surfaced observation  → contextual input
 Explicit user feedback    → explicit evidence     → highest-confidence input
 ```
