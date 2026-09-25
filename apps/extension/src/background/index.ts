@@ -49,11 +49,13 @@ const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
+let historyReconciliationReady: Promise<void> = Promise.resolve();
 
 async function persistNormalizedEvidence(
   evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
   id: string,
 ): Promise<void> {
+  await historyReconciliationReady;
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
@@ -164,7 +166,7 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
   return pool;
 }
 
-void reconcileStoredHistoryEvidence().catch((error) => {
+historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
   console.warn('Stored History evidence reconciliation skipped', error);
 });
 
@@ -418,19 +420,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'PERSONAL_ALGORITHM_BACKFILL_HISTORY_METADATA') {
     void (async () => {
+      await historyReconciliationReady;
       const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
-      const storedEvidence = await personalAlgorithmStore.listEvidence();
-      const legacyHistoryIds = storedEvidence
-        .filter((record) => (
-          record.evidence.kind === 'interaction'
-          && record.evidence.interaction === 'watched'
-          && record.evidence.provenance.mechanism === 'history_dom'
-          && !record.id.endsWith(':history')
-        ))
-        .map((record) => record.id);
-      await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
-      await Promise.all(historyEvidence.map((item) => persistNormalizedEvidence(
-        toNormalizedInteraction({
+      const normalizedInputs = historyEvidence.map((item) => ({
+        id: createHistoryEvidenceId(item.externalId),
+        evidence: toNormalizedInteraction({
           videoId: item.externalId,
           exposureId: null,
           title: item.title,
@@ -441,8 +435,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           observedAt: item.observedAt,
           provenance: 'youtube_history_dom',
         }),
-        createHistoryEvidenceId(item.externalId),
-      )));
+        confidence: 1,
+      }));
+      await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
       const graph = await personalAlgorithmStore.rebuildGraphFromEvidence();
       sendResponse({ ok: true, historyCount: historyEvidence.length, graph });
     })().catch((error) => sendResponse({
@@ -487,20 +482,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         ...nonHistoryEvents,
         ...watchedEvents,
       ].slice(-MAX_SELECTION_EVENTS));
-      const storedEvidence = await personalAlgorithmStore.listEvidence();
-      const legacyHistoryIds = storedEvidence
-        .filter((record) => (
-          record.evidence.kind === 'interaction'
-          && record.evidence.interaction === 'watched'
-          && record.evidence.provenance.mechanism === 'history_dom'
-          && !record.id.endsWith(':history')
-        ))
-        .map((record) => record.id);
-      await Promise.all(legacyHistoryIds.map((id) => personalAlgorithmStore.deleteEvidence(id)));
-      await Promise.all(watchedEvents.map((event) => persistNormalizedEvidence(
-        toNormalizedInteraction(event),
-        createHistoryEvidenceId(event.videoId),
-      )));
+      await historyReconciliationReady;
+      await personalAlgorithmStore.reconcileHistoryEvidence(
+        watchedEvents.map((event) => ({
+          id: createHistoryEvidenceId(event.videoId),
+          evidence: toNormalizedInteraction(event),
+          confidence: 1,
+        })),
+      );
       console.info('[MyAlgo] history observation persisted', {
         storedEvidence: evidence.length,
       });
