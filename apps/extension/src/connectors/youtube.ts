@@ -6,7 +6,8 @@ const createYouTubeContentIdentity = (externalId: string) => ({
   externalId,
 });
 
-export const youtubeConnector = {
+export const youtubeConnector: PageProviderConnector = {
+  source: 'youtube',
   id: 'youtube',
   capabilities: {
     search: true,
