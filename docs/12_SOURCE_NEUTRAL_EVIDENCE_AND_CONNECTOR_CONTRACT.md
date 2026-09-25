@@ -272,7 +272,7 @@ Evidence deletion removes its references from graph edges. Inferred edges with n
 
 User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later. The store also exposes a deterministic graph-review summary for development validation before a dedicated visualization UI exists.
 
-Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization. Schema version 2 has an explicit v1 → v2 migration that preserves existing evidence and graph nodes and initializes legacy edge support references to an empty list. Unknown versions are not heuristically interpreted.
+Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization (`exportState()` / JSON). Schema version 2 has an explicit v1 → v2 migration that preserves existing evidence and graph nodes and initializes legacy edge support references to an empty list. Unknown versions are not heuristically interpreted.
 
 The store is evidence persistence, not preference inference. It does not assign recommendation weights, rank candidates, resolve cross-source identities, or consume YouTube Data API account/display data as observational evidence.
 
