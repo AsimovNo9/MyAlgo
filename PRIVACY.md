@@ -17,7 +17,8 @@ When the current in-product privacy disclosure has been accepted and MyAlgo is e
 - derived local Personal Algorithm Graph nodes and relationships;
 - local scoring results, compact trace metadata, settings, and feed-control state;
 - when the user enables RSS discovery, recently observed YouTube channel IDs and the resulting bounded YouTube RSS candidate metadata/provenance;
-- when the user enables web search, bounded query terms derived from graph goals/topics and the active mode, plus resulting public YouTube URLs/snippets returned by the configured search endpoint.
+- when the user enables web search, bounded query terms derived from graph goals/topics and the active mode, plus resulting public YouTube URLs/snippets returned by PrivAU by default or a custom SearXNG endpoint;
+- when PrivAU is selected, the user-supplied PrivAU API key, stored in extension-local browser storage and sent only to PrivAU as an authentication header.
 
 MyAlgo does not request Chrome's `history` permission. Its launch evidence comes from the YouTube pages on which its content script runs.
 
@@ -39,7 +40,7 @@ The local-only MVP does **not** send observed YouTube activity, evidence records
 
 The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. When the user explicitly enables RSS discovery, MyAlgo also requests bounded YouTube channel RSS feeds using channel IDs already observed from YouTube metadata. RSS requests do not contain the Personal Algorithm Graph, raw watch-history rows, feedback records, or scoring traces.
 
-When the user explicitly enables web search, MyAlgo sends a bounded set of normalized graph-derived goal/topic queries plus active mode intent to the HTTPS SearXNG-compatible endpoint the user configured. It does not send raw watch-history rows, the full graph, explicit feedback records, scoring traces, or browser cookies to that endpoint. Search results are treated only as candidate-discovery metadata; YouTube watch-page enrichment remains the source of richer candidate metadata before local scoring.
+When the user explicitly enables web search, MyAlgo sends a bounded set of normalized graph-derived goal/topic queries plus active mode intent to PrivAU (`https://priv.au`) by default, or to the HTTPS SearXNG-compatible endpoint selected in Advanced settings. It does not send raw watch-history rows, the full graph, explicit feedback records, scoring traces, or browser cookies to that endpoint. When PrivAU is selected, MyAlgo sends the locally stored PrivAU API key only in the request authentication header. Search results are treated only as candidate-discovery metadata; YouTube watch-page enrichment remains the source of richer candidate metadata before local scoring.
 
 The launch extension does not use observed data for personalized advertising, credit/lending decisions, or sale to data brokers.
 
@@ -54,7 +55,7 @@ Users can:
 - pause MyAlgo, which stops new observation/enforcement while paused;
 - separately enable or disable experimental History and Home-context collection where those controls apply;
 - separately enable or disable RSS candidate discovery;
-- configure and separately enable or disable web-search candidate discovery, including granting/revoking host access to the chosen HTTPS search endpoint;
+- separately enable or disable web-search candidate discovery; PrivAU is the default provider, while provider/API-key/custom-endpoint configuration is kept in Advanced settings, including host access grants;
 - use **Delete all local MyAlgo data** in Settings to clear local evidence, graph state, caches, traces, feedback, settings, and disclosure acceptance.
 
 After a full local-data deletion, observation remains disabled until the current privacy disclosure is affirmatively accepted again.
