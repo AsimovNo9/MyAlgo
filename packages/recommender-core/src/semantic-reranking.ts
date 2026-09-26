@@ -47,6 +47,7 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
       node_id: string;
       node_label: string;
       similarity: number;
+      weight: number;
     }>;
   }>;
   modeProfile: SemanticModeProfile;
@@ -390,9 +391,11 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       semantic_graph_similarity: graphSimilarity,
       semantic_mode_similarity: positiveSimilarity(embedding, modeCentroid),
       semantic_model_version: semanticModelVersion,
-      semantic_graph_matches: graphMatches.map(({ rankingWeight: _rankingWeight, ...match }) => ({
-        ...match,
+      semantic_graph_matches: graphMatches.map((match) => ({
+        node_id: match.node_id,
+        node_label: match.node_label,
         similarity: Number(match.similarity.toFixed(4)),
+        weight: Number(match.rankingWeight.toFixed(4)),
       })),
     };
   });
