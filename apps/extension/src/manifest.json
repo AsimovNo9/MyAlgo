@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "Personal Algorithm",
   "version": "0.1.0",
-  "description": "Weighted topic preferences and always/never rules for your YouTube feed.",
-  "permissions": ["storage"],
+  "description": "Local, user-controlled scoring and feed controls for YouTube with inspectable Personal Algorithm evidence.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
-    "https://*.youtube.com/*",
-    "https://youtube.com/*"
+    "https://*.youtube.com/*"
   ],
   "action": {
     "default_title": "Personal Algorithm",
@@ -21,8 +22,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["src/content-scripts/youtube.ts"],
+      "matches": [
+        "https://*.youtube.com/*"
+      ],
+      "js": [
+        "src/content-scripts/youtube.ts"
+      ],
       "run_at": "document_idle"
     }
   ]
