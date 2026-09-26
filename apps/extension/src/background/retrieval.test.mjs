@@ -272,7 +272,8 @@ test('YouTube search provider uses generated query with existing YouTube host ac
   assert.equal(provider.id, 'youtube_search_page');
   assert.equal(requests.length, 1);
   assert.match(requests[0].url, /^https:\/\/www\.youtube\.com\/results\?/);
-  assert.match(decodeURIComponent(requests[0].url), /search_query=distributed systems tutorial/);
+  const requestUrl = new URL(requests[0].url);
+  assert.equal(requestUrl.searchParams.get('search_query'), 'distributed systems tutorial');
   assert.equal(requests[0].options.credentials, 'omit');
   assert.deepEqual(results.map((item) => item.url), ['https://www.youtube.com/watch?v=abc123']);
 });
