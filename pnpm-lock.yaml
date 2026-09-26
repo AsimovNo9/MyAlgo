@@ -17,6 +17,9 @@ importers:
 
   apps/extension:
     dependencies:
+      '@repo/recommender-core':
+        specifier: workspace:*
+        version: link:../../packages/recommender-core
       '@repo/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
