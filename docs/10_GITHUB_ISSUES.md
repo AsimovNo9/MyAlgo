@@ -161,7 +161,7 @@ Completed in the #195 slice:
 
 Remaining work is tracked separately where needed: broader candidate coverage/feed enforcement, safe replacement behavior, trust UX, richer user policy controls, and any future feedback undo/reversal semantics. The #195 slice does not claim to control YouTube's underlying recommender.
 
-After PR #195 merges, re-review the current documentation and implementation together and create/adjust follow-up issues based on the actual remaining gaps.
+PR #195 is merged. Treat this entry as the status record for the runtime-scoring slice; do not interpret it as completion of native-feed enforcement or the entire #169 acceptance set.
 
 ### [#151](https://github.com/AsimovNo9/MyAlgo/issues/151): Implement deterministic additive scoring and reproducible trace — **completed in PR #193**
 

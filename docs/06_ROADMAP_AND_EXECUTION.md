@@ -140,7 +140,7 @@ The scorer provides deterministic hard-exclusion and eligibility evaluation, add
 
 The live diagnostic passed against real extension state with 792 evidence records, 516 graph nodes, 269 graph edges, score 10.5, contribution total 10.5, consistent trace accounting, and stable replay score/trace identity. It also caught an edge-scoping bug that was corrected before merge.
 
-The scorer remains policy-driven: it does not infer preference from raw watched evidence, and it is not yet the extension feed-ranking path. Extension-local runtime integration remains #169.
+The scorer remains policy-driven: it does not infer preference from raw watched evidence. Extension-local runtime integration is now implemented for the #195 runtime-scoring slice; broader native-feed enforcement, replacement, and remaining #169 acceptance criteria continue downstream.
 
 ### Extension-local scoring runtime (#169 / PR #195)
 
@@ -193,7 +193,7 @@ scoring / ranking
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace foundation is implemented and live-validated. The next boundary is wiring those primitives into the extension's actual local recommendation path (#169), while completing the remaining privacy/API boundary gates (#167/#168).
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime-scoring foundation is implemented and live-validated through PR #195. The next product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#160/#171), alongside the remaining privacy/API boundary gates (#167/#168).
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 

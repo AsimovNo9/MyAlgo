@@ -34,6 +34,16 @@ The graph is durable user state.
 
 Foundation-model outputs are evidence/features with provenance; they are not the Personal Algorithm Graph itself.
 
+Keep three concepts distinct:
+
+```text
+content model → content features/evidence → Personal Algorithm Graph → recommendation policy
+```
+
+A content model describes or represents content. The Personal Algorithm Graph is the durable user model. Recommendation policy/scoring decides how graph state and explicit policy inputs affect a candidate. A model output must not silently become a user preference or graph relationship.
+
+Use **training** only for changing model parameters from a training dataset. Use **personalization** for updating user-specific evidence, graph state, or preference state. An explicit action such as `not_interested` is personalization/feedback, not model training. The local scorer consumes these signals without updating model weights.
+
 ## 5. YouTube API boundary
 
 For the initial launch:
