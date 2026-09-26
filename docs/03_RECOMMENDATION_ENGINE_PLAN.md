@@ -254,3 +254,40 @@ This is local computation whenever possible.
 Modes modify policy/weights over one graph.
 
 They should not fork the underlying evidence graph.
+
+
+## Mode-aware retrieval and content classification
+
+Mode is a user-intent overlay, not a statement about every candidate.
+
+The active mode modifies retrieval intent and adds a bounded traceable score contribution only when candidate classification supports that mode:
+
+```text
+Personal Algorithm Graph goal/topics
+        +
+active mode intent
+        ↓
+bounded search query plans
+        ↓
+web/RSS candidate acquisition
+        ↓
+canonical YouTube metadata enrichment
+        ↓
+candidate content classification
+        ↓
+deterministic score + trace
+```
+
+Examples:
+
+- Learning mode expands the graph goal toward learn/understand/study and prefers tutorial/lecture/course/explainer query forms.
+- Work mode adds practical implementation/build/solve intent and prefers guides/tutorials/case studies.
+- Relax mode adds relax/enjoy intent and prefers documentary/podcast/music-style query forms.
+
+The active mode must not be rendered as a label on every video. A visible `Learning`, `Work`, or `Relax` label is derived from candidate metadata and shown only above a classification confidence threshold. A video can therefore be scored while Learning mode is active without being labeled Learning.
+
+### Web search adapter
+
+The first concrete provider is SearXNG-compatible and remains behind the source-neutral `WebSearchProvider` interface. The user configures an HTTPS endpoint and grants that exact origin at runtime. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
+
+Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
