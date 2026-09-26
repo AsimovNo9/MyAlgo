@@ -1,6 +1,6 @@
 import type { EmbeddingRecord } from '@repo/shared-types';
 import type { EmbeddingCache } from '@repo/recommender-core';
-import { STORAGE_KEYS } from './storage';
+import { STORAGE_KEYS } from './storage.ts';
 
 type CacheState = Record<string, EmbeddingRecord>;
 
