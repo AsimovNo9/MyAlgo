@@ -218,15 +218,16 @@ scoring / ranking
 
 The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
 
-1. **#168** — prove the YouTube Data API display-only boundary.
-2. **#152 + #171** — make native-card decisions reliable while preventing self-observation and stale reranking.
-3. **#160** — make replacement slots safe once native enforcement is stable.
-4. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
-5. **#162** — establish replay/evaluation baselines before adding richer content understanding.
-6. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
-7. **#169** — close the remaining local-runtime umbrella criteria as downstream feed/offline boundaries are discharged.
-8. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
-9. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
+1. **#152 + #171** — make native-card decisions reliable while preventing self-observation and stale reranking.
+2. **#160** — make replacement slots safe once native enforcement is stable.
+3. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
+4. **#162** — establish replay/evaluation baselines before adding richer content understanding.
+5. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
+6. **#169** — close the remaining local-runtime umbrella criteria as downstream feed/offline boundaries are discharged.
+7. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
+8. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
+
+#168 is now a completed launch-boundary audit: the current runtime has no YouTube Data API integration and CI guards against accidental introduction.
 
 ## Phase 1 scope discipline
 
