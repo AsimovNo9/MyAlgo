@@ -67,6 +67,14 @@ type LocalFeedItem = CandidatePoolItem & {
   };
 };
 
+const candidateHasAcquisitionMechanism = (
+  candidate: { provenance?: CandidateAcquisitionProvenance; acquisition_history?: CandidateAcquisitionProvenance[] },
+  mechanism: CandidateAcquisitionProvenance['mechanism'],
+): boolean => (
+  candidate.provenance?.mechanism === mechanism
+  || candidate.acquisition_history?.some((entry) => entry.mechanism === mechanism) === true
+);
+
 const MAX_CANDIDATE_POOL_SIZE = 800;
 const MAX_HISTORY_EVIDENCE = 2000;
 const MAX_FEED_CACHE_SIZE = 80;
@@ -913,6 +921,19 @@ const handleRuntimeMessage = (
         const replacementInventory = ranked
           .filter((item) => !currentPageIds.has(item.external_id))
           .slice(0, MAX_FEED_CACHE_SIZE);
+        const searchCandidatesScored = ranked.filter((item) => (
+          !currentPageIds.has(item.external_id)
+          && candidateHasAcquisitionMechanism(item, 'web_search')
+        ));
+        const searchCandidatesQualified = searchCandidatesScored.filter((item) => (
+          item.visible !== false
+          && item.suppressed !== true
+          && item.policyOutcome === 'eligible'
+          && item.score >= youtubeConnector.presentation.replacementMinimumScore
+        ));
+        const searchCandidatesInReplacementInventory = replacementInventory.filter((item) => (
+          candidateHasAcquisitionMechanism(item, 'web_search')
+        ));
         const presentationFeed = [
           ...currentPageFeed,
           ...replacementInventory,
@@ -927,6 +948,12 @@ const handleRuntimeMessage = (
           cachedFeedSize: feedCache.length,
           currentPageScored: currentPageFeed.length,
           replacementInventorySize: replacementInventory.length,
+          searchCandidatesScored: searchCandidatesScored.length,
+          searchCandidatesQualified: searchCandidatesQualified.length,
+          searchCandidatesInReplacementInventory: searchCandidatesInReplacementInventory.length,
+          maxSearchCandidateScore: searchCandidatesScored.length > 0
+            ? Math.max(...searchCandidatesScored.map((item) => item.score))
+            : null,
           poolSize: candidatePool.length,
           rankingWorkingSetSize: workingPool.length,
           enriched: 0,
