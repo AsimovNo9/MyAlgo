@@ -15,7 +15,7 @@ const sorted=(v:string[])=>[...new Set(v.filter(Boolean))].sort();
 function hash(v:unknown){const s=JSON.stringify(v);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16).padStart(8,'0')}
 function evidenceRevision(e:EvidenceRecord[]){return hash(e.map(r=>({id:r.id,observedAt:r.evidence.observedAt,kind:r.evidence.kind,content:r.evidence.content,provenance:r.evidence.provenance})).sort((a,b)=>a.id.localeCompare(b.id)))}
 function ids(c:ScoreCandidate){return sorted([...(c.nodeIds??[]),...(c.creatorNodeId?[c.creatorNodeId]:[])])}
-function edges(g:PersonalAlgorithmGraph,ns:Set<string>){return g.edges.filter(e=>ns.has(e.sourceNodeId)||ns.has(e.targetNodeId)).sort((a,b)=>a.id.localeCompare(b.id))}
+function edges(g:PersonalAlgorithmGraph,ns:Set<string>){return g.edges.filter(e=>ns.has(e.sourceNodeId)&&ns.has(e.targetNodeId)).sort((a,b)=>a.id.localeCompare(b.id))}
 function contrib(id:string,kind:ScoreContributionKind,label:string,value:number,sourceId?:string,evidenceIds:string[]=[]):ScoreContribution{return {id,kind,label,value:finite(value),...(sourceId?{sourceId}:{}),evidenceIds:sorted(evidenceIds)}}
 function paths(c:ScoreCandidate,ns:GraphNode[],es:GraphEdge[]):ScoreMatchedPath[]{if(es.length)return es.map(e=>({nodeIds:sorted([e.sourceNodeId,e.targetNodeId]),edgeIds:[e.id],evidenceIds:sorted(e.evidenceIds)}));return [{nodeIds:ids(c),edgeIds:[],evidenceIds:[]}]}
 function feedbackMatch(s:ScoreFeedbackSignal,c:ScoreCandidate,n:Set<string>){return (s.contentId!=null&&(s.contentId===c.content.externalId||s.contentId===`${c.content.source}:${c.content.externalId}`))||(s.nodeId!=null&&n.has(s.nodeId))}
