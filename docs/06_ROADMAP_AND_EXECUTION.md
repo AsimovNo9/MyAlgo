@@ -218,8 +218,8 @@ scoring / ranking
 
 The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
 
-1. **#152 + #171** — make native-card decisions reliable while preventing self-observation and stale reranking.
-2. **#160** — make replacement slots safe once native enforcement is stable.
+1. **#152 + #171** — implementation in PR #204: native-card enforcement, degraded pass-through, hard-policy precedence, injected-DOM exclusion, and stale-render invalidation; live-browser validation remains before closure.
+2. **#160** — make replacement slots safe once #152/#171 browser validation is complete.
 3. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
 4. **#162** — establish replay/evaluation baselines before adding richer content understanding.
 5. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
