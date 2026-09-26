@@ -416,3 +416,16 @@ A successfully rendered opportunistic replacement is held stable for 45 seconds 
 Badges and replacement presentation must not wait on network metadata enrichment. The critical path is now: collect current DOM candidates → merge/persist lightweight observations → hydrate from already-cached metadata → score the bounded working set → return/render. Canonical watch-page enrichment runs asynchronously afterward in the extension service worker and requests a later metadata rerank only when new metadata was actually persisted.
 
 Ordinary YouTube mutation/page-data churn must not invalidate a rank already in flight. Mutation and metadata events are coalesced into one queued rerank while the current response is allowed to render. Only hard lifecycle/semantic changes such as navigation, mode changes, graph changes, and explicit feedback invalidate the active generation.
+
+
+## 10. Mode, classification, and semantic enrichment boundaries
+
+Keep these three concepts separate:
+
+1. **Mode** is transient user intent. It affects retrieval planning and bounded score weighting.
+2. **Content classification** describes the candidate itself. UI labels such as `Learning` may be shown only when candidate metadata supports that classification with sufficient confidence.
+3. **Semantic enrichment** is rebuildable derived data. Text embeddings may improve candidate↔goal/topic similarity and retrieval expansion, but do not become canonical graph truth.
+
+The current deterministic classifier uses enriched textual metadata (title, description, keywords/category, format, creator) and returns a label plus confidence. It is intentionally conservative.
+
+Text embeddings are the next model layer to evaluate because they can improve semantic matching without requiring image/video inference. Multimodal thumbnail/video classification is deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
