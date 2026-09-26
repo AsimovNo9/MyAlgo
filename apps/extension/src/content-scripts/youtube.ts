@@ -1021,6 +1021,10 @@ const rankCurrentPage = async (requestGeneration: number) => {
         backgroundElapsedMs: response.elapsedMs ?? null,
         rankingWorkingSetSize: response.rankingWorkingSetSize ?? null,
         replacementInventorySize: response.replacementInventorySize ?? null,
+        searchCandidatesScored: response.searchCandidatesScored ?? null,
+        searchCandidatesQualified: response.searchCandidatesQualified ?? null,
+        searchCandidatesInReplacementInventory: response.searchCandidatesInReplacementInventory ?? null,
+        maxSearchCandidateScore: response.maxSearchCandidateScore ?? null,
         enrichmentPending: response.enrichmentPending === true,
       });
       cachedFeed = response.feed;
