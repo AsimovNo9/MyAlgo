@@ -360,7 +360,7 @@ test('retrieved discovery can use a bounded exploration slot without provenance 
     {
       external_id: 'search-a',
       title: 'Search A',
-      score: 61,
+      score: 65,
       visible: true,
       traceId: 'trace-search-a',
       policyOutcome: 'eligible',
@@ -392,8 +392,8 @@ test('retrieved discovery can use a bounded exploration slot without provenance 
       item: assignment.item.external_id,
     })),
     [
-      { target: 'native-a', item: 'rss-b' },
-      { target: 'native-b', item: 'search-a' },
+      { target: 'native-a', item: 'search-a' },
+      { target: 'native-b', item: 'rss-b' },
     ],
   );
 });
