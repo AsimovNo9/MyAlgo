@@ -57,9 +57,25 @@ const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
+let privacyDisclosureReady: Promise<boolean> | null = null;
 
-void getStorage<unknown>(STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION, null)
-  .then((value) => { privacyDisclosureAccepted = isPrivacyDisclosureAccepted(value); });
+const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
+  if (privacyDisclosureReady) return privacyDisclosureReady;
+  privacyDisclosureReady = getStorage<unknown>(
+    STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+    null,
+  ).then((value) => {
+    privacyDisclosureAccepted = isPrivacyDisclosureAccepted(value);
+    return privacyDisclosureAccepted;
+  }).catch((error) => {
+    privacyDisclosureReady = null;
+    console.warn('[MyAlgo] privacy disclosure state load failed', error);
+    return false;
+  });
+  return privacyDisclosureReady;
+};
+
+void ensurePrivacyDisclosureLoaded();
 
 const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
@@ -336,6 +352,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         [STORAGE_KEYS.ENABLED]: true,
       });
       privacyDisclosureAccepted = true;
+      privacyDisclosureReady = Promise.resolve(true);
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: true } }).catch(() => undefined)
@@ -348,6 +365,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === 'RESET_LOCAL_DATA') {
     void (async () => {
       privacyDisclosureAccepted = false;
+      privacyDisclosureReady = Promise.resolve(false);
       await chrome.storage.local.clear();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
@@ -363,6 +381,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         : undefined));
       sendResponse({ ok: true });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to delete local MyAlgo data.' }));
+    return true;
+  }
+
+  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyDisclosureReady) {
+    void ensurePrivacyDisclosureLoaded().then(() => {
+      chrome.runtime.sendMessage(message, sendResponse);
+    });
     return true;
   }
 
