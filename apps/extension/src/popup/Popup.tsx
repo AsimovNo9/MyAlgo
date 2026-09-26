@@ -8,6 +8,7 @@ const defaultSourceFilters: FeedSourceFilters = {
   includeDiscovery: true,
   includeShorts: true,
   includeLive: true,
+  includePlayables: true,
 };
 
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [] };
@@ -142,6 +143,7 @@ export function Popup() {
         <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
         <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
+        <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide Playables</label>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
