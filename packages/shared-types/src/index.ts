@@ -235,11 +235,18 @@ export interface SemanticModeProfile {
   embedding?: number[] | null;
 }
 
+export interface SemanticGraphMatch {
+  node_id: string;
+  node_label: string;
+  similarity: number;
+}
+
 export interface CandidateSemanticFeatures {
   model_version: string;
   graph_similarity: number;
   mode_similarity: number;
   matched_node_ids: string[];
+  graph_matches?: SemanticGraphMatch[];
 }
 
 /** @deprecated Use CandidateAcquisitionProvenance. */
@@ -299,6 +306,7 @@ export interface RecommendationCandidate {
   semantic_graph_similarity?: number | null;
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
+  semantic_graph_matches?: SemanticGraphMatch[];
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
 }
