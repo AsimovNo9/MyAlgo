@@ -72,7 +72,9 @@ Implemented in PR #184. The collector:
 
 Automated tests and real-browser validation are complete. PR #184 was merged; #183 is closed.
 
-### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review
+### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review — **implementation/reconciliation in PR #TBD**
+
+Current #167 work adds a versioned affirmative disclosure gate before YouTube observation, keeps the content script paused before acceptance, rejects privacy-gated background messages before acceptance, adds a full local-data deletion control, narrows manifest access to HTTPS YouTube + `storage`, publishes an implementation-matched privacy policy, documents the Store Privacy-practices reconciliation, and adds a built-artifact secret scan. Chrome Web Store dashboard submission fields and clean-profile manual validation remain release-owner checks; #168 remains a separate launch gate.
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary
 
