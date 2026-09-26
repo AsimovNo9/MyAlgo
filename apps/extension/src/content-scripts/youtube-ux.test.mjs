@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale } from './youtube-ux.ts';
+import { getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -78,4 +78,17 @@ test('render context rejects stale generation, route, or mode', () => {
   assert.equal(isRenderContextStale({ ...current, generation: 3 }, current), true);
   assert.equal(isRenderContextStale({ ...current, routeKey: '/' }, current), true);
   assert.equal(isRenderContextStale({ ...current, mode: 'Relax' }, current), true);
+});
+
+
+test('outermost-card selection removes nested duplicate presentation targets', () => {
+  const outer = { id: 'outer' };
+  const inner = { id: 'inner' };
+  const sibling = { id: 'sibling' };
+  const contains = (parent, child) => parent === outer && child === inner;
+
+  assert.deepEqual(
+    keepOutermostElements([outer, inner, sibling], contains),
+    [outer, sibling],
+  );
 });
