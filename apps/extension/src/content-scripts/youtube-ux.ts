@@ -167,10 +167,14 @@ export function getReplacementCandidates(
     return true;
   })
     .sort((left, right) => {
-      const scoreDelta = (right.score ?? 0) - (left.score ?? 0);
-      if (scoreDelta !== 0 || !selectionSeed) return scoreDelta;
-      return seededCandidateOrder(selectionSeed, left.external_id ?? '')
+      const leftScore = left.score ?? 0;
+      const rightScore = right.score ?? 0;
+      const leftBand = Math.floor(leftScore / 5);
+      const rightBand = Math.floor(rightScore / 5);
+      if (rightBand !== leftBand || !selectionSeed) return rightScore - leftScore;
+      const seeded = seededCandidateOrder(selectionSeed, left.external_id ?? '')
         - seededCandidateOrder(selectionSeed, right.external_id ?? '');
+      return seeded || rightScore - leftScore;
     })
     .slice(0, limit);
 }
