@@ -87,3 +87,26 @@ test('graph retrieval query plans are bounded, deterministic, and revision tagge
   assert.ok(first.every((plan) => plan.algorithmRevision === '12'));
   assert.ok(first.some((plan) => plan.lane === 'goal'));
 });
+
+
+test('query planner supports creator-only graph retrieval before semantic topic nodes exist', () => {
+  const profile = {
+    goal: '',
+    language: null,
+    explicitTopics: [],
+    aliases: [],
+    intents: [],
+    semanticTerms: ['Creator A'],
+    positiveRuleTerms: [],
+    negativeRuleTerms: [],
+    preferredFormats: ['guide'],
+    creatorTerms: ['Creator A'],
+  };
+  const plans = buildRecommendationQueryPlans(profile, 3, '9');
+  assert.deepEqual(plans, [{
+    text: 'Creator A guide',
+    lane: 'creator',
+    topics: [],
+    algorithmRevision: '9',
+  }]);
+});
