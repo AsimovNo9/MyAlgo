@@ -58,6 +58,11 @@ type SemanticFeatureRecord = {
   modelVersion: string;
   graphSimilarity: number;
   modeSimilarity: number;
+  graphMatches: Array<{
+    node_id: string;
+    node_label: string;
+    similarity: number;
+  }>;
   generatedAt: string;
 };
 
@@ -693,6 +698,7 @@ async function hydrateSemanticScoreFeatures(
       semantic_graph_similarity: record.graphSimilarity,
       semantic_mode_similarity: record.modeSimilarity,
       semantic_model_version: record.modelVersion,
+      semantic_graph_matches: record.graphMatches,
     };
   });
 }
@@ -747,6 +753,7 @@ async function refreshSemanticScoreFeatures(
         modelVersion: semanticModelIdentity,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
+        graphMatches: (candidate.semantic_graph_matches ?? []).slice(0, 3),
         generatedAt,
       };
       const previous = existing[key];
@@ -754,6 +761,7 @@ async function refreshSemanticScoreFeatures(
         !previous
         || Math.abs(previous.graphSimilarity - record.graphSimilarity) > 0.0001
         || Math.abs(previous.modeSimilarity - record.modeSimilarity) > 0.0001
+        || JSON.stringify(previous.graphMatches ?? []) !== JSON.stringify(record.graphMatches)
       ) {
         changed += 1;
       }
