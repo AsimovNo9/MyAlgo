@@ -6,6 +6,14 @@ export type VideoCandidate = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  provenance?: {
+    mechanism?: string | null;
+    acquired_at?: string | null;
+  };
+  acquisition_history?: Array<{
+    mechanism?: string | null;
+    acquired_at?: string | null;
+  }>;
 };
 
 export type RankedFeedItem = {
@@ -196,6 +204,44 @@ export type OpportunisticReplacementAssignment = {
   target: OpportunisticReplacementTarget;
   item: RankedFeedItem;
 };
+export function isRetrievedDiscoveryCandidate(item: RankedFeedItem): boolean {
+  const mechanisms = [
+    item.provenance?.mechanism,
+    ...(item.acquisition_history ?? []).map((entry) => entry.mechanism),
+  ];
+  return mechanisms.some((mechanism) => mechanism === 'web_search' || mechanism === 'rss');
+}
+
+export function selectRetrievedDiscoveryAssignments(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit = 2,
+): OpportunisticReplacementAssignment[] {
+  const candidates = replacementCandidates
+    .filter((item) => (
+      isRetrievedDiscoveryCandidate(item)
+      && Boolean(item.external_id && item.title && item.traceId)
+      && item.visible !== false
+      && item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    ))
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+
+  const targets = [...nativeTargets]
+    .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
+    .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
+
+  const selected: OpportunisticReplacementAssignment[] = [];
+  const count = Math.min(Math.max(0, limit), candidates.length, targets.length);
+  for (let index = 0; index < count; index += 1) {
+    const candidate = candidates[index];
+    const target = targets[index];
+    if (!candidate || !target || (candidate.score ?? 0) < target.score) continue;
+    selected.push({ target, item: candidate });
+  }
+  return selected;
+}
+
 
 export function selectOpportunisticReplacementAssignments(
   nativeTargets: OpportunisticReplacementTarget[],
