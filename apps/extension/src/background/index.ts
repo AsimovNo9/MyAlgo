@@ -80,7 +80,8 @@ const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
-  webSearchEndpoint: null,
+  webSearchEndpoint: DEFAULT_WEB_SEARCH_ENDPOINT,
+  webSearchProvider: 'privau',
 };
 const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastRssSyncAt: null,
@@ -477,13 +478,28 @@ async function refreshWebSearchCandidates(
     return { diagnostics: previous, changed: false };
   }
 
-  const endpoint = normalizeWebSearchEndpoint(settings.webSearchEndpoint);
+  const providerKind = settings.webSearchProvider ?? 'privau';
+  const endpoint = normalizeWebSearchEndpoint(
+    providerKind === 'privau' ? DEFAULT_WEB_SEARCH_ENDPOINT : settings.webSearchEndpoint,
+  );
   if (!endpoint) {
     const diagnostics = {
       ...previous,
       lastWebSearchAt: new Date(nowMs).toISOString(),
       nextWebSearchAllowedAt: null,
-      lastError: 'Web search is enabled but no valid HTTPS SearXNG endpoint is configured.',
+      lastError: 'Web search is enabled but no valid HTTPS search endpoint is configured.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const apiKey = await getStorage<string>(STORAGE_KEYS.WEB_SEARCH_API_KEY, '');
+  if (providerKind === 'privau' && !apiKey.trim()) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: null,
+      lastError: 'PrivAU requires an API key. Add it in Advanced settings before enabling web discovery.',
     };
     await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
     return { diagnostics, changed: false };
@@ -538,7 +554,9 @@ async function refreshWebSearchCandidates(
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
-  const provider = createSearxngWebSearchProvider(endpoint);
+  const provider = providerKind === 'privau'
+    ? createDefaultWebSearchProvider(apiKey)
+    : createSearxngWebSearchProvider(endpoint);
 
   let candidates: PageCandidate[] = [];
   let succeeded = 0;
