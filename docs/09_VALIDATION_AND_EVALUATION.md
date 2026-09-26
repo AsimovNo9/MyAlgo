@@ -207,3 +207,13 @@ Validate the search/classification slice with the following invariants:
 8. A Learning label is rendered only when the candidate classifier reports learning with the configured confidence threshold.
 9. Mode-alignment score contributions appear in the deterministic trace only when candidate classification matches the mode.
 10. Search/enrichment remains off the initial overlay first-paint path.
+
+
+### Search isolation and retention regression
+
+For long-session validation:
+1. enabling/refreshing web discovery must not prevent `RANK_PAGE` responses or remove existing badges while search is fetching/parsing;
+2. search parsing runs in the offscreen dedicated worker on supported Chrome;
+3. scrolling/searching for an extended session keeps candidate, metadata, History, Home exposure, selection, and evidence stores at their documented caps;
+4. Home exposure evidence count follows the retained Home observation window instead of monotonically increasing;
+5. evidence compaction preserves indefinite evidence and graph nodes referenced by retained evidence, edges, or user edits.
