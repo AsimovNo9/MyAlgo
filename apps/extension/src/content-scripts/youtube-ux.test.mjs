@@ -289,3 +289,21 @@ test('replacement candidate rotation changes across generation seeds but is stab
   assert.deepEqual(firstReplay, first);
   assert.notDeepEqual(second, first);
 });
+
+
+test('replacement rotation can vary candidates within the same 5-point score band', () => {
+  const items = [
+    { external_id: 'a', title: 'A', score: 80, visible: true, traceId: 'ta', policyOutcome: 'eligible' },
+    { external_id: 'b', title: 'B', score: 79, visible: true, traceId: 'tb', policyOutcome: 'eligible' },
+    { external_id: 'c', title: 'C', score: 78, visible: true, traceId: 'tc', policyOutcome: 'eligible' },
+    { external_id: 'd', title: 'D', score: 77, visible: true, traceId: 'td', policyOutcome: 'eligible' },
+    { external_id: 'e', title: 'E', score: 70, visible: true, traceId: 'te', policyOutcome: 'eligible' },
+  ];
+
+  const first = getReplacementCandidates(items, [], 3, 55, 'seed-one').map((item) => item.external_id);
+  const second = getReplacementCandidates(items, [], 3, 55, 'seed-two').map((item) => item.external_id);
+
+  assert.notDeepEqual(first, second);
+  assert.equal(first.includes('e'), false);
+  assert.equal(second.includes('e'), false);
+});
