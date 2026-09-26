@@ -273,6 +273,109 @@ export class LocalPersonalAlgorithmStore {
     });
   }
 
+  async reconcileExposureEvidence(
+    inputs: Array<{ id: string; evidence: NormalizedEvidence; confidence?: number }>,
+    mechanism = 'home_dom',
+  ): Promise<{ removed: number; upserted: number }> {
+    return this.mutate((state) => {
+      const nextIds = new Set(inputs.map((input) => input.id));
+      const removedIds = new Set(
+        state.evidence
+          .filter((record) => (
+            record.evidence.kind === 'exposure'
+            && record.evidence.provenance.mechanism === mechanism
+            && !nextIds.has(record.id)
+          ))
+          .map((record) => record.id),
+      );
+
+      if (removedIds.size > 0) {
+        state.evidence = state.evidence.filter((record) => !removedIds.has(record.id));
+        state.graph.edges = state.graph.edges
+          .map((edge) => ({
+            ...edge,
+            evidenceIds: edge.evidenceIds.filter((evidenceId) => !removedIds.has(evidenceId)),
+          }))
+          .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+      }
+
+      const retainedAt = nowIso();
+      for (const input of inputs) {
+        const record: EvidenceRecord = {
+          id: input.id,
+          evidence: structuredClone(input.evidence),
+          confidence: clampConfidence(input.confidence ?? 1),
+          retainedAt,
+          retention: { policy: 'default', expiresAt: null },
+        };
+        const existingIndex = state.evidence.findIndex((item) => item.id === record.id);
+        if (existingIndex >= 0) state.evidence[existingIndex] = record;
+        else state.evidence.push(record);
+        this.ensureContentNode(state, record.evidence);
+        this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
+      }
+
+      return { removed: removedIds.size, upserted: inputs.length };
+    });
+  }
+
+  async compactEvidence(maxDefaultRecords: number, at = new Date()): Promise<number> {
+    const state = await this.getState();
+    const now = at.getTime();
+    const defaults = state.evidence
+      .filter((record) => record.retention.policy === 'default')
+      .sort((left, right) => right.retainedAt.localeCompare(left.retainedAt));
+    const keepDefaultIds = new Set(
+      defaults.slice(0, Math.max(0, Math.floor(maxDefaultRecords))).map((record) => record.id),
+    );
+
+    const removedIds = new Set(
+      state.evidence
+        .filter((record) => {
+          if (record.retention.policy === 'indefinite') return false;
+          if (record.retention.policy === 'until_expiry') {
+            const expiresAt = new Date(record.retention.expiresAt ?? 0).getTime();
+            return Number.isFinite(expiresAt) && expiresAt <= now;
+          }
+          return !keepDefaultIds.has(record.id);
+        })
+        .map((record) => record.id),
+    );
+    if (removedIds.size === 0) return 0;
+
+    state.evidence = state.evidence.filter((record) => !removedIds.has(record.id));
+    state.graph.edges = state.graph.edges
+      .map((edge) => ({
+        ...edge,
+        evidenceIds: edge.evidenceIds.filter((evidenceId) => !removedIds.has(evidenceId)),
+      }))
+      .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+    const evidenceContentIds = new Set(state.evidence.map((record) =>
+      contentNodeId(record.evidence.content.source, record.evidence.content.externalId)));
+    const edgeNodeIds = new Set(state.graph.edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]));
+    const editedNodeIds = new Set(state.graph.userEdits
+      .filter((edit) => edit.action.endsWith('_node'))
+      .map((edit) => edit.targetId));
+    state.graph.nodes = state.graph.nodes.filter((node) => (
+      node.kind !== 'content'
+      || evidenceContentIds.has(node.id)
+      || edgeNodeIds.has(node.id)
+      || editedNodeIds.has(node.id)
+    ));
+
+    const referencedCreatorIds = new Set(state.graph.edges.map((edge) => edge.targetNodeId));
+    state.graph.nodes = state.graph.nodes.filter((node) => (
+      node.kind !== 'creator'
+      || node.provenance !== 'inferred'
+      || referencedCreatorIds.has(node.id)
+      || editedNodeIds.has(node.id)
+    ));
+
+    await this.persist();
+    return removedIds.size;
+  }
+
   async deleteEvidence(id: string): Promise<boolean> {
     return this.mutate((state) => {
       const before = state.evidence.length;
