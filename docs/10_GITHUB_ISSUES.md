@@ -88,7 +88,7 @@ Implemented and validated:
 - built-artifact secret scan;
 - clean-profile validation of pre-acceptance blocking, acceptance → observation, and deletion → disabled observation.
 
-#167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL, reconcile the final Store listing/Privacy practices fields, and complete #168.
+#167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL and reconcile the final Store listing/Privacy practices fields. The separate #168 repository/runtime audit is implemented in PR #203 with green CI.
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **audit implemented; current launch runtime has no Data API integration**
 
