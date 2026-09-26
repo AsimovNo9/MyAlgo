@@ -91,6 +91,35 @@ test('incremental evidence ingestion does not invent creator relationships witho
   assert.equal(graph.edges.filter((edge) => edge.relation === 'created_by').length, 0);
 });
 
+
+
+test('replacing evidence reconciles stale creator relationship support', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorName: 'Old Creator' },
+    },
+  }, 'replace-creator');
+  assert.equal((await store.getGraph()).edges.length, 1);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorName: 'New Creator' },
+    },
+  }, 'replace-creator');
+
+  const graph = await store.getGraph();
+  const creatorEdges = graph.edges.filter((edge) => edge.relation === 'created_by');
+  assert.equal(creatorEdges.length, 1);
+  assert.equal(creatorEdges[0].targetNodeId, 'creator:youtube:New%20Creator');
+  assert.deepEqual(creatorEdges[0].evidenceIds, ['replace-creator']);
+  assert.equal(graph.edges.some((edge) => edge.targetNodeId === 'creator:youtube:Old%20Creator'), false);
+});
+
 test('incremental creator relationships remain evidence-backed after metadata arrives later', async () => {
   backing.clear();
   const store = new LocalPersonalAlgorithmStore(storage);
