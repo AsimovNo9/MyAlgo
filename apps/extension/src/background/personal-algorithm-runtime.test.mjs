@@ -189,3 +189,20 @@ test('local policy is graph-derived and does not use candidate base scores', () 
   assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 2);
   assert.equal(policy.edgeRelationWeights?.created_by, 3);
 });
+
+
+test('newly acquired videos can score through an already known creator node', () => {
+  const acquired = scoreLocalCandidates(state, [
+    {
+      external_id: 'rss-new-video',
+      title: 'New RSS video',
+      channel_id: 'Creator A',
+      source_kind: 'discovery',
+    },
+  ], 'Learning');
+
+  assert.equal(acquired[0].score, 2);
+  assert.equal(acquired[0].trace.nodeContributions.length, 1);
+  assert.equal(acquired[0].trace.nodeContributions[0].nodeId, 'creator:youtube:Creator%20A');
+  assert.equal(acquired[0].trace.edgeContributions.length, 0);
+});
