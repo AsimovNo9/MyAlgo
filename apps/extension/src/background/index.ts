@@ -24,6 +24,10 @@ type PageCandidate = {
   thumbnail_url?: string | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   published_at?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
+  topics?: string[];
+  content_type?: string | null;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
   is_short?: boolean;
@@ -173,7 +177,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
 
-  const enriched = (await Promise.all(missing.map(async (candidate) => {
+  const enrichedResults = await Promise.all(missing.map(async (candidate): Promise<VideoRecord | null> => {
     try {
       const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
       if (!response.ok) return null;
@@ -197,7 +201,8 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     } catch {
       return null;
     }
-  }))).filter((record): record is VideoRecord => record != null);
+  }));
+  const enriched = enrichedResults.filter((record): record is VideoRecord => record !== null);
 
   if (enriched.length === 0) return [];
   for (const record of enriched) existing[record.external_id] = record;
