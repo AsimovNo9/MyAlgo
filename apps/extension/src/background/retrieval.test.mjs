@@ -5,18 +5,20 @@ import {
   acquireWebSearchCandidates,
   buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
-  createYoutubeSearchPageProvider,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
   needsYoutubeMetadataRefresh,
-  normalizeWebSearchResultsToYoutubeCandidates,
-  parseYoutubeSearchResultsHtml,
   nextRssAllowedAt,
   nextWebSearchAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
   shouldRefreshObservedCandidate,
 } from './retrieval.ts';
+import {
+  createYoutubeSearchPageProvider,
+  enrichYoutubeCandidate,
+  parseYoutubeSearchResultsHtml,
+} from '../connectors/youtube-acquisition.ts';
 
 test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS provenance', () => {
   const xml = `
@@ -123,37 +125,16 @@ test('planned web-search requests stay bounded and preserve graph query provenan
       lane: 'topic',
       topics: ['distributed systems'],
       algorithmRevision: 'graph-2-abc12345',
-    }, 100),
+    }, '2026-09-26T18:00:00.000Z', 100),
     {
       query: 'distributed systems tutorial',
       lane: 'topic',
       topics: ['distributed systems'],
       graphRevision: 'graph-2-abc12345',
+      acquiredAt: '2026-09-26T18:00:00.000Z',
       limit: 20,
     },
   );
-});
-
-
-test('web-search results become YouTube candidates that can be watch-page enriched', () => {
-  const plan = {
-    text: 'local first software tutorial',
-    lane: 'topic',
-    topics: ['local first software'],
-    algorithmRevision: 'graph-2-search123',
-  };
-  const candidates = normalizeWebSearchResultsToYoutubeCandidates([
-    { url: 'https://www.youtube.com/watch?v=video-a', title: 'Thin search title', snippet: 'Search snippet' },
-    { url: 'https://youtu.be/video-b?t=30', title: 'Second result' },
-    { url: 'https://example.com/not-youtube', title: 'Ignore me' },
-    { url: 'https://www.youtube.com/watch?v=video-a', title: 'Duplicate' },
-  ], plan, '2026-09-26T18:00:00.000Z');
-
-  assert.deepEqual(candidates.map((item) => item.external_id), ['video-a', 'video-b']);
-  assert.equal(candidates[0].provenance?.mechanism, 'web_search');
-  assert.equal(candidates[0].provenance?.query, plan.text);
-  assert.equal(candidates[0].provenance?.graph_revision, plan.algorithmRevision);
-  assert.equal(candidates[0].description, 'Search snippet');
 });
 
 
@@ -163,9 +144,24 @@ test('web-search acquisition is bounded, deduplicated, and returns enrichable Yo
     id: 'fixture-search',
     async search(request) {
       calls.push(request);
+      const makeCandidate = (externalId, title) => ({
+        external_id: externalId,
+        title,
+        source_kind: 'discovery',
+        provenance: {
+          connector: 'fixture',
+          mechanism: 'web_search',
+          query: request.query,
+          query_lane: request.lane,
+          query_topics: request.topics,
+          acquired_at: request.acquiredAt,
+          graph_revision: request.graphRevision,
+          source_url: `https://fixture.invalid/${externalId}`,
+        },
+      });
       return [
-        { url: 'https://www.youtube.com/watch?v=shared-video', title: 'Shared' },
-        { url: `https://www.youtube.com/watch?v=${request.lane}-video`, title: 'Lane result' },
+        makeCandidate('shared-video', 'Shared'),
+        makeCandidate(`${request.lane}-video`, 'Lane result'),
       ];
     },
   };
@@ -180,6 +176,7 @@ test('web-search acquisition is bounded, deduplicated, and returns enrichable Yo
   assert.equal(calls.every((call) => call.limit === 5), true);
   assert.deepEqual(candidates.map((item) => item.external_id).sort(), ['goal-video', 'shared-video', 'topic-video']);
   assert.equal(candidates.every((item) => item.provenance?.mechanism === 'web_search'), true);
+  assert.equal(calls.every((call) => call.acquiredAt === '2026-09-26T18:10:00.000Z'), true);
 });
 
 
@@ -266,6 +263,7 @@ test('YouTube search provider uses generated query with existing YouTube host ac
     lane: 'goal',
     topics: ['distributed systems'],
     graphRevision: 'graph-x',
+    acquiredAt: '2026-09-26T19:00:00.000Z',
     limit: 5,
   });
 
@@ -275,5 +273,48 @@ test('YouTube search provider uses generated query with existing YouTube host ac
   const requestUrl = new URL(requests[0].url);
   assert.equal(requestUrl.searchParams.get('search_query'), 'distributed systems tutorial');
   assert.equal(requests[0].options.credentials, 'omit');
-  assert.deepEqual(results.map((item) => item.url), ['https://www.youtube.com/watch?v=abc123']);
+  assert.deepEqual(results.map((item) => item.external_id), ['abc123']);
+  assert.equal(results[0].provenance?.connector, 'youtube');
+  assert.equal(results[0].provenance?.mechanism, 'web_search');
+});
+
+
+test('YouTube connector enrichment maps canonical watch metadata into provider-neutral candidate metadata', async () => {
+  const enriched = await enrichYoutubeCandidate({
+    external_id: 'abc123',
+    title: 'Thin title',
+    description: 'Thin description',
+    topics: ['existing'],
+    is_live: false,
+  }, async (url, options) => {
+    assert.equal(url, 'https://www.youtube.com/watch?v=abc123');
+    assert.equal(options.credentials, 'omit');
+    return new Response(`
+      <script>var ytInitialPlayerResponse = {
+        "videoDetails":{
+          "title":"Rich title",
+          "shortDescription":"Rich description",
+          "lengthSeconds":"120",
+          "channelId":"UC1234567890123456789012",
+          "author":"Systems Lab",
+          "keywords":["distributed","systems"],
+          "thumbnail":{"thumbnails":[{"url":"large.jpg","width":1280}]},
+          "viewCount":"42",
+          "isLiveContent":false
+        },
+        "microformat":{"playerMicroformatRenderer":{
+          "publishDate":"2026-09-26",
+          "category":"Education"
+        }}
+      };</script>
+    `, { status: 200 });
+  });
+
+  assert.equal(enriched.title, 'Rich title');
+  assert.equal(enriched.channel_name, 'Systems Lab');
+  assert.equal(enriched.channel_id, 'UC1234567890123456789012');
+  assert.equal(enriched.duration_seconds, 120);
+  assert.equal(enriched.content_type, 'Education');
+  assert.equal(enriched.view_count, 42);
+  assert.deepEqual(enriched.topics, ['existing', 'distributed', 'systems', 'Education']);
 });
