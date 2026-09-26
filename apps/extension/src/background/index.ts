@@ -417,15 +417,13 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   const fetched = results.flatMap((result) => result.candidates);
   const uniqueFetched = [...new Map(fetched.map((item) => [item.external_id, item])).values()];
   const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
+  let enrichedCount = 0;
   if (uniqueFetched.length > 0) {
     await mergeCandidatePool(uniqueFetched);
 
-    // RSS is intentionally lightweight. Before the new candidates are ranked,
-    // enrich a bounded batch from their canonical watch pages through an open
-    // YouTube tab. This gives the local scorer/title UI substantially richer
-    // metadata without introducing a native yt-dlp binary, backend, API key, or
-    // YouTube Data API dependency.
-    await enrichVideos(uniqueFetched.slice(0, 18));
+    // RSS is intentionally lightweight. Canonical watch-page enrichment
+    // supplies the richer metadata used by classification/scoring.
+    enrichedCount = (await enrichVideos(uniqueFetched.slice(0, 18))).length;
   }
 
   const succeeded = results.filter((result) => result.ok).length;
@@ -456,7 +454,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     added: diagnostics.rssCandidatesAdded,
     deduplicated: diagnostics.rssCandidatesDeduplicated,
   });
-  return { diagnostics, changed: addedCount > 0 };
+  return { diagnostics, changed: addedCount > 0 || enrichedCount > 0 };
 }
 
 
@@ -554,11 +552,12 @@ async function refreshWebSearchCandidates(
 
   const unique = [...new Map(candidates.map((item) => [item.external_id, item])).values()];
   const addedCount = unique.filter((item) => !existingIds.has(item.external_id)).length;
+  let enrichedCount = 0;
   if (unique.length > 0) {
     await mergeCandidatePool(unique);
     // Search snippets are discovery-only metadata. Canonical YouTube watch-page
     // enrichment supplies the richer metadata used by classification/scoring.
-    await enrichVideos(unique.slice(0, 18));
+    enrichedCount = (await enrichVideos(unique.slice(0, 18))).length;
   }
 
   const failed = Math.max(0, plans.length - succeeded);
