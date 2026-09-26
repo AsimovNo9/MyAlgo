@@ -12,6 +12,7 @@ import {
   nextRssAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
+  shouldRefreshObservedCandidate,
 } from './retrieval.ts';
 
 test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS provenance', () => {
@@ -176,4 +177,17 @@ test('web-search acquisition is bounded, deduplicated, and returns enrichable Yo
   assert.equal(calls.every((call) => call.limit === 5), true);
   assert.deepEqual(candidates.map((item) => item.external_id).sort(), ['goal-video', 'shared-video', 'topic-video']);
   assert.equal(candidates.every((item) => item.provenance?.mechanism === 'web_search'), true);
+});
+
+
+test('observed candidate refreshes are coalesced inside the short persistence window', () => {
+  const now = Date.parse('2026-09-26T19:00:00.000Z');
+  assert.equal(
+    shouldRefreshObservedCandidate('2026-09-26T18:59:45.000Z', now, 30_000),
+    false,
+  );
+  assert.equal(
+    shouldRefreshObservedCandidate('2026-09-26T18:59:20.000Z', now, 30_000),
+    true,
+  );
 });
