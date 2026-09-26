@@ -305,14 +305,11 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
   let channelIds = selectRssChannelIds(Object.values(store));
 
-  // Older cached metadata can be fresh but lack channel IDs, which makes RSS
-  // discovery appear enabled while attempting zero feeds. Seed channel IDs
-  // immediately from the current candidate reservoir using an open YouTube tab.
+  // Older cached metadata can be fresh but lack channel IDs. Seed channel IDs
+  // directly in the extension worker from the bounded candidate reservoir.
   if (channelIds.length === 0) {
     const candidatePool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
-    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
-    const tabId = tabs.find((tab) => tab.id != null)?.id;
-    if (tabId && candidatePool.length > 0) {
+    if (candidatePool.length > 0) {
       await enrichVideos(candidatePool);
       store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
       channelIds = selectRssChannelIds(Object.values(store));
@@ -324,7 +321,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
       ...EMPTY_RETRIEVAL_DIAGNOSTICS,
       lastRssSyncAt: new Date(nowMs).toISOString(),
       nextRssAllowedAt: null,
-      lastError: 'No YouTube channel IDs are available yet. Keep a YouTube tab open and refresh discovery after MyAlgo has observed a few videos.',
+      lastError: 'No YouTube channel IDs are available yet. Refresh discovery after MyAlgo has observed a few videos.',
     };
     await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
     return { diagnostics, changed: false };
