@@ -248,6 +248,12 @@ Only after measured gaps:
 - [#165](https://github.com/AsimovNo9/MyAlgo/issues/165): validate paid value before billing
 - [#166](https://github.com/AsimovNo9/MyAlgo/issues/166): second connector after YouTube retention validation
 
+## Repository/documentation hygiene
+
+### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
+
+The tracked README/docs now describe the browser-local Personal Algorithm architecture, but the GitHub repository description is repository metadata rather than a tracked file. Update it separately so it no longer presents YouTube Data API sourcing and LLM classification as the MVP foundation.
+
 ## Compliance-specific issues
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): YouTube API display-only boundary audit
