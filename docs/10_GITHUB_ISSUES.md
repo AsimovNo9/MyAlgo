@@ -4,7 +4,7 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #160 — safe replacement slots.
+1. #206 + #202 — source-neutral RSS/web-search candidate acquisition and retrieval provenance cleanup.
 2. #170 + #153 — graph provenance/visualization and per-item trace explanation.
 3. #162 — replay/evaluation baselines before richer enrichment.
 4. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
@@ -12,7 +12,7 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 6. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
 7. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
 
-#152 and #171 are completed in merged PR #204 after CI and live-browser validation.
+#152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
 
 #168 is the completed compliance boundary immediately preceding this sequence.
 
@@ -206,9 +206,9 @@ PR #193 was merged after CI and live browser/runtime validation. The live diagno
 
 Merged and live-browser validated. Native cards are enforced in place without reordering; hard/runtime policy precedes numeric score visibility; unmatched cards pass through; presentation cleanup survives DOM recycling.
 
-### [#160](https://github.com/AsimovNo9/MyAlgo/issues/160): Implement safe native-feed replacement slots — **next active task**
+### [#160](https://github.com/AsimovNo9/MyAlgo/issues/160): Implement safe native-feed replacement slots — **completed in PR #205**
 
-Reintroduce replacement behavior only through stable native slots, current-generation locally scored candidates, strict native/shelf/replacement deduplication, injected-DOM exclusion, trace metadata, and explicit unfilled-slot behavior.
+Merged implementation uses one native feed surface, trace-backed in-place replacements, terminal Shorts/Live/Playables source controls, first-batch Home shaping, candidate-reservoir preservation across extension updates, and hardened MV3 worker wake behavior.
 
 ### [#171](https://github.com/AsimovNo9/MyAlgo/issues/171): Prevent self-observation and stale reranking loops — **completed in PR #204**
 
@@ -258,9 +258,13 @@ Only after measured gaps:
 
 ## Repository/documentation hygiene
 
-### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Remove or rename legacy YouTube retrieval vocabulary
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **next active task**
 
-The #168 audit found no YouTube Data API implementation, but shared/recommender planning types still use labels such as `youtube_subscription`, `youtube_search`, `youtube_liked`, `subscriptions`, and `search`. These are currently non-network planning/type vocabulary, not API consumers, but they should be removed or renamed so code review does not imply an integration that does not exist.
+Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
+
+### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Refine retrieval provenance vocabulary for source-neutral acquisition
+
+Complete as part of #206. Replace provider/API-implying labels such as `youtube_search` and `youtube_subscription` with connector + acquisition mechanism + query-lane provenance while preserving the generic retrieval planner.
 
 ### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
 

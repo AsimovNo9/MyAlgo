@@ -39,11 +39,11 @@ Implemented and validated foundations:
 
 Current execution order:
 
-1. implement safe native-feed replacement slots (#160);
+1. implement source-neutral retrieval lanes for RSS and graph-derived web search (#206), including the provenance vocabulary cleanup in #202;
 2. expose graph provenance and per-item explanation paths (#170, #153);
 3. establish replay/evaluation baselines before adding richer enrichment (#162);
-4. add explicit graph controls and editing only after the explanation loop is trustworthy.
+4. add explicit graph controls and editing after the acquisition/explanation boundary is trustworthy.
 
-Native-card enforcement and stale/self-observation hardening are merged and live-browser validated (#152/#171 via PR #204). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
+Safe native-feed replacement slots are merged in PR #205 (#160), including first-batch source controls, Hide Playables, local candidate-reservoir preservation, and trace-backed in-place replacements. Native-card enforcement and stale/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
 Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.

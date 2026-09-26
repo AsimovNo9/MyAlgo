@@ -210,7 +210,7 @@ scoring / ranking
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated. PR #198 hardened graph consistency, PR #199 implemented/browser-validated the local privacy gate, PR #203 locked the no-YouTube-Data-API launch boundary, and PR #204 completed/live-validated native-card enforcement plus stale/self-observation hardening. The next active product task is safe replacement slots (#160), followed by graph provenance/explanation UX (#170/#153).
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated. PR #198 hardened graph consistency, PR #199 implemented/browser-validated the local privacy gate, PR #203 locked the no-YouTube-Data-API launch boundary, PR #204 completed native-card enforcement/stale-loop hardening, and PR #205 completed safe native-slot replacements plus first-batch source controls. The next active product task is source-neutral retrieval expansion through RSS and graph-derived web search (#206/#202), followed by graph provenance/explanation UX (#170/#153).
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 
@@ -218,13 +218,15 @@ scoring / ranking
 
 The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
 
-1. **#160** — implement safe native-feed replacement slots on top of the merged/live-validated #152/#171 enforcement boundary.
+1. **#206 + #202** — implement source-neutral candidate acquisition through RSS and graph-derived web search, while replacing misleading provider/API-like retrieval provenance.
 2. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
 3. **#162** — establish replay/evaluation baselines before adding richer content understanding.
 4. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
 5. **#169** — close the remaining local-runtime umbrella criterion with explicit offline/signed-out validation.
 6. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
-7. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
+7. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector after the acquisition/explanation loop proves value.
+
+#160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
 
 #152 and #171 are completed via PR #204. Live validation covered native order, degraded pass-through, stale render rejection, infinite-scroll DOM recycling, badge cleanup, mode consistency, pause/reactivation, graph rebuild invalidation, and explicit feedback reranking.
 
@@ -297,9 +299,11 @@ Only after measured evidence gaps:
 
 Channel context is a separate enrichment/cache layer, not an uncontrolled extension of per-video analysis. A creator summary should be built from a bounded recent window and reused across videos from that creator.
 
-## Phase 7 — Retrieval expansion
+## Retrieval expansion — current active slice
 
-Phase 7 is the point at which MyAlgo can stop treating the current YouTube DOM as its entire recommendation universe. It should be entered only after Phases 1–5 demonstrate that users understand and value the local representation.
+MyAlgo can now safely transform the native feed and use a bounded local candidate reservoir, so the next measured limitation is candidate acquisition: browser-observed DOM alone cannot reliably supply distinct replacement candidates or broaden discovery. The first retrieval slice is therefore active now through #206 rather than deferred as a generic future phase.
+
+Retrieval expands the candidate universe; it does not become the preference model. Retrieved candidates must enter the same local reservoir and deterministic scorer used by browser-observed candidates, with acquisition provenance kept distinct from graph/evidence provenance.
 
 ### Retrieval architecture
 
@@ -308,7 +312,7 @@ user model
     ↓
 retrieval planner
     ↓
-DOM / subscriptions / RSS / search / semantic / exploration
+observed DOM / RSS / web search / exploration
     ↓
 candidate pool
     ↓

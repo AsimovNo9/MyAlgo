@@ -220,7 +220,7 @@ export interface LocalFirstIntelligenceBenchmarkResult {
   reasons: string[];
 }
 
-/** Legacy/future retrieval planning lanes; no YouTube Data API client backs these in the launch runtime. */
+/** Source-neutral retrieval planning foundation. No YouTube Data API client backs these lanes; #206 implements RSS/web-search acquisition and #202 removes ambiguous provider-like naming. */
 export type RetrievalLane = 'subscriptions' | 'rss' | 'semantic' | 'search' | 'explore';
 
 export interface RetrievalLaneAssignment {

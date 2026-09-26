@@ -68,6 +68,27 @@ or preference. Repeatedly surfaced but unobserved items are a future
 avoidance/negative-signal research question, not an automatic P0 preference
 update.
 
+## Candidate acquisition
+
+The current runtime primarily acquires candidates by observing rendered YouTube pages. After PR #205, presentation/replacement can consume a broader local reservoir, so #206 adds independent acquisition without adding a second scorer.
+
+The repository already contains deterministic planning primitives:
+
+- `buildRetrievalCoordinatorPlan()` for bounded per-topic lane budgets;
+- `buildRecommendationProfile()` for goal/topic/format/creator intent;
+- `buildRecommendationQueries()` and `buildRecommendationQueryPlans()` for inspectable goal/topic/alias/format/intent/creator/freshness queries.
+
+Those helpers still lean on the legacy `Algorithm` contract. #206 must bridge the current `PersonalAlgorithmState`/graph into a retrieval-intent profile deterministically; it must not revive the legacy algorithm object as a second preference model.
+
+The first implemented acquisition mechanisms should be:
+
+1. **RSS** — bounded source/channel update discovery;
+2. **web search** — opt-in queries derived from normalized graph concepts, explicit goals, and retained history-derived concepts rather than raw history rows.
+
+Retrieval expands the candidate set only. It must not directly update preference weights or create graph evidence. Each acquired candidate carries source-neutral acquisition provenance and then flows through the same local deterministic scorer and policy as browser-observed candidates.
+
+The provenance cleanup in #202 should distinguish connector/provider, acquisition mechanism (`observed_dom`, `rss`, `web_search`, `exploration`), query lane, graph/algorithm revision, and retrieval time. Provider/API-like labels such as `youtube_search` should not survive the #206 implementation.
+
 ## Content understanding
 
 Prefer a layered approach:
