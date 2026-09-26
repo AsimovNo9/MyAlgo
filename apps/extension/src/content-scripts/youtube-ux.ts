@@ -149,6 +149,41 @@ export function getReplacementCandidates(
   }).slice(0, limit);
 }
 
+export type OpportunisticReplacementTarget = {
+  externalId: string;
+  score: number;
+  nativeIndex: number;
+};
+
+export function selectOpportunisticReplacementTargets(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit = 6,
+): OpportunisticReplacementTarget[] {
+  const candidates = replacementCandidates
+    .filter((item) => (
+      Boolean(item.external_id && item.title && item.traceId)
+      && item.visible !== false
+      && item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    ))
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+
+  const targets = [...nativeTargets]
+    .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
+    .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
+
+  const selected: OpportunisticReplacementTarget[] = [];
+  const count = Math.min(Math.max(0, limit), candidates.length, targets.length);
+  for (let index = 0; index < count; index += 1) {
+    const candidateScore = candidates[index]?.score ?? 0;
+    const target = targets[index];
+    if (!target || candidateScore <= target.score) break;
+    selected.push(target);
+  }
+  return selected;
+}
+
 export type ReplacementSlot = {
   slotId: string;
   sourceVideoId: string;
