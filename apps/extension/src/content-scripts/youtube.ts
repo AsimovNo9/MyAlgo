@@ -322,13 +322,18 @@ const getChannelName = (element: HTMLElement) => normalizeText(
   element.querySelector('#channel-name, ytd-channel-name, .ytd-channel-name')?.textContent ?? '',
 );
 
-const getVideoElements = () => {
+const getVideoElements = (diagnoseInjected = false) => {
   const knownElements = Array.from(document.querySelectorAll(videoSelectors.join(','))) as HTMLElement[];
   const linkElements = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
     .map(getCardForVideoLink)
     .filter((element): element is HTMLElement => Boolean(element));
-  return Array.from(new Set([...knownElements, ...linkElements]))
-    .filter((element) => !isMyAlgoInjectedElement(element));
+  const uniqueElements = Array.from(new Set([...knownElements, ...linkElements]));
+  const nativeElements = uniqueElements.filter((element) => !isMyAlgoInjectedElement(element));
+  const skippedInjected = uniqueElements.length - nativeElements.length;
+  if (diagnoseInjected && skippedInjected > 0) {
+    console.info('[MyAlgo] skipped injected candidate elements', { count: skippedInjected });
+  }
+  return nativeElements;
 };
 
 const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
@@ -341,7 +346,7 @@ const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
 
 const collectCandidates = () => {
   const sourceKind = getPageSourceKind();
-  const cardCandidates = getVideoElements()
+  const cardCandidates = getVideoElements(true)
     .map((element) => ({
       external_id: getVideoId(element),
       title: getVideoTitle(element),
@@ -415,7 +420,7 @@ const scheduleHistoryObservation = () => {
 const observeHomeRecommendations = () => {
   if (!extensionEnabled || !isCurrentInstance() || !isYouTubeHomePage(location.pathname)) return;
   safeStorageGet([STORAGE_KEYS.HOME_OBSERVATION_ENABLED]).then((result) => {
-    if (result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
+    if (!extensionEnabled || !isCurrentInstance() || result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
     const observation = collectRecommendationObservationsFromDom(document);
     safeSendMessage({
       type: EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION,
@@ -719,6 +724,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
+    clearExtensionPresentation(false);
     void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
       sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
       refreshRecommendationShelf();
@@ -726,10 +732,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return;
   }
+  if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {
+    rankGeneration += 1;
+    cachedFeed = [];
+    lastCandidateSignature = '';
+    lastRankMode = '';
+    clearExtensionPresentation(false);
+    triggerRank('graph');
+    return;
+  }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
   rankGeneration += 1;
   activeMode = message.payload.mode;
   cachedFeed = [];
+  lastCandidateSignature = '';
+  lastRankMode = '';
+  clearExtensionPresentation(false);
   refreshRecommendationShelf();
   triggerRank('mode');
 });
@@ -884,7 +902,7 @@ const registerFeedbackHandlers = () => {
     if (!isCurrentInstance() || !extensionEnabled) return;
 
     const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
+    if (!target || isMyAlgoInjectedElement(target)) return;
 
     const trigger = getMoreActionsTrigger(target);
     if (trigger) {
@@ -914,6 +932,13 @@ const registerFeedbackHandlers = () => {
         contentItemId: context.contentItemId,
         eventType,
       },
+    }, (response) => {
+      if (!response?.ok || !isCurrentInstance() || !extensionEnabled) return;
+      cachedFeed = [];
+      lastCandidateSignature = '';
+      lastRankMode = '';
+      clearExtensionPresentation(false);
+      triggerRank('feedback');
     });
   }, true);
 };
@@ -946,7 +971,6 @@ window.addEventListener('yt-navigate-finish', () => {
     triggerRank('navigation');
     scheduleHomeRecommendationObservation();
   }
-  scheduleHomeRecommendationObservation();
 });
 window.addEventListener('yt-page-data-updated', () => {
   triggerRank('navigation');
@@ -966,7 +990,7 @@ window.addEventListener('resize', () => {
 const pageObserver = new MutationObserver((records) => {
   const hasNativeVideoMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
-    if (node.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]')) return false;
+    if (node.closest(MYALGO_INJECTED_SELECTOR)) return false;
     return node.matches(`${videoSelectors.join(',')}, ${videoLinkSelector}`)
       || Boolean(node.querySelector(`${videoSelectors.join(',')}, ${videoLinkSelector}`));
   }));
