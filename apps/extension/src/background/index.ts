@@ -210,38 +210,50 @@ const ensureHistoryReconciled = (): Promise<void> => {
   return historyReconciliationReady;
 };
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   void (async () => {
     await ensureHistoryReconciled();
     await personalAlgorithmStore.initialize();
     const current = await chrome.storage.local.get([
       STORAGE_KEYS.MODE,
       STORAGE_KEYS.ENABLED,
+      STORAGE_KEYS.FEED_CACHE,
+      STORAGE_KEYS.FEED_CANDIDATE_POOL,
+      STORAGE_KEYS.VIDEO_STORE,
+      STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+      STORAGE_KEYS.HISTORY_METRICS,
+      STORAGE_KEYS.HOME_OBSERVATION_ENABLED,
+      STORAGE_KEYS.HOME_OBSERVATIONS,
+      STORAGE_KEYS.HOME_METRICS,
+      STORAGE_KEYS.SELECTION_EVENTS,
     ]);
     privacyDisclosureAccepted = isPrivacyDisclosureAccepted(
       current[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
     );
+    privacyDisclosureReady = Promise.resolve(privacyDisclosureAccepted);
+
+    const firstInstall = details.reason === 'install';
     await chrome.storage.local.set({
       [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Work',
       [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
-      [STORAGE_KEYS.FEED_CACHE]: [],
-      [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
-      [STORAGE_KEYS.VIDEO_STORE]: {},
-      [STORAGE_KEYS.LAST_SYNC]: null,
+      [STORAGE_KEYS.FEED_CACHE]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CACHE] ?? [],
+      [STORAGE_KEYS.FEED_CANDIDATE_POOL]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CANDIDATE_POOL] ?? [],
+      [STORAGE_KEYS.VIDEO_STORE]: firstInstall ? {} : current[STORAGE_KEYS.VIDEO_STORE] ?? {},
+      [STORAGE_KEYS.LAST_SYNC]: firstInstall ? null : current[STORAGE_KEYS.LAST_SYNC] ?? null,
       [STORAGE_KEYS.SOURCE_FILTERS]: current[STORAGE_KEYS.SOURCE_FILTERS] ?? {
         subscribedOnly: false,
         includeDiscovery: true,
         includeShorts: true,
         includeLive: true,
       },
-      // Preserve persisted History evidence across extension installs/updates.
-      [STORAGE_KEYS.HISTORY_METRICS]: null,
-      [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
-      [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
-      [STORAGE_KEYS.HOME_METRICS]: null,
-      [STORAGE_KEYS.SELECTION_EVENTS]: [],
+      // User-owned/local observational state must survive extension updates.
+      [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
+      [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
+      [STORAGE_KEYS.HOME_OBSERVATIONS]: current[STORAGE_KEYS.HOME_OBSERVATIONS] ?? [],
+      [STORAGE_KEYS.HOME_METRICS]: current[STORAGE_KEYS.HOME_METRICS] ?? null,
+      [STORAGE_KEYS.SELECTION_EVENTS]: current[STORAGE_KEYS.SELECTION_EVENTS] ?? [],
     });
     if (!privacyDisclosureAccepted) {
       await chrome.runtime.openOptionsPage();
