@@ -291,3 +291,16 @@ The active mode must not be rendered as a label on every video. A visible `Learn
 The first concrete provider is YouTube search-page discovery. The `WebSearchProvider` abstraction remains source-neutral, but the launch implementation issues bounded generated queries only to `https://www.youtube.com/results`, parses stable YouTube video IDs from `ytInitialData`, deduplicates them, and then runs those IDs through the canonical watch-page enrichment layer before scoring. No search box, API key, third-party search host, or optional host permission is required. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
 
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
+
+
+### Retrieved-discovery exploration
+
+Retrieval provenance does not add preference weight. Search/RSS candidates are still scored by the same graph, metadata, mode-alignment, feedback, and policy signals as observed candidates.
+
+To prevent qualified retrieved candidates from being permanently crowded out of the global off-page ranking, presentation reserves at most two exploration opportunities per generation for recently retrieved discovery candidates. An exploration replacement must:
+- clear the normal replacement minimum score;
+- remain visible/eligible/unsuppressed;
+- not duplicate a native or already-used candidate;
+- score at least as high as the native target it would replace.
+
+All remaining opportunistic replacements retain the stricter normal uplift requirement. This changes presentation opportunity, not candidate score.
