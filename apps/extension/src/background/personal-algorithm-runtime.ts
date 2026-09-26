@@ -255,9 +255,9 @@ export function buildLocalFeedbackSignals(
         )
         : null;
       const value = event.eventType === 'more_like_this'
-        ? 10
+        ? 20
         : event.eventType === 'not_interested'
-          ? -10
+          ? -25
           : event.eventType === 'never_show_channel'
             ? -100
             : 0;
