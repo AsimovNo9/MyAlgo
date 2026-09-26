@@ -15,6 +15,7 @@ export default defineConfig(() => {
       input: {
         popup: 'index.html',
         options: 'options.html',
+        offscreenSearch: 'offscreen-search.html',
       },
     },
   },
