@@ -27,8 +27,22 @@ The working product model is:
 - `docs` — active product, compliance, and execution documents
 - [`PRIVACY.md`](PRIVACY.md) — current local-only extension privacy policy
 
-## Working plan
-1. Build the Personal Algorithm Graph and its local storage.
-2. Bootstrap and observe YouTube signals with provenance.
-3. Deliver the trace → edit → feed-change loop.
-4. Validate the product loop before widening scope.
+## Current status and next work
+
+Implemented and validated foundations:
+
+- browser-observed YouTube evidence with source-neutral provenance;
+- browser-local Personal Algorithm Graph storage and deterministic reconciliation;
+- incremental creator relationship maintenance, validated against real exported state;
+- deterministic additive scoring and local runtime trace generation;
+- versioned privacy disclosure, minimized Chrome permissions, local-data deletion, and clean-profile privacy-gate validation.
+
+Current execution order:
+
+1. complete the YouTube Data API display-only boundary audit (#168);
+2. harden native-feed enforcement and stale/self-observation behavior (#152, #171, #160);
+3. expose graph provenance and per-item explanation paths (#170, #153);
+4. establish replay/evaluation baselines before adding richer enrichment (#162);
+5. add explicit graph controls and editing only after the explanation loop is trustworthy.
+
+Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.
