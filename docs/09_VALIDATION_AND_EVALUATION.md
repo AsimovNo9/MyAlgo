@@ -168,3 +168,16 @@ For #210/#208 scoring validation, also verify:
 6. the compact `Why this?` view reports the same contribution values as the trace;
 7. RSS/web-search acquisition mechanism does not itself add preference weight;
 8. web-search execution is not claimed as validated until a real provider adapter exists and is live-tested.
+
+
+## Long-session performance validation (#211)
+
+Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only short functional tests:
+
+1. `rankingWorkingSetSize` remains bounded while the persistent candidate pool grows.
+2. Mutation bursts collapse into one rank request rather than one request per DOM mutation.
+3. Unchanged observed candidates do not rewrite the full candidate pool inside the 30-second coalescing window.
+4. Metadata enrichment never exceeds the configured two-request concurrency.
+5. Rank latency is measured at small, medium, and maximum working-set sizes.
+6. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
+7. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
