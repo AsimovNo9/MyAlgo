@@ -70,13 +70,13 @@ export function createExposureId(input: {
   position: number | null;
   occurrenceKey?: string | null;
 }): string {
-  return [
+  const base = [
     input.videoId,
     input.surface,
     input.section ?? '',
     input.position == null ? '' : String(input.position),
-    input.occurrenceKey ?? '',
   ].join('|');
+  return input.occurrenceKey ? `${base}|${input.occurrenceKey}` : base;
 }
 
 export function getSelectionSource(target: Element | null): SelectionSource {
