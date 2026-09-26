@@ -69,6 +69,16 @@ export function isRenderContextStale(request: RenderContext, current: RenderCont
     || request.mode !== current.mode;
 }
 
+export function keepOutermostElements<T>(
+  elements: T[],
+  contains: (parent: T, child: T) => boolean,
+): T[] {
+  return elements.filter((element, index) => !elements.some(
+    (candidate, candidateIndex) => candidateIndex !== index
+      && contains(candidate, element),
+  ));
+}
+
 export function dedupeCandidatesById<T extends VideoCandidate>(candidates: T[]): T[] {
   const seen = new Set<string>();
   const deduped: T[] = [];
