@@ -5,20 +5,17 @@ import {
   acquireWebSearchCandidates,
   buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
-  createDefaultWebSearchProvider,
-  createSearxngWebSearchProvider,
-  DEFAULT_WEB_SEARCH_ENDPOINT,
+  createYoutubeSearchPageProvider,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
   needsYoutubeMetadataRefresh,
-  normalizeWebSearchEndpoint,
   normalizeWebSearchResultsToYoutubeCandidates,
+  parseYoutubeSearchResultsHtml,
   nextRssAllowedAt,
   nextWebSearchAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
   shouldRefreshObservedCandidate,
-  webSearchOriginPattern,
 } from './retrieval.ts';
 
 test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS provenance', () => {
@@ -199,39 +196,6 @@ test('observed candidate refreshes are coalesced inside the short persistence wi
 });
 
 
-test('SearXNG provider normalizes endpoint, constrains results to YouTube search, and maps JSON results', async () => {
-  const requests = [];
-  const provider = createSearxngWebSearchProvider('https://search.example.org/', { fetcher: async (url, options) => {
-    requests.push({ url, options });
-    return new Response(JSON.stringify({
-      results: [
-        { url: 'https://www.youtube.com/watch?v=abc', title: 'A', content: 'snippet' },
-        { url: 'https://example.com/nope', title: 'B' },
-      ],
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
-  } });
-  const results = await provider.search({
-    query: 'distributed systems tutorial',
-    lane: 'goal',
-    topics: ['distributed systems'],
-    graphRevision: 'graph-x',
-    limit: 5,
-  });
-
-  assert.equal(provider.id, 'searxng');
-  assert.equal(requests.length, 1);
-  assert.match(requests[0].url, /format=json/);
-  assert.match(decodeURIComponent(requests[0].url), /site:youtube\.com\/watch/);
-  assert.equal(results[0].url, 'https://www.youtube.com/watch?v=abc');
-  assert.equal(results[0].snippet, 'snippet');
-});
-
-test('web-search endpoint helpers require HTTPS and return exact opt-in origin pattern', () => {
-  assert.equal(normalizeWebSearchEndpoint('http://search.example.org'), null);
-  assert.equal(normalizeWebSearchEndpoint('https://search.example.org/'), 'https://search.example.org');
-  assert.equal(webSearchOriginPattern('https://search.example.org/path'), 'https://search.example.org/*');
-});
-
 test('web-search refresh policy applies TTL and bounded failure backoff', () => {
   const now = Date.parse('2026-09-26T12:00:00.000Z');
   const success = nextWebSearchAllowedAt(now, 0);
@@ -241,28 +205,74 @@ test('web-search refresh policy applies TTL and bounded failure backoff', () => 
 });
 
 
-test('PrivAU default provider uses the documented endpoint and API-key header', async () => {
+
+
+test('YouTube search-page parser extracts bounded unique video results from ytInitialData', () => {
+  const html = `
+    <html><script>
+      var ytInitialData = {
+        "contents": [{
+          "videoRenderer": {
+            "videoId": "video-a",
+            "title": {"runs":[{"text":"Distributed systems tutorial"}]},
+            "descriptionSnippet":{"runs":[{"text":"Learn CRDTs"}]},
+            "thumbnail":{"thumbnails":[
+              {"url":"https://i.ytimg.com/vi/video-a/default.jpg","width":120},
+              {"url":"https://i.ytimg.com/vi/video-a/hqdefault.jpg","width":480}
+            ]}
+          }
+        },{
+          "videoRenderer": {
+            "videoId": "video-b",
+            "title": {"simpleText":"Second result"},
+            "thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/vi/video-b/hqdefault.jpg","width":480}]}
+          }
+        },{
+          "compactVideoRenderer": {
+            "videoId": "video-a",
+            "title": {"simpleText":"Duplicate"}
+          }
+        }]
+      };
+    </script></html>
+  `;
+
+  const results = parseYoutubeSearchResultsHtml(html, 8);
+  assert.deepEqual(results.map((item) => item.url), [
+    'https://www.youtube.com/watch?v=video-a',
+    'https://www.youtube.com/watch?v=video-b',
+  ]);
+  assert.equal(results[0].title, 'Distributed systems tutorial');
+  assert.equal(results[0].snippet, 'Learn CRDTs');
+  assert.equal(results[0].thumbnailUrl, 'https://i.ytimg.com/vi/video-a/hqdefault.jpg');
+});
+
+test('YouTube search provider uses generated query with existing YouTube host access', async () => {
   const requests = [];
-  const provider = createDefaultWebSearchProvider('test-key', async (url, options) => {
+  const provider = createYoutubeSearchPageProvider(async (url, options) => {
     requests.push({ url, options });
-    return new Response(JSON.stringify({ results: [] }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
+    return new Response(`
+      <script>var ytInitialData = {
+        "contents":[{"videoRenderer":{
+          "videoId":"abc123",
+          "title":{"simpleText":"Candidate"}
+        }}]
+      };</script>
+    `, { status: 200, headers: { 'content-type': 'text/html' } });
   });
 
-  await provider.search({
-    query: 'local first tutorial',
+  const results = await provider.search({
+    query: 'distributed systems tutorial',
     lane: 'goal',
-    topics: ['local first'],
+    topics: ['distributed systems'],
     graphRevision: 'graph-x',
-    limit: 4,
+    limit: 5,
   });
 
-  assert.equal(provider.id, 'privau');
-  assert.equal(DEFAULT_WEB_SEARCH_ENDPOINT, 'https://priv.au');
+  assert.equal(provider.id, 'youtube_search_page');
   assert.equal(requests.length, 1);
-  assert.match(requests[0].url, /^https:\/\/priv\.au\/search\?/);
-  assert.equal(requests[0].options.headers['X-API-Key'], 'test-key');
+  assert.match(requests[0].url, /^https:\/\/www\.youtube\.com\/results\?/);
+  assert.match(decodeURIComponent(requests[0].url), /search_query=distributed systems tutorial/);
   assert.equal(requests[0].options.credentials, 'omit');
+  assert.deepEqual(results.map((item) => item.url), ['https://www.youtube.com/watch?v=abc123']);
 });
