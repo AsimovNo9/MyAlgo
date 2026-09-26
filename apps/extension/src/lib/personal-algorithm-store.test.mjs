@@ -198,7 +198,8 @@ test('history reconciliation replaces legacy history evidence in one storage wri
       'interaction:watched:legacy-2:history',
     ],
   );
-  assert.equal((await store.getGraph()).nodes.length, 2);
+  assert.equal((await store.getGraph()).nodes.length, 3);
+  assert.equal((await store.getGraph()).nodes.filter((node) => node.kind === 'creator').length, 1);
 });
 
 
@@ -446,9 +447,9 @@ test('content nodes preserve and hydrate normalized metadata without creating se
   }, 'metadata-2');
 
   const graph = await store.getGraph();
-  assert.equal(graph.nodes.length, 1);
-  assert.equal(graph.nodes[0].kind, 'content');
-  assert.equal(graph.nodes[0].label, 'Metadata title');
+  assert.equal(graph.nodes.filter((node) => node.kind === 'content').length, 1);
+  assert.equal(graph.nodes.filter((node) => node.kind === 'topic').length, 0);
+  assert.equal(graph.nodes.find((node) => node.kind === 'content')?.label, 'Metadata title');
   assert.equal(graph.nodes[0].attributes.metadata.creatorId, 'creator-1');
   assert.equal(graph.nodes[0].attributes.metadata.description, 'Description');
   assert.equal(graph.nodes[0].attributes.metadata.publishedAt, '2026-09-25T09:00:00.000Z');
