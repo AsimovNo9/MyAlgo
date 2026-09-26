@@ -311,7 +311,12 @@ async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): P
     : undefined));
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+const handleRuntimeMessage = (
+  message: unknown,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+  privacyChecked = false,
+): boolean => {
   const { type, payload } = message as {
     type: string;
     payload?: {
@@ -384,16 +389,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyDisclosureReady) {
-    void ensurePrivacyDisclosureLoaded().then(() => {
-      chrome.runtime.sendMessage(message, sendResponse);
-    });
+  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyChecked) {
+    void ensurePrivacyDisclosureLoaded().then((accepted) => {
+      if (!accepted) {
+        sendResponse({ ok: false, error: 'Accept the current privacy disclosure before MyAlgo observes or stores YouTube activity.' });
+        return;
+      }
+      handleRuntimeMessage(message, _sender, sendResponse, true);
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to load privacy disclosure state.',
+    }));
     return true;
-  }
-
-  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyDisclosureAccepted) {
-    sendResponse({ ok: false, error: 'Accept the current privacy disclosure before MyAlgo observes or stores YouTube activity.' });
-    return false;
   }
 
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
@@ -721,7 +728,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   sendResponse({ ok: false });
   return true;
-});
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => (
+  handleRuntimeMessage(message, sender, sendResponse)
+));
 
 chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) => {
   sendResponse({ ok: true });
