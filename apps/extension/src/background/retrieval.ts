@@ -71,99 +71,143 @@ export function normalizeWebSearchResultsToYoutubeCandidates(
   return candidates;
 }
 
-export function normalizeWebSearchEndpoint(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) return null;
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== 'https:') return null;
-    url.pathname = url.pathname.replace(/\/$/, '');
-    url.search = '';
-    url.hash = '';
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return null;
+type JsonObject = Record<string, unknown>;
+
+const isJsonObject = (value: unknown): value is JsonObject =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value));
+
+function extractAssignedJson(html: string, markers: string[]): unknown | null {
+  for (const marker of markers) {
+    const markerIndex = html.indexOf(marker);
+    if (markerIndex < 0) continue;
+    const start = html.indexOf('{', markerIndex + marker.length);
+    if (start < 0) continue;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < html.length; index += 1) {
+      const char = html[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (char === '{') depth += 1;
+      else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(html.slice(start, index + 1));
+          } catch {
+            break;
+          }
+        }
+      }
+    }
   }
+  return null;
 }
 
-export function webSearchOriginPattern(value: string | null | undefined): string | null {
-  const endpoint = normalizeWebSearchEndpoint(value);
-  if (!endpoint) return null;
-  const url = new URL(endpoint);
-  return `${url.origin}/*`;
+const rendererText = (value: unknown): string | null => {
+  if (!isJsonObject(value)) return null;
+  if (typeof value.simpleText === 'string') return value.simpleText.trim() || null;
+  if (!Array.isArray(value.runs)) return null;
+  const text = value.runs
+    .map((run) => isJsonObject(run) && typeof run.text === 'string' ? run.text : '')
+    .join('')
+    .trim();
+  return text || null;
+};
+
+const rendererThumbnail = (value: unknown): string | null => {
+  if (!isJsonObject(value) || !Array.isArray(value.thumbnails)) return null;
+  const candidates = value.thumbnails
+    .filter((item): item is JsonObject => isJsonObject(item) && typeof item.url === 'string')
+    .sort((left, right) => Number(right.width ?? 0) - Number(left.width ?? 0));
+  return typeof candidates[0]?.url === 'string' ? candidates[0].url : null;
+};
+
+export function parseYoutubeSearchResultsHtml(
+  html: string,
+  limit = 20,
+): WebSearchResult[] {
+  const data = extractAssignedJson(html, [
+    'var ytInitialData =',
+    'ytInitialData =',
+    'window["ytInitialData"] =',
+  ]);
+  if (!data) return [];
+
+  const results: WebSearchResult[] = [];
+  const seen = new Set<string>();
+  const boundedLimit = Math.max(0, Math.min(50, Math.floor(limit)));
+
+  const visit = (value: unknown): void => {
+    if (results.length >= boundedLimit) return;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+        if (results.length >= boundedLimit) break;
+      }
+      return;
+    }
+    if (!isJsonObject(value)) return;
+
+    for (const rendererKey of ['videoRenderer', 'gridVideoRenderer', 'compactVideoRenderer']) {
+      const renderer = value[rendererKey];
+      if (!isJsonObject(renderer)) continue;
+      const videoId = typeof renderer.videoId === 'string' ? renderer.videoId.trim() : '';
+      if (!videoId || seen.has(videoId)) continue;
+      const title = rendererText(renderer.title) ?? 'YouTube video';
+      seen.add(videoId);
+      results.push({
+        url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+        title,
+        snippet: rendererText(renderer.descriptionSnippet),
+        thumbnailUrl: rendererThumbnail(renderer.thumbnail),
+        publishedAt: null,
+      });
+      if (results.length >= boundedLimit) return;
+    }
+
+    for (const child of Object.values(value)) {
+      visit(child);
+      if (results.length >= boundedLimit) return;
+    }
+  };
+
+  visit(data);
+  return results;
 }
 
-export function createSearxngWebSearchProvider(
-  endpointValue: string,
-  options: {
-    apiKey?: string | null;
-    providerId?: string;
-    fetcher?: typeof fetch;
-  } = {},
+export function createYoutubeSearchPageProvider(
+  fetcher: typeof fetch = fetch,
 ): WebSearchProvider {
-  const endpoint = normalizeWebSearchEndpoint(endpointValue);
-  if (!endpoint) throw new Error('Web-search endpoint must be an HTTPS SearXNG base URL.');
-
-  const fetcher = options.fetcher ?? fetch;
-  const apiKey = options.apiKey?.trim() || null;
-
   return {
-    id: options.providerId ?? 'searxng',
+    id: 'youtube_search_page',
     async search(request) {
-      const url = new URL(`${endpoint}/search`);
-      url.searchParams.set('q', `${request.query} site:youtube.com/watch`);
-      url.searchParams.set('format', 'json');
-      url.searchParams.set('categories', 'general');
-      url.searchParams.set('language', 'auto');
+      const url = new URL('https://www.youtube.com/results');
+      url.searchParams.set('search_query', request.query);
 
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      if (apiKey) headers['X-API-Key'] = apiKey;
       const response = await fetcher(url.toString(), {
         method: 'GET',
         credentials: 'omit',
         cache: 'no-store',
-        headers,
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
       });
-      if (!response.ok) throw new Error(`Web search HTTP ${response.status}`);
-      const payload = await response.json() as {
-        results?: Array<{
-          url?: unknown;
-          title?: unknown;
-          content?: unknown;
-          publishedDate?: unknown;
-          thumbnail?: unknown;
-        }>;
-      };
-
-      return (payload.results ?? [])
-        .flatMap((item): WebSearchResult[] => {
-          if (typeof item.url !== 'string' || typeof item.title !== 'string') return [];
-          return [{
-            url: item.url,
-            title: item.title,
-            snippet: typeof item.content === 'string' ? item.content : null,
-            publishedAt: typeof item.publishedDate === 'string' ? item.publishedDate : null,
-            thumbnailUrl: typeof item.thumbnail === 'string' ? item.thumbnail : null,
-          }];
-        })
-        .slice(0, request.limit);
+      if (!response.ok) throw new Error(`YouTube search HTTP ${response.status}`);
+      return parseYoutubeSearchResultsHtml(await response.text(), request.limit);
     },
   };
-}
-
-export const DEFAULT_WEB_SEARCH_ENDPOINT = 'https://priv.au';
-export const DEFAULT_WEB_SEARCH_PROVIDER = 'privau' as const;
-
-export function createDefaultWebSearchProvider(
-  apiKey: string,
-  fetcher: typeof fetch = fetch,
-): WebSearchProvider {
-  if (!apiKey.trim()) throw new Error('PrivAU API key is required for web search.');
-  return createSearxngWebSearchProvider(DEFAULT_WEB_SEARCH_ENDPOINT, {
-    apiKey,
-    providerId: DEFAULT_WEB_SEARCH_PROVIDER,
-    fetcher,
-  });
 }
 
 export interface WebSearchProvider {
