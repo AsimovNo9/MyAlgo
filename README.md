@@ -39,7 +39,7 @@ Implemented and validated foundations:
 
 Current execution order:
 
-1. complete the YouTube Data API display-only boundary audit (#168);
+1. keep the audited no-YouTube-Data-API launch boundary enforced (#168);
 2. harden native-feed enforcement and stale/self-observation behavior (#152, #171, #160);
 3. expose graph provenance and per-item explanation paths (#170, #153);
 4. establish replay/evaluation baselines before adding richer enrichment (#162);
