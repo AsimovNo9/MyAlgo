@@ -68,7 +68,15 @@ export function Popup() {
   const handleFilterChange = async (key: keyof FeedSourceFilters, value: boolean) => {
     const nextFilters = { ...sourceFilters, [key]: value };
     setSourceFilters(nextFilters);
-    await chrome.runtime.sendMessage({ type: 'SET_SOURCE_FILTERS', payload: { sourceFilters: nextFilters } });
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_SOURCE_FILTERS',
+      payload: { sourceFilters: nextFilters },
+    }) as { ok?: boolean; error?: string };
+    if (!response?.ok) {
+      setLastError(response?.error ?? 'Unable to update feed controls.');
+    } else {
+      setLastError(null);
+    }
   };
 
   const modeOptions = ['Work', 'Learning', 'Relax'];
