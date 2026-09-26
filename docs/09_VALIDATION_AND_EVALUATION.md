@@ -186,3 +186,8 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 ### Replacement stability regression
 
 For live replacement validation, render at least one replacement and then allow ordinary Home mutations and `yt-page-data-updated` events to occur for at least 45 seconds. The same replacement should remain present while its source card and candidate stay valid. Confirm that `yt-navigate-start`, mode changes, feedback/graph invalidation, suppression, and stability expiry correctly permit teardown/reselection.
+
+
+### Overlay first-paint latency regression
+
+Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation.
