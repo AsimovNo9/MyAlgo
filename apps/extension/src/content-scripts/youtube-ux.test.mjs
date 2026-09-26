@@ -92,3 +92,10 @@ test('outermost-card selection removes nested duplicate presentation targets', (
     [outer, sibling],
   );
 });
+
+
+test('reactivation semantics require a fresh manual generation rather than stale mutation reuse', () => {
+  const stale = { generation: 7, routeKey: '/', mode: 'Work' };
+  const current = { generation: 8, routeKey: '/', mode: 'Work' };
+  assert.equal(isRenderContextStale(stale, current), true);
+});
