@@ -272,13 +272,13 @@ Treat embeddings as replaceable derived enrichment around the canonical Personal
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS implemented in PR #208; web search remains planned**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS merged in PR #208; YouTube search-page discovery implemented in PR #212; final live promotion validation remains**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
 ### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Refine retrieval provenance vocabulary for source-neutral acquisition
 
-Complete as part of #206. Replace provider/API-implying labels such as `youtube_search` and `youtube_subscription` with connector + acquisition mechanism + query-lane provenance while preserving the generic retrieval planner.
+Completed in merged PR #208. Provider/API-implying labels were replaced with connector + acquisition mechanism + query-lane provenance while preserving the generic retrieval planner.
 
 ### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
 
@@ -297,4 +297,4 @@ Implementation and clean-profile browser validation are complete in PR #199. Rem
 
 ### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions
 
-Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. The first hardening slice bounds ranking and persistence working sets, moves metadata parsing to the extension worker, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Follow-up work includes incremental score caching, evidence/graph compaction, stress testing, and a dedicated CPU worker only if profiling still justifies it.
+Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. Hardening now bounds ranking/persistence/evidence stores, isolates YouTube search fetch/parsing in an offscreen dedicated Worker, reconciles Home exposure evidence to a bounded window, compacts default/expired evidence, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Remaining work is sustained live validation plus incremental score caching only if profiling still justifies it.
