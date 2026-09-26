@@ -89,7 +89,7 @@ Implemented and validated:
 
 #167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL, reconcile the final Store listing/Privacy practices fields, and complete #168.
 
-### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **next active gate**
+### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **audit implemented; current launch runtime has no Data API integration**
 
 ### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **completed in PR #188**
 
@@ -250,6 +250,10 @@ Only after measured gaps:
 
 ## Repository/documentation hygiene
 
+### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Remove or rename legacy YouTube retrieval vocabulary
+
+The #168 audit found no YouTube Data API implementation, but shared/recommender planning types still use labels such as `youtube_subscription`, `youtube_search`, `youtube_liked`, `subscriptions`, and `search`. These are currently non-network planning/type vocabulary, not API consumers, but they should be removed or renamed so code review does not imply an integration that does not exist.
+
 ### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
 
 The tracked README/docs now describe the browser-local Personal Algorithm architecture, but the GitHub repository description is repository metadata rather than a tracked file. Update it separately so it no longer presents YouTube Data API sourcing and LLM classification as the MVP foundation.
@@ -258,7 +262,7 @@ The tracked README/docs now describe the browser-local Personal Algorithm archit
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): YouTube API display-only boundary audit
 
-Confirm implementation never feeds YouTube API Data into graph derivation.
+Repository audit result: the current launch runtime contains no YouTube Data API endpoint/client/OAuth/credential/cache path. CI now fails if those surfaces appear in launch source/artifacts. Future API use defaults to account/display-only and requires a new policy/product/privacy review before API Data can approach graph/scoring paths.
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
