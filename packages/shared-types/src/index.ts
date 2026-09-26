@@ -214,12 +214,32 @@ export interface SemanticProfile {
 }
 
 export interface EmbeddingRecord {
-  owner_type: 'concept' | 'content' | 'user_profile';
+  owner_type: 'concept' | 'content' | 'user_profile' | 'mode';
   owner_id: string;
+  model_id?: string;
   model_version: string;
+  input_hash?: string;
   dimensions: number;
   embedding: number[];
   generated_at: string;
+}
+
+export interface SemanticModeProfile {
+  id: string;
+  label: string;
+  seed_text: string;
+  graph_revision: number;
+  node_weights: Record<string, number>;
+  semantic_terms: string[];
+  model_version?: string | null;
+  embedding?: number[] | null;
+}
+
+export interface CandidateSemanticFeatures {
+  model_version: string;
+  graph_similarity: number;
+  mode_similarity: number;
+  matched_node_ids: string[];
 }
 
 /** @deprecated Use CandidateAcquisitionProvenance. */
@@ -276,6 +296,9 @@ export interface RecommendationCandidate {
   candidate_relevance?: 'matched' | 'unmatched';
   base_score?: number;
   semantic_similarity?: number | null;
+  semantic_graph_similarity?: number | null;
+  semantic_mode_similarity?: number | null;
+  semantic_model_version?: string | null;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
 }
