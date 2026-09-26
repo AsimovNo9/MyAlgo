@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectRetrievedDiscoveryAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -735,10 +735,15 @@ const applyRankedFeed = () => {
 
     if (remainingReplacementCapacity > 0) {
       const replacementSelectionSeed = `${rankGeneration}|${routeKey}`;
+      // Score remains the authority. Retrieved candidates do not receive a
+      // provenance bonus, but reserve up to two exploration opportunities so a
+      // qualified RSS/search candidate is not permanently crowded out by the
+      // global off-page ranking. Exploration still requires the normal minimum
+      // score and must be at least as strong as the native target.
       const replacementCandidates = getReplacementCandidates(
         cachedFeed,
         [...nativeIds, ...usedCandidateIds],
-        remainingReplacementCapacity,
+        Math.max(24, remainingReplacementCapacity * 6),
         youtubeConnector.presentation.replacementMinimumScore,
         replacementSelectionSeed,
       );
@@ -748,17 +753,30 @@ const applyRankedFeed = () => {
         if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
         return [{ externalId: id, score, nativeIndex }];
       });
-      const selectedAssignments = selectOpportunisticReplacementAssignments(
+
+      const explorationAssignments = selectRetrievedDiscoveryAssignments(
         nativeTargets,
         replacementCandidates,
-        remainingReplacementCapacity,
+        Math.min(2, remainingReplacementCapacity),
+      );
+      const exploredCandidateIds = new Set(
+        explorationAssignments.map((assignment) => assignment.item.external_id ?? ''),
+      );
+      const exploredTargetIds = new Set(
+        explorationAssignments.map((assignment) => assignment.target.externalId),
+      );
+      const strictAssignments = selectOpportunisticReplacementAssignments(
+        nativeTargets.filter((target) => !exploredTargetIds.has(target.externalId)),
+        replacementCandidates.filter((item) => !exploredCandidateIds.has(item.external_id ?? '')),
+        Math.max(0, remainingReplacementCapacity - explorationAssignments.length),
         youtubeConnector.presentation.replacementMinimumUplift,
       );
+      const selectedAssignments = [...explorationAssignments, ...strictAssignments];
 
       opportunisticReplacementCandidates = replacementCandidates.length;
       opportunisticNativeTargets = nativeTargets.length;
       opportunisticSelectedTargets = selectedAssignments.length;
-      opportunisticUpliftQualified = selectedAssignments.length;
+      opportunisticUpliftQualified = strictAssignments.length;
 
       for (const assignment of selectedAssignments) {
         const selected = assignment.target;
@@ -804,6 +822,10 @@ const applyRankedFeed = () => {
     opportunisticReplacementCandidates,
     opportunisticNativeTargets,
     opportunisticSelectedTargets,
+    retrievedDiscoveryExplorationAssignments: Math.max(
+      0,
+      opportunisticSelectedTargets - opportunisticUpliftQualified,
+    ),
     opportunisticUpliftQualified,
     replacementMinimumUplift: youtubeConnector.presentation.replacementMinimumUplift,
   });
