@@ -542,7 +542,7 @@ const scheduleHomeRecommendationObservation = () => {
 const getFeedLayoutItem = (element: HTMLElement): HTMLElement | null => {
   let current: HTMLElement | null = element;
   for (let depth = 0; current && depth < 10; depth += 1) {
-    const parent = current.parentElement;
+    const parent: HTMLElement | null = current.parentElement;
     if (!parent) return current;
     if (parent.id === 'contents' && parent.closest('ytd-rich-grid-renderer')) {
       return current;
