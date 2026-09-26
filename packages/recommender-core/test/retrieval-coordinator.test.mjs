@@ -110,3 +110,34 @@ test('query planner supports creator-only graph retrieval before semantic topic 
     algorithmRevision: '9',
   }]);
 });
+
+
+test('buildGraphRetrievalRevision changes when retrieval-relevant graph state changes', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      nodes: [
+        { id: 'creator:youtube:a', kind: 'creator', label: 'Creator A', provenance: 'inferred', confidence: 1, attributes: {}, createdAt: '', updatedAt: '' },
+      ],
+      edges: [],
+      userEdits: [],
+      revisions: [],
+      currentRevision: 0,
+    },
+  };
+  const first = buildGraphRetrievalRevision(state);
+  const second = buildGraphRetrievalRevision({
+    ...state,
+    graph: {
+      ...state.graph,
+      nodes: [
+        ...state.graph.nodes,
+        { id: 'topic:local-first', kind: 'topic', label: 'Local-first', provenance: 'explicit', confidence: 1, attributes: {}, createdAt: '', updatedAt: '' },
+      ],
+    },
+  });
+
+  assert.notEqual(first, second);
+  assert.equal(first.startsWith('graph-2-'), true);
+});
