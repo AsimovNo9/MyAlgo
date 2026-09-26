@@ -1,6 +1,6 @@
 # Chrome Web Store / Privacy Compliance
 
-> **Status: P0 pre-launch gate (#167).** This document is the release reconciliation record for the local-only MVP.
+> **Status: implementation and clean-profile browser validation complete in #167 / PR #199; Store-dashboard release steps remain open.** This document is the release reconciliation record for the local-only MVP.
 
 ## Implemented launch boundary
 
@@ -114,9 +114,9 @@ Re-review #167 and increment the disclosure version before shipping any change t
 Do not submit until all of the following are true:
 
 - CI passes typecheck, tests, build, manifest permission checks, and artifact secret scan;
-- first-run disclosure is manually validated in a clean Chrome profile;
+- first-run disclosure remains covered by the clean-profile validation completed after PR #199;
 - no YouTube observation occurs before acceptance;
-- pause and full local-data deletion are manually validated;
+- pause and full local-data deletion remain covered by that validation;
 - privacy policy has a stable public URL;
 - Store listing and Privacy practices tab match the release artifact;
 - #168's separate YouTube Data API boundary review is complete.
