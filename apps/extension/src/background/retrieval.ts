@@ -1,8 +1,43 @@
-import type { CandidateAcquisitionProvenance, RecommendationCandidate } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, RecommendationCandidate, RecommendationQueryPlan } from '@repo/shared-types';
 
 export const RSS_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 export const MAX_RSS_CHANNELS_PER_REFRESH = 6;
 export const MAX_RSS_ITEMS_PER_CHANNEL = 8;
+
+
+export type WebSearchRequest = {
+  query: string;
+  lane: RecommendationQueryPlan['lane'];
+  topics: string[];
+  graphRevision: string;
+  limit: number;
+};
+
+export type WebSearchResult = {
+  url: string;
+  title: string;
+  snippet?: string | null;
+  publishedAt?: string | null;
+  thumbnailUrl?: string | null;
+};
+
+export interface WebSearchProvider {
+  readonly id: string;
+  search(request: WebSearchRequest): Promise<WebSearchResult[]>;
+}
+
+export function buildWebSearchRequest(
+  plan: RecommendationQueryPlan,
+  limit = 8,
+): WebSearchRequest {
+  return {
+    query: plan.text,
+    lane: plan.lane,
+    topics: [...plan.topics],
+    graphRevision: plan.algorithmRevision,
+    limit: Math.max(1, Math.min(20, Math.floor(limit))),
+  };
+}
 
 const decodeXml = (value: string): string => value
   .replace(/&amp;/g, '&')
