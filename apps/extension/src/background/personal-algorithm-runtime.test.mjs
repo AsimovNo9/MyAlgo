@@ -1,13 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { PersonalAlgorithmState } from '@repo/shared-types';
 import {
   buildLocalFeedbackSignals,
   buildLocalScoringPolicy,
   scoreLocalCandidates,
 } from './personal-algorithm-runtime.ts';
 
-const state: PersonalAlgorithmState = {
+const state = {
   schemaVersion: 2,
   evidence: [],
   graph: {
