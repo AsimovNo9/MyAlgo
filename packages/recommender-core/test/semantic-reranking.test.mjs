@@ -193,3 +193,36 @@ test('local hash embedding baseline is deterministic and separates unrelated mod
 
   assert.ok(cosine(workA, workB) > cosine(workA, relax));
 });
+
+
+test('local baseline produces different candidate ordering across Work and Relax semantic modes', async () => {
+  const local = createLocalHashEmbeddingProvider(192);
+  const cache = createMemoryEmbeddingCache();
+  const candidates = [
+    {
+      external_id: 'systems',
+      title: 'Practical distributed systems implementation',
+      description: 'Build reliable software architecture',
+    },
+    {
+      external_id: 'ambient',
+      title: 'Ambient music to relax and unwind',
+      description: 'Calm evening listening',
+    },
+  ];
+
+  const work = await enrichCandidatesWithSemanticReranking(state, candidates, 'Work', local, cache);
+  const relax = await enrichCandidatesWithSemanticReranking(state, candidates, 'Relax', local, cache);
+
+  const workById = Object.fromEntries(work.candidates.map((candidate) => [candidate.external_id, candidate]));
+  const relaxById = Object.fromEntries(relax.candidates.map((candidate) => [candidate.external_id, candidate]));
+
+  assert.ok(
+    workById.systems.semantic_mode_similarity
+      > workById.ambient.semantic_mode_similarity,
+  );
+  assert.ok(
+    relaxById.ambient.semantic_mode_similarity
+      > relaxById.systems.semantic_mode_similarity,
+  );
+});
