@@ -111,3 +111,19 @@ Current safety budgets:
 - live ranking working set: 320, including at most 180 off-page replacement candidates.
 
 Home exposure evidence is reconciled to the retained 300-observation window rather than accumulating every historical feed impression indefinitely. Evidence compaction removes the oldest default-retention records, expired records, unsupported inferred edges/creator nodes, and unreferenced auto-created content nodes while preserving indefinite/user-supported graph data.
+
+
+## Semantic inference performance envelope
+
+Semantic inference is not part of overlay first paint.
+
+Current PR #213 bounds:
+- at most 64 objective/topic/concept graph nodes are embedded for a semantic pass;
+- at most the existing 320-candidate live ranking working set participates;
+- persistent embedding cache: 600 records;
+- persistent graph/mode candidate similarity cache: 600 records;
+- cache identity includes model/version/input hash, graph revision, and mode where appropriate.
+
+The dependency-free hash embedding baseline runs locally and is primarily an integration/fallback benchmark. A compact neural encoder must be benchmarked against it for first-run latency, cached latency, memory, extension/package impact, multilingual quality, and long-session stability before becoming the default provider.
+
+Heavy model inference must execute outside the service-worker ranking critical path. Cached semantic similarities may be consumed synchronously by the scorer because they are small derived numbers; generating new embeddings is asynchronous and requests a later rerank.
