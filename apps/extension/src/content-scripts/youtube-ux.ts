@@ -15,6 +15,52 @@ export type RankedFeedItem = {
   score?: number;
 };
 
+export const MYALGO_INJECTED_SELECTOR = [
+  '[data-personal-algorithm-shelf]',
+  '[data-personal-algorithm-replacement]',
+  '[data-personal-algorithm-status]',
+  '[data-personal-algorithm-explanation]',
+  '[data-personal-algorithm-control]',
+].join(', ');
+
+export function isMyAlgoInjectedElement(element: Element | null): boolean {
+  return Boolean(element?.closest(MYALGO_INJECTED_SELECTOR));
+}
+
+export type NativeCardDecision =
+  | { action: 'show'; reason: 'ranked' | 'unmatched' }
+  | { action: 'hide'; reason: 'source_filter' | 'runtime_policy' | 'score' };
+
+export function getNativeCardDecision(
+  item: RankedFeedItem | undefined,
+  options: { sourceFiltered: boolean; minimumVisibleScore: number },
+): NativeCardDecision {
+  // Hard/runtime policy gates always win before score-based presentation.
+  if (options.sourceFiltered) return { action: 'hide', reason: 'source_filter' };
+  if (item?.visible === false) return { action: 'hide', reason: 'runtime_policy' };
+
+  // Missing coverage is a degraded/pass-through state, not a reason to erase
+  // YouTube-owned cards that MyAlgo has not scored.
+  if (!item) return { action: 'show', reason: 'unmatched' };
+
+  if ((item.score ?? 0) < options.minimumVisibleScore) {
+    return { action: 'hide', reason: 'score' };
+  }
+  return { action: 'show', reason: 'ranked' };
+}
+
+export type RenderContext = {
+  generation: number;
+  routeKey: string;
+  mode: string;
+};
+
+export function isRenderContextStale(request: RenderContext, current: RenderContext): boolean {
+  return request.generation !== current.generation
+    || request.routeKey !== current.routeKey
+    || request.mode !== current.mode;
+}
+
 export function dedupeCandidatesById<T extends VideoCandidate>(candidates: T[]): T[] {
   const seen = new Set<string>();
   const deduped: T[] = [];
