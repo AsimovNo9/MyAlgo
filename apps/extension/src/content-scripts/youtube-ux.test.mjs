@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, isRenderContextStale, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -147,4 +147,30 @@ test('replacement slot identity changes with generation, route, position, and so
   assert.notEqual(createReplacementSlotId(4, '/results?q=x', 2, 'native-a'), base);
   assert.notEqual(createReplacementSlotId(4, '/', 3, 'native-a'), base);
   assert.notEqual(createReplacementSlotId(4, '/', 2, 'native-b'), base);
+});
+
+
+test('replacement presentation metadata is explicit and generation scoped', () => {
+  const assignment = {
+    slot: { slotId: '8|/|3|native-a', sourceVideoId: 'native-a' },
+    item: {
+      external_id: 'replacement-a',
+      title: 'Replacement A',
+      score: 6,
+      traceId: 'trace-a',
+      policyOutcome: 'eligible',
+    },
+  };
+  assert.deepEqual(
+    getReplacementPresentationMetadata(assignment, 8, 'Learning'),
+    {
+      generation: 8,
+      mode: 'Learning',
+      score: 6,
+      traceId: 'trace-a',
+      slotId: '8|/|3|native-a',
+      sourceVideoId: 'native-a',
+      replacementVideoId: 'replacement-a',
+    },
+  );
 });
