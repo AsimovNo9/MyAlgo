@@ -463,7 +463,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await setStorage(STORAGE_KEYS.SOURCE_FILTERS, payload?.sourceFilters ?? {});
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
-        ? chrome.tabs.sendMessage(tab.id, { type: 'SOURCE_FILTERS_CHANGED' }).catch(() => undefined)
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'SOURCE_FILTERS_CHANGED',
+          payload: { sourceFilters: payload?.sourceFilters ?? {} },
+        }).catch(() => undefined)
         : undefined));
       sendResponse({ ok: true });
     })();
