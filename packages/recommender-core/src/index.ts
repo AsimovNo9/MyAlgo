@@ -1239,5 +1239,5 @@ export function buildStoredOrDerivedAlgorithmIntentProfile(
 
 export * from './personal-algorithm-scorer.ts';
 
-export * from './semantic-primitives';
-export * from './semantic-reranking';
+export * from './semantic-primitives.ts';
+export * from './semantic-reranking.ts';
