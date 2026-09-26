@@ -43,6 +43,11 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
     semantic_graph_similarity?: number | null;
     semantic_mode_similarity?: number | null;
     semantic_model_version?: string | null;
+    semantic_graph_matches?: Array<{
+      node_id: string;
+      node_label: string;
+      similarity: number;
+    }>;
   }>;
   modeProfile: SemanticModeProfile;
   diagnostics: SemanticRerankingDiagnostics;
@@ -350,13 +355,45 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
 
   const enriched = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
-    const graphSimilarity = positiveSimilarity(embedding, graphCentroid);
+    const graphMatches = eligibleGraphNodes
+      .map((node) => {
+        const similarity = positiveSimilarity(
+          embedding,
+          nodeEmbeddingById.get(node.id) ?? [],
+        );
+        return {
+          node_id: node.id,
+          node_label: node.label,
+          similarity,
+          rankingWeight: similarity * graphNodeWeight(node),
+        };
+      })
+      .filter((match) => match.similarity > 0)
+      .sort((left, right) => (
+        right.rankingWeight - left.rankingWeight
+        || right.similarity - left.similarity
+        || left.node_id.localeCompare(right.node_id)
+      ))
+      .slice(0, 3);
+
+    const graphSimilarity = graphMatches.length > 0
+      ? graphMatches.reduce((sum, match) => sum + match.rankingWeight, 0)
+        / graphMatches.reduce((sum, match) => {
+          const node = eligibleGraphNodes.find((candidateNode) => candidateNode.id === match.node_id);
+          return sum + (node ? graphNodeWeight(node) : 1);
+        }, 0)
+      : positiveSimilarity(embedding, graphCentroid);
+
     return {
       ...candidate,
       semantic_similarity: graphSimilarity,
       semantic_graph_similarity: graphSimilarity,
       semantic_mode_similarity: positiveSimilarity(embedding, modeCentroid),
       semantic_model_version: semanticModelVersion,
+      semantic_graph_matches: graphMatches.map(({ rankingWeight: _rankingWeight, ...match }) => ({
+        ...match,
+        similarity: Number(match.similarity.toFixed(4)),
+      })),
     };
   });
 
