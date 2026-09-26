@@ -919,15 +919,18 @@ const applySourceFilters = (nextFilters: FeedSourceFilters) => {
   if (!isCurrentInstance() || sourceFiltersEqual(sourceFilters, nextFilters)) return;
   sourceFilters = nextFilters;
   rankGeneration += 1;
-  cachedFeed = [];
+
+  // Keep the last valid scored generation available for the optimistic local
+  // presentation pass. Source controls are presentation policy, so clearing
+  // cachedFeed here would remove mode/score badges until a later rank response
+  // wins the generation race.
+  clearExtensionPresentation(false);
+  applyRankedFeed();
+
+  // Force a fresh score/trace request after the immediate presentation update.
+  // The generation guard prevents older in-flight work from replacing it.
   lastCandidateSignature = '';
   lastRankMode = '';
-  clearExtensionPresentation(false);
-
-  // Source controls are local presentation policy. Apply them immediately so
-  // Hide Shorts/Live does not wait on a worker wake, storage round-trip, or
-  // ranking response. The subsequent rank refreshes scores/traces.
-  applyRankedFeed();
   triggerRank('mode');
 };
 
