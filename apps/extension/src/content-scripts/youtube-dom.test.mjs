@@ -353,7 +353,8 @@ test('YouTube connector declares bounded presentation and normalized provider be
   assert.equal(youtubeConnector.pageUrlPatterns.includes('https://www.youtube.com/*'), true);
   assert.equal(youtubeConnector.presentation.shelfBatchSize <= youtubeConnector.presentation.shelfDomLimit, true);
   assert.equal(youtubeConnector.presentation.horizontalAspectRatio, '16 / 9');
-  assert.equal(youtubeConnector.presentation.replacementMinimumScore, 1);
+  assert.equal(youtubeConnector.presentation.replacementMinimumScore, 55);
+  assert.equal(youtubeConnector.presentation.replacementMinimumUplift, 5);
   assert.equal(youtubeConnector.presentation.replacementLimit, 6);
 });
 
