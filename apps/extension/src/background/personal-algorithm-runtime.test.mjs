@@ -336,3 +336,23 @@ test('semantic similarities below threshold do not affect ranking', () => {
     false,
   );
 });
+
+
+test('semantic mode similarity replaces the legacy heuristic mode boost instead of double-counting mode intent', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-learning',
+    title: 'Learn Rust with a complete tutorial',
+    semantic_mode_similarity: 0.8,
+    semantic_graph_similarity: 0.4,
+    semantic_model_version: 'fixture-v1',
+  }], 'Learning')[0];
+
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.label === 'mode alignment: learning'),
+    false,
+  );
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.label === 'semantic match: active mode'),
+    true,
+  );
+});
