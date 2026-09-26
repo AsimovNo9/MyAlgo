@@ -455,3 +455,17 @@ shared reservoir + scorer
 ```
 
 Future connectors add acquisition adapters rather than provider branches to the retrieval coordinator.
+
+
+### Search worker isolation
+
+YouTube search acquisition must not block the extension service worker that handles ranking and presentation.
+
+The production YouTube search provider delegates `/results` fetching and large `ytInitialData` parsing to an offscreen extension document. That document spawns a dedicated Web Worker using Chrome's MV3 `offscreen` + `WORKERS` capability. The ranking service worker exchanges only the generated query and normalized search results with this context.
+
+If the offscreen capability is unavailable, the provider may fall back to direct fetch/parsing for compatibility, but the supported Chrome path is isolated.
+
+This preserves three performance domains:
+- YouTube renderer/content script: DOM observation and presentation only;
+- extension service worker: ranking, storage coordination, graph/retrieval scheduling;
+- search worker: search-page network payload and CPU-heavy result parsing.
