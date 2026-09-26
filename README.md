@@ -39,10 +39,11 @@ Implemented and validated foundations:
 
 Current execution order:
 
-1. keep the audited no-YouTube-Data-API launch boundary enforced (#168);
-2. harden native-feed enforcement and stale/self-observation behavior (#152, #171, #160);
-3. expose graph provenance and per-item explanation paths (#170, #153);
-4. establish replay/evaluation baselines before adding richer enrichment (#162);
-5. add explicit graph controls and editing only after the explanation loop is trustworthy.
+1. implement safe native-feed replacement slots (#160);
+2. expose graph provenance and per-item explanation paths (#170, #153);
+3. establish replay/evaluation baselines before adding richer enrichment (#162);
+4. add explicit graph controls and editing only after the explanation loop is trustworthy.
+
+Native-card enforcement and stale/self-observation hardening are merged and live-browser validated (#152/#171 via PR #204). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
 Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.
