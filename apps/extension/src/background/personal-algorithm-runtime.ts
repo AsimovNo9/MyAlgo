@@ -52,7 +52,19 @@ const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntime
       && state.graph.nodes.some((node) => node.id === edge.targetNodeId && node.kind === 'creator')
     ))
     : undefined;
-  const creatorNodeId = creatorEdge?.targetNodeId ?? null;
+  const creatorNodeId = creatorEdge?.targetNodeId
+    ?? (candidate.channel_id
+      ? state.graph.nodes.find((node) => (
+        node.kind === 'creator'
+        && node.id === `creator:youtube:${encodeURIComponent(candidate.channel_id ?? '')}`
+      ))?.id ?? null
+      : null)
+    ?? (candidate.channel_name
+      ? state.graph.nodes.find((node) => (
+        node.kind === 'creator'
+        && node.label.trim().toLowerCase() === candidate.channel_name?.trim().toLowerCase()
+      ))?.id ?? null
+      : null);
 
   return {
     id: `youtube:${candidate.external_id}`,

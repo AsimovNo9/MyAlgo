@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
 import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
@@ -14,6 +14,18 @@ test('extractYouTubeVideoId handles watch URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/watch?v=abc123'), 'abc123');
   assert.equal(extractYouTubeVideoId('/watch?feature=share&v=abc123'), 'abc123');
   assert.equal(extractYouTubeVideoId('https://m.youtube.com/watch?v=mobile123&t=12'), 'mobile123');
+});
+
+test('extractYouTubeChannelIdFromWatchHtml recovers canonical channel IDs from watch HTML', () => {
+  assert.equal(
+    extractYouTubeChannelIdFromWatchHtml('<script>var ytInitialPlayerResponse={"videoDetails":{"channelId":"UC1234567890123456789012"}}</script>'),
+    'UC1234567890123456789012',
+  );
+  assert.equal(
+    extractYouTubeChannelIdFromWatchHtml('<meta itemprop="channelId" content="UCabcdefghijklmnopqrstuv">'),
+    'UCabcdefghijklmnopqrstuv',
+  );
+  assert.equal(extractYouTubeChannelIdFromWatchHtml('<html>no channel id</html>'), null);
 });
 
 test('extractYouTubeVideoId handles Shorts URLs', () => {

@@ -15,6 +15,10 @@ normalized local evidence
           ↓
 Personal Algorithm Graph
           ↓
+candidate acquisition (optional YouTube RSS)
+          ↓
+local candidate reservoir
+          ↓
 scoring / trace
           ↓
 feed enforcement
@@ -37,6 +41,7 @@ YouTube page
    │          └── compact traces/settings
    │
    └── YouTube-owned HTTPS requests used by page operation/metadata enrichment
+       └── optional bounded channel RSS requests when RSS discovery is enabled
 
 MyAlgo backend / analytics / ad network
    X  no launch transfer of observed activity, graph, feedback, or traces
@@ -81,12 +86,22 @@ Purpose: local evidence, graph construction, scoring, explanation, and feed cont
 
 Purpose: direct personal control.
 
+### Acquired candidate state
+
+When RSS discovery is explicitly enabled:
+
+- recently observed YouTube channel IDs select bounded public RSS feeds;
+- RSS candidate metadata is normalized into the existing local candidate reservoir;
+- acquisition provenance records connector, mechanism, graph revision, source URL, and acquisition time;
+- RSS acquisition itself is not preference evidence and does not create graph evidence.
+
 ### Derived local state
 
 - Personal Algorithm Graph;
 - graph revisions;
 - candidate/feed caches;
-- score/trace metadata.
+- score/trace metadata;
+- retrieval settings and privacy-safe retrieval diagnostics.
 
 Purpose: ranking, explanation, replay/debugging, and enforcement.
 

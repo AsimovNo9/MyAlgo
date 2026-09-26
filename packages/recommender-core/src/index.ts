@@ -1,4 +1,4 @@
-import type { Algorithm } from '@repo/shared-types';
+import type { Algorithm, PersonalAlgorithmState } from '@repo/shared-types';
 
 export interface ConceptCatalogEntry {
   id?: string;
@@ -221,7 +221,7 @@ export interface LocalFirstIntelligenceBenchmarkResult {
 }
 
 /** Source-neutral retrieval planning foundation. No YouTube Data API client backs these lanes; #206 implements RSS/web-search acquisition and #202 removes ambiguous provider-like naming. */
-export type RetrievalLane = 'subscriptions' | 'rss' | 'semantic' | 'search' | 'explore';
+export type RetrievalLane = 'observed' | 'rss' | 'web_search' | 'explore';
 
 export interface RetrievalLaneAssignment {
   lane: RetrievalLane;
@@ -649,7 +649,7 @@ export function buildRetrievalCoordinatorPlan({
   topics,
   currentCoverage,
   targetPerTopic = 4,
-  lanes = ['subscriptions', 'semantic', 'search', 'explore'],
+  lanes = ['observed', 'rss', 'web_search', 'explore'],
 }: {
   topics: string[];
   currentCoverage: Record<string, number>;
@@ -659,7 +659,7 @@ export function buildRetrievalCoordinatorPlan({
   const normalizedTopics = [...new Set(topics.map((topic) => topic.trim().toLowerCase()).filter(Boolean))];
   const safeLanes: RetrievalLane[] = lanes.length > 0
     ? lanes
-    : ['subscriptions', 'semantic', 'search', 'explore'];
+    : ['observed', 'rss', 'web_search', 'explore'];
   const budgets = normalizedTopics.map((topic) => {
     const current = Number(currentCoverage[topic] ?? 0);
     const required = Math.max(0, Math.ceil(targetPerTopic - current));
@@ -921,6 +921,90 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalo
   };
 }
 
+function stableRetrievalHash(value: unknown): string {
+  const source = JSON.stringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function buildGraphRetrievalRevision(state: PersonalAlgorithmState): string {
+  const nodes = state.graph.nodes
+    .filter((node) => ['topic', 'concept', 'objective', 'creator'].includes(node.kind))
+    .map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      label: node.label,
+      provenance: node.provenance,
+      confidence: node.confidence,
+      format: typeof node.attributes?.format === 'string' ? node.attributes.format : null,
+      language: typeof node.attributes?.language === 'string' ? node.attributes.language : null,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  return `graph-${state.schemaVersion}-${stableRetrievalHash(nodes)}`;
+}
+
+export function buildGraphRetrievalProfile(
+  state: PersonalAlgorithmState,
+  options: {
+    minimumInferredConfidence?: number;
+    maxTopics?: number;
+    maxCreators?: number;
+  } = {},
+): RecommendationProfile {
+  const minimumInferredConfidence = options.minimumInferredConfidence ?? 0.5;
+  const maxTopics = options.maxTopics ?? 8;
+  const maxCreators = options.maxCreators ?? 4;
+  const eligible = state.graph.nodes.filter((node) => (
+    node.provenance === 'explicit'
+    || (node.confidence ?? 0) >= minimumInferredConfidence
+  ));
+  const rankNodes = (kind: 'topic' | 'concept' | 'objective' | 'creator') => eligible
+    .filter((node) => node.kind === kind && node.label.trim())
+    .sort((left, right) => {
+      const explicitDelta = Number(right.provenance === 'explicit') - Number(left.provenance === 'explicit');
+      if (explicitDelta !== 0) return explicitDelta;
+      const confidenceDelta = (right.confidence ?? 0) - (left.confidence ?? 0);
+      if (confidenceDelta !== 0) return confidenceDelta;
+      return left.label.localeCompare(right.label);
+    });
+
+  const topics = [...rankNodes('topic'), ...rankNodes('concept')]
+    .filter((node, index, all) => all.findIndex((candidate) => (
+      normalizeTopic(candidate.label) === normalizeTopic(node.label)
+    )) === index)
+    .slice(0, maxTopics)
+    .map((node) => node.label.trim());
+  const goals = rankNodes('objective').slice(0, 2).map((node) => node.label.trim());
+  const creators = rankNodes('creator').slice(0, maxCreators).map((node) => node.label.trim());
+  const preferredFormats = [...new Set(eligible.flatMap((node) => {
+    const format = node.attributes?.format;
+    return typeof format === 'string' && format.trim() ? [format.trim().toLowerCase()] : [];
+  }))].slice(0, 4);
+  const language = eligible
+    .map((node) => node.attributes?.language)
+    .find((value): value is string => typeof value === 'string' && /^[a-z]{2}$/i.test(value.trim()))
+    ?.trim()
+    .toLowerCase() ?? null;
+
+  return {
+    goal: goals.join('; '),
+    language,
+    explicitTopics: topics,
+    aliases: [],
+    intents: [],
+    semanticTerms: [...new Set([...topics, ...goals, ...creators])],
+    positiveRuleTerms: [],
+    negativeRuleTerms: [],
+    preferredFormats: preferredFormats.length > 0 ? preferredFormats : ['guide'],
+    creatorTerms: creators,
+  };
+}
+
 export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], learnedCreatorTerms: string[] = []): RecommendationProfile {
   const intentProfile = buildAlgorithmIntentProfile(algorithm, catalog);
   const rules = algorithm?.rules ?? [];
@@ -1014,7 +1098,14 @@ export function buildRecommendationQueries(
   relations: ConceptRelationEntry[] = [],
   includeFreshness = false,
 ): RecommendationQuery[] {
-  if (limit <= 0 || profile.explicitTopics.length === 0) {
+  if (
+    limit <= 0
+    || (
+      profile.explicitTopics.length === 0
+      && !profile.goal.trim()
+      && profile.creatorTerms.length === 0
+    )
+  ) {
     return [];
   }
 

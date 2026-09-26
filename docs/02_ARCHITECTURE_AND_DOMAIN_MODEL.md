@@ -150,16 +150,16 @@ Foundation models may produce structured content evidence:
 
 This is content evidence. It is not itself the user model.
 
-## 3. Foundation-model boundary
+## 3. Foundation-model and semantic-enrichment boundary
 
 ```text
-Foundation model
+content / graph inputs
       ↓
-content evidence
+replaceable local enrichment
       ↓
-Personal Algorithm Graph
+semantic features / content evidence
       ↓
-transparent scoring
+Personal Algorithm Graph + deterministic scoring
 ```
 
 Possible enrichment later:
@@ -170,12 +170,47 @@ Possible enrichment later:
 - transcript where legitimately available
 - thumbnail vision
 - bounded comment sampling
-- embeddings
-- optional summaries
+- local embeddings
+- optional local summaries / explanation synthesis
 
-Enrichment must be asynchronous, cached appropriately, provenance-aware, and replaceable.
+The Personal Algorithm Graph remains the authoritative, inspectable user model. Embeddings are **rebuildable derived data**, not canonical preference state.
 
-A model-version change must not silently reconstruct the user's graph.
+```text
+evidence + explicit edits
+        ↓
+Personal Algorithm Graph (authoritative)
+        │
+        ├── symbolic nodes / edges / provenance
+        │
+        └── local embeddings (recomputable)
+                  ↓
+          semantic neighbourhoods
+                  ↓
+retrieval expansion / candidate matching / score features
+                  ↓
+deterministic scorer + trace
+```
+
+Embeddings may propose semantically related graph concepts, expand retrieval intents, cluster user-interest regions, and produce candidate similarity features. Similarity alone must not silently create permanent preference edges or override explicit feedback/hard policy.
+
+Each embedding cache record should be tied to stable owner identity plus model ID/version, input hash, dimensions, and generation time so a model change can invalidate/rebuild semantic enrichment without changing canonical evidence, graph edits, or preference state.
+
+A compact local embedding encoder is preferred for vector generation. A later local generative model may synthesize natural-language explanations from bounded structured trace/path inputs, but it must not independently infer why the user likes an item from raw history.
+
+For “Why am I seeing this?”, semantic machinery should resolve to symbolic paths such as:
+
+```text
+Goal: Learn distributed systems
+  → Local-first software
+  → CRDTs
+  → this candidate
+```
+
+Raw vector distances/model internals belong in debug provenance, not the primary user-facing reason.
+
+Enrichment must be asynchronous, cached appropriately, provenance-aware, replaceable, and safe to delete/recompute.
+
+A model-version change must not silently reconstruct the user's graph. See #209.
 
 ## 4. Scoring
 

@@ -89,17 +89,46 @@ Retrieval expands the candidate set only. It must not directly update preference
 
 The provenance cleanup in #202 should distinguish connector/provider, acquisition mechanism (`observed_dom`, `rss`, `web_search`, `exploration`), query lane, graph/algorithm revision, and retrieval time. Provider/API-like labels such as `youtube_search` should not survive the #206 implementation.
 
-## Content understanding
+## Content understanding and semantic enrichment
 
 Prefer a layered approach:
 
-1. deterministic metadata extraction
-2. transcript/text enrichment where legitimately available
-3. embeddings/semantic matching when justified
-4. vision analysis for measured visual gaps
-5. LLM disambiguation only where deterministic methods are insufficient
+1. deterministic metadata extraction;
+2. transcript/text enrichment where legitimately available;
+3. local embeddings/semantic matching when justified;
+4. vision analysis for measured visual gaps;
+5. local generative disambiguation/explanation synthesis only where deterministic methods are insufficient.
 
 No model is allowed to silently become the user's preference model.
+
+### Local embedding layer (#209)
+
+Embeddings are derived features around the Personal Algorithm Graph, not the graph itself. The intended uses are:
+
+- graph-semantic neighbourhood discovery between concept/topic/objective/creator nodes;
+- bounded semantic expansion for retrieval queries;
+- candidate-to-goal/topic semantic matching;
+- interest-cluster suggestions for later graph controls (#178);
+- support for symbolic explanation paths in #153.
+
+The local embedding record must be versioned and recomputable from stable owner identity + model/version + input hash. Replacing the embedding model must not invalidate canonical evidence, explicit graph edits, or user-owned preference state.
+
+Semantic similarity enters ranking only as explicit traceable features/contributions. Hard exclusions, explicit feedback, and deterministic graph policy remain authoritative.
+
+The retrieval planner should accept a bounded set of semantic expansion terms later without changing RSS/web-search adapter contracts. #206 therefore owns acquisition; #209 owns semantic expansion/enrichment.
+
+For explanation generation, a local generative model may verbalize exact trace data:
+
+```text
+acquisition provenance
++ matched symbolic graph path
++ exact score contributions
++ trace/graph revision
+        ↓
+optional local explanation synthesis
+```
+
+It must not receive unrestricted raw history and independently invent a preference rationale.
 
 ## Additive scoring
 

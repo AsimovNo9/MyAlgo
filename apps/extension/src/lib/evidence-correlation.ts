@@ -108,22 +108,38 @@ export function correlateEvidence(
     }
 
     for (const watch of watches) {
-      for (const click of clicks.filter((event) => event.observedAt <= watch.observedAt)) {
+      const priorClicks = clicks
+        .filter((event) => event.observedAt <= watch.observedAt)
+        .sort((a, b) => b.observedAt.localeCompare(a.observedAt));
+      const matchedClick = watch.exposureId
+        ? priorClicks.find((event) => event.exposureId === watch.exposureId)
+        : priorClicks[0];
+
+      if (matchedClick) {
         correlations.push({
           kind: 'clicked_watched',
           content,
-          clickedAt: click.observedAt,
-          clickedExposureId: click.exposureId,
+          clickedAt: matchedClick.observedAt,
+          clickedExposureId: matchedClick.exposureId,
           watchedAt: watch.observedAt,
         });
       }
 
-      for (const exposure of exposuresForContent.filter((item) => item.observedAt <= watch.observedAt)) {
+      const priorExposures = exposuresForContent
+        .filter((item) => item.observedAt <= watch.observedAt)
+        .sort((a, b) => b.observedAt.localeCompare(a.observedAt));
+      const matchedExposure = watch.exposureId
+        ? priorExposures.find((item) => item.exposureId === watch.exposureId)
+        : matchedClick?.exposureId
+          ? priorExposures.find((item) => item.exposureId === matchedClick.exposureId)
+          : priorExposures[0];
+
+      if (matchedExposure) {
         correlations.push({
           kind: 'surfaced_watched',
           content,
-          surfacedAt: exposure.observedAt,
-          surfacedExposureId: exposure.exposureId,
+          surfacedAt: matchedExposure.observedAt,
+          surfacedExposureId: matchedExposure.exposureId,
           watchedAt: watch.observedAt,
         });
       }

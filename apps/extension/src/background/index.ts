@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -11,14 +11,20 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
 
 type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  channel_id?: string | null;
   thumbnail_url?: string | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
+  published_at?: string | null;
+  provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
   is_short?: boolean;
   is_live?: boolean;
 };
@@ -35,6 +41,7 @@ type VideoRecord = PageCandidate & {
 type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
+  lastAcquiredAt?: string;
 };
 
 type LocalFeedItem = CandidatePoolItem & {
@@ -54,6 +61,21 @@ const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
+  rssEnabled: false,
+};
+const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
+  lastRssSyncAt: null,
+  nextRssAllowedAt: null,
+  rssChannelsConsidered: 0,
+  rssFeedsSucceeded: 0,
+  rssFeedsFailed: 0,
+  rssCandidatesFetched: 0,
+  rssCandidatesAdded: 0,
+  rssCandidatesDeduplicated: 0,
+  rssConsecutiveFailures: 0,
+  lastError: null,
+};
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -79,6 +101,9 @@ void ensurePrivacyDisclosureLoaded();
 
 const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
+  'SET_RETRIEVAL_SETTINGS',
+  'REFRESH_RETRIEVAL',
+  'GET_RETRIEVAL_PLAN',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -132,7 +157,9 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
   const missing = candidates
     .filter((candidate) => {
       const record = existing[candidate.external_id];
-      return !record || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
+      return !record
+        || !record.channel_id
+        || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
@@ -180,13 +207,31 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     if (!candidate.external_id || !candidate.title) continue;
 
     const previous = byId.get(candidate.external_id);
+    const incomingProvenance = candidate.provenance ?? {
+      connector: 'youtube',
+      mechanism: 'observed_dom' as const,
+      acquired_at: now,
+      graph_revision: null,
+      source_url: null,
+    };
+    const acquisitionHistory = mergeCandidateAcquisitionHistory(
+      previous?.acquisition_history
+        ?? (previous?.provenance ? [previous.provenance] : undefined),
+      incomingProvenance,
+    );
+    const observedNow = incomingProvenance.mechanism === 'observed_dom';
     byId.set(candidate.external_id, {
       ...previous,
       ...candidate,
+      // Keep the first acquisition path stable; retain subsequent paths in
+      // acquisition_history so merge order cannot rewrite provenance.
+      provenance: previous?.provenance ?? incomingProvenance,
+      acquisition_history: acquisitionHistory,
       external_id: candidate.external_id,
       title: candidate.title,
       firstSeenAt: previous?.firstSeenAt ?? now,
-      lastSeenAt: now,
+      lastSeenAt: observedNow ? now : previous?.lastSeenAt ?? now,
+      lastAcquiredAt: incomingProvenance.acquired_at,
     });
   }
 
@@ -199,6 +244,129 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
 
   await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
   return pool;
+}
+
+const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+async function refreshRssCandidates(force = false): Promise<{ diagnostics: RetrievalDiagnostics; changed: boolean }> {
+  const settings = await getStorage<RetrievalSettings>(
+    STORAGE_KEYS.RETRIEVAL_SETTINGS,
+    DEFAULT_RETRIEVAL_SETTINGS,
+  );
+  const previous = await getStorage<RetrievalDiagnostics>(
+    STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+    EMPTY_RETRIEVAL_DIAGNOSTICS,
+  );
+  const nowMs = Date.now();
+
+  if (!settings.rssEnabled) return { diagnostics: previous, changed: false };
+  if (!force && !isRetrievalAllowed(previous.nextRssAllowedAt, nowMs)) {
+    return { diagnostics: previous, changed: false };
+  }
+
+  let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  let channelIds = selectRssChannelIds(Object.values(store));
+
+  // Older cached metadata can be fresh but lack channel IDs, which makes RSS
+  // discovery appear enabled while attempting zero feeds. Seed channel IDs
+  // immediately from the current candidate reservoir using an open YouTube tab.
+  if (channelIds.length === 0) {
+    const candidatePool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    const tabId = tabs.find((tab) => tab.id != null)?.id;
+    if (tabId && candidatePool.length > 0) {
+      await enrichVideosInTab(tabId, candidatePool);
+      store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+      channelIds = selectRssChannelIds(Object.values(store));
+    }
+  }
+
+  if (channelIds.length === 0) {
+    const diagnostics: RetrievalDiagnostics = {
+      ...EMPTY_RETRIEVAL_DIAGNOSTICS,
+      lastRssSyncAt: new Date(nowMs).toISOString(),
+      nextRssAllowedAt: null,
+      lastError: 'No YouTube channel IDs are available yet. Keep a YouTube tab open and refresh discovery after MyAlgo has observed a few videos.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+  const existingIds = new Set(existingPool.map((item) => item.external_id));
+  const acquiredAt = new Date(nowMs).toISOString();
+  const state = await personalAlgorithmStore.exportState();
+  const graphRevision = buildGraphRetrievalRevision(state);
+
+  const results = await Promise.all(channelIds.map(async (channelId) => {
+    const sourceUrl = buildYoutubeRssFeedUrl(channelId);
+    try {
+      const response = await fetchWithTimeout(sourceUrl);
+      if (!response.ok) throw new Error(`RSS HTTP ${response.status}`);
+      const xml = await response.text();
+      return {
+        ok: true as const,
+        candidates: parseYoutubeRssFeed(xml, acquiredAt, sourceUrl).map((candidate) => ({
+          ...candidate,
+          provenance: candidate.provenance
+            ? { ...candidate.provenance, graph_revision: graphRevision }
+            : undefined,
+        })),
+      };
+    } catch {
+      return { ok: false as const, candidates: [] };
+    }
+  }));
+
+  const fetched = results.flatMap((result) => result.candidates);
+  const uniqueFetched = [...new Map(fetched.map((item) => [item.external_id, item])).values()];
+  const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
+  if (uniqueFetched.length > 0) {
+    await mergeCandidatePool(uniqueFetched);
+  }
+
+  const succeeded = results.filter((result) => result.ok).length;
+  const failed = results.length - succeeded;
+  const consecutiveFailures = results.length > 0 && succeeded === 0
+    ? (previous.rssConsecutiveFailures ?? 0) + 1
+    : 0;
+  const diagnostics: RetrievalDiagnostics = {
+    lastRssSyncAt: acquiredAt,
+    nextRssAllowedAt: nextRssAllowedAt(nowMs, consecutiveFailures),
+    rssChannelsConsidered: channelIds.length,
+    rssFeedsSucceeded: succeeded,
+    rssFeedsFailed: failed,
+    rssCandidatesFetched: uniqueFetched.length,
+    rssCandidatesAdded: addedCount,
+    rssCandidatesDeduplicated: Math.max(0, fetched.length - uniqueFetched.length)
+      + uniqueFetched.filter((item) => existingIds.has(item.external_id)).length,
+    rssConsecutiveFailures: consecutiveFailures,
+    lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
+  };
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  console.info('[MyAlgo] retrieval refresh', {
+    mechanism: 'rss',
+    channels: diagnostics.rssChannelsConsidered,
+    succeeded: diagnostics.rssFeedsSucceeded,
+    failed: diagnostics.rssFeedsFailed,
+    fetched: diagnostics.rssCandidatesFetched,
+    added: diagnostics.rssCandidatesAdded,
+    deduplicated: diagnostics.rssCandidatesDeduplicated,
+  });
+  return { diagnostics, changed: addedCount > 0 };
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
@@ -222,6 +390,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       STORAGE_KEYS.VIDEO_STORE,
       STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
+      STORAGE_KEYS.RETRIEVAL_SETTINGS,
+      STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
       STORAGE_KEYS.HISTORY_METRICS,
       STORAGE_KEYS.HOME_OBSERVATION_ENABLED,
@@ -249,6 +419,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         includeLive: true,
         includePlayables: true,
       },
+      [STORAGE_KEYS.RETRIEVAL_SETTINGS]: current[STORAGE_KEYS.RETRIEVAL_SETTINGS] ?? DEFAULT_RETRIEVAL_SETTINGS,
+      [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: current[STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS] ?? EMPTY_RETRIEVAL_DIAGNOSTICS,
       // User-owned/local observational state must survive extension updates.
       [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
       [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
@@ -314,7 +486,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -340,6 +512,7 @@ const handleRuntimeMessage = (
       externalId?: string;
       eventType?: string;
       sourceFilters?: FeedSourceFilters;
+      retrievalSettings?: RetrievalSettings;
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
@@ -384,7 +557,12 @@ const handleRuntimeMessage = (
     void (async () => {
       privacyDisclosureAccepted = false;
       privacyDisclosureReady = Promise.resolve(false);
+      historyReconciliationReady = null;
       await chrome.storage.local.clear();
+      // The store caches state in the service worker. Reset it after clearing
+      // storage so deleted graph/evidence cannot survive in memory or be
+      // persisted again by a later mutation in the same worker lifetime.
+      await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
         [STORAGE_KEYS.ENABLED]: false,
@@ -392,6 +570,8 @@ const handleRuntimeMessage = (
         [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
         [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
         [STORAGE_KEYS.SELECTION_EVENTS]: [],
+        [STORAGE_KEYS.RETRIEVAL_SETTINGS]: DEFAULT_RETRIEVAL_SETTINGS,
+        [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: EMPTY_RETRIEVAL_DIAGNOSTICS,
       });
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
@@ -521,6 +701,91 @@ const handleRuntimeMessage = (
         : undefined));
     })();
     sendResponse({ ok: true, enabled });
+    return true;
+  }
+
+  if (type === 'SET_RETRIEVAL_SETTINGS') {
+    void (async () => {
+      const previousSettings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      const next: RetrievalSettings = {
+        ...DEFAULT_RETRIEVAL_SETTINGS,
+        ...(payload?.retrievalSettings ?? {}),
+      };
+      await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
+      const refresh = next.rssEnabled
+        ? await refreshRssCandidates(!previousSettings.rssEnabled)
+        : {
+          diagnostics: await getStorage<RetrievalDiagnostics>(
+            STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+            EMPTY_RETRIEVAL_DIAGNOSTICS,
+          ),
+          changed: false,
+        };
+      if (refresh.changed) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics: refresh.diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
+    }));
+    return true;
+  }
+
+  if (type === 'REFRESH_RETRIEVAL') {
+    void (async () => {
+      const refresh = await refreshRssCandidates(true);
+      if (refresh.changed) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, diagnostics: refresh.diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_PLAN') {
+    void personalAlgorithmStore.exportState().then((state) => {
+      const profile = buildGraphRetrievalProfile(state);
+      const retrievalRevision = buildGraphRetrievalRevision(state);
+      const plans = buildRecommendationQueryPlans(
+        profile,
+        8,
+        retrievalRevision,
+        [],
+        [],
+        true,
+      );
+      sendResponse({
+        ok: true,
+        graphRevision: state.graph.currentRevision,
+        retrievalRevision,
+        topicCount: profile.explicitTopics.length,
+        creatorCount: profile.creatorTerms.length,
+        plans,
+      });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to build retrieval plan.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_DIAGNOSTICS') {
+    void Promise.all([
+      getStorage<RetrievalSettings>(STORAGE_KEYS.RETRIEVAL_SETTINGS, DEFAULT_RETRIEVAL_SETTINGS),
+      getStorage<RetrievalDiagnostics>(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, EMPTY_RETRIEVAL_DIAGNOSTICS),
+    ]).then(([retrievalSettings, diagnostics]) => {
+      sendResponse({ ok: true, retrievalSettings, diagnostics });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to read retrieval diagnostics.',
+    }));
     return true;
   }
 

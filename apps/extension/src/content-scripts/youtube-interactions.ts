@@ -68,13 +68,15 @@ export function createExposureId(input: {
   surface: YouTubeSurface;
   section: string | null;
   position: number | null;
+  occurrenceKey?: string | null;
 }): string {
-  return [
+  const base = [
     input.videoId,
     input.surface,
     input.section ?? '',
     input.position == null ? '' : String(input.position),
   ].join('|');
+  return input.occurrenceKey ? `${base}|${input.occurrenceKey}` : base;
 }
 
 export function getSelectionSource(target: Element | null): SelectionSource {
@@ -124,12 +126,13 @@ export function getSelectionFromTarget(
     ? surfaceOrPathname as YouTubeSurface
     : getYouTubeSurface(surfaceOrPathname, card);
   const position = getCardPosition(card, videoSelector);
+  const assignedExposureId = card?.getAttribute('data-personal-algorithm-exposure-id')?.trim() || null;
   const exposure: CandidateExposure = {
     videoId,
     surface,
     section,
     position,
-    exposureId: createExposureId({ videoId, surface, section, position }),
+    exposureId: assignedExposureId ?? createExposureId({ videoId, surface, section, position }),
   };
 
   return { videoId, exposure, source: getSelectionSource(target) };

@@ -221,10 +221,11 @@ The numbered issue priorities in older issue titles describe the phase in which 
 1. **#206 + #202** — implement source-neutral candidate acquisition through RSS and graph-derived web search, while replacing misleading provider/API-like retrieval provenance.
 2. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
 3. **#162** — establish replay/evaluation baselines before adding richer content understanding.
-4. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
-5. **#169** — close the remaining local-runtime umbrella criterion with explicit offline/signed-out validation.
-6. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
-7. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector after the acquisition/explanation loop proves value.
+4. **#209** — add rebuildable local semantic embeddings for graph neighbourhoods, retrieval expansion, traceable semantic scoring, clustering, and explanation support once the baseline shows the need.
+5. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
+6. **#169** — close the remaining local-runtime umbrella criterion with explicit offline/signed-out validation.
+7. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
+8. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector after the acquisition/explanation loop proves value.
 
 #160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
 
@@ -288,14 +289,18 @@ Replay recent candidates under hypothetical graph versions.
 
 ## Phase 6 — Enrichment
 
-Only after measured evidence gaps:
+Only after measured evidence/semantic gaps:
 
-- transcript
-- embeddings
-- thumbnail vision
-- bounded comment analysis
-- optional LLM disambiguation
-- channel-level context summaries
+- transcript;
+- rebuildable local embeddings (#209);
+- thumbnail vision;
+- bounded comment analysis;
+- optional local LLM disambiguation/explanation synthesis;
+- channel-level context summaries.
+
+The Personal Algorithm Graph remains canonical. Embeddings are recomputable enrichment tied to model/version/input hashes and may support semantic graph neighbourhoods, retrieval expansion, candidate matching, preference clustering, and symbolic explanation paths. Similarity alone must not become a permanent preference edge or ranking authority.
+
+A local generative model may later convert exact trace/path data into concise prose, but the underlying explanation must remain grounded in symbolic graph paths, acquisition provenance, and deterministic score contributions.
 
 Channel context is a separate enrichment/cache layer, not an uncontrolled extension of per-video analysis. A creator summary should be built from a bounded recent window and reused across videos from that creator.
 
@@ -311,6 +316,8 @@ Retrieval expands the candidate universe; it does not become the preference mode
 user model
     ↓
 retrieval planner
+    ↓
+(optional bounded semantic expansion from #209)
     ↓
 observed DOM / RSS / web search / exploration
     ↓
