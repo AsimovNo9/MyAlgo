@@ -39,6 +39,13 @@ test('native-card policy gates run before score visibility', () => {
     ),
     { action: 'hide', reason: 'runtime_policy' },
   );
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-a', title: 'Video A', score: 99, visible: true, suppressed: true, policyOutcome: 'suppressed' },
+      { sourceFiltered: false, minimumVisibleScore: 0 },
+    ),
+    { action: 'hide', reason: 'runtime_policy' },
+  );
 });
 
 test('native-card score threshold applies only to ranked candidates', () => {
