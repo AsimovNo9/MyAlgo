@@ -25,10 +25,10 @@ export function extractYouTubeVideoId(href: string): string | undefined {
 
 export function extractYouTubeChannelIdFromWatchHtml(html: string): string | null {
   const patterns = [
-    /"channelId"\s*:\s*"([^"]+)"/,
+    /"videoDetails"\s*:\s*\{[\s\S]{0,5000}?"channelId"\s*:\s*"([^"]+)"/,
     /"externalChannelId"\s*:\s*"([^"]+)"/,
-    /"browseId"\s*:\s*"(UC[A-Za-z0-9_-]+)"/,
     /itemprop=["']channelId["'][^>]*content=["']([^"']+)["']/i,
+    /"channelId"\s*:\s*"(UC[A-Za-z0-9_-]+)"/,
   ];
 
   for (const pattern of patterns) {
