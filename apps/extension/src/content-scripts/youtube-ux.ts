@@ -33,7 +33,7 @@ export function getShelfCandidates(
   items: RankedFeedItem[],
   limit = 6,
   blockedIds: Iterable<string | undefined> = [],
-  minimumScore = 0,
+  minimumScore = 52,
 ): RankedFeedItem[] {
   const seen = new Set(Array.from(blockedIds).filter((id): id is string => Boolean(id && id.trim())));
   return items.filter((item) => {
@@ -50,7 +50,7 @@ export function getReplacementCandidates(
   items: RankedFeedItem[],
   blockedIds: Iterable<string | undefined>,
   limit = 6,
-  minimumScore = 0,
+  minimumScore = 52,
 ): RankedFeedItem[] {
   const blocked = new Set(Array.from(blockedIds).filter((id): id is string => Boolean(id && id.trim())));
   const seen = new Set<string>();
