@@ -469,3 +469,34 @@ This preserves three performance domains:
 - YouTube renderer/content script: DOM observation and presentation only;
 - extension service worker: ranking, storage coordination, graph/retrieval scheduling;
 - search worker: search-page network payload and CPU-heavy result parsing.
+
+
+## Semantic reranking runtime
+
+Semantic reranking is a derived layer around the canonical Personal Algorithm Graph.
+
+```text
+canonical evidence + graph
+        │
+        ├── objective/topic/concept text ──→ embedding cache
+        │                                      │
+active mode seed ──────────────────────────────┤
+                                               ↓
+                                     semantic mode lens
+                                               │
+enriched candidate text ───────────→ embedding cache
+                                               │
+                     graph similarity + mode similarity
+                                               ↓
+                                deterministic scorer/trace
+```
+
+The model-facing contract is `LocalEmbeddingProvider`. It is replaceable and exposes only model ID/version, dimensions, and batched text embedding. Embedding records are keyed by stable owner identity + model/version + input hash and are safe to delete/rebuild.
+
+PR #213 includes a dependency-free hashed word/phrase/subword vector provider as the end-to-end baseline. It is **not** treated as equivalent to a pretrained neural encoder; its purpose is to validate cache invalidation, mode construction, ranking integration, fallback behavior, and trace semantics before adopting model weights.
+
+The ranking critical path never waits for new embedding computation. A rank uses semantic feature records already cached for the exact model + graph revision + mode + candidate input hash. Missing semantic features fall back to the existing deterministic lexical/classifier path. After first paint, semantic enrichment computes in the background, persists bounded derived features, and triggers one follow-up rerank only when the semantic values changed.
+
+When semantic mode similarity exists, it replaces the older heuristic mode score rather than stacking with it. Candidate classification remains separate and may still drive descriptive UI labels such as Learning.
+
+A future neural provider should run in an off-main-rank worker/offscreen inference context with WebGPU when available and a bounded CPU/WASM fallback. Switching provider/model versions invalidates only derived caches; it never rewrites graph/evidence truth.
