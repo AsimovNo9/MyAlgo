@@ -274,6 +274,32 @@ User interaction ──────┘─→ clicked evidence
 
 YouTube is the first connector.
 
+## 6.1 Candidate acquisition boundary
+
+PR #205 completes the native presentation boundary: MyAlgo can score, hide, annotate, and safely replace native cards using its local reservoir. The next expansion (#206) broadens that reservoir without changing the preference model.
+
+Candidate acquisition is upstream of scoring:
+
+```text
+Personal Algorithm Graph + explicit goals + normalized evidence/history
+        ↓
+deterministic query/retrieval planning
+        ↓
+observed DOM / RSS / web search / exploration
+        ↓
+normalized candidate reservoir + acquisition provenance
+        ↓
+existing deterministic scorer/policy
+        ↓
+native feed presentation
+```
+
+Acquisition provenance and graph/evidence provenance are separate. A candidate retrieved through RSS or web search does **not** become preference evidence merely because it was retrieved. Only separately defined user/observation events may affect the graph.
+
+Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter must remain provider-neutral even if an initial implementation targets a Google-compatible search service.
+
+The launch YouTube Data API boundary remains unchanged: #206 must not add YouTube Data API search.
+
 ## 7. Storage
 
 MVP target:
