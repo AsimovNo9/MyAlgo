@@ -11,14 +11,14 @@ const lowScoreFeed = [
 
 test('MVP scores are eligible for shelf presentation', () => {
   assert.deepEqual(
-    getShelfCandidates(lowScoreFeed, 6),
+    getShelfCandidates(lowScoreFeed, 6, [], 0),
     [lowScoreFeed[0], lowScoreFeed[1]],
   );
 });
 
 test('MVP scores are eligible for replacement while negative feedback stays hidden', () => {
   assert.deepEqual(
-    getReplacementCandidates(lowScoreFeed, ['video-a'], 6),
+    getReplacementCandidates(lowScoreFeed, ['video-a'], 6, 0),
     [lowScoreFeed[1]],
   );
 });
