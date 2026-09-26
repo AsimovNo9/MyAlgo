@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, extractYouTubeWatchMetadataFromHtml, normalizeYouTubeText } from './youtube-dom.ts';
 import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
@@ -26,6 +26,22 @@ test('extractYouTubeChannelIdFromWatchHtml recovers canonical channel IDs from w
     'UCabcdefghijklmnopqrstuv',
   );
   assert.equal(extractYouTubeChannelIdFromWatchHtml('<html>no channel id</html>'), null);
+});
+
+test('extractYouTubeWatchMetadataFromHtml reads embedded player metadata like a lightweight yt-dlp pass', () => {
+  const html = `<script>var ytInitialPlayerResponse = {"videoDetails":{"title":"Deep systems tutorial","shortDescription":"A detailed description","lengthSeconds":"742","channelId":"UC1234567890123456789012","author":"Systems Lab","keywords":["systems","distributed"],"thumbnail":{"thumbnails":[{"url":"small.jpg","width":120},{"url":"large.jpg","width":1280}]},"isLiveContent":false},"microformat":{"playerMicroformatRenderer":{"publishDate":"2026-09-25","category":"Education"}}};</script>`;
+  assert.deepEqual(extractYouTubeWatchMetadataFromHtml(html), {
+    title: 'Deep systems tutorial',
+    description: 'A detailed description',
+    channelId: 'UC1234567890123456789012',
+    channelName: 'Systems Lab',
+    durationSeconds: 742,
+    publishedAt: '2026-09-25',
+    thumbnailUrl: 'large.jpg',
+    keywords: ['systems', 'distributed'],
+    category: 'Education',
+    isLive: false,
+  });
 });
 
 test('extractYouTubeVideoId handles Shorts URLs', () => {
