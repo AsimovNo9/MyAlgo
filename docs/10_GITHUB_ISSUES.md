@@ -284,3 +284,8 @@ Repository audit result: the current launch runtime contains no YouTube Data API
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
 Implementation and clean-profile browser validation are complete in PR #199. Remaining work is Store-dashboard publication/reconciliation plus #168.
+
+
+### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions
+
+Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. The first hardening slice bounds ranking and persistence working sets, moves metadata parsing to the extension worker, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Follow-up work includes incremental score caching, evidence/graph compaction, stress testing, and a dedicated CPU worker only if profiling still justifies it.
