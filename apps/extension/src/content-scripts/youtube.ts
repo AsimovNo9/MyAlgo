@@ -729,12 +729,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
+    clearExtensionPresentation(!extensionEnabled);
+
     if (extensionEnabled) {
-      showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-      refreshRecommendationShelf();
-      triggerRank('mode');
-    } else {
-      clearExtensionPresentation();
+      // Activation is a hard lifecycle boundary. Do not let an in-flight
+      // request from before the pause strand the clean page waiting for its
+      // callback; its generation is already stale and cannot render.
+      rankingInFlight = false;
+      void safeStorageGet([STORAGE_KEYS.MODE]).then((result) => {
+        if (!isCurrentInstance() || !extensionEnabled) return;
+        activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+        showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+        refreshRecommendationShelf();
+        triggerRank('manual');
+      });
     }
     return;
   }
