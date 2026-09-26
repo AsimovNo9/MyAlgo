@@ -43,7 +43,8 @@ export const youtubeConnector: PageProviderConnector = {
   presentation: {
     candidateLimit: 1000,
     minimumVisibleScore: 0,
-    replacementMinimumScore: 1,
+    replacementMinimumScore: 55,
+    replacementMinimumUplift: 5,
     replacementLimit: 6,
     shelfBatchSize: 6,
     shelfDomLimit: 18,
