@@ -35,6 +35,9 @@ jobs:
       - name: Build extension
         run: pnpm --filter extension build
 
+      - name: Audit extension artifact
+        run: node scripts/audit-extension-package.mjs
+
       - name: Upload extension artifact
         uses: actions/upload-artifact@v4
         with:

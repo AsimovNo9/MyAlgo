@@ -11,6 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
 type PageCandidate = {
   external_id: string;
@@ -53,6 +54,20 @@ const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 let historyReconciliationReady: Promise<void> = Promise.resolve();
+let privacyDisclosureAccepted = false;
+
+void getStorage<unknown>(STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION, null)
+  .then((value) => { privacyDisclosureAccepted = isPrivacyDisclosureAccepted(value); });
+
+const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
+  'RANK_PAGE',
+  EXTENSION_MESSAGE_TYPES.ACTIVITY,
+  EXTENSION_MESSAGE_TYPES.FEEDBACK,
+  EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+  EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION,
+  EXTENSION_MESSAGE_TYPES.SELECTION_OBSERVATION,
+  EXTENSION_MESSAGE_TYPES.WATCH_OBSERVATION,
+]);
 
 async function persistNormalizedEvidence(
   evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
@@ -174,27 +189,42 @@ historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  void historyReconciliationReady.then(() => personalAlgorithmStore.initialize());
-  chrome.storage.local.set({
-    [STORAGE_KEYS.MODE]: 'Work',
-    [STORAGE_KEYS.ENABLED]: true,
-    [STORAGE_KEYS.FEED_CACHE]: [],
-    [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
-    [STORAGE_KEYS.VIDEO_STORE]: {},
-    [STORAGE_KEYS.LAST_SYNC]: null,
-    [STORAGE_KEYS.SOURCE_FILTERS]: {
-      subscribedOnly: false,
-      includeDiscovery: true,
-      includeShorts: true,
-      includeLive: true,
-    },
-    // Preserve persisted History evidence across extension installs/updates.
-    [STORAGE_KEYS.HISTORY_METRICS]: null,
-    [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
-    [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
-    [STORAGE_KEYS.HOME_METRICS]: null,
-    [STORAGE_KEYS.SELECTION_EVENTS]: [],
-  });
+  void (async () => {
+    await historyReconciliationReady;
+    await personalAlgorithmStore.initialize();
+    const current = await chrome.storage.local.get([
+      STORAGE_KEYS.MODE,
+      STORAGE_KEYS.ENABLED,
+      STORAGE_KEYS.SOURCE_FILTERS,
+      STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+    ]);
+    privacyDisclosureAccepted = isPrivacyDisclosureAccepted(
+      current[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
+    );
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Work',
+      [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
+      [STORAGE_KEYS.FEED_CACHE]: [],
+      [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
+      [STORAGE_KEYS.VIDEO_STORE]: {},
+      [STORAGE_KEYS.LAST_SYNC]: null,
+      [STORAGE_KEYS.SOURCE_FILTERS]: current[STORAGE_KEYS.SOURCE_FILTERS] ?? {
+        subscribedOnly: false,
+        includeDiscovery: true,
+        includeShorts: true,
+        includeLive: true,
+      },
+      // Preserve persisted History evidence across extension installs/updates.
+      [STORAGE_KEYS.HISTORY_METRICS]: null,
+      [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
+      [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
+      [STORAGE_KEYS.HOME_METRICS]: null,
+      [STORAGE_KEYS.SELECTION_EVENTS]: [],
+    });
+    if (!privacyDisclosureAccepted) {
+      await chrome.runtime.openOptionsPage();
+    }
+  })().catch((error) => console.warn('Privacy-aware install initialization failed', error));
 });
 
 async function rankLocalCandidates(
@@ -263,6 +293,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       metrics?: unknown;
     };
   };
+
+  if (type === 'ACCEPT_PRIVACY_DISCLOSURE') {
+    void (async () => {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION]: PRIVACY_DISCLOSURE_VERSION,
+        [STORAGE_KEYS.ENABLED]: true,
+      });
+      privacyDisclosureAccepted = true;
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: true } }).catch(() => undefined)
+        : undefined));
+      sendResponse({ ok: true, version: PRIVACY_DISCLOSURE_VERSION });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to save privacy disclosure acceptance.' }));
+    return true;
+  }
+
+  if (type === 'RESET_LOCAL_DATA') {
+    void (async () => {
+      privacyDisclosureAccepted = false;
+      await chrome.storage.local.clear();
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.MODE]: 'Work',
+        [STORAGE_KEYS.ENABLED]: false,
+        [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
+        [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
+        [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
+        [STORAGE_KEYS.SELECTION_EVENTS]: [],
+      });
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: false } }).catch(() => undefined)
+        : undefined));
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to delete local MyAlgo data.' }));
+    return true;
+  }
+
+  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyDisclosureAccepted) {
+    sendResponse({ ok: false, error: 'Accept the current privacy disclosure before MyAlgo observes or stores YouTube activity.' });
+    return false;
+  }
 
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
     void historyReconciliationReady.then(() => personalAlgorithmStore.reviewGraph())
@@ -354,6 +426,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'SET_ENABLED') {
     const enabled = payload?.enabled !== false;
+    if (enabled && !privacyDisclosureAccepted) {
+      sendResponse({ ok: false, enabled: false, error: 'Accept the current privacy disclosure before enabling MyAlgo.' });
+      return false;
+    }
     void (async () => {
       await setStorage(STORAGE_KEYS.ENABLED, enabled);
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });

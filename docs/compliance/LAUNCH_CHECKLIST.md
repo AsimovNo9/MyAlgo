@@ -7,7 +7,7 @@
 - [ ] Live-feed observation validated
 - [ ] MyAlgo-injected cards excluded from observation
 - [ ] Local graph storage validated
-- [ ] Reset/delete behavior validated
+- [ ] Reset/delete behavior validated in a clean browser profile
 - [ ] YouTube API confirmed display/account-facts-only in code review
 
 ## P1 — Product
@@ -22,14 +22,16 @@
 
 ## P2 — Privacy/compliance
 
-- [ ] Host permissions minimized
-- [ ] First-run data disclosure complete
-- [ ] Privacy policy matches implementation
-- [ ] Data inventory complete
-- [ ] Retention/deletion policy complete
-- [ ] YouTube API policy review completed
-- [ ] Chrome Web Store data-use disclosure reviewed
-- [ ] No secrets in extension bundle
+- [x] Manifest host/API permissions minimized in source and covered by test
+- [x] Versioned in-product disclosure implemented before observation
+- [x] Privacy policy source matches the local-only implementation
+- [x] Data inventory and local/remote boundary documented
+- [x] Retention/deletion semantics documented; full local-data deletion implemented
+- [ ] Clean-profile browser test proves no observation before acceptance and deletion disables observation
+- [ ] YouTube API policy review completed (#168)
+- [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
+- [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
+- [ ] CI built-artifact secret scan passes and final package receives manual endpoint/credential review
 
 ## P3 — Quality
 

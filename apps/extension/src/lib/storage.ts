@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   LAST_SYNC: 'personal-algorithm-last-sync',
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
+  HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
   HISTORY_METRICS: 'personal-algorithm-history-metrics',
   HOME_OBSERVATION_ENABLED: 'personal-algorithm-home-observation-enabled',
   HOME_OBSERVATIONS: 'personal-algorithm-home-observations',
@@ -14,6 +15,7 @@ export const STORAGE_KEYS = {
   SELECTION_EVENTS: 'personal-algorithm-selection-events',
   PERSONAL_ALGORITHM_STATE: 'personal-algorithm-state',
   PERSONAL_ALGORITHM_LOCAL_TRACES: 'personal-algorithm-local-traces',
+  PRIVACY_DISCLOSURE_ACCEPTED_VERSION: 'personal-algorithm-privacy-disclosure-accepted-version',
 } as const;
 
 export async function getStorage<T>(key: string, fallback: T): Promise<T> {

@@ -58,6 +58,12 @@ when available, observation time, and browser-DOM provenance. It does not send
 these records to a backend. Disabling the experiment stops further collection;
 the reset/delete controls must remove retained evidence before launch.
 
+## Disclosure gate
+
+The local-only MVP uses a versioned in-product privacy disclosure. Observation and ranking remain disabled until the current version is affirmatively accepted. A material data-flow change requires a disclosure-version increment and renewed acceptance before changed collection begins.
+
+A full local-data deletion clears disclosure acceptance as well as retained extension state, so observation cannot silently restart after reset.
+
 ## Cloud processing
 
 MVP default:
