@@ -38,6 +38,12 @@ The initial launch deliberately keeps the **YouTube Data API out of the graph-le
 
 This separation is a compliance design decision, not merely an implementation detail.
 
+## Current implementation status
+
+The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. Creator relationships are maintained incrementally and can be deterministically rebuilt from retained evidence. The Chrome privacy gate is implemented and has been manually validated in a clean browser profile.
+
+The next active compliance task is **#168: audit the YouTube Data API display-only boundary**. Native-feed hardening follows through #152/#171/#160, then provenance/explanation UX through #170/#153.
+
 ## MVP product
 
 The first product validates five things:
