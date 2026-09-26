@@ -289,10 +289,10 @@ export function Popup() {
         </p>
         <button
           type="button"
-          disabled={!retrievalSettings.rssEnabled || retrievalBusy}
+          disabled={(!retrievalSettings.rssEnabled && !retrievalSettings.webSearchEnabled) || retrievalBusy}
           onClick={() => void handleRefreshRetrieval()}
         >
-          {retrievalBusy ? 'Refreshing…' : 'Refresh RSS discovery'}
+          {retrievalBusy ? 'Refreshing…' : 'Refresh discovery'}
         </button>
         <p style={{ margin: '6px 0 0', fontSize: 12 }}>
           RSS: {retrievalDiagnostics.rssCandidatesAdded} added · {retrievalDiagnostics.rssCandidatesDeduplicated} deduplicated · {retrievalDiagnostics.rssFeedsSucceeded}/{retrievalDiagnostics.rssChannelsConsidered} feeds succeeded
