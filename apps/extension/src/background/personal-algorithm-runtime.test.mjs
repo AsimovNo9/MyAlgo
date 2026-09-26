@@ -43,11 +43,34 @@ const state = {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      {
+        id: 'content:youtube:video-c',
+        kind: 'content',
+        label: 'Video C',
+        content: { source: 'youtube', externalId: 'video-c' },
+        provenance: 'inferred',
+        confidence: 1,
+        attributes: {},
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
     ],
     edges: [
       {
         id: 'edge:created_by:video-a',
         sourceNodeId: 'content:youtube:video-a',
+        targetNodeId: 'creator:youtube:Creator%20A',
+        relation: 'created_by',
+        provenance: 'inferred',
+        confidence: 1,
+        evidenceIds: ['e1'],
+        attributes: {},
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'edge:created_by:video-c',
+        sourceNodeId: 'content:youtube:video-c',
         targetNodeId: 'creator:youtube:Creator%20A',
         relation: 'created_by',
         provenance: 'inferred',
@@ -131,9 +154,11 @@ test('never-show-channel feedback matches the creator node rather than only the 
   const ranked = scoreLocalCandidates(state, [
     { external_id: 'video-a', title: 'Video A' },
     { external_id: 'video-b', title: 'Video B' },
+    { external_id: 'video-c', title: 'Video C' },
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
   assert.equal(ranked.find((item) => item.external_id === 'video-a')?.score, -94);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.score, -94);
 });
 
 test('subscription and discovery filters apply to source-tagged candidates', () => {
