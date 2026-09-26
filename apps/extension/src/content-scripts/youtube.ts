@@ -3,7 +3,7 @@ import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
-import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeWatchMetadataFromHtml } from './youtube-dom';
+
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
@@ -993,54 +993,6 @@ safeStorageGet([
   scheduleInitialRank();
 });
 
-const parseIsoDuration = (value: string | null): number | null => {
-  if (!value) return null;
-  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
-  if (!match) return null;
-  return (Number(match[1] ?? 0) * 3600) + (Number(match[2] ?? 0) * 60) + Number(match[3] ?? 0);
-};
-
-const enrichYouTubeVideo = async (candidate: { external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }) => {
-  const fallback = { ...candidate, enrichedAt: new Date().toISOString() };
-  try {
-    const url = youtubeConnector.getCanonicalUrl(candidate.external_id);
-    const response = await fetch(url, { credentials: 'same-origin' });
-    if (!response.ok) return fallback;
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const meta = (selector: string) => doc.querySelector<HTMLMetaElement>(selector)?.content?.trim() || null;
-    const rich = extractYouTubeWatchMetadataFromHtml(html);
-    const viewCountRaw = meta('meta[itemprop="interactionCount"]');
-    const viewCount = viewCountRaw && /^\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
-    const fallbackDuration = parseIsoDuration(meta('meta[itemprop="duration"]'));
-    return {
-      ...fallback,
-      title: rich.title ?? meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title,
-      channel_name: rich.channelName ?? meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null,
-      channel_id: rich.channelId ?? meta('meta[itemprop="channelId"]') ?? extractYouTubeChannelIdFromWatchHtml(html),
-      thumbnail_url: rich.thumbnailUrl ?? meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null,
-      description: (rich.description ?? meta('meta[name="description"]') ?? meta('meta[property="og:description"]'))?.slice(0, 1600) ?? null,
-      duration_seconds: rich.durationSeconds ?? fallbackDuration,
-      published_at: rich.publishedAt ?? meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]'),
-      topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
-      content_type: rich.category ?? null,
-      is_live: candidate.is_live === true || rich.isLive,
-      view_count: viewCount,
-    };
-  } catch {
-    return fallback;
-  }
-};
-
-const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }>) => {
-  const results: unknown[] = [];
-  for (let index = 0; index < candidates.length; index += 3) {
-    const batch = candidates.slice(index, index + 3);
-    results.push(...await Promise.all(batch.map(enrichYouTubeVideo)));
-  }
-  return results;
-};
-
 const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) => (
   left.subscribedOnly === right.subscribedOnly
   && left.includeDiscovery === right.includeDiscovery
@@ -1076,11 +1028,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
-  if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
-    const candidates = Array.isArray(message.payload?.candidates) ? message.payload.candidates : [];
-    void enrichYouTubeVideos(candidates).then((videos) => sendResponse({ ok: true, videos }));
-    return true;
-  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
