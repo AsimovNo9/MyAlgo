@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildCandidateEmbeddingText,
   buildGraphNodeEmbeddingText,
+  createLocalHashEmbeddingProvider,
   createMemoryEmbeddingCache,
   embeddingCacheKey,
   enrichCandidatesWithSemanticReranking,
@@ -174,4 +175,21 @@ test('changing mode changes semantic mode alignment without changing graph simil
     relax.candidates[0].semantic_mode_similarity
       > work.candidates[0].semantic_mode_similarity,
   );
+});
+
+
+test('local hash embedding baseline is deterministic and separates unrelated mode text', async () => {
+  const local = createLocalHashEmbeddingProvider(96);
+  const [workA, workB, relax] = await local.embed([
+    'distributed systems implementation architecture',
+    'distributed software architecture implementation',
+    'ambient music relax unwind',
+  ]);
+
+  assert.deepEqual(await local.embed(['distributed systems implementation architecture']), [workA]);
+  const dot = (left, right) => left.reduce((sum, value, index) => sum + value * right[index], 0);
+  const magnitude = (vector) => Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  const cosine = (left, right) => dot(left, right) / (magnitude(left) * magnitude(right));
+
+  assert.ok(cosine(workA, workB) > cosine(workA, relax));
 });
