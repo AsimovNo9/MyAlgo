@@ -654,11 +654,13 @@ const applyRankedFeed = () => {
     const nativeIds = new Set(
       knownElements.map(getVideoId).filter((id) => id && !id.startsWith('title:')),
     );
+    const replacementSelectionSeed = `${rankGeneration}|${getRouteKey()}`;
     const replacementCandidates = getReplacementCandidates(
       cachedFeed,
       nativeIds,
       remainingReplacementCapacity,
       youtubeConnector.presentation.replacementMinimumScore,
+      replacementSelectionSeed,
     );
     const nativeTargets = knownElements.flatMap((element, nativeIndex) => {
       if (element.style.getPropertyValue('display') === 'none') return [];
@@ -779,6 +781,7 @@ const renderReplacementSlots = (generation: number) => {
     slots,
     blockedIds,
     youtubeConnector.presentation.replacementMinimumScore,
+    `${generation}|${getRouteKey()}`,
   ).slice(0, youtubeConnector.presentation.replacementLimit);
   const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
   let filled = 0;
