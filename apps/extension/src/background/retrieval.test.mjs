@@ -5,14 +5,18 @@ import {
   acquireWebSearchCandidates,
   buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
+  createSearxngWebSearchProvider,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
   needsYoutubeMetadataRefresh,
+  normalizeWebSearchEndpoint,
   normalizeWebSearchResultsToYoutubeCandidates,
   nextRssAllowedAt,
+  nextWebSearchAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
   shouldRefreshObservedCandidate,
+  webSearchOriginPattern,
 } from './retrieval.ts';
 
 test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS provenance', () => {
@@ -190,4 +194,46 @@ test('observed candidate refreshes are coalesced inside the short persistence wi
     shouldRefreshObservedCandidate('2026-09-26T18:59:20.000Z', now, 30_000),
     true,
   );
+});
+
+
+test('SearXNG provider normalizes endpoint, constrains results to YouTube search, and maps JSON results', async () => {
+  const requests = [];
+  const provider = createSearxngWebSearchProvider('https://search.example.org/', async (url, options) => {
+    requests.push({ url, options });
+    return new Response(JSON.stringify({
+      results: [
+        { url: 'https://www.youtube.com/watch?v=abc', title: 'A', content: 'snippet' },
+        { url: 'https://example.com/nope', title: 'B' },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+  const results = await provider.search({
+    query: 'distributed systems tutorial',
+    lane: 'goal',
+    topics: ['distributed systems'],
+    graphRevision: 'graph-x',
+    limit: 5,
+  });
+
+  assert.equal(provider.id, 'searxng');
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /format=json/);
+  assert.match(decodeURIComponent(requests[0].url), /site:youtube\.com\/watch/);
+  assert.equal(results[0].url, 'https://www.youtube.com/watch?v=abc');
+  assert.equal(results[0].snippet, 'snippet');
+});
+
+test('web-search endpoint helpers require HTTPS and return exact opt-in origin pattern', () => {
+  assert.equal(normalizeWebSearchEndpoint('http://search.example.org'), null);
+  assert.equal(normalizeWebSearchEndpoint('https://search.example.org/'), 'https://search.example.org');
+  assert.equal(webSearchOriginPattern('https://search.example.org/path'), 'https://search.example.org/*');
+});
+
+test('web-search refresh policy applies TTL and bounded failure backoff', () => {
+  const now = Date.parse('2026-09-26T12:00:00.000Z');
+  const success = nextWebSearchAllowedAt(now, 0);
+  const failure = nextWebSearchAllowedAt(now, 2);
+  assert.equal(Date.parse(success) - now, 15 * 60 * 1000);
+  assert.equal(Date.parse(failure) - now, 4 * 60 * 1000);
 });
