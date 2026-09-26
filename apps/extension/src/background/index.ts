@@ -41,6 +41,8 @@ type LocalFeedItem = CandidatePoolItem & {
   id: string;
   score: number;
   visible: boolean;
+  suppressed: boolean;
+  policyOutcome: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   source_kind: 'subscription' | 'discovery' | 'liked' | null;
   traceId: string;
 };
@@ -264,6 +266,8 @@ async function rankLocalCandidates(
 
   return ranked.map(({ trace, ...item }) => ({
     ...item,
+    suppressed: trace.suppressed,
+    policyOutcome: trace.policyOutcome,
     source_kind: item.source_kind ?? null,
     traceId: trace.id,
   }));
