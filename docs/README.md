@@ -30,7 +30,7 @@ Learn
 
 The initial launch deliberately keeps the **YouTube Data API out of the graph-learning pipeline**.
 
-- YouTube Data API: account facts/display only.
+- YouTube Data API: no launch runtime integration; future optional use defaults to account/display-only pending a fresh review.
 - Browser-observed YouTube pages: graph evidence.
 - User actions/preferences: graph evidence or direct graph edits.
 - Personal Algorithm Graph: derived from browser-observed and user-provided inputs.
@@ -42,7 +42,7 @@ This separation is a compliance design decision, not merely an implementation de
 
 The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. Creator relationships are maintained incrementally and can be deterministically rebuilt from retained evidence. The Chrome privacy gate is implemented and has been manually validated in a clean browser profile.
 
-The next active compliance task is **#168: audit the YouTube Data API display-only boundary**. Native-feed hardening follows through #152/#171/#160, then provenance/explanation UX through #170/#153.
+The #168 repository/runtime audit found no YouTube Data API integration in the launch path and added CI guardrails for that boundary. Native-feed hardening is next through #152/#171/#160, then provenance/explanation UX through #170/#153.
 
 ## MVP product
 

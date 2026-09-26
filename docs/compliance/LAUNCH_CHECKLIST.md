@@ -8,7 +8,7 @@
 - [x] MyAlgo-injected cards excluded from behavioral observation paths
 - [x] Local graph storage and deterministic rebuild validated (#148/#198)
 - [x] Reset/delete behavior validated in a clean browser profile (#167/#199)
-- [ ] YouTube API confirmed display/account-facts-only in code review
+- [x] YouTube API repository/runtime audit completed (#168): no launch Data API endpoint/client/OAuth/cache path; CI guardrails added
 
 ## P1 — Product
 
@@ -28,7 +28,7 @@
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
 - [x] Clean-profile browser test proves no observation before acceptance and deletion disables observation
-- [ ] YouTube API policy review completed (#168)
+- [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
 - [x] CI built-artifact secret scan passes

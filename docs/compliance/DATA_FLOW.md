@@ -47,15 +47,19 @@ Local storage is extension-specific and may persist independently of normal brow
 ## API boundary
 
 ```text
+Current launch runtime:
+YouTube Data API
+       X  no endpoint/client/OAuth integration
+
+Future optional API use:
 YouTube Data API
        │
-       └── account facts/display only
+       └── account facts/display only by default
                X
-               │
-               └── NOT graph derivation
+               └── NOT graph/scoring/trace/explanation input
 ```
 
-#168 owns the separate audit proving this boundary for release.
+#168 audits and CI-enforces this boundary.
 
 ## Data categories
 

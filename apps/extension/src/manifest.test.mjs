@@ -11,6 +11,9 @@ test('MV3 manifest requests only local storage and YouTube host access', async (
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(new Set(manifest.permissions), new Set(['storage']));
   assert.equal(manifest.permissions.includes('scripting'), false);
+  assert.equal(manifest.permissions.includes('identity'), false);
+  assert.equal(manifest.permissions.includes('identity.email'), false);
+  assert.equal(Object.hasOwn(manifest, 'oauth2'), false);
   assert.deepEqual(new Set(manifest.host_permissions), new Set([
     'https://*.youtube.com/*',
   ]));

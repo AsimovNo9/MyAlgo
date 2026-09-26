@@ -9,7 +9,7 @@ The documentation must agree that:
 - The graph is a graph, not a strict tree.
 - Scoring is additive and intrinsically explainable.
 - Foundation models provide content evidence.
-- The YouTube API is display/account-facts-only at launch.
+- The current launch runtime has no YouTube Data API integration; any future API use defaults to display/account-facts-only unless a new review explicitly changes that boundary.
 - Browser observation supplies graph evidence.
 - MVP is local-first.
 - Watch-history extraction was the first technical spike and is now completed.
@@ -35,7 +35,7 @@ privacy/disclosure gate
 The current remaining dependency order is:
 
 ```text
-YouTube API boundary audit (#168)
+YouTube API boundary audit (#168) — implemented; no launch API integration found
       ↓
 feed enforcement / stale-loop hardening
       ↓

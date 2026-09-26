@@ -35,6 +35,9 @@ jobs:
       - name: Build extension
         run: pnpm --filter extension build
 
+      - name: Audit YouTube API boundary
+        run: node scripts/audit-youtube-api-boundary.mjs
+
       - name: Audit extension artifact
         run: node scripts/audit-extension-package.mjs
 

@@ -41,7 +41,7 @@ The launch extension does not use observed data for personalized advertising, cr
 
 ## YouTube Data API boundary
 
-The launch architecture keeps YouTube Data API account/display data separate from browser-observed graph evidence. YouTube Data API data must not be used to derive the Personal Algorithm Graph unless a future version goes through a separate product, provider-policy, privacy, and disclosure review.
+The current launch runtime does not integrate the YouTube Data API. Browser-observed YouTube pages provide the launch evidence used by the local graph/scorer. If YouTube Data API use is introduced later, API Data must remain separate from graph derivation, scoring, traces, and explanations unless a future version goes through a separate product, provider-policy, privacy, and disclosure review.
 
 ## User controls
 

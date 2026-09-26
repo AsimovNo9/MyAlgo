@@ -4,15 +4,16 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #168 — YouTube Data API display-only boundary audit.
-2. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
-3. #160 — safe replacement slots.
-4. #170 + #153 — graph provenance/visualization and per-item trace explanation.
-5. #162 — replay/evaluation baselines before richer enrichment.
-6. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
-7. #169 — discharge remaining local-runtime umbrella criteria.
-8. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
-9. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+1. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
+2. #160 — safe replacement slots.
+3. #170 + #153 — graph provenance/visualization and per-item trace explanation.
+4. #162 — replay/evaluation baselines before richer enrichment.
+5. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
+6. #169 — discharge remaining local-runtime umbrella criteria.
+7. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
+8. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+
+#168 is the completed compliance boundary immediately preceding this sequence.
 
 ## P0 — Validate the data boundary
 
@@ -87,9 +88,9 @@ Implemented and validated:
 - built-artifact secret scan;
 - clean-profile validation of pre-acceptance blocking, acceptance → observation, and deletion → disabled observation.
 
-#167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL, reconcile the final Store listing/Privacy practices fields, and complete #168.
+#167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL and reconcile the final Store listing/Privacy practices fields. The separate #168 repository/runtime audit is implemented in PR #203 with green CI.
 
-### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **next active gate**
+### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **audit implemented; current launch runtime has no Data API integration**
 
 ### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **completed in PR #188**
 
@@ -250,6 +251,10 @@ Only after measured gaps:
 
 ## Repository/documentation hygiene
 
+### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Remove or rename legacy YouTube retrieval vocabulary
+
+The #168 audit found no YouTube Data API implementation, but shared/recommender planning types still use labels such as `youtube_subscription`, `youtube_search`, `youtube_liked`, `subscriptions`, and `search`. These are currently non-network planning/type vocabulary, not API consumers, but they should be removed or renamed so code review does not imply an integration that does not exist.
+
 ### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
 
 The tracked README/docs now describe the browser-local Personal Algorithm architecture, but the GitHub repository description is repository metadata rather than a tracked file. Update it separately so it no longer presents YouTube Data API sourcing and LLM classification as the MVP foundation.
@@ -258,7 +263,7 @@ The tracked README/docs now describe the browser-local Personal Algorithm archit
 
 ### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): YouTube API display-only boundary audit
 
-Confirm implementation never feeds YouTube API Data into graph derivation.
+Repository audit result: the current launch runtime contains no YouTube Data API endpoint/client/OAuth/credential/cache path. CI now fails if those surfaces appear in launch source/artifacts. Future API use defaults to account/display-only and requires a new policy/product/privacy review before API Data can approach graph/scoring paths.
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
