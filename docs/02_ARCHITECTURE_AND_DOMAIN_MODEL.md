@@ -434,3 +434,24 @@ Text embeddings are the next model layer to evaluate because they can improve se
 ### YouTube search-page acquisition
 
 The launch web-discovery provider uses YouTube's ordinary search-result pages under the extension's existing YouTube host permission. Generated queries come from the graph retrieval profile plus active mode intent. The provider parses embedded `ytInitialData` for stable video IDs and lightweight result metadata, then hands those IDs to the same canonical watch-page enrichment path used by RSS candidates. Search-page acquisition is candidate discovery only and never becomes preference evidence by itself. The provider-neutral `WebSearchProvider` interface remains so acquisition can be replaced later without coupling search transport to ranking.
+
+
+### Connector-owned acquisition adapters
+
+PR #212 keeps provider acquisition behind `PageProviderConnector.acquisition`. The background coordinator asks the active connector for its search provider and enrichment function; it does not construct YouTube search providers directly.
+
+The YouTube acquisition adapter contains search-page parsing, RSS mechanics, stable video-ID normalization, and canonical watch-page metadata enrichment. This preserves the intended dependency direction:
+
+```text
+background retrieval coordinator
+        ↓
+PageProviderConnector.acquisition
+        ↓
+provider-specific acquisition
+        ↓
+normalized RecommendationCandidate / metadata
+        ↓
+shared reservoir + scorer
+```
+
+Future connectors add acquisition adapters rather than provider branches to the retrieval coordinator.
