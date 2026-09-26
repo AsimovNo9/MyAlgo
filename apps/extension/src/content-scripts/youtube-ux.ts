@@ -147,6 +147,15 @@ export type ReplacementSlot = {
   sourceVideoId: string;
 };
 
+export function createReplacementSlotId(
+  generation: number,
+  routeKey: string,
+  nativeIndex: number,
+  sourceVideoId: string,
+): string {
+  return `${generation}|${routeKey}|${nativeIndex}|${sourceVideoId}`;
+}
+
 export type ReplacementAssignment = {
   slot: ReplacementSlot;
   item: RankedFeedItem;
