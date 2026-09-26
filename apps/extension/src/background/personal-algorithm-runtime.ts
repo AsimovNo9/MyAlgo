@@ -1,4 +1,4 @@
-import type { PersonalAlgorithmState } from '@repo/shared-types';
+import type { FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
 import {
   isScoreTraceConsistent,
   scorePersonalAlgorithm,
@@ -138,10 +138,7 @@ export function scoreLocalCandidates(
   candidates: LocalRuntimeCandidate[],
   mode: string,
   feedbackSignals: ScoreFeedbackSignal[] = [],
-  sourceFilters: {
-    includeShorts?: boolean;
-    includeLive?: boolean;
-  } = {},
+  sourceFilters: FeedSourceFilters = {},
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
 
@@ -152,6 +149,8 @@ export function scoreLocalCandidates(
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
         || (candidate.is_live && sourceFilters.includeLive === false)
+        || (sourceFilters.subscribedOnly === true && candidate.source_kind !== 'subscription')
+        || (sourceFilters.includeDiscovery === false && candidate.source_kind === 'discovery')
       );
 
       if (!isScoreTraceConsistent(result.trace)) {
