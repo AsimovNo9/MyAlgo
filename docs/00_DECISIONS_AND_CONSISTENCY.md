@@ -46,15 +46,15 @@ Use **training** only for changing model parameters from a training dataset. Use
 
 ## 5. YouTube API boundary
 
-For the initial launch:
+For the initial launch, the current runtime does not integrate the YouTube Data API at all:
 
 ```text
-YouTube Data API → account facts/display only
+YouTube Data API → no launch runtime integration
 Browser observation → graph evidence
 User input → graph input
 ```
 
-The graph must not be constructed from YouTube API Data.
+If API use is introduced later, the default reviewed role is account facts/display only. API Data must not be used to construct the graph, score candidates, produce traces, or drive explanations unless a new product/provider-policy/privacy review explicitly changes this boundary.
 
 For live YouTube playback, `watched` is derived from temporal HTML media
 playback evidence rather than requiring a visit to the rendered History page.
