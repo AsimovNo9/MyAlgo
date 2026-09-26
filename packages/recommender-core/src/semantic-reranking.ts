@@ -112,7 +112,7 @@ export function createLocalHashEmbeddingProvider(
           const secondary = hashToken(term, 0x9e3779b9);
           const index = primary % safeDimensions;
           const secondaryIndex = secondary % safeDimensions;
-          const weight = term.includes('_') ? 1.25 : term.length === 3 ? 0.35 : 1;
+          const weight = term.includes('_') ? 1.25 : term.length === 3 ? 0.05 : 1;
           // Keep the lexical baseline non-negative so exact/shared terms and
           // subwords increase similarity predictably. A second low-weight bin
           // reduces single-hash collision sensitivity without pretending this
