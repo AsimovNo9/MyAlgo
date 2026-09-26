@@ -62,13 +62,15 @@ type LocalFeedItem = CandidatePoolItem & {
   };
 };
 
-const MAX_CANDIDATE_POOL_SIZE = 5000;
+const MAX_CANDIDATE_POOL_SIZE = 1500;
 const MAX_HISTORY_EVIDENCE = 10000;
-const MAX_FEED_CACHE_SIZE = 100;
-const MAX_VIDEO_STORE_SIZE = 2000;
-const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
-const MAX_SELECTION_EVENTS = 5000;
+const MAX_FEED_CACHE_SIZE = 80;
+const MAX_VIDEO_STORE_SIZE = 800;
+const MAX_METADATA_ENRICHMENTS_PER_SCAN = 6;
+const MAX_SELECTION_EVENTS = 2000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const MAX_RANK_WORKING_SET = 320;
+const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
 };
@@ -484,7 +486,7 @@ async function rankLocalCandidates(
     score: item.score,
     recordedAt: new Date().toISOString(),
   }));
-  await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, MAX_FEED_CACHE_SIZE));
+  await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, 60));
 
   return ranked.map(({ trace, ...item }) => {
     const contributions = [
@@ -699,8 +701,24 @@ const handleRuntimeMessage = (
           ...candidate,
           ...(enrichmentById.get(candidate.external_id) ?? {}),
         }));
-        const candidatePool = await hydrateCandidatePool(await mergeCandidatePool(candidatesWithMetadata));
-        const ranked = await rankLocalCandidates(candidatePool, sourceFilters, payload?.mode ?? 'default');
+        const candidatePool = await mergeCandidatePool(candidatesWithMetadata);
+        const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
+
+        // Do not rescore the entire persistent reservoir on every YouTube DOM
+        // mutation. Score every current-page item plus a bounded off-page
+        // replacement working set. The full pool remains persisted for later
+        // retrieval/rotation but is not materialized into every ranking pass.
+        const currentPagePool = candidatePool.filter((item) => currentPageIds.has(item.external_id));
+        const offPagePool = candidatePool
+          .filter((item) => !currentPageIds.has(item.external_id))
+          .sort((left, right) => (
+            new Date(right.lastAcquiredAt ?? right.lastSeenAt).getTime()
+            - new Date(left.lastAcquiredAt ?? left.lastSeenAt).getTime()
+          ))
+          .slice(0, MAX_REPLACEMENT_WORKING_SET);
+        const workingPool = [...currentPagePool, ...offPagePool].slice(0, MAX_RANK_WORKING_SET);
+        const hydratedWorkingPool = await hydrateCandidatePool(workingPool);
+        const ranked = await rankLocalCandidates(hydratedWorkingPool, sourceFilters, payload?.mode ?? 'default');
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
 
         // The popup cache is intentionally bounded to the top-ranked reservoir,
@@ -708,7 +726,6 @@ const handleRuntimeMessage = (
         // current page. Otherwise a large/RSS-expanded reservoir can push all
         // visible native cards outside the top 100, making them look "unmatched"
         // and removing badges/replacement eligibility from the live page.
-        const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
         const currentPageFeed = ranked.filter((item) => currentPageIds.has(item.external_id));
 
         // Replacement inventory must be independent of the global top-N cache.
@@ -734,6 +751,7 @@ const handleRuntimeMessage = (
           currentPageScored: currentPageFeed.length,
           replacementInventorySize: replacementInventory.length,
           poolSize: candidatePool.length,
+          rankingWorkingSetSize: workingPool.length,
           enriched: enrichedCandidates.length,
         });
       } catch (error) {
