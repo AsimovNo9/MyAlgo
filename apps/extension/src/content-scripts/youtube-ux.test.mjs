@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, isRenderContextStale, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -172,5 +172,25 @@ test('replacement presentation metadata is explicit and generation scoped', () =
       sourceVideoId: 'native-a',
       replacementVideoId: 'replacement-a',
     },
+  );
+});
+
+
+test('explicit source-filter hides are terminal and never become replacement slots', () => {
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'source_filter' }),
+    false,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'runtime_policy' }),
+    true,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'score' }),
+    true,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'show', reason: 'ranked' }),
+    false,
   );
 });
