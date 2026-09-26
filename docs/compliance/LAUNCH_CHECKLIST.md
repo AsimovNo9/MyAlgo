@@ -28,7 +28,7 @@
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
 - [x] Clean-profile browser test proves no observation before acceptance and deletion disables observation
-- [ ] YouTube API policy review completed (#168)
+- [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
 - [x] CI built-artifact secret scan passes
