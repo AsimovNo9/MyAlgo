@@ -293,6 +293,14 @@ The first concrete provider is YouTube search-page discovery. The `WebSearchProv
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
 
 
+### Current PR #212 status
+
+The current implementation has passed acquisition-level live validation and CI. One observed browser run reported 4/4 search plans succeeded, 32 candidates fetched, 3 newly added, 29 deduplicated, 35 search-origin candidates retained in the reservoir, and no retrieval error. This establishes the search → reservoir path.
+
+The remaining live gate is search → scoring → replacement promotion after the bounded retrieved-discovery exploration change. Validate the new rank diagnostics (`searchCandidatesScored`, `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `maxSearchCandidateScore`) together with `retrievedDiscoveryExplorationAssignments` and confirm search activity no longer disrupts badges/replacements.
+
+CI #662 passes 25/25 recommender-core tests and 122/122 extension tests, plus typecheck, lint, build, YouTube API-boundary audit, secret scan, and artifact upload.
+
 ### Retrieved-discovery exploration
 
 Retrieval provenance does not add preference weight. Search/RSS candidates are still scored by the same graph, metadata, mode-alignment, feedback, and policy signals as observed candidates.
