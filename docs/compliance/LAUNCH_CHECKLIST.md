@@ -8,7 +8,7 @@
 - [x] MyAlgo-injected cards excluded from behavioral observation paths
 - [x] Local graph storage and deterministic rebuild validated (#148/#198)
 - [x] Reset/delete behavior validated in a clean browser profile (#167/#199)
-- [ ] YouTube API confirmed display/account-facts-only in code review
+- [x] YouTube API repository/runtime audit completed (#168): no launch Data API endpoint/client/OAuth/cache path; CI guardrails added
 
 ## P1 — Product
 
