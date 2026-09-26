@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -133,6 +133,8 @@ const clearExtensionPresentation = (showPaused = true) => {
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    delete element.dataset.personalAlgorithmSlotId;
+    delete element.dataset.personalAlgorithmSlotWidth;
     if (element.dataset.personalAlgorithmPositionPatched === 'true') {
       element.style.removeProperty('position');
       delete element.dataset.personalAlgorithmPositionPatched;
@@ -145,7 +147,10 @@ const clearExtensionPresentation = (showPaused = true) => {
   }
 };
 
-const createThumbnail = (item: RankedFeedItem): HTMLElement => {
+const createThumbnail = (
+  item: RankedFeedItem,
+  aspectRatio = youtubeConnector.presentation.horizontalAspectRatio,
+): HTMLElement => {
   const media = item.thumbnail_url ? document.createElement('img') : document.createElement('div');
   if (media instanceof HTMLImageElement) {
     media.src = item.thumbnail_url ?? '';
@@ -154,8 +159,74 @@ const createThumbnail = (item: RankedFeedItem): HTMLElement => {
   } else {
     media.setAttribute('aria-hidden', 'true');
   }
-  media.style.cssText = `display:block;width:100%;aspect-ratio:${youtubeConnector.presentation.horizontalAspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
+  media.style.cssText = `display:block;width:100%;aspect-ratio:${aspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
   return media;
+};
+
+const createReplacementCard = (
+  item: RankedFeedItem,
+  target: HTMLElement,
+  slotId: string,
+  sourceVideoId: string,
+  generation: number,
+): HTMLElement => {
+  const card = document.createElement('article');
+  const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
+  const targetFlags = getVideoSourceFlags(target);
+  const aspectRatio = targetFlags.is_short
+    ? youtubeConnector.presentation.verticalAspectRatio
+    : youtubeConnector.presentation.horizontalAspectRatio;
+
+  card.dataset.personalAlgorithmReplacement = 'true';
+  card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
+  card.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  card.dataset.personalAlgorithmReplacementSlot = slotId;
+  card.dataset.personalAlgorithmReplacementSourceVideoId = sourceVideoId;
+  card.dataset.personalAlgorithmReplacementGeneration = String(generation);
+  card.dataset.personalAlgorithmReplacementMode = activeMode;
+  card.dataset.personalAlgorithmReplacementScore = String(item.score ?? 0);
+  card.setAttribute('role', 'group');
+  card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
+  card.style.cssText = `display:block;width:100%;max-width:${targetWidth > 0 ? `${targetWidth}px` : '100%'};min-width:0;align-self:start;box-sizing:border-box;position:relative;color:var(--yt-spec-text-primary, #0f0f0f);font-family:Roboto,Arial,sans-serif;`;
+
+  const link = document.createElement('a');
+  link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
+  link.dataset.personalAlgorithmVideoId = item.external_id ?? '';
+  link.setAttribute('aria-label', item.title ?? 'MyAlgo recommended video');
+  link.style.cssText = 'display:block;color:inherit;text-decoration:none;min-width:0;';
+  link.appendChild(createThumbnail(item, aspectRatio));
+
+  const title = document.createElement('div');
+  title.textContent = item.title ?? 'Recommended video';
+  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+  link.appendChild(title);
+
+  const channel = document.createElement('div');
+  channel.textContent = item.channel_name ?? `${activeMode} replacement`;
+  channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
+  link.appendChild(channel);
+  card.appendChild(link);
+
+  const meta = document.createElement('div');
+  meta.textContent = `MyAlgo · ${activeMode} · ${item.score ?? 0}`;
+  meta.style.cssText = 'margin-top:6px;color:var(--yt-spec-text-secondary, #606060);font-size:11px;line-height:16px;';
+  card.appendChild(meta);
+
+  const why = document.createElement('button');
+  why.type = 'button';
+  why.dataset.personalAlgorithmExplanation = 'true';
+  why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  why.textContent = 'Why this?';
+  why.setAttribute('aria-label', 'Why MyAlgo showed this replacement');
+  why.style.cssText = 'margin-top:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--yt-spec-10-percent-layer, #d0d0d0);background:transparent;color:var(--yt-spec-text-primary, #0f0f0f);font:600 11px/1.2 sans-serif;cursor:pointer;';
+  why.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showStatus(`Personal Algorithm trace ${item.traceId ?? 'unavailable'} · score ${item.score ?? 0}`);
+  });
+  card.appendChild(why);
+
+  return card;
 };
 
 const syncShelfCardWidth = (cards: HTMLElement) => {
@@ -454,12 +525,14 @@ const applyRankedFeed = () => {
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
   const knownElements = getVideoElements();
 
-  knownElements.forEach((element) => {
+  knownElements.forEach((element, nativeIndex) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    delete element.dataset.personalAlgorithmSlotId;
+    delete element.dataset.personalAlgorithmSlotWidth;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const title = getVideoTitle(element);
@@ -470,6 +543,12 @@ const applyRankedFeed = () => {
     });
 
     if (decision.action === 'hide') {
+      const sourceVideoId = getVideoId(element);
+      const slotWidth = element.getBoundingClientRect().width;
+      if (!sourceVideoId.startsWith('title:') && slotWidth >= 120 && element.parentElement) {
+        element.dataset.personalAlgorithmSlotId = `${getRouteKey()}|${nativeIndex}|${sourceVideoId}`;
+        element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      }
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = decision.reason;
       return;
@@ -502,6 +581,72 @@ const applyRankedFeed = () => {
     badge.textContent = `${activeMode} · ${score}`;
   });
 };
+
+const renderReplacementSlots = (generation: number) => {
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
+
+  const nativeElements = getVideoElements();
+  const targets = nativeElements.filter((element) => (
+    Boolean(element.dataset.personalAlgorithmSlotId)
+    && element.style.getPropertyValue('display') === 'none'
+    && element.parentElement
+  ));
+  const slots = targets.map((element) => ({
+    slotId: element.dataset.personalAlgorithmSlotId ?? '',
+    sourceVideoId: getVideoId(element),
+  }));
+
+  const blockedIds = new Set<string>();
+  nativeElements.map(getVideoId).forEach((id) => {
+    if (id && !id.startsWith('title:')) blockedIds.add(id);
+  });
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id], [data-personal-algorithm-replacement] [data-personal-algorithm-video-id]',
+  ).forEach((element) => {
+    const id = element.dataset.personalAlgorithmVideoId;
+    if (id) blockedIds.add(id);
+  });
+
+  const assignments = planReplacementAssignments(
+    cachedFeed,
+    slots,
+    blockedIds,
+    youtubeConnector.presentation.replacementMinimumScore,
+  ).slice(0, youtubeConnector.presentation.replacementLimit);
+  const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
+  let filled = 0;
+
+  for (const assignment of assignments) {
+    const target = targetBySlot.get(assignment.slot.slotId);
+    if (
+      !target
+      || !target.isConnected
+      || target.style.getPropertyValue('display') !== 'none'
+      || target.dataset.personalAlgorithmSlotId !== assignment.slot.slotId
+      || !target.parentElement
+    ) {
+      continue;
+    }
+    const replacement = createReplacementCard(
+      assignment.item,
+      target,
+      assignment.slot.slotId,
+      assignment.slot.sourceVideoId,
+      generation,
+    );
+    target.parentElement.insertBefore(replacement, target);
+    filled += 1;
+  }
+
+  console.info('[MyAlgo] replacement slots', {
+    generation,
+    eligibleSlots: slots.length,
+    filled,
+    unfilled: Math.max(0, slots.length - filled),
+  });
+};
+
 const scheduleRankGeneration = (generation: number) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
@@ -571,6 +716,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
+      personalPicks = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
 
@@ -580,6 +726,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
       clearExtensionPresentation(false);
       applyRankedFeed();
       renderRecommendationShelf();
+      renderReplacementSlots(requestGeneration);
 
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
         item.visible !== false
@@ -601,6 +748,10 @@ const triggerRank = (
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
+  if (reason !== 'mutation') {
+    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  }
+
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
   const hasMeaningfulCards = currentCandidates.length >= 2;
@@ -616,6 +767,7 @@ const triggerRank = (
   ) {
     applyRankedFeed();
     renderRecommendationShelf();
+    renderReplacementSlots(rankGeneration);
     return;
   }
 
