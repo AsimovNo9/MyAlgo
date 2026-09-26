@@ -17,6 +17,7 @@ type PageCandidate = {
   title: string;
   channel_name?: string | null;
   thumbnail_url?: string | null;
+  source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   is_short?: boolean;
   is_live?: boolean;
 };
