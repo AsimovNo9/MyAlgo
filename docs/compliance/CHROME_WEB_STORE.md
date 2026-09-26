@@ -7,11 +7,12 @@
 The extension is Manifest V3 and requests:
 
 - `storage`;
+- `offscreen`, used only to host the bundled dedicated Worker for optional YouTube search-page fetch/parsing away from the ranking service worker;
 - required HTTPS host access for `https://*.youtube.com/*`.
 
 It does not request `<all_urls>`, Chrome `history`, `tabs`, `cookies`, `webRequest`, or `scripting`.
 
-The YouTube host permission is required because MyAlgo's disclosed single purpose depends on observing rendered YouTube content, retrieving optional YouTube RSS/search-page candidates, enriching candidate metadata, and applying user-controlled feed decisions on those pages.
+The YouTube host permission is required because MyAlgo's disclosed single purpose depends on observing rendered YouTube content, retrieving optional YouTube RSS/search-page candidates, enriching candidate metadata, and applying user-controlled feed decisions on those pages. The `offscreen` permission does not expand the network boundary; it isolates large search-page payload handling from the service worker that serves ranking/UI requests.
 
 ## User-data inventory
 
