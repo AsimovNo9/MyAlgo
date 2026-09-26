@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -48,6 +48,15 @@ const instanceAttribute = 'data-personal-algorithm-instance';
 document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
+const getRouteKey = () => `${location.pathname}${location.search}`;
+
+const logStaleRender = (phase: string, requestGeneration: number) => {
+  console.info('[MyAlgo] skipped stale render', {
+    phase,
+    requestGeneration,
+    latestGeneration: rankGeneration,
+  });
+};
 
 const isExtensionContextValid = () => {
   try {
@@ -130,10 +139,6 @@ const clearExtensionPresentation = (showPaused = true) => {
   }
 };
 
-const removeReplacementCards = () => {
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
-};
-
 const createThumbnail = (item: RankedFeedItem): HTMLElement => {
   const media = item.thumbnail_url ? document.createElement('img') : document.createElement('div');
   if (media instanceof HTMLImageElement) {
@@ -145,32 +150,6 @@ const createThumbnail = (item: RankedFeedItem): HTMLElement => {
   }
   media.style.cssText = `display:block;width:100%;aspect-ratio:${youtubeConnector.presentation.horizontalAspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
   return media;
-};
-
-const createReplacementCard = (item: RankedFeedItem, target: HTMLElement): HTMLElement => {
-  const card = document.createElement(target.localName);
-  card.className = target.className;
-  card.dataset.personalAlgorithmReplacement = 'true';
-  card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
-  card.style.cssText = 'display:block;min-width:0;align-self:start;box-sizing:border-box;background:var(--yt-spec-base-background, #fff);';
-
-  const link = document.createElement('a');
-  link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
-  link.style.cssText = 'display:block;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
-
-  link.appendChild(createThumbnail(item));
-
-  const title = document.createElement('div');
-  title.textContent = item.title ?? 'Recommended video';
-  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-  link.appendChild(title);
-
-  const channel = document.createElement('div');
-  channel.textContent = item.channel_name ?? `${activeMode} pick`;
-  channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
-  link.appendChild(channel);
-  card.appendChild(link);
-  return card;
 };
 
 const syncShelfCardWidth = (cards: HTMLElement) => {
@@ -322,7 +301,7 @@ const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => 
 };
 
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
-  if (link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]')) return null;
+  if (isMyAlgoInjectedElement(link)) return null;
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
 
@@ -348,7 +327,8 @@ const getVideoElements = () => {
   const linkElements = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
     .map(getCardForVideoLink)
     .filter((element): element is HTMLElement => Boolean(element));
-  return Array.from(new Set([...knownElements, ...linkElements]));
+  return Array.from(new Set([...knownElements, ...linkElements]))
+    .filter((element) => !isMyAlgoInjectedElement(element));
 };
 
 const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
@@ -374,7 +354,7 @@ const collectCandidates = () => {
     .slice(0, youtubeConnector.presentation.candidateLimit);
 
   const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
-    .filter((link) => !link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]'))
+    .filter((link) => !isMyAlgoInjectedElement(link))
     .map((link) => ({
       external_id: youtubeConnector.getExternalId(link.href) ?? '',
       title: normalizeText(youtubeConnector.getLinkTitle({
