@@ -214,7 +214,7 @@ export interface SemanticProfile {
 }
 
 export interface EmbeddingRecord {
-  owner_type: 'concept' | 'content' | 'user_profile' | 'mode';
+  owner_type: 'concept' | 'graph_node' | 'content' | 'user_profile' | 'mode';
   owner_id: string;
   model_id?: string;
   model_version: string;
