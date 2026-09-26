@@ -79,6 +79,20 @@ export function Popup() {
     }
   };
 
+  const handleOpenOptions = async () => {
+    try {
+      await chrome.runtime.openOptionsPage();
+      setLastError(null);
+    } catch {
+      try {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+        setLastError(null);
+      } catch (error) {
+        setLastError(error instanceof Error ? error.message : 'Unable to open options.');
+      }
+    }
+  };
+
   const modeOptions = ['Work', 'Learning', 'Relax'];
 
   if (!disclosureAccepted) {
@@ -91,7 +105,7 @@ export function Popup() {
         <p>{PRIVACY_DISCLOSURE.storage}. {PRIVACY_DISCLOSURE.transfer}.</p>
         <p>{PRIVACY_DISCLOSURE.deletion}.</p>
         <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
-        <button type="button" onClick={() => void chrome.runtime.openOptionsPage()} style={{ marginLeft: 8 }}>Review settings</button>
+        <button type="button" onClick={() => void handleOpenOptions()} style={{ marginLeft: 8 }}>Review settings</button>
         {lastError ? <p style={{ color: '#b91c1c' }}>{lastError}</p> : null}
       </main>
     );
@@ -138,7 +152,7 @@ export function Popup() {
           </button>
         ))}
       </div>
-      <button onClick={() => void chrome.runtime.openOptionsPage()} style={{ marginTop: 12 }}>
+      <button onClick={() => void handleOpenOptions()} style={{ marginTop: 12 }}>
         Open options
       </button>
     </main>
