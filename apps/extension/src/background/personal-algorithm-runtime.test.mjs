@@ -372,7 +372,7 @@ test('semantic graph matches are split into symbolic trace contributions without
   }], 'Work')[0];
 
   const graphFeatures = ranked.trace.featureContributions
-    .filter((item) => item.id.startsWith('semantic:graph:'));
+    .filter((item) => item.id.startsWith('feature:semantic:graph:'));
   assert.equal(graphFeatures.length, 2);
   assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Distributed systems'), true);
   assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Local-first software'), true);
