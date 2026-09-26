@@ -566,9 +566,16 @@ const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
+  const rankById = new Map(cachedFeed.map((item, index) => [item.external_id, index]));
   const knownElements = getVideoElements();
+  const nativeCards = knownElements.map((element) => ({
+    element,
+    id: getVideoId(element),
+    title: getVideoTitle(element),
+    flags: getVideoSourceFlags(element),
+  }));
 
-  knownElements.forEach((element, nativeIndex) => {
+  nativeCards.forEach(({ element, id, title, flags }, nativeIndex) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
@@ -578,15 +585,14 @@ const applyRankedFeed = () => {
     delete element.dataset.personalAlgorithmSlotWidth;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
-    const title = getVideoTitle(element);
-    const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
+    const item = feedById.get(id) ?? feedByTitle.get(title);
     const decision = getNativeCardDecision(item, {
-      sourceFiltered: shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters),
+      sourceFiltered: shouldHideForSourceFilters(flags, sourceFilters),
       minimumVisibleScore: youtubeConnector.presentation.minimumVisibleScore,
     });
 
     if (decision.action === 'hide') {
-      const sourceVideoId = getVideoId(element);
+      const sourceVideoId = id;
       const slotWidth = element.getBoundingClientRect().width;
       if (
         isReplacementEligibleNativeDecision(decision)
@@ -611,7 +617,7 @@ const applyRankedFeed = () => {
 
     const score = item.score ?? 0;
     element.dataset.personalAlgorithmScore = String(score);
-    element.dataset.personalAlgorithmRank = String(cachedFeed.indexOf(item));
+    element.dataset.personalAlgorithmRank = String(rankById.get(item.external_id) ?? -1);
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
 
@@ -653,7 +659,7 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const nativeIds = new Set(
-      knownElements.map(getVideoId).filter((id) => id && !id.startsWith('title:')),
+      nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
     );
     const replacementSelectionSeed = `${rankGeneration}|${getRouteKey()}`;
     const replacementCandidates = getReplacementCandidates(
@@ -663,9 +669,8 @@ const applyRankedFeed = () => {
       youtubeConnector.presentation.replacementMinimumScore,
       replacementSelectionSeed,
     );
-    const nativeTargets = knownElements.flatMap((element, nativeIndex) => {
+    const nativeTargets = nativeCards.flatMap(({ element, id }, nativeIndex) => {
       if (element.style.getPropertyValue('display') === 'none') return [];
-      const id = getVideoId(element);
       const score = Number(element.dataset.personalAlgorithmScore);
       if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
       return [{ externalId: id, score, nativeIndex }];
