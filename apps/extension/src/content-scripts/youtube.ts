@@ -640,9 +640,11 @@ const scheduleInitialRank = () => {
 };
 
 safeStorageGet([
+  STORAGE_KEYS.MODE,
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
+  activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
   const disclosureAccepted = isPrivacyDisclosureAccepted(
     result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
   );
