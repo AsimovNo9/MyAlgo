@@ -29,6 +29,9 @@ export type LocalRuntimeCandidate = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  semantic_graph_similarity?: number | null;
+  semantic_mode_similarity?: number | null;
+  semantic_model_version?: string | null;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
 };
@@ -242,6 +245,38 @@ export function classifyCandidateContent(
   return { label: null, confidence: 0 };
 }
 
+const semanticAlignmentFeatures = (
+  candidate: LocalRuntimeCandidate,
+): ScoreFeatureSignal[] => {
+  const features: ScoreFeatureSignal[] = [];
+  const graphSimilarity = Number(candidate.semantic_graph_similarity ?? 0);
+  const modeSimilarity = Number(candidate.semantic_mode_similarity ?? 0);
+
+  if (Number.isFinite(graphSimilarity) && graphSimilarity >= 0.2) {
+    features.push({
+      id: 'semantic:graph',
+      label: 'semantic match: personal graph',
+      value: Number((18 * Math.min(1, graphSimilarity)).toFixed(2)),
+      sourceId: candidate.semantic_model_version
+        ? `embedding:${candidate.semantic_model_version}`
+        : 'embedding',
+    });
+  }
+
+  if (Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
+    features.push({
+      id: 'semantic:mode',
+      label: 'semantic match: active mode',
+      value: Number((14 * Math.min(1, modeSimilarity)).toFixed(2)),
+      sourceId: candidate.semantic_model_version
+        ? `embedding:${candidate.semantic_model_version}`
+        : 'embedding',
+    });
+  }
+
+  return features;
+};
+
 const modeAlignmentFeature = (
   mode: string,
   classification: ReturnType<typeof classifyCandidateContent>,
@@ -276,6 +311,7 @@ const candidateContext = (
   const classification = classifyCandidateContent(candidate);
   const modeFeature = modeAlignmentFeature(mode, classification);
   if (modeFeature) extracted.features.push(modeFeature);
+  extracted.features.push(...semanticAlignmentFeatures(candidate));
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;
