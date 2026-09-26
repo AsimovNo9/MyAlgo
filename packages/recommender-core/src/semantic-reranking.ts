@@ -22,6 +22,7 @@ export interface LocalEmbeddingProvider {
 export interface EmbeddingCache {
   get(key: string): Promise<EmbeddingRecord | null>;
   set(key: string, record: EmbeddingRecord): Promise<void>;
+  flush?(): Promise<void>;
 }
 
 export type SemanticRerankingDiagnostics = {
@@ -41,6 +42,116 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
   modeProfile: SemanticModeProfile;
   diagnostics: SemanticRerankingDiagnostics;
 };
+
+
+const hashToken = (value: string, seed: number): number => {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+};
+
+const embeddingTerms = (text: string): string[] => {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+  const words = normalized.split(' ').filter((token) => token.length >= 2);
+  const bigrams = words.slice(0, -1).map((token, index) => `${token}_${words[index + 1]}`);
+  const characterNgrams = words.flatMap((word) => {
+    if (word.length < 4) return [];
+    const padded = `^${word}import type {
+  EmbeddingRecord,
+  PersonalAlgorithmState,
+  RecommendationCandidate,
+  SemanticModeProfile,
+} from '@repo/shared-types';
+
+import {
+  buildSemanticModeProfile,
+  cosineSimilarity,
+  semanticModeSeed,
+  weightedEmbeddingCentroid,
+} from './semantic-primitives';
+
+export interface LocalEmbeddingProvider {
+  readonly modelId: string;
+  readonly modelVersion: string;
+  readonly dimensions: number;
+  embed(texts: readonly string[]): Promise<number[][]>;
+}
+
+export interface EmbeddingCache {
+  get(key: string): Promise<EmbeddingRecord | null>;
+  set(key: string, record: EmbeddingRecord): Promise<void>;
+  flush?(): Promise<void>;
+}
+
+export type SemanticRerankingDiagnostics = {
+  modelId: string;
+  modelVersion: string;
+  graphNodesConsidered: number;
+  graphEmbeddingsComputed: number;
+  graphEmbeddingsFromCache: number;
+  candidateEmbeddingsComputed: number;
+  candidateEmbeddingsFromCache: number;
+  candidateCount: number;
+  modeNodeCount: number;
+};
+
+export type SemanticRerankingResult<T extends RecommendationCandidate> = {
+  candidates: T[];
+  modeProfile: SemanticModeProfile;
+  diagnostics: SemanticRerankingDiagnostics;
+};
+
+;
+    const grams: string[] = [];
+    for (let index = 0; index <= padded.length - 3; index += 1) {
+      grams.push(padded.slice(index, index + 3));
+    }
+    return grams;
+  });
+  return [...words, ...bigrams, ...characterNgrams];
+};
+
+/**
+ * Small dependency-free local embedding baseline.
+ *
+ * This is deliberately not presented as a neural semantic model. It provides a
+ * deterministic hashed word/phrase/subword vector so the full semantic
+ * reranking/caching/mode pipeline can run locally now. The provider contract is
+ * intentionally identical to the future compact transformer encoder.
+ */
+export function createLocalHashEmbeddingProvider(
+  dimensions = 192,
+): LocalEmbeddingProvider {
+  const safeDimensions = Math.max(32, Math.min(1024, Math.floor(dimensions)));
+  return {
+    modelId: 'myalgo-local-hash-embedding',
+    modelVersion: `hash-v1-d${safeDimensions}`,
+    dimensions: safeDimensions,
+    async embed(texts) {
+      return texts.map((text) => {
+        const vector = new Array<number>(safeDimensions).fill(0);
+        const terms = embeddingTerms(text);
+        for (const term of terms) {
+          const primary = hashToken(term, 0x811c9dc5);
+          const secondary = hashToken(term, 0x9e3779b9);
+          const index = primary % safeDimensions;
+          const sign = (secondary & 1) === 0 ? 1 : -1;
+          const weight = term.includes('_') ? 1.25 : term.length === 3 ? 0.35 : 1;
+          vector[index] += sign * weight;
+        }
+        return vector;
+      });
+    },
+  };
+}
 
 const normalizeText = (value: string | null | undefined): string =>
   (value ?? '').replace(/\s+/g, ' ').trim();
@@ -265,6 +376,8 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     text: buildCandidateEmbeddingText(candidate),
   }));
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
+
+  await cache.flush?.();
 
   const enriched = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
