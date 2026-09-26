@@ -1,7 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('../apps/extension/dist/', import.meta.url);
+const root = fileURLToPath(new URL('../apps/extension/dist/', import.meta.url));
 const textExtensions = new Set(['.js', '.json', '.html', '.css', '.map', '.txt']);
 const secretPatterns = [
   ['Google API key', /AIza[0-9A-Za-z_-]{35}/g],
@@ -28,7 +29,7 @@ for (const file of files) {
   const content = await readFile(file, 'utf8');
   for (const [label, pattern] of secretPatterns) {
     pattern.lastIndex = 0;
-    if (pattern.test(content)) findings.push(`${label}: ${relative(root.pathname, file)}`);
+    if (pattern.test(content)) findings.push(`${label}: ${relative(root, file)}`);
   }
 }
 
