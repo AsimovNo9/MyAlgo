@@ -13,8 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createYoutubeSearchPageProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
-import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
+import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 
 type PageCandidate = {
   external_id: string;
@@ -192,29 +191,17 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
   missing.forEach((candidate) => metadataEnrichmentInFlight.add(candidate.external_id));
 
   const enrichOne = async (candidate: PageCandidate): Promise<VideoRecord | null> => {
-    try {
-      const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
-      if (!response.ok) return null;
-      const html = await response.text();
-      const rich = extractYouTubeWatchMetadataFromHtml(html);
-      return {
-        ...candidate,
-        title: rich.title ?? candidate.title,
-        channel_name: rich.channelName ?? candidate.channel_name ?? null,
-        channel_id: rich.channelId ?? candidate.channel_id ?? null,
-        thumbnail_url: rich.thumbnailUrl ?? candidate.thumbnail_url ?? null,
-        description: rich.description?.slice(0, 1600) ?? null,
-        duration_seconds: rich.durationSeconds,
-        published_at: rich.publishedAt ?? candidate.published_at ?? null,
-        topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
-        content_type: rich.category ?? null,
-        is_live: candidate.is_live === true || rich.isLive,
-        view_count: rich.viewCount,
-        enrichedAt: new Date().toISOString(),
-      } satisfies VideoRecord;
-    } catch {
-      return null;
-    }
+    const acquisition = youtubeConnector.acquisition;
+    if (!acquisition) return null;
+    const enriched = await acquisition.enrich(candidate);
+    if (!enriched) return null;
+    return {
+      ...candidate,
+      ...enriched,
+      external_id: candidate.external_id,
+      title: enriched.title || candidate.title,
+      enrichedAt: new Date().toISOString(),
+    } satisfies VideoRecord;
   };
 
   try {
@@ -510,7 +497,17 @@ async function refreshWebSearchCandidates(
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
-  const provider = createYoutubeSearchPageProvider();
+  const provider = youtubeConnector.acquisition?.search;
+  if (!provider) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: null,
+      lastError: 'The active connector does not support search acquisition.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
 
   let candidates: PageCandidate[] = [];
   let succeeded = 0;
