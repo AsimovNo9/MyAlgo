@@ -613,6 +613,18 @@ const renderReplacementSlots = (generation: number) => {
     if (id) blockedIds.add(id);
   });
 
+  const replacementCandidateDiagnostics = {
+    feed: cachedFeed.length,
+    traced: cachedFeed.filter((item) => Boolean(item.traceId)).length,
+    visible: cachedFeed.filter((item) => item.visible !== false).length,
+    eligible: cachedFeed.filter((item) => (
+      item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    )).length,
+    positiveScore: cachedFeed.filter((item) => (
+      (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+    )).length,
+  };
   const replacementQualifiedBeforeBlocking = cachedFeed.filter((item) => (
     Boolean(item.external_id && item.title && item.traceId)
     && item.visible !== false
@@ -658,6 +670,7 @@ const renderReplacementSlots = (generation: number) => {
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
+    candidates: replacementCandidateDiagnostics,
   });
 };
 
