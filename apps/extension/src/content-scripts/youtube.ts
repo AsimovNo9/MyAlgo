@@ -128,12 +128,13 @@ const clearExtensionPresentation = (showPaused = true) => {
   ).forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden]',
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
   ).forEach((container) => {
     container.style.removeProperty('display');
     delete container.dataset.personalAlgorithmSourceShelfHidden;
     delete container.dataset.personalAlgorithmSourceRowHidden;
     delete container.dataset.personalAlgorithmSourceSectionHidden;
+    delete container.dataset.personalAlgorithmSourceLayoutHidden;
   });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
     element.style.removeProperty('position');
@@ -538,6 +539,19 @@ const scheduleHomeRecommendationObservation = () => {
   }, 400);
 };
 
+const getFeedLayoutItem = (element: HTMLElement): HTMLElement | null => {
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 10; depth += 1) {
+    const parent = current.parentElement;
+    if (!parent) return current;
+    if (parent.id === 'contents' && parent.closest('ytd-rich-grid-renderer')) {
+      return current;
+    }
+    current = parent;
+  }
+  return null;
+};
+
 const syncSourceFilteredContainers = () => {
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden]',
@@ -559,6 +573,11 @@ const syncSourceFilteredContainers = () => {
       const structuralHost = shelf.closest<HTMLElement>(
         'ytd-rich-section-renderer, ytd-item-section-renderer',
       );
+      const layoutItem = getFeedLayoutItem(structuralHost ?? shelf);
+      if (layoutItem) {
+        layoutItem.dataset.personalAlgorithmSourceLayoutHidden = 'shorts';
+        layoutItem.style.setProperty('display', 'none', 'important');
+      }
       if (structuralHost) {
         structuralHost.dataset.personalAlgorithmSourceSectionHidden = 'shorts';
         structuralHost.style.setProperty('display', 'none', 'important');
@@ -673,6 +692,9 @@ const applyRankedFeed = () => {
     ).length,
     hiddenSourceRows: document.querySelectorAll(
       '[data-personal-algorithm-source-row-hidden]',
+    ).length,
+    hiddenSourceLayoutItems: document.querySelectorAll(
+      '[data-personal-algorithm-source-layout-hidden]',
     ).length,
   });
 };
