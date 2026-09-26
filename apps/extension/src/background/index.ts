@@ -209,7 +209,11 @@ async function rankLocalCandidates(
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
       .filter((event) => event.kind === 'feedback')
-      .map((event) => event.payload as { contentItemId?: string; eventType?: string }),
+      .map((event) => ({
+        ...(event.payload as { contentItemId?: string; eventType?: string; channelId?: string | null }),
+        recordedAt: event.recordedAt,
+      })),
+    state,
   );
   const ranked = scoreLocalCandidates(
     state,
