@@ -1005,6 +1005,48 @@ export function buildGraphRetrievalProfile(
   };
 }
 
+export function applyModeToRetrievalProfile(
+  profile: RecommendationProfile,
+  mode: 'Work' | 'Learning' | 'Relax' | string,
+): RecommendationProfile {
+  const normalizedMode = mode.trim().toLowerCase();
+  const modifiers = normalizedMode === 'learning'
+    ? {
+        goalSuffix: 'learn understand',
+        preferredFormats: ['tutorial', 'lecture', 'course', 'explainer'],
+        intents: ['learn', 'understand', 'study'],
+      }
+    : normalizedMode === 'work'
+      ? {
+          goalSuffix: 'practical implementation',
+          preferredFormats: ['guide', 'tutorial', 'case study'],
+          intents: ['implement', 'build', 'solve'],
+        }
+      : normalizedMode === 'relax'
+        ? {
+            goalSuffix: 'relax enjoyable',
+            preferredFormats: ['documentary', 'podcast', 'music'],
+            intents: ['relax', 'enjoy'],
+          }
+        : {
+            goalSuffix: '',
+            preferredFormats: profile.preferredFormats,
+            intents: [],
+          };
+
+  const goal = [profile.goal.trim(), modifiers.goalSuffix].filter(Boolean).join(' ');
+  return {
+    ...profile,
+    goal,
+    intents: [...new Set([...profile.intents, ...modifiers.intents])],
+    semanticTerms: [...new Set([...profile.semanticTerms, ...modifiers.intents])],
+    preferredFormats: [...new Set([
+      ...modifiers.preferredFormats,
+      ...profile.preferredFormats,
+    ])].slice(0, 4),
+  };
+}
+
 export function buildRecommendationProfile(algorithm?: Algorithm | null, catalog: ConceptCatalogEntry[] = [], learnedCreatorTerms: string[] = []): RecommendationProfile {
   const intentProfile = buildAlgorithmIntentProfile(algorithm, catalog);
   const rules = algorithm?.rules ?? [];

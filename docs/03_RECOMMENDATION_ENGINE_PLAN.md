@@ -119,7 +119,7 @@ A MyAlgo replacement must read like a real video card, not a debugging surface. 
 
 ### Search status
 
-Graph-derived query planning is implemented. RSS acquisition is implemented. A network web-search provider is **not yet implemented**. Search remains planned behind a source-neutral adapter, explicit user enablement/configuration, bounded execution, provenance, and privacy review in #206.
+Graph-derived query planning, RSS acquisition, and zero-config YouTube search-page discovery are implemented in #206/#212. Web discovery remains explicitly user-enabled, bounded, provenance-tagged, and separate from preference evidence. Search-page metadata is discovery-only; canonical watch-page enrichment supplies richer candidate metadata before scoring.
 
 ## Content understanding and semantic enrichment
 
@@ -254,3 +254,61 @@ This is local computation whenever possible.
 Modes modify policy/weights over one graph.
 
 They should not fork the underlying evidence graph.
+
+
+## Mode-aware retrieval and content classification
+
+Mode is a user-intent overlay, not a statement about every candidate.
+
+The active mode modifies retrieval intent and adds a bounded traceable score contribution only when candidate classification supports that mode:
+
+```text
+Personal Algorithm Graph goal/topics
+        +
+active mode intent
+        ↓
+bounded search query plans
+        ↓
+web/RSS candidate acquisition
+        ↓
+canonical YouTube metadata enrichment
+        ↓
+candidate content classification
+        ↓
+deterministic score + trace
+```
+
+Examples:
+
+- Learning mode expands the graph goal toward learn/understand/study and prefers tutorial/lecture/course/explainer query forms.
+- Work mode adds practical implementation/build/solve intent and prefers guides/tutorials/case studies.
+- Relax mode adds relax/enjoy intent and prefers documentary/podcast/music-style query forms.
+
+The active mode must not be rendered as a label on every video. A visible `Learning`, `Work`, or `Relax` label is derived from candidate metadata and shown only above a classification confidence threshold. A video can therefore be scored while Learning mode is active without being labeled Learning.
+
+### Web search adapter
+
+The first concrete provider is YouTube search-page discovery. The `WebSearchProvider` abstraction remains source-neutral, but the launch implementation issues bounded generated queries only to `https://www.youtube.com/results`, parses stable YouTube video IDs from `ytInitialData`, deduplicates them, and then runs those IDs through the canonical watch-page enrichment layer before scoring. No search box, API key, third-party search host, or optional host permission is required. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
+
+Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
+
+
+### Current PR #212 status
+
+The current implementation has passed acquisition-level live validation and CI. One observed browser run reported 4/4 search plans succeeded, 32 candidates fetched, 3 newly added, 29 deduplicated, 35 search-origin candidates retained in the reservoir, and no retrieval error. This establishes the search → reservoir path.
+
+The remaining live gate is search → scoring → replacement promotion after the bounded retrieved-discovery exploration change. Validate the new rank diagnostics (`searchCandidatesScored`, `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `maxSearchCandidateScore`) together with `retrievedDiscoveryExplorationAssignments` and confirm search activity no longer disrupts badges/replacements.
+
+CI #662 passes 25/25 recommender-core tests and 122/122 extension tests, plus typecheck, lint, build, YouTube API-boundary audit, secret scan, and artifact upload.
+
+### Retrieved-discovery exploration
+
+Retrieval provenance does not add preference weight. Search/RSS candidates are still scored by the same graph, metadata, mode-alignment, feedback, and policy signals as observed candidates.
+
+To prevent qualified retrieved candidates from being permanently crowded out of the global off-page ranking, presentation reserves at most two exploration opportunities per generation for recently retrieved discovery candidates. An exploration replacement must:
+- clear the normal replacement minimum score;
+- remain visible/eligible/unsuppressed;
+- not duplicate a native or already-used candidate;
+- score at least as high as the native target it would replace.
+
+All remaining opportunistic replacements retain the stricter normal uplift requirement. This changes presentation opportunity, not candidate score.

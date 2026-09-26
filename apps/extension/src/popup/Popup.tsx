@@ -13,6 +13,7 @@ const defaultSourceFilters: FeedSourceFilters = {
 
 const defaultRetrievalSettings: RetrievalSettings = {
   rssEnabled: false,
+  webSearchEnabled: false,
 };
 
 const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
@@ -25,6 +26,14 @@ const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
   rssCandidatesAdded: 0,
   rssCandidatesDeduplicated: 0,
   rssConsecutiveFailures: 0,
+  lastWebSearchAt: null,
+  nextWebSearchAllowedAt: null,
+  webSearchPlansAttempted: 0,
+  webSearchPlansSucceeded: 0,
+  webSearchCandidatesFetched: 0,
+  webSearchCandidatesAdded: 0,
+  webSearchCandidatesDeduplicated: 0,
+  webSearchConsecutiveFailures: 0,
   lastError: null,
 };
 
@@ -51,7 +60,8 @@ export function Popup() {
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
       setEnabled(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']) && result['personal-algorithm-enabled'] !== false);
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
-      setRetrievalSettings({ ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) });
+      const nextRetrievalSettings = { ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) };
+      setRetrievalSettings(nextRetrievalSettings);
       setRetrievalDiagnostics({ ...emptyRetrievalDiagnostics, ...(result['personal-algorithm-retrieval-diagnostics'] as RetrievalDiagnostics | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
@@ -102,8 +112,8 @@ export function Popup() {
     }
   };
 
-  const handleRetrievalChange = async (rssEnabled: boolean) => {
-    const nextSettings = { ...retrievalSettings, rssEnabled };
+  const updateRetrievalSettings = async (nextSettings: RetrievalSettings) => {
+    const previousSettings = retrievalSettings;
     setRetrievalSettings(nextSettings);
     setRetrievalBusy(true);
     try {
@@ -112,15 +122,27 @@ export function Popup() {
         payload: { retrievalSettings: nextSettings },
       }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
       if (!response?.ok) {
-        setRetrievalSettings(retrievalSettings);
+        setRetrievalSettings(previousSettings);
         setLastError(response?.error ?? 'Unable to update retrieval settings.');
-        return;
+        return false;
       }
       if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
       setLastError(null);
+      return true;
     } finally {
       setRetrievalBusy(false);
     }
+  };
+
+  const handleRetrievalChange = async (rssEnabled: boolean) => {
+    await updateRetrievalSettings({ ...retrievalSettings, rssEnabled });
+  };
+
+  const handleWebSearchChange = async (webSearchEnabled: boolean) => {
+    await updateRetrievalSettings({
+      ...retrievalSettings,
+      webSearchEnabled,
+    });
   };
 
   const handleRefreshRetrieval = async () => {
@@ -220,10 +242,10 @@ export function Popup() {
         </p>
         <button
           type="button"
-          disabled={!retrievalSettings.rssEnabled || retrievalBusy}
+          disabled={(!retrievalSettings.rssEnabled && !retrievalSettings.webSearchEnabled) || retrievalBusy}
           onClick={() => void handleRefreshRetrieval()}
         >
-          {retrievalBusy ? 'Refreshing…' : 'Refresh RSS discovery'}
+          {retrievalBusy ? 'Refreshing…' : 'Refresh discovery'}
         </button>
         <p style={{ margin: '6px 0 0', fontSize: 12 }}>
           RSS: {retrievalDiagnostics.rssCandidatesAdded} added · {retrievalDiagnostics.rssCandidatesDeduplicated} deduplicated · {retrievalDiagnostics.rssFeedsSucceeded}/{retrievalDiagnostics.rssChannelsConsidered} feeds succeeded
@@ -233,9 +255,22 @@ export function Popup() {
             {retrievalDiagnostics.lastError}
           </p>
         ) : null}
-        <p style={{ margin: '8px 0 0', maxWidth: 280, fontSize: 12 }}>
-          Web search: planned. Graph-derived query planning is available, but no network search provider is connected yet.
-        </p>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e7eb' }}>
+          <label style={{ display: 'block', marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={retrievalSettings.webSearchEnabled === true}
+              disabled={retrievalBusy}
+              onChange={(event) => void handleWebSearchChange(event.target.checked)}
+            /> Enable web discovery
+          </label>
+          <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
+            MyAlgo automatically searches YouTube from your graph goal/topics plus the active mode; there is no search box. Returned video IDs are passed through the normal YouTube enrichment layer before local scoring.
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+            Search: {retrievalDiagnostics.webSearchCandidatesAdded ?? 0} added · {retrievalDiagnostics.webSearchCandidatesDeduplicated ?? 0} deduplicated · {retrievalDiagnostics.webSearchPlansSucceeded ?? 0}/{retrievalDiagnostics.webSearchPlansAttempted ?? 0} plans succeeded
+          </p>
+        </div>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>

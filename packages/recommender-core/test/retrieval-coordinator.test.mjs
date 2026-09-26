@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan } from '../src/index.ts';
+import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan } from '../src/index.ts';
 
 test('buildRetrievalCoordinatorPlan allocates more budget to under-covered interests', () => {
   const plan = buildRetrievalCoordinatorPlan({
@@ -140,4 +140,30 @@ test('buildGraphRetrievalRevision changes when retrieval-relevant graph state ch
 
   assert.notEqual(first, second);
   assert.equal(first.startsWith('graph-2-'), true);
+});
+
+
+test('mode changes retrieval intent without replacing the graph goal', () => {
+  const base = {
+    goal: 'Distributed systems',
+    language: null,
+    explicitTopics: ['CRDTs'],
+    aliases: [],
+    intents: [],
+    semanticTerms: ['CRDTs'],
+    positiveRuleTerms: [],
+    negativeRuleTerms: [],
+    preferredFormats: ['talk'],
+    creatorTerms: [],
+  };
+
+  const learning = applyModeToRetrievalProfile(base, 'Learning');
+  const work = applyModeToRetrievalProfile(base, 'Work');
+
+  assert.match(learning.goal, /^Distributed systems /);
+  assert.match(learning.goal, /learn understand/);
+  assert.equal(learning.preferredFormats[0], 'tutorial');
+  assert.match(work.goal, /practical implementation/);
+  assert.equal(work.preferredFormats[0], 'guide');
+  assert.equal(base.goal, 'Distributed systems');
 });

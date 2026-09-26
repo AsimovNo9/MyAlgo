@@ -29,21 +29,29 @@ The working product model is:
 
 ## Current status and next work
 
-Implemented and validated foundations:
+Implemented foundations now include:
 
 - browser-observed YouTube evidence with source-neutral provenance;
 - browser-local Personal Algorithm Graph storage and deterministic reconciliation;
-- incremental creator relationship maintenance, validated against real exported state;
-- deterministic additive scoring and local runtime trace generation;
-- versioned privacy disclosure, minimized Chrome permissions, local-data deletion, and clean-profile privacy-gate validation.
+- deterministic additive scoring, calibrated display scoring, and trace-backed native replacements;
+- source-neutral RSS plus zero-config YouTube search-page candidate acquisition;
+- mode-aware retrieval intent separated from candidate content classification;
+- connector-owned acquisition/enrichment boundaries;
+- offscreen Worker isolation for YouTube search-page fetch/parsing;
+- bounded candidate/history/feed/evidence retention for long local sessions;
+- versioned privacy disclosure, local-data deletion, and CI-enforced YouTube API/security boundaries.
 
 Current execution order:
 
-1. implement source-neutral retrieval lanes for RSS and graph-derived web search (#206), including the provenance vocabulary cleanup in #202;
-2. expose graph provenance and per-item explanation paths (#170, #153);
-3. establish replay/evaluation baselines before adding richer enrichment (#162);
-4. add explicit graph controls and editing after the acquisition/explanation boundary is trustworthy.
+1. finish live validation of PR #212 / #206 / #211: search → enrichment → scoring → bounded exploration replacement, overlay responsiveness, and retention caps;
+2. finish #210 deterministic candidate-quality/replacement hardening;
+3. build graph provenance visualization and complete per-item explanation paths (#170, #153);
+4. establish replay/evaluation baselines (#162);
+5. add rebuildable **text embeddings** for semantic retrieval/scoring (#209), with multimodal enrichment deferred until measured need;
+6. add correction/Forget/history-selection controls (#154, #155, #178), then broader graph editing/counterfactual work.
 
-Safe native-feed replacement slots are merged in PR #205 (#160), including first-batch source controls, Hide Playables, local candidate-reservoir preservation, and trace-backed in-place replacements. Native-card enforcement and stale/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
+PR #212 currently keeps retrieval provenance score-neutral while reserving at most two bounded exploration opportunities for qualified RSS/search candidates that clear the normal replacement score and do not score below the native target. Search work is isolated from ranking in an MV3 offscreen Worker path.
+
+Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
 Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.

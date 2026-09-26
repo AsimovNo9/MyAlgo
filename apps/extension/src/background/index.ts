@@ -11,10 +11,10 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
-import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
+import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
+import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 
 type PageCandidate = {
   external_id: string;
@@ -67,18 +67,30 @@ type LocalFeedItem = CandidatePoolItem & {
   };
 };
 
-const MAX_CANDIDATE_POOL_SIZE = 1500;
-const MAX_HISTORY_EVIDENCE = 10000;
+const candidateHasAcquisitionMechanism = (
+  candidate: { provenance?: CandidateAcquisitionProvenance; acquisition_history?: CandidateAcquisitionProvenance[] },
+  mechanism: CandidateAcquisitionProvenance['mechanism'],
+): boolean => (
+  candidate.provenance?.mechanism === mechanism
+  || candidate.acquisition_history?.some((entry) => entry.mechanism === mechanism) === true
+);
+
+const MAX_CANDIDATE_POOL_SIZE = 800;
+const MAX_HISTORY_EVIDENCE = 2000;
 const MAX_FEED_CACHE_SIZE = 80;
-const MAX_VIDEO_STORE_SIZE = 800;
+const MAX_VIDEO_STORE_SIZE = 500;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 6;
-const MAX_SELECTION_EVENTS = 2000;
+const MAX_SELECTION_EVENTS = 750;
+const MAX_HOME_OBSERVATIONS = 300;
+const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
+const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
 const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
+  webSearchEnabled: false,
 };
 const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastRssSyncAt: null,
@@ -90,6 +102,14 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   rssCandidatesAdded: 0,
   rssCandidatesDeduplicated: 0,
   rssConsecutiveFailures: 0,
+  lastWebSearchAt: null,
+  nextWebSearchAllowedAt: null,
+  webSearchPlansAttempted: 0,
+  webSearchPlansSucceeded: 0,
+  webSearchCandidatesFetched: 0,
+  webSearchCandidatesAdded: 0,
+  webSearchCandidatesDeduplicated: 0,
+  webSearchConsecutiveFailures: 0,
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
@@ -183,29 +203,17 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
   missing.forEach((candidate) => metadataEnrichmentInFlight.add(candidate.external_id));
 
   const enrichOne = async (candidate: PageCandidate): Promise<VideoRecord | null> => {
-    try {
-      const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
-      if (!response.ok) return null;
-      const html = await response.text();
-      const rich = extractYouTubeWatchMetadataFromHtml(html);
-      return {
-        ...candidate,
-        title: rich.title ?? candidate.title,
-        channel_name: rich.channelName ?? candidate.channel_name ?? null,
-        channel_id: rich.channelId ?? candidate.channel_id ?? null,
-        thumbnail_url: rich.thumbnailUrl ?? candidate.thumbnail_url ?? null,
-        description: rich.description?.slice(0, 1600) ?? null,
-        duration_seconds: rich.durationSeconds,
-        published_at: rich.publishedAt ?? candidate.published_at ?? null,
-        topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
-        content_type: rich.category ?? null,
-        is_live: candidate.is_live === true || rich.isLive,
-        view_count: rich.viewCount,
-        enrichedAt: new Date().toISOString(),
-      } satisfies VideoRecord;
-    } catch {
-      return null;
-    }
+    const acquisition = youtubeConnector.acquisition;
+    if (!acquisition) return null;
+    const enriched = await acquisition.enrich(candidate);
+    if (!enriched) return null;
+    return {
+      ...candidate,
+      ...enriched,
+      external_id: candidate.external_id,
+      title: enriched.title || candidate.title,
+      enrichedAt: new Date().toISOString(),
+    } satisfies VideoRecord;
   };
 
   try {
@@ -354,7 +362,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   }
 
   let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
-  let channelIds = selectRssChannelIds(Object.values(store));
+  let channelIds = selectYoutubeRssChannelIds(Object.values(store));
 
   // Older cached metadata can be fresh but lack channel IDs. Seed channel IDs
   // directly in the extension worker from the bounded candidate reservoir.
@@ -363,7 +371,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     if (candidatePool.length > 0) {
       await enrichVideos(candidatePool);
       store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
-      channelIds = selectRssChannelIds(Object.values(store));
+      channelIds = selectYoutubeRssChannelIds(Object.values(store));
     }
   }
 
@@ -407,15 +415,13 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   const fetched = results.flatMap((result) => result.candidates);
   const uniqueFetched = [...new Map(fetched.map((item) => [item.external_id, item])).values()];
   const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
+  let enrichedCount = 0;
   if (uniqueFetched.length > 0) {
     await mergeCandidatePool(uniqueFetched);
 
-    // RSS is intentionally lightweight. Before the new candidates are ranked,
-    // enrich a bounded batch from their canonical watch pages through an open
-    // YouTube tab. This gives the local scorer/title UI substantially richer
-    // metadata without introducing a native yt-dlp binary, backend, API key, or
-    // YouTube Data API dependency.
-    await enrichVideos(uniqueFetched.slice(0, 18));
+    // RSS is intentionally lightweight. Canonical watch-page enrichment
+    // supplies the richer metadata used by classification/scoring.
+    enrichedCount = (await enrichVideos(uniqueFetched.slice(0, 18))).length;
   }
 
   const succeeded = results.filter((result) => result.ok).length;
@@ -446,6 +452,123 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     added: diagnostics.rssCandidatesAdded,
     deduplicated: diagnostics.rssCandidatesDeduplicated,
   });
+  return { diagnostics, changed: addedCount > 0 || enrichedCount > 0 };
+}
+
+
+async function refreshWebSearchCandidates(
+  force = false,
+  modeOverride?: string,
+): Promise<{ diagnostics: RetrievalDiagnostics; changed: boolean }> {
+  const settings = await getStorage<RetrievalSettings>(
+    STORAGE_KEYS.RETRIEVAL_SETTINGS,
+    DEFAULT_RETRIEVAL_SETTINGS,
+  );
+  const previous = await getStorage<RetrievalDiagnostics>(
+    STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+    EMPTY_RETRIEVAL_DIAGNOSTICS,
+  );
+  const nowMs = Date.now();
+
+  if (!settings.webSearchEnabled) return { diagnostics: previous, changed: false };
+  if (!force && !isRetrievalAllowed(previous.nextWebSearchAllowedAt, nowMs)) {
+    return { diagnostics: previous, changed: false };
+  }
+
+  const state = await personalAlgorithmStore.exportState();
+  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Work');
+  const baseProfile = buildGraphRetrievalProfile(state);
+  const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
+  const retrievalRevision = buildGraphRetrievalRevision(state);
+  const plans = buildRecommendationQueryPlans(
+    profile,
+    8,
+    `${retrievalRevision}:mode-${storedMode.toLowerCase()}`,
+    [],
+    [],
+    true,
+  ).slice(0, 4);
+
+  if (plans.length === 0) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, 0),
+      webSearchPlansAttempted: 0,
+      webSearchPlansSucceeded: 0,
+      webSearchCandidatesFetched: 0,
+      webSearchCandidatesAdded: 0,
+      webSearchCandidatesDeduplicated: 0,
+      webSearchConsecutiveFailures: 0,
+      lastError: null,
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+  const existingIds = new Set(existingPool.map((item) => item.external_id));
+  const acquiredAt = new Date(nowMs).toISOString();
+  const provider = youtubeConnector.acquisition?.search;
+  if (!provider) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: null,
+      lastError: 'The active connector does not support search acquisition.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  let candidates: PageCandidate[] = [];
+  let succeeded = 0;
+  let failureMessage: string | null = null;
+  try {
+    candidates = await acquireWebSearchCandidates(provider, plans, acquiredAt, plans.length, 8);
+    succeeded = plans.length;
+  } catch (error) {
+    failureMessage = error instanceof Error ? error.message : 'Web search failed.';
+  }
+
+  const unique = [...new Map(candidates.map((item) => [item.external_id, item])).values()];
+  const addedCount = unique.filter((item) => !existingIds.has(item.external_id)).length;
+  let enrichedCount = 0;
+  if (unique.length > 0) {
+    await mergeCandidatePool(unique);
+    // Search snippets are discovery-only metadata. Canonical YouTube watch-page
+    // enrichment supplies the richer metadata used by classification/scoring.
+    enrichedCount = (await enrichVideos(unique.slice(0, 18))).length;
+  }
+
+  const failed = Math.max(0, plans.length - succeeded);
+  const consecutiveFailures = plans.length > 0 && succeeded === 0
+    ? (previous.webSearchConsecutiveFailures ?? 0) + 1
+    : 0;
+  const diagnostics: RetrievalDiagnostics = {
+    ...previous,
+    lastWebSearchAt: acquiredAt,
+    nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, consecutiveFailures),
+    webSearchPlansAttempted: plans.length,
+    webSearchPlansSucceeded: succeeded,
+    webSearchCandidatesFetched: unique.length,
+    webSearchCandidatesAdded: addedCount,
+    webSearchCandidatesDeduplicated: Math.max(0, candidates.length - unique.length)
+      + unique.filter((item) => existingIds.has(item.external_id)).length,
+    webSearchConsecutiveFailures: consecutiveFailures,
+    lastError: failureMessage,
+  };
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+
+  console.info('[MyAlgo] web-search refresh', {
+    provider: provider.id,
+    mode: storedMode,
+    plans: plans.length,
+    fetched: unique.length,
+    added: addedCount,
+    failed,
+  });
+
   return { diagnostics, changed: addedCount > 0 };
 }
 
@@ -798,6 +921,19 @@ const handleRuntimeMessage = (
         const replacementInventory = ranked
           .filter((item) => !currentPageIds.has(item.external_id))
           .slice(0, MAX_FEED_CACHE_SIZE);
+        const searchCandidatesScored = ranked.filter((item) => (
+          !currentPageIds.has(item.external_id)
+          && candidateHasAcquisitionMechanism(item, 'web_search')
+        ));
+        const searchCandidatesQualified = searchCandidatesScored.filter((item) => (
+          item.visible !== false
+          && item.suppressed !== true
+          && item.policyOutcome === 'eligible'
+          && item.score >= youtubeConnector.presentation.replacementMinimumScore
+        ));
+        const searchCandidatesInReplacementInventory = replacementInventory.filter((item) => (
+          candidateHasAcquisitionMechanism(item, 'web_search')
+        ));
         const presentationFeed = [
           ...currentPageFeed,
           ...replacementInventory,
@@ -812,6 +948,12 @@ const handleRuntimeMessage = (
           cachedFeedSize: feedCache.length,
           currentPageScored: currentPageFeed.length,
           replacementInventorySize: replacementInventory.length,
+          searchCandidatesScored: searchCandidatesScored.length,
+          searchCandidatesQualified: searchCandidatesQualified.length,
+          searchCandidatesInReplacementInventory: searchCandidatesInReplacementInventory.length,
+          maxSearchCandidateScore: searchCandidatesScored.length > 0
+            ? Math.max(...searchCandidatesScored.map((item) => item.score))
+            : null,
           poolSize: candidatePool.length,
           rankingWorkingSetSize: workingPool.length,
           enriched: 0,
@@ -848,6 +990,15 @@ const handleRuntimeMessage = (
     const nextMode = payload?.mode ?? 'Work';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
+      const settings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      if (settings.webSearchEnabled) {
+        void refreshWebSearchCandidates(true, nextMode).then(async (refresh) => {
+          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
+        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
+      }
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
@@ -885,19 +1036,28 @@ const handleRuntimeMessage = (
         ...(payload?.retrievalSettings ?? {}),
       };
       await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
-      const refresh = next.rssEnabled
-        ? await refreshRssCandidates(!previousSettings.rssEnabled)
-        : {
-          diagnostics: await getStorage<RetrievalDiagnostics>(
-            STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
-            EMPTY_RETRIEVAL_DIAGNOSTICS,
-          ),
-          changed: false,
-        };
-      if (refresh.changed) {
+      let diagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      let changed = false;
+
+      if (next.rssEnabled) {
+        const rssRefresh = await refreshRssCandidates(!previousSettings.rssEnabled);
+        diagnostics = rssRefresh.diagnostics;
+        changed = changed || rssRefresh.changed;
+      }
+      if (next.webSearchEnabled) {
+        const searchRefresh = await refreshWebSearchCandidates(
+          !previousSettings.webSearchEnabled,
+        );
+        diagnostics = searchRefresh.diagnostics;
+        changed = changed || searchRefresh.changed;
+      }
+      if (changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, retrievalSettings: next, diagnostics: refresh.diagnostics });
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
@@ -907,11 +1067,29 @@ const handleRuntimeMessage = (
 
   if (type === 'REFRESH_RETRIEVAL') {
     void (async () => {
-      const refresh = await refreshRssCandidates(true);
-      if (refresh.changed) {
+      const settings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      let diagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      let changed = false;
+      if (settings.rssEnabled) {
+        const rssRefresh = await refreshRssCandidates(true);
+        diagnostics = rssRefresh.diagnostics;
+        changed = changed || rssRefresh.changed;
+      }
+      if (settings.webSearchEnabled) {
+        const searchRefresh = await refreshWebSearchCandidates(true);
+        diagnostics = searchRefresh.diagnostics;
+        changed = changed || searchRefresh.changed;
+      }
+      if (changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, diagnostics: refresh.diagnostics });
+      sendResponse({ ok: true, diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
@@ -920,21 +1098,27 @@ const handleRuntimeMessage = (
   }
 
   if (type === 'GET_RETRIEVAL_PLAN') {
-    void personalAlgorithmStore.exportState().then((state) => {
-      const profile = buildGraphRetrievalProfile(state);
+    void Promise.all([
+      personalAlgorithmStore.exportState(),
+      getStorage<string>(STORAGE_KEYS.MODE, 'Work'),
+    ]).then(([state, mode]) => {
+      const baseProfile = buildGraphRetrievalProfile(state);
+      const profile = applyModeToRetrievalProfile(baseProfile, mode);
       const retrievalRevision = buildGraphRetrievalRevision(state);
       const plans = buildRecommendationQueryPlans(
         profile,
         8,
-        retrievalRevision,
+        `${retrievalRevision}:mode-${mode.toLowerCase()}`,
         [],
         [],
         true,
       );
       sendResponse({
         ok: true,
+        mode,
         graphRevision: state.graph.currentRevision,
         retrievalRevision,
+        goal: profile.goal,
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
@@ -1007,6 +1191,9 @@ const handleRuntimeMessage = (
         toNormalizedInteraction(observation),
         `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`,
       );
+      if (events.length >= MAX_SELECTION_EVENTS) {
+        await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
+      }
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
@@ -1047,6 +1234,9 @@ const handleRuntimeMessage = (
         toNormalizedInteraction(observation),
         `interaction:watched:${observation.videoId}:${observation.sessionId}`,
       );
+      if (events.length >= MAX_SELECTION_EVENTS) {
+        await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
+      }
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store temporal watch observation.' }));
@@ -1087,9 +1277,11 @@ const handleRuntimeMessage = (
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
-      const validHistoryEvidence = historyEvidence.filter((item) => (
-        item?.externalId && item.title && item.provenance === 'youtube_history_dom'
-      ));
+      const validHistoryEvidence = historyEvidence
+        .filter((item) => (
+          item?.externalId && item.title && item.provenance === 'youtube_history_dom'
+        ))
+        .slice(0, MAX_HISTORY_ITEMS_PER_OBSERVATION);
       const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
         .slice(0, MAX_HISTORY_EVIDENCE);
       console.info('[MyAlgo] history observation prepared', {
@@ -1125,6 +1317,7 @@ const handleRuntimeMessage = (
           confidence: 1,
         })),
       );
+      await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
       console.info('[MyAlgo] history observation persisted', {
         storedEvidence: evidence.length,
       });
@@ -1144,7 +1337,11 @@ const handleRuntimeMessage = (
       const validIncoming = incoming.filter((observation) => (
         observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
       ));
-      const observations = mergeRecommendationObservations(existing, validIncoming);
+      const observations = mergeRecommendationObservations(
+        existing,
+        validIncoming,
+        MAX_HOME_OBSERVATIONS,
+      );
       console.info('[MyAlgo] recommendation observation prepared', {
         incoming: incoming.length,
         validIncoming: validIncoming.length,
@@ -1153,10 +1350,15 @@ const handleRuntimeMessage = (
       });
       await setStorage(STORAGE_KEYS.HOME_OBSERVATIONS, observations);
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
-      await Promise.all(validIncoming.map((observation) => persistNormalizedEvidence(
-        toNormalizedExposure(observation),
-        `exposure:${observation.exposureId}`,
-      )));
+      await personalAlgorithmStore.reconcileExposureEvidence(
+        observations.map((observation) => ({
+          id: `exposure:${observation.exposureId}`,
+          evidence: toNormalizedExposure(observation),
+          confidence: 1,
+        })),
+        'home_dom',
+      );
+      await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
       console.info('[MyAlgo] recommendation observation persisted', {
         storedObservations: observations.length,
       });
@@ -1178,9 +1380,12 @@ const handleRuntimeMessage = (
   return true;
 };
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => (
-  handleRuntimeMessage(message, sender, sendResponse)
-));
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if ((message as { target?: string } | null)?.target === 'youtube-search-offscreen') {
+    return false;
+  }
+  return handleRuntimeMessage(message, sender, sendResponse);
+});
 
 chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) => {
   sendResponse({ ok: true });

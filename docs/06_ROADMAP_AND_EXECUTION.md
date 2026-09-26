@@ -24,7 +24,7 @@ The extension may observe rendered `/feed/history` rows only after the user enab
 - visible history timestamp when present;
 - observation time and `youtube_history_dom` provenance.
 
-Evidence remains local, is deduplicated by video ID, and is capped at 10,000 records in the compatibility History store. The normalized Personal Algorithm state uses the same stable video identity and reconciles the current History snapshot atomically, replacing legacy timestamp-keyed History records while preserving unrelated evidence and removing unsupported inferred edges. The observer records local yield/failure counters for duplicate, injected, missing-ID, and missing-title rows. It must never send observations to a backend.
+Evidence remains local, is deduplicated by video ID, and is capped at 2,000 unique History records in retained local state; each History observation processes at most 500 rendered items. The normalized Personal Algorithm state uses the same stable video identity and reconciles the current History snapshot atomically, replacing legacy timestamp-keyed History records while preserving unrelated evidence and removing unsupported inferred edges. The observer records local yield/failure counters for duplicate, injected, missing-ID, and missing-title rows. It must never send observations to a backend.
 
 Completed validation: a real-browser session across multiple history scroll depths established that modern history cards expose creator metadata and that the initial creator gap was caused by selectors rather than virtualization/hydration. History titles are normalized at extraction, literal `Watch` placeholders are excluded/classified, repeated observations are deduplicated, and the resulting evidence remains local. Shorts Home observations now preserve real titles when available, although creator metadata can remain null on Shorts-specific rows. The browser fixture tests remain a regression guard rather than evidence that the live DOM is permanently stable.
 
@@ -210,7 +210,7 @@ scoring / ranking
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated. PR #198 hardened graph consistency, PR #199 implemented/browser-validated the local privacy gate, PR #203 locked the no-YouTube-Data-API launch boundary, PR #204 completed native-card enforcement/stale-loop hardening, and PR #205 completed safe native-slot replacements plus first-batch source controls. The next active product task is source-neutral retrieval expansion through RSS and graph-derived web search (#206/#202), followed by graph provenance/explanation UX (#170/#153).
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated. PR #198 hardened graph consistency, PR #199 implemented/browser-validated the local privacy gate, PR #203 locked the no-YouTube-Data-API launch boundary, PR #204 completed native-card enforcement/stale-loop hardening, and PR #205 completed safe native-slot replacements plus first-batch source controls. PR #208 merged RSS/source-neutral retrieval foundations. PR #212 now implements zero-config YouTube search-page discovery, connector-owned acquisition/enrichment, mode-aware retrieval, offscreen Worker search isolation, bounded retention, and retrieved-discovery exploration. The immediate gate is live promotion/performance validation for #206/#211, followed by #210 and then #170/#153.
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 
@@ -220,20 +220,21 @@ Live validation exposed that candidate acquisition can outgrow the resolution of
 
 Replacement-card presentation must also preserve normal video title/creator hierarchy; a MyAlgo score badge and trace control are annotations, not substitutes for ordinary video metadata.
 
-Web search remains planned rather than implemented: query planning exists, but no network search provider is currently wired.
+Web search is now implemented in PR #212 through YouTube's normal search-result pages under the existing YouTube host permission. Search runs from graph goal/topics + mode intent, parses `ytInitialData` off the ranking service-worker path, normalizes stable video IDs, and routes those IDs through canonical watch-page enrichment before scoring.
 
 ## Current execution order
 
-The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
+Older P-labels describe historical phases; use this sequence for current work:
 
-1. **#206 + #202 + #210** — finish source-neutral candidate acquisition (RSS now, graph-derived web search next), while improving deterministic candidate feature extraction, calibrated scoring, replacement uplift, and replacement-card metadata.
-2. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
-3. **#162** — establish replay/evaluation baselines before adding richer content understanding.
-4. **#209** — add rebuildable local semantic embeddings for graph neighbourhoods, retrieval expansion, traceable semantic scoring, clustering, and explanation support once the baseline shows the need.
-5. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
-6. **#169** — close the remaining local-runtime umbrella criterion with explicit offline/signed-out validation.
-7. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
-8. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector after the acquisition/explanation loop proves value.
+1. **PR #212 / #206 / #211** — finish live search-to-feed promotion and long-session responsiveness/retention validation.
+2. **#210** — finish deterministic candidate-quality and replacement-presentation hardening exposed by search promotion.
+3. **#170 + #153** — graph/provenance visualization and complete per-item trace explanation.
+4. **#162** — replay/evaluation baseline before semantic models.
+5. **#209** — rebuildable local text embeddings for semantic retrieval/scoring; multimodal remains deferred.
+6. **#154 + #155 + #178** — correction, Forget/provenance, and history-cluster controls.
+7. **#169 + #161 + #158 + #159** — remaining runtime validation, mode/editing, and counterfactual work.
+8. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and second connector.
+
 
 #160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
 

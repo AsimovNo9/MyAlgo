@@ -1,5 +1,6 @@
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from '../content-scripts/youtube-dom.ts';
 import type { PageProviderConnector } from './types';
+import { youtubeAcquisition } from './youtube-acquisition.ts';
 
 const createYouTubeContentIdentity = (externalId: string) => ({
   source: 'youtube',
@@ -40,6 +41,7 @@ export const youtubeConnector: PageProviderConnector = {
     'a[aria-label][href*="/shorts/"]',
   ],
   videoLinkSelector,
+  acquisition: youtubeAcquisition,
   presentation: {
     candidateLimit: 1000,
     minimumVisibleScore: 0,

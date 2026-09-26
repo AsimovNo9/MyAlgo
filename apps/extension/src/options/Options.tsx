@@ -9,7 +9,12 @@ export function Options() {
   const [status, setStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-history-observation-enabled', 'personal-algorithm-home-observation-enabled', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+    chrome.storage.local.get([
+      'personal-algorithm-mode',
+      'personal-algorithm-history-observation-enabled',
+      'personal-algorithm-home-observation-enabled',
+      'personal-algorithm-privacy-disclosure-accepted-version',
+    ]).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);

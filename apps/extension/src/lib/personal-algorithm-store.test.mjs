@@ -579,3 +579,63 @@ test('invalid or unknown schema versions migrate to a safe empty v2 state', asyn
   assert.deepEqual(state.evidence, []);
   assert.equal(state.graph.currentRevision, 0);
 });
+
+
+test('home exposure reconciliation keeps only the retained observation window', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  const makeExposure = (id) => ({
+    ...exposure,
+    exposureId: `${id}|home||0`,
+    content: { source: 'youtube', externalId: id },
+    metadata: { title: `Video ${id}` },
+  });
+
+  await store.reconcileExposureEvidence([
+    { id: 'exposure:a', evidence: makeExposure('a') },
+    { id: 'exposure:b', evidence: makeExposure('b') },
+  ]);
+  await store.reconcileExposureEvidence([
+    { id: 'exposure:b', evidence: makeExposure('b') },
+    { id: 'exposure:c', evidence: makeExposure('c') },
+  ]);
+
+  assert.deepEqual(
+    (await store.listEvidence()).map((record) => record.id).sort(),
+    ['exposure:b', 'exposure:c'],
+  );
+});
+
+test('evidence compaction bounds default evidence while preserving indefinite evidence', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  for (let index = 0; index < 5; index += 1) {
+    await store.upsertEvidence({
+      evidence: {
+        ...exposure,
+        exposureId: `video-${index}|home||0`,
+        content: { source: 'youtube', externalId: `video-${index}` },
+        observedAt: `2026-09-25T10:0${index}:00.000Z`,
+        metadata: { title: `Video ${index}` },
+      },
+    }, `default-${index}`);
+  }
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'pinned|home||0',
+      content: { source: 'youtube', externalId: 'pinned' },
+      metadata: { title: 'Pinned' },
+    },
+    retentionPolicy: 'indefinite',
+  }, 'pinned');
+
+  const removed = await store.compactEvidence(2, new Date('2026-09-26T00:00:00.000Z'));
+  const retained = await store.listEvidence();
+
+  assert.equal(removed, 3);
+  assert.equal(retained.filter((record) => record.retention.policy === 'default').length, 2);
+  assert.equal(retained.some((record) => record.id === 'pinned'), true);
+});

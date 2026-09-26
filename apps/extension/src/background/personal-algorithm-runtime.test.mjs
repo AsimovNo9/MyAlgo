@@ -4,6 +4,7 @@ import {
   buildLocalFeedbackSignals,
   buildLocalScoringPolicy,
   calibrateLocalScore,
+  classifyCandidateContent,
   extractLocalCandidateFeatures,
   scoreLocalCandidates,
 } from './personal-algorithm-runtime.ts';
@@ -257,4 +258,45 @@ test('calibrated scores are deterministic, monotonic, and bounded', () => {
   assert.ok(calibrateLocalScore(-20) < calibrateLocalScore(-10));
   assert.ok(calibrateLocalScore(1000) <= 100);
   assert.ok(calibrateLocalScore(-1000) >= 0);
+});
+
+
+test('content classification is independent of active mode and only labels strong learning evidence', () => {
+  assert.deepEqual(
+    classifyCandidateContent({
+      external_id: 'learning-video',
+      title: 'Distributed systems tutorial',
+      content_type: 'Education',
+    }),
+    { label: 'learning', confidence: 0.92 },
+  );
+  assert.equal(
+    classifyCandidateContent({
+      external_id: 'unknown-video',
+      title: 'Weekly update',
+    }).label,
+    null,
+  );
+});
+
+test('matching mode adds a traceable alignment feature without relabeling unrelated content', () => {
+  const learning = scoreLocalCandidates(state, [{
+    external_id: 'new-learning',
+    title: 'Learn Rust with a complete tutorial',
+  }], 'Learning')[0];
+  const work = scoreLocalCandidates(state, [{
+    external_id: 'new-learning',
+    title: 'Learn Rust with a complete tutorial',
+  }], 'Work')[0];
+
+  assert.equal(learning.content_label, 'learning');
+  assert.ok(learning.rawScore > work.rawScore);
+  assert.equal(
+    learning.trace.featureContributions.some((item) => item.label === 'mode alignment: learning'),
+    true,
+  );
+  assert.equal(
+    work.trace.featureContributions.some((item) => item.label === 'mode alignment: learning'),
+    false,
+  );
 });

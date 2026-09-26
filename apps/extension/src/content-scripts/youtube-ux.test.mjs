@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
+import { createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -331,4 +331,88 @@ test('opportunistic replacement assignments bind the selected candidate to its n
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0].target.externalId, 'native-low');
   assert.equal(assignments[0].item.external_id, 'replacement-a');
+});
+
+
+test('content presentation labels come from candidate classification, not active mode', () => {
+  assert.equal(
+    getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.9 }),
+    'Learning',
+  );
+  assert.equal(
+    getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.6 }),
+    null,
+  );
+  assert.equal(
+    getContentPresentationLabel({ score: 80 }),
+    null,
+  );
+});
+
+
+test('retrieved discovery can use a bounded exploration slot without provenance score bonus', () => {
+  const targets = [
+    { externalId: 'native-a', score: 60, nativeIndex: 0 },
+    { externalId: 'native-b', score: 63, nativeIndex: 1 },
+    { externalId: 'native-c', score: 66, nativeIndex: 2 },
+  ];
+  const candidates = [
+    {
+      external_id: 'search-a',
+      title: 'Search A',
+      score: 65,
+      visible: true,
+      traceId: 'trace-search-a',
+      policyOutcome: 'eligible',
+      acquisition_history: [{ mechanism: 'web_search', acquired_at: '2026-09-26T22:00:00.000Z' }],
+    },
+    {
+      external_id: 'rss-b',
+      title: 'RSS B',
+      score: 64,
+      visible: true,
+      traceId: 'trace-rss-b',
+      policyOutcome: 'eligible',
+      provenance: { mechanism: 'rss', acquired_at: '2026-09-26T22:00:00.000Z' },
+    },
+    {
+      external_id: 'observed-c',
+      title: 'Observed C',
+      score: 99,
+      visible: true,
+      traceId: 'trace-observed-c',
+      policyOutcome: 'eligible',
+      provenance: { mechanism: 'observed_dom', acquired_at: '2026-09-26T22:00:00.000Z' },
+    },
+  ];
+
+  assert.deepEqual(
+    selectRetrievedDiscoveryAssignments(targets, candidates, 2).map((assignment) => ({
+      target: assignment.target.externalId,
+      item: assignment.item.external_id,
+    })),
+    [
+      { target: 'native-a', item: 'search-a' },
+      { target: 'native-b', item: 'rss-b' },
+    ],
+  );
+});
+
+test('retrieved discovery never replaces a stronger native card', () => {
+  assert.deepEqual(
+    selectRetrievedDiscoveryAssignments(
+      [{ externalId: 'native-a', score: 70, nativeIndex: 0 }],
+      [{
+        external_id: 'search-a',
+        title: 'Search A',
+        score: 69,
+        visible: true,
+        traceId: 'trace-search-a',
+        policyOutcome: 'eligible',
+        provenance: { mechanism: 'web_search', acquired_at: '2026-09-26T22:00:00.000Z' },
+      }],
+      2,
+    ),
+    [],
+  );
 });

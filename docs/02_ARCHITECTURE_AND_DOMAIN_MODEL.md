@@ -416,3 +416,56 @@ A successfully rendered opportunistic replacement is held stable for 45 seconds 
 Badges and replacement presentation must not wait on network metadata enrichment. The critical path is now: collect current DOM candidates → merge/persist lightweight observations → hydrate from already-cached metadata → score the bounded working set → return/render. Canonical watch-page enrichment runs asynchronously afterward in the extension service worker and requests a later metadata rerank only when new metadata was actually persisted.
 
 Ordinary YouTube mutation/page-data churn must not invalidate a rank already in flight. Mutation and metadata events are coalesced into one queued rerank while the current response is allowed to render. Only hard lifecycle/semantic changes such as navigation, mode changes, graph changes, and explicit feedback invalidate the active generation.
+
+
+## 10. Mode, classification, and semantic enrichment boundaries
+
+Keep these three concepts separate:
+
+1. **Mode** is transient user intent. It affects retrieval planning and bounded score weighting.
+2. **Content classification** describes the candidate itself. UI labels such as `Learning` may be shown only when candidate metadata supports that classification with sufficient confidence.
+3. **Semantic enrichment** is rebuildable derived data. Text embeddings may improve candidate↔goal/topic similarity and retrieval expansion, but do not become canonical graph truth.
+
+The current deterministic classifier uses enriched textual metadata (title, description, keywords/category, format, creator) and returns a label plus confidence. It is intentionally conservative.
+
+Text embeddings are the next model layer to evaluate because they can improve semantic matching without requiring image/video inference. Multimodal thumbnail/video classification is deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
+
+
+### YouTube search-page acquisition
+
+The launch web-discovery provider uses YouTube's ordinary search-result pages under the extension's existing YouTube host permission. Generated queries come from the graph retrieval profile plus active mode intent. The provider parses embedded `ytInitialData` for stable video IDs and lightweight result metadata, then hands those IDs to the same canonical watch-page enrichment path used by RSS candidates. Search-page acquisition is candidate discovery only and never becomes preference evidence by itself. The provider-neutral `WebSearchProvider` interface remains so acquisition can be replaced later without coupling search transport to ranking.
+
+
+### Connector-owned acquisition adapters
+
+PR #212 keeps provider acquisition behind `PageProviderConnector.acquisition`. The background coordinator asks the active connector for its search provider and enrichment function; it does not construct YouTube search providers directly.
+
+The YouTube acquisition adapter contains search-page parsing, RSS mechanics, stable video-ID normalization, and canonical watch-page metadata enrichment. This preserves the intended dependency direction:
+
+```text
+background retrieval coordinator
+        ↓
+PageProviderConnector.acquisition
+        ↓
+provider-specific acquisition
+        ↓
+normalized RecommendationCandidate / metadata
+        ↓
+shared reservoir + scorer
+```
+
+Future connectors add acquisition adapters rather than provider branches to the retrieval coordinator.
+
+
+### Search worker isolation
+
+YouTube search acquisition must not block the extension service worker that handles ranking and presentation.
+
+The production YouTube search provider delegates `/results` fetching and large `ytInitialData` parsing to an offscreen extension document. That document spawns a dedicated Web Worker using Chrome's MV3 `offscreen` + `WORKERS` capability. The ranking service worker exchanges only the generated query and normalized search results with this context.
+
+If the offscreen capability is unavailable, the provider may fall back to direct fetch/parsing for compatibility, but the supported Chrome path is isolated.
+
+This preserves three performance domains:
+- YouTube renderer/content script: DOM observation and presentation only;
+- extension service worker: ranking, storage coordination, graph/retrieval scheduling;
+- search worker: search-page network payload and CPU-heavy result parsing.

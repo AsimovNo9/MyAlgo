@@ -4,14 +4,23 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #206 + #202 + #210 — source-neutral acquisition plus richer deterministic candidate scoring/calibration and replacement presentation hardening.
-2. #170 + #153 — graph provenance/visualization and per-item trace explanation.
-3. #162 — replay/evaluation baselines before richer enrichment.
-4. #209 — rebuildable local semantic embeddings for graph/retrieval/scoring/explanations.
-5. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
-6. #169 — finish explicit offline/signed-out local-runtime validation.
-7. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
-8. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+This is the authoritative near-term order after PR #212. Historical P-labels in issue titles are retained for continuity.
+
+1. **Finish and live-validate PR #212 / #206 / #211** — confirm search-origin candidates survive search isolation, enrichment, scoring, and bounded exploration into the native feed; confirm badges/replacements remain responsive during search and long-session retention caps hold.
+2. **#210 — finish deterministic candidate quality and replacement presentation** — close remaining score-resolution/presentation gaps exposed by live search promotion, without giving acquisition provenance preference weight.
+3. **#170 + #153 — graph provenance visualization and complete per-item “Why this?”** — make exact graph paths, evidence provenance, and trace contributions inspectable/actionable.
+4. **#162 — replay/evaluation baseline** — establish reproducible quality/performance fixtures before adding semantic models.
+5. **#209 — local text embeddings** — add rebuildable semantic candidate↔goal/topic matching and bounded retrieval expansion; keep multimodal inference deferred until measured text-only ambiguity justifies it.
+6. **#154 + #155 + #178 — correction/Forget/history-cluster controls** — give users direct control over what evidence and graph regions influence ranking.
+7. **#169 + #161 + #158 + #159** — finish offline/signed-out runtime validation, mode semantics, explicit graph creation/editing, and counterfactual replay.
+8. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and a second connector.
+
+### Current handoff state
+
+PR #212 is functionally implemented and CI-green. Live diagnostics already confirm YouTube search acquisition is working: 4/4 plans succeeded, 32 candidates were fetched in the observed run, 35 search-origin candidates were retained, and no retrieval error was reported. The remaining validation is downstream promotion and long-session responsiveness: verify `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `retrievedDiscoveryExplorationAssignments`, badge stability during search, and bounded local storage under sustained use.
+
+Do not start #209 multimodal work next. The next task after #212/#206/#211 validation is #210, then the trust/explanation path (#170/#153), then replay/evaluation (#162), then text embeddings (#209).
+
 
 #152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
 
@@ -263,13 +272,13 @@ Treat embeddings as replaceable derived enrichment around the canonical Personal
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS implemented in PR #208; web search remains planned**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS merged in PR #208; YouTube search-page discovery implemented in PR #212; final live promotion validation remains**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
 ### [#202](https://github.com/AsimovNo9/MyAlgo/issues/202): Refine retrieval provenance vocabulary for source-neutral acquisition
 
-Complete as part of #206. Replace provider/API-implying labels such as `youtube_search` and `youtube_subscription` with connector + acquisition mechanism + query-lane provenance while preserving the generic retrieval planner.
+Completed in merged PR #208. Provider/API-implying labels were replaced with connector + acquisition mechanism + query-lane provenance while preserving the generic retrieval planner.
 
 ### [#200](https://github.com/AsimovNo9/MyAlgo/issues/200): Update stale GitHub repository description
 
@@ -288,4 +297,4 @@ Implementation and clean-profile browser validation are complete in PR #199. Rem
 
 ### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions
 
-Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. The first hardening slice bounds ranking and persistence working sets, moves metadata parsing to the extension worker, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Follow-up work includes incremental score caching, evidence/graph compaction, stress testing, and a dedicated CPU worker only if profiling still justifies it.
+Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. Hardening now bounds ranking/persistence/evidence stores, isolates YouTube search fetch/parsing in an offscreen dedicated Worker, reconciles Home exposure evidence to a bounded window, compacts default/expired evidence, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Remaining work is sustained live validation plus incremental score caching only if profiling still justifies it.

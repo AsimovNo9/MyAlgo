@@ -191,3 +191,56 @@ For live replacement validation, render at least one replacement and then allow 
 ### Overlay first-paint latency regression
 
 Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation.
+
+
+## Web search, mode, and classification validation
+
+Validate the search/classification slice with the following invariants:
+
+1. Changing mode changes generated search intent while preserving the underlying graph goal.
+2. Search sends only bounded normalized graph-derived terms plus mode intent; it does not send raw history rows, full graph state, explicit feedback, or scoring traces.
+3. Search requires no user API key, third-party endpoint, or optional host permission; it runs only against YouTube search pages under the existing YouTube host permission.
+4. YouTube search-page `ytInitialData` is parsed into bounded unique video IDs, and duplicate renderer variants are collapsed by video ID.
+5. Search-page metadata is replaced/augmented by canonical watch-page enrichment before candidate scoring when enrichment is available.
+6. Retrieval mechanism itself contributes no preference weight.
+7. Active Learning mode alone does not produce a Learning UI label.
+8. A Learning label is rendered only when the candidate classifier reports learning with the configured confidence threshold.
+9. Mode-alignment score contributions appear in the deterministic trace only when candidate classification matches the mode.
+10. Search/enrichment remains off the initial overlay first-paint path.
+
+
+### Search isolation and retention regression
+
+For long-session validation:
+1. enabling/refreshing web discovery must not prevent `RANK_PAGE` responses or remove existing badges while search is fetching/parsing;
+2. search parsing runs in the offscreen dedicated worker on supported Chrome;
+3. scrolling/searching for an extended session keeps candidate, metadata, History, Home exposure, selection, and evidence stores at their documented caps;
+4. Home exposure evidence count follows the retained Home observation window instead of monotonically increasing;
+5. evidence compaction preserves indefinite evidence and graph nodes referenced by retained evidence, edges, or user edits.
+
+
+### Current search validation checkpoint
+
+Observed live retrieval diagnostics:
+
+```text
+plansAttempted: 4
+plansSucceeded: 4
+fetched: 32
+added: 3
+deduplicated: 29
+searchCandidatesInPool: 35
+error: null
+```
+
+Interpretation: acquisition is working; the active validation target is downstream scoring/presentation. The next live run must capture the promotion diagnostics below and confirm at least one qualified search-origin candidate can reach a replacement without destabilizing the overlay.
+
+### Search-to-feed promotion diagnostics
+
+Live rank diagnostics expose:
+- `searchCandidatesScored`;
+- `searchCandidatesQualified`;
+- `searchCandidatesInReplacementInventory`;
+- `maxSearchCandidateScore`.
+
+A healthy search run can fetch candidates without producing replacements when none clear the score/native-quality gates. Validation should distinguish acquisition failure from ranking/presentation rejection. Retrieved-discovery exploration may fill at most two replacement opportunities and must never replace a higher-scoring native target.
