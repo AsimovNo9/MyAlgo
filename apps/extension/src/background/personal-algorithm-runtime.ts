@@ -32,6 +32,11 @@ export type LocalRuntimeCandidate = {
   semantic_graph_similarity?: number | null;
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
+  semantic_graph_matches?: Array<{
+    node_id: string;
+    node_label: string;
+    similarity: number;
+  }>;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
 };
@@ -253,14 +258,33 @@ const semanticAlignmentFeatures = (
   const modeSimilarity = Number(candidate.semantic_mode_similarity ?? 0);
 
   if (Number.isFinite(graphSimilarity) && graphSimilarity >= 0.2) {
-    features.push({
-      id: 'semantic:graph',
-      label: 'semantic match: personal graph',
-      value: Number((18 * Math.min(1, graphSimilarity)).toFixed(2)),
-      sourceId: candidate.semantic_model_version
-        ? `embedding:${candidate.semantic_model_version}`
-        : 'embedding',
-    });
+    const matches = (candidate.semantic_graph_matches ?? [])
+      .filter((match) => Number.isFinite(match.similarity) && match.similarity > 0)
+      .slice(0, 3);
+    const semanticValue = 18 * Math.min(1, graphSimilarity);
+    const totalSimilarity = matches.reduce((sum, match) => sum + match.similarity, 0);
+
+    if (matches.length > 0 && totalSimilarity > 0) {
+      for (const match of matches) {
+        features.push({
+          id: `semantic:graph:${match.node_id}`,
+          label: `semantic match: ${match.node_label}`,
+          value: Number((semanticValue * (match.similarity / totalSimilarity)).toFixed(2)),
+          sourceId: candidate.semantic_model_version
+            ? `embedding:${candidate.semantic_model_version}`
+            : 'embedding',
+        });
+      }
+    } else {
+      features.push({
+        id: 'semantic:graph',
+        label: 'semantic match: personal graph',
+        value: Number(semanticValue.toFixed(2)),
+        sourceId: candidate.semantic_model_version
+          ? `embedding:${candidate.semantic_model_version}`
+          : 'embedding',
+      });
+    }
   }
 
   if (Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
