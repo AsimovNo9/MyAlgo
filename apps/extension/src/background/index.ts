@@ -247,6 +247,7 @@ chrome.runtime.onInstalled.addListener((details) => {
         includeDiscovery: true,
         includeShorts: true,
         includeLive: true,
+        includePlayables: true,
       },
       // User-owned/local observational state must survive extension updates.
       [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
