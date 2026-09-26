@@ -264,6 +264,8 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
+  const state = await personalAlgorithmStore.exportState();
+  const graphRevision = String(state.graph.currentRevision);
 
   const results = await Promise.all(channelIds.map(async (channelId) => {
     const sourceUrl = buildYoutubeRssFeedUrl(channelId);
@@ -273,7 +275,12 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
       const xml = await response.text();
       return {
         ok: true as const,
-        candidates: parseYoutubeRssFeed(xml, acquiredAt, sourceUrl),
+        candidates: parseYoutubeRssFeed(xml, acquiredAt, sourceUrl).map((candidate) => ({
+          ...candidate,
+          provenance: candidate.provenance
+            ? { ...candidate.provenance, graph_revision: graphRevision }
+            : undefined,
+        })),
       };
     } catch {
       return { ok: false as const, candidates: [] };
