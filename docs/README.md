@@ -42,7 +42,7 @@ This separation is a compliance design decision, not merely an implementation de
 
 The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. Creator relationships are maintained incrementally and can be deterministically rebuilt from retained evidence. The Chrome privacy gate is implemented and has been manually validated in a clean browser profile.
 
-The #168 repository/runtime audit found no YouTube Data API integration in the launch path and added CI guardrails for that boundary. Native-card enforcement plus stale/self-observation hardening are merged and live-browser validated in PR #204 (#152/#171). The next active engineering task is safe replacement slots (#160), followed by provenance/explanation UX through #170/#153.
+The #168 repository/runtime audit found no YouTube Data API integration in the launch path and added CI guardrails for that boundary. PR #204 completed native-card enforcement/stale-loop hardening and PR #205 completed safe native-slot replacement plus first-batch source controls (#160). The next active engineering task is source-neutral candidate acquisition through RSS and graph-derived web search (#206), with provenance cleanup in #202, followed by provenance/explanation UX through #170/#153.
 
 ## MVP product
 
