@@ -317,3 +317,29 @@ future preference inference
 ```
 
 The final arrow is deliberately outside #148. A watched History record is evidence; it is not itself a `user → prefers → topic` edge.
+
+
+## Acquisition connector boundary
+
+Provider-specific candidate acquisition belongs to the connector layer just like provider-specific evidence observation.
+
+`PageProviderConnector.acquisition` may expose:
+- a source-neutral `WebSearchProvider` implementation for provider-native search;
+- canonical candidate enrichment that maps provider-specific pages/responses into normalized candidate metadata.
+
+For YouTube, the connector owns:
+- `/results` URL construction;
+- `ytInitialData` parsing and renderer traversal;
+- YouTube URL/video-ID normalization;
+- `web_search` candidate provenance construction;
+- YouTube RSS URL/parsing/channel selection;
+- canonical watch-page fetch/parsing for metadata enrichment.
+
+Generic retrieval/background orchestration owns only:
+- bounded query-plan execution;
+- refresh/backoff timing;
+- candidate deduplication/reservoir merge;
+- acquisition-history preservation;
+- cache/concurrency policy.
+
+The generic retrieval module must not import or encode provider renderer names, provider URL paths, provider-specific ID formats, or provider-specific HTML parsing.
