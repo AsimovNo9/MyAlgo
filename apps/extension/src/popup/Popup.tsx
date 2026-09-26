@@ -1,6 +1,7 @@
 import React from 'react';
 import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
 import type { FeedItem, FeedSourceFilters } from '@repo/shared-types';
+import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
 const defaultSourceFilters: FeedSourceFilters = {
   subscribedOnly: false,
@@ -15,17 +16,19 @@ export function Popup() {
   const [mode, setMode] = React.useState('Work');
   const [feedCount, setFeedCount] = React.useState(0);
   const [lastError, setLastError] = React.useState<string | null>(null);
-  const [enabled, setEnabled] = React.useState(true);
+  const [enabled, setEnabled] = React.useState(false);
+  const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [sourceFilters, setSourceFilters] = React.useState<FeedSourceFilters>(defaultSourceFilters);
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-last-error']).then((result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
       setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
       setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
-      setEnabled(result['personal-algorithm-enabled'] !== false);
+      setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
+      setEnabled(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']) && result['personal-algorithm-enabled'] !== false);
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
@@ -44,6 +47,16 @@ export function Popup() {
     setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
   };
 
+  const handleAcceptDisclosure = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'ACCEPT_PRIVACY_DISCLOSURE' }) as { ok?: boolean; error?: string };
+    if (!response?.ok) {
+      setLastError(response?.error ?? 'Unable to save privacy disclosure acceptance.');
+      return;
+    }
+    setDisclosureAccepted(true);
+    setEnabled(true);
+  };
+
   const handleToggleEnabled = async () => {
     const nextEnabled = !enabled;
     const response = await chrome.runtime.sendMessage({ type: 'SET_ENABLED', payload: { enabled: nextEnabled } }) as { ok?: boolean; enabled?: boolean };
@@ -59,6 +72,22 @@ export function Popup() {
   };
 
   const modeOptions = ['Work', 'Learning', 'Relax'];
+
+  if (!disclosureAccepted) {
+    return (
+      <main style={{ minWidth: 300, maxWidth: 360, padding: 16, fontFamily: 'sans-serif' }}>
+        <h2 style={{ marginTop: 0 }}>Before MyAlgo observes YouTube</h2>
+        <p><strong>Disclosure v{PRIVACY_DISCLOSURE_VERSION}</strong></p>
+        <p>MyAlgo observes {PRIVACY_DISCLOSURE.pages.toLowerCase()}.</p>
+        <p>It records {PRIVACY_DISCLOSURE.data} to {PRIVACY_DISCLOSURE.purpose}.</p>
+        <p>{PRIVACY_DISCLOSURE.storage}. {PRIVACY_DISCLOSURE.transfer}.</p>
+        <p>{PRIVACY_DISCLOSURE.deletion}.</p>
+        <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
+        <button type="button" onClick={() => void chrome.runtime.openOptionsPage()} style={{ marginLeft: 8 }}>Review settings</button>
+        {lastError ? <p style={{ color: '#b91c1c' }}>{lastError}</p> : null}
+      </main>
+    );
+  }
 
   return (
     <main style={{ minWidth: 260, padding: 16, fontFamily: 'sans-serif' }}>
