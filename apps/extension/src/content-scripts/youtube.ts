@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -487,31 +487,20 @@ const syncSourceFilteredContainers = () => {
   document.querySelectorAll<HTMLElement>(
     'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
   ).forEach((shelf) => {
-    if (sourceFilters.includeShorts === false) {
-      const hasShorts = Boolean(
+    const reason = getSourceShelfHideReason({
+      heading: shelf.querySelector<HTMLElement>(
+        '#title, #title-container, h2, h3, yt-formatted-string',
+      )?.textContent ?? '',
+      hasShortsLink: Boolean(
         shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
-      );
-      if (hasShorts) {
-        hideShelf(shelf, 'shorts');
-        return;
-      }
-    }
-
-    if (sourceFilters.includePlayables === false) {
-      const heading = normalizeText(
-        shelf.querySelector<HTMLElement>(
-          '#title, #title-container, h2, h3, yt-formatted-string',
-        )?.textContent ?? '',
-      );
-      const hasPlayableLink = Boolean(
+      ),
+      hasPlayableLink: Boolean(
         shelf.querySelector(
           'a[href*="/playables"], a[href*="playables?"], a[href*="/game/"]',
         ),
-      );
-      if (heading.includes('playables') || hasPlayableLink) {
-        hideShelf(shelf, 'playables');
-      }
-    }
+      ),
+    }, sourceFilters);
+    if (reason) hideShelf(shelf, reason);
   });
 
   // YouTube can retain an otherwise-empty rich-grid row after every card in it
