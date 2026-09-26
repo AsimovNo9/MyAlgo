@@ -7,12 +7,11 @@
 The extension is Manifest V3 and requests:
 
 - `storage`;
-- required HTTPS host access for `https://*.youtube.com/*`;
-- optional HTTPS host permission capability for a user-configured web-search endpoint.
+- required HTTPS host access for `https://*.youtube.com/*`.
 
 It does not request `<all_urls>`, Chrome `history`, `tabs`, `cookies`, `webRequest`, or `scripting`.
 
-The YouTube host permission is required because MyAlgo's disclosed single purpose depends on observing rendered YouTube content and applying user-controlled feed decisions on those pages. Web-search host access is optional: the extension requests the exact configured HTTPS origin only from a direct user action, and removes that origin grant when search is disabled or the endpoint origin changes.
+The YouTube host permission is required because MyAlgo's disclosed single purpose depends on observing rendered YouTube content, retrieving optional YouTube RSS/search-page candidates, enriching candidate metadata, and applying user-controlled feed decisions on those pages.
 
 ## User-data inventory
 
@@ -28,9 +27,9 @@ The launch extension handles web activity / website content and user interaction
 | Personal Algorithm state | evidence, graph nodes/edges, revisions | user model | local |
 | Recommendation state | candidate cache, scores, compact traces | feed control/debugging | local |
 | Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
-| Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned public YouTube URLs/snippets; user-supplied PrivAU API key when PrivAU is selected | expand candidate reservoir | PrivAU (`https://priv.au`) is the default provider; queries and the API authentication header go only to PrivAU, or to an explicitly selected custom HTTPS SearXNG endpoint; results are stored locally and enriched from YouTube before scoring |
+| Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned YouTube video IDs/titles/snippets | expand candidate reservoir | bounded requests to YouTube search pages under the existing YouTube host permission; results stored locally and enriched from canonical YouTube watch pages before scoring |
 
-The local-first MVP does not send observed activity, raw evidence, full graph state, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web search sends only bounded normalized graph-derived goal/topic queries plus active mode intent to the HTTPS search endpoint explicitly configured by the user.
+The local-first MVP does not send observed activity, raw evidence, full graph state, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages.
 
 ## Disclosure and affirmative acceptance
 
@@ -39,7 +38,7 @@ Chrome Web Store disclosure has two layers:
 1. **Before installation:** the Store listing and Privacy practices tab must prominently describe the user data handled and its use. Publishing requires the developer to complete these dashboard fields.
 2. **Before in-product observation:** MyAlgo uses a versioned disclosure gate. Until the current disclosure version is affirmatively accepted, the content script starts paused and the background rejects observation/ranking messages.
 
-Disclosure v3 adds the optional user-configured web-search candidate-acquisition boundary on top of the v2 YouTube RSS boundary. The current disclosure explains:
+Disclosure v3 adds optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. The current disclosure explains:
 
 - pages observed;
 - data categories;
@@ -87,9 +86,9 @@ Pause is not deletion: pausing stops new observation/enforcement but retained lo
 
 The extension runs on YouTube and can request YouTube-owned URLs for metadata or user navigation. With explicit RSS discovery enabled it can also request public YouTube channel RSS feeds using already observed channel IDs.
 
-With explicit web search enabled, the user supplies a SearXNG-compatible HTTPS endpoint and grants that exact origin. MyAlgo sends only bounded graph-derived goal/topic queries plus the active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-result snippets are discovery metadata and are followed by canonical YouTube enrichment before scoring.
+With explicit web discovery enabled, MyAlgo requests YouTube search pages using only bounded graph-derived goal/topic queries plus active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-page snippets are discovery metadata and are followed by canonical YouTube watch-page enrichment before scoring.
 
-Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, bundled third-party search credential, or materially different processor is a new data-flow boundary and requires review before collection begins.
+Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, third-party search provider, or materially different processor is a new data-flow boundary and requires review before collection begins.
 
 ## Package/security checks
 
