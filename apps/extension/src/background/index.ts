@@ -177,7 +177,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
 
-  const enrichedResults = await Promise.all(missing.map(async (candidate): Promise<VideoRecord | null> => {
+  const enrichOne = async (candidate: PageCandidate): Promise<VideoRecord | null> => {
     try {
       const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
       if (!response.ok) return null;
@@ -201,7 +201,12 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     } catch {
       return null;
     }
-  }));
+  };
+
+  const enrichedResults: Array<VideoRecord | null> = [];
+  for (let index = 0; index < missing.length; index += 2) {
+    enrichedResults.push(...await Promise.all(missing.slice(index, index + 2).map(enrichOne)));
+  }
   const enriched = enrichedResults.filter((record): record is VideoRecord => record !== null);
 
   if (enriched.length === 0) return [];
