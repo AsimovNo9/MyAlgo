@@ -97,3 +97,25 @@ test('generic correlation is deterministic across equivalent input copies', () =
     correlateEvidence(JSON.parse(JSON.stringify(exposures)), JSON.parse(JSON.stringify(interactions))),
   );
 });
+
+
+test('watch correlation uses one authoritative exposure instead of every prior exposure', () => {
+  const exposures = [
+    exposure('youtube', 'video-1', 'exp-a', '2026-09-25T10:00:00.000Z'),
+    exposure('youtube', 'video-1', 'exp-b', '2026-09-25T10:03:00.000Z'),
+  ];
+  const interactions = [
+    interaction('youtube', 'video-1', 'clicked', '2026-09-25T10:01:00.000Z', 'exp-a'),
+    interaction('youtube', 'video-1', 'clicked', '2026-09-25T10:04:00.000Z', 'exp-b'),
+    interaction('youtube', 'video-1', 'watched', '2026-09-25T10:05:00.000Z', 'exp-b'),
+  ];
+
+  const timeline = correlateEvidence(exposures, interactions)[0];
+  const clickedWatched = timeline.correlations.filter((item) => item.kind === 'clicked_watched');
+  const surfacedWatched = timeline.correlations.filter((item) => item.kind === 'surfaced_watched');
+
+  assert.equal(clickedWatched.length, 1);
+  assert.equal(clickedWatched[0].clickedExposureId, 'exp-b');
+  assert.equal(surfacedWatched.length, 1);
+  assert.equal(surfacedWatched[0].surfacedExposureId, 'exp-b');
+});

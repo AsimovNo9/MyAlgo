@@ -150,16 +150,16 @@ Foundation models may produce structured content evidence:
 
 This is content evidence. It is not itself the user model.
 
-## 3. Foundation-model boundary
+## 3. Foundation-model and semantic-enrichment boundary
 
 ```text
-Foundation model
+content / graph inputs
       ↓
-content evidence
+replaceable local enrichment
       ↓
-Personal Algorithm Graph
+semantic features / content evidence
       ↓
-transparent scoring
+Personal Algorithm Graph + deterministic scoring
 ```
 
 Possible enrichment later:
@@ -170,12 +170,47 @@ Possible enrichment later:
 - transcript where legitimately available
 - thumbnail vision
 - bounded comment sampling
-- embeddings
-- optional summaries
+- local embeddings
+- optional local summaries / explanation synthesis
 
-Enrichment must be asynchronous, cached appropriately, provenance-aware, and replaceable.
+The Personal Algorithm Graph remains the authoritative, inspectable user model. Embeddings are **rebuildable derived data**, not canonical preference state.
 
-A model-version change must not silently reconstruct the user's graph.
+```text
+evidence + explicit edits
+        ↓
+Personal Algorithm Graph (authoritative)
+        │
+        ├── symbolic nodes / edges / provenance
+        │
+        └── local embeddings (recomputable)
+                  ↓
+          semantic neighbourhoods
+                  ↓
+retrieval expansion / candidate matching / score features
+                  ↓
+deterministic scorer + trace
+```
+
+Embeddings may propose semantically related graph concepts, expand retrieval intents, cluster user-interest regions, and produce candidate similarity features. Similarity alone must not silently create permanent preference edges or override explicit feedback/hard policy.
+
+Each embedding cache record should be tied to stable owner identity plus model ID/version, input hash, dimensions, and generation time so a model change can invalidate/rebuild semantic enrichment without changing canonical evidence, graph edits, or preference state.
+
+A compact local embedding encoder is preferred for vector generation. A later local generative model may synthesize natural-language explanations from bounded structured trace/path inputs, but it must not independently infer why the user likes an item from raw history.
+
+For “Why am I seeing this?”, semantic machinery should resolve to symbolic paths such as:
+
+```text
+Goal: Learn distributed systems
+  → Local-first software
+  → CRDTs
+  → this candidate
+```
+
+Raw vector distances/model internals belong in debug provenance, not the primary user-facing reason.
+
+Enrichment must be asynchronous, cached appropriately, provenance-aware, replaceable, and safe to delete/recompute.
+
+A model-version change must not silently reconstruct the user's graph. See #209.
 
 ## 4. Scoring
 
@@ -231,9 +266,9 @@ Safe replacement is now layered on top of that enforcement boundary in #160. A r
 
 The legacy horizontal Personal picks shelf is no longer part of the YouTube runtime. The native YouTube feed is the single recommendation surface and MyAlgo starts applying persisted presentation controls from the first available Home batch rather than waiting on a fixed startup delay. Explicit source controls currently include Shorts, Live, and Playables; source-filter removals are terminal presentation hides and never become replacement slots. Once native-card enforcement and safe replacement slots are active, MyAlgo uses a single coherent feed surface: YouTube's native grid/list, annotated and selectively replaced in place. This avoids presenting a second horizontal feed that could be mistaken for the primary recommendation surface.
 
-Replacement presentation is generation-scoped and synthetic: it carries trace/score/mode/source-slot metadata, is excluded from candidate/evidence/interaction observation, and is removed on a new generation, route/mode/source/graph invalidation, pause, or reactivation. The YouTube connector currently requires a positive local score (`replacementMinimumScore = 1`) and caps a render at six replacements. If no qualified candidate exists, the native rejection remains unfilled rather than inventing content.
+Replacement presentation is generation-scoped and synthetic: it carries trace/score/mode/source-slot metadata, is excluded from candidate/evidence/interaction observation, and is removed on a new generation, route/mode/source/graph invalidation, pause, or reactivation. The YouTube connector now compares deterministic calibrated display scores: a replacement candidate must clear `replacementMinimumScore = 55`, opportunistic swaps require at least a 5-point display-score uplift over the native card, and a render remains capped at six replacements. The raw additive score remains the replay/explanation authority; calibration is only a bounded presentation/ranking layer. If no qualified candidate exists, the native card remains rather than creating a blank slot.
 
-The replacement UI preserves the target slot footprint and target media aspect ratio, links only to the canonical provider URL, and exposes a bounded trace entry point for the later #153 explanation surface. It does not mutate the Personal Algorithm Graph or create evidence merely because MyAlgo rendered the card.
+The replacement UI preserves the target slot footprint and target media aspect ratio, visibly presents title + creator/channel even when thumbnail metadata is missing, links only to the canonical provider URL, and exposes a compact exact-contribution trace entry point that precedes the full #153 explanation surface. It does not mutate the Personal Algorithm Graph or create evidence merely because MyAlgo rendered the card.
 
 ## 5. Explanation
 
@@ -360,3 +395,24 @@ EvidenceProvenance
 The evidence store, Personal Algorithm Graph, behavior correlation, scorer, and explanation layers must consume those normalized concepts rather than provider-specific IDs or event types.
 
 The full contract is defined in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTOR_CONTRACT.md`.
+
+
+## 9. Live-ranking performance boundary
+
+The persistent candidate/evidence stores are not the per-render scoring working set. PR #208/#211 now scores every current-page candidate plus a separately bounded off-page replacement subset, coalesces YouTube DOM mutation bursts, indexes graph lookups once per scoring batch, computes evidence/feedback revision hashes once per batch, and avoids rewriting unchanged candidate/trace state on every mutation.
+
+Watch-page metadata enrichment runs in the MV3 service worker with bounded concurrency rather than inside the YouTube renderer. A dedicated Web Worker remains optional future work only if profiling shows the bounded service-worker scorer is still CPU-bound after indexing, batching, caching, and working-set reduction.
+
+Opportunistic replacements bind the selected off-page candidate to the native slot when the slot is created. Rendering consumes that binding instead of independently selecting a second time; fallback selection is reserved for policy-created slots without a pre-bound candidate.
+
+
+### Replacement stability across SPA churn
+
+A successfully rendered opportunistic replacement is held stable for 45 seconds across ordinary in-route YouTube DOM/page-data churn. The hold is keyed by the native source video ID and replacement candidate, is bounded by the replacement limit, and survives only while the target still exists and the candidate remains eligible and at least as relevant as the native card. Actual navigation, mode changes, graph/feedback invalidation, suppression, or expiry clear the hold. `yt-page-data-updated` is treated as an in-route mutation refresh because YouTube emits it during normal Home updates; hard route invalidation remains attached to `yt-navigate-start`.
+
+
+### First-paint overlay path
+
+Badges and replacement presentation must not wait on network metadata enrichment. The critical path is now: collect current DOM candidates → merge/persist lightweight observations → hydrate from already-cached metadata → score the bounded working set → return/render. Canonical watch-page enrichment runs asynchronously afterward in the extension service worker and requests a later metadata rerank only when new metadata was actually persisted.
+
+Ordinary YouTube mutation/page-data churn must not invalidate a rank already in flight. Mutation and metadata events are coalesced into one queued rerank while the current response is allowed to render. Only hard lifecycle/semantic changes such as navigation, mode changes, graph changes, and explicit feedback invalidate the active generation.

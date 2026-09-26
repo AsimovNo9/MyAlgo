@@ -89,17 +89,78 @@ Retrieval expands the candidate set only. It must not directly update preference
 
 The provenance cleanup in #202 should distinguish connector/provider, acquisition mechanism (`observed_dom`, `rss`, `web_search`, `exploration`), query lane, graph/algorithm revision, and retrieval time. Provider/API-like labels such as `youtube_search` should not survive the #206 implementation.
 
-## Content understanding
+## Candidate scoring resolution and presentation calibration
+
+Live validation on PR #208 showed that the first local scorer is too coarse for a large candidate reservoir: many videos receive the same raw score because the runtime primarily matches content identity, creator identity, the `created_by` relation, and explicit feedback.
+
+The next deterministic scoring layer (#210) keeps the additive trace as the authoritative score but extracts more local candidate features:
+
+- lexical objective/topic/concept matches against graph nodes;
+- creator affinity through graph identity;
+- format compatibility;
+- bounded freshness;
+- explicit user feedback and hard policy;
+- future semantic similarity from #209 only as another explicit traceable contribution.
+
+Retrieval provenance is **not** a preference feature. A video does not receive a positive score merely because RSS or web search found it.
+
+The scorer should retain two values:
+
+```text
+raw additive score        → exact replay / explanation / counterfactuals
+calibrated display score  → bounded 0-100 UI and replacement comparison
+```
+
+Calibration must be deterministic and monotonic. Replacement should require a configurable minimum uplift once score resolution is sufficient, rather than using equal-score churn as normal behavior.
+
+### Replacement-card metadata
+
+A MyAlgo replacement must read like a real video card, not a debugging surface. Title and creator/channel are first-class visible metadata and must remain present even when thumbnail metadata is absent. MyAlgo provenance/score/Why-this controls are secondary annotations.
+
+### Search status
+
+Graph-derived query planning is implemented. RSS acquisition is implemented. A network web-search provider is **not yet implemented**. Search remains planned behind a source-neutral adapter, explicit user enablement/configuration, bounded execution, provenance, and privacy review in #206.
+
+## Content understanding and semantic enrichment
 
 Prefer a layered approach:
 
-1. deterministic metadata extraction
-2. transcript/text enrichment where legitimately available
-3. embeddings/semantic matching when justified
-4. vision analysis for measured visual gaps
-5. LLM disambiguation only where deterministic methods are insufficient
+1. deterministic metadata extraction;
+2. transcript/text enrichment where legitimately available;
+3. local embeddings/semantic matching when justified;
+4. vision analysis for measured visual gaps;
+5. local generative disambiguation/explanation synthesis only where deterministic methods are insufficient.
 
 No model is allowed to silently become the user's preference model.
+
+### Local embedding layer (#209)
+
+Embeddings are derived features around the Personal Algorithm Graph, not the graph itself. The intended uses are:
+
+- graph-semantic neighbourhood discovery between concept/topic/objective/creator nodes;
+- bounded semantic expansion for retrieval queries;
+- candidate-to-goal/topic semantic matching;
+- interest-cluster suggestions for later graph controls (#178);
+- support for symbolic explanation paths in #153.
+
+The local embedding record must be versioned and recomputable from stable owner identity + model/version + input hash. Replacing the embedding model must not invalidate canonical evidence, explicit graph edits, or user-owned preference state.
+
+Semantic similarity enters ranking only as explicit traceable features/contributions. Hard exclusions, explicit feedback, and deterministic graph policy remain authoritative.
+
+The retrieval planner should accept a bounded set of semantic expansion terms later without changing RSS/web-search adapter contracts. #206 therefore owns acquisition; #209 owns semantic expansion/enrichment.
+
+For explanation generation, a local generative model may verbalize exact trace data:
+
+```text
+acquisition provenance
++ matched symbolic graph path
++ exact score contributions
++ trace/graph revision
+        ↓
+optional local explanation synthesis
+```
+
+It must not receive unrestricted raw history and independently invent a preference rationale.
 
 ## Additive scoring
 

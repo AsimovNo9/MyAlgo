@@ -26,8 +26,9 @@ The launch extension handles web activity / website content and user interaction
 | User interactions | selections and explicit feedback | evidence and scoring policy input | local |
 | Personal Algorithm state | evidence, graph nodes/edges, revisions | user model | local |
 | Recommendation state | candidate cache, scores, compact traces | feed control/debugging | local |
+| Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
 
-The local-only MVP does not send observed activity, evidence, graph state, feedback, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker.
+The local-first MVP does not send observed activity, evidence, graph state, feedback, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints.
 
 ## Disclosure and affirmative acceptance
 
@@ -36,7 +37,7 @@ Chrome Web Store disclosure has two layers:
 1. **Before installation:** the Store listing and Privacy practices tab must prominently describe the user data handled and its use. Publishing requires the developer to complete these dashboard fields.
 2. **Before in-product observation:** MyAlgo uses a versioned disclosure gate. Until the current disclosure version is affirmatively accepted, the content script starts paused and the background rejects observation/ranking messages.
 
-The current disclosure explains:
+Disclosure v2 adds the optional YouTube RSS candidate-acquisition boundary. The current disclosure explains:
 
 - pages observed;
 - data categories;
@@ -82,7 +83,7 @@ Pause is not deletion: pausing stops new observation/enforcement but retained lo
 
 ## Network boundary
 
-The extension runs on YouTube and can request YouTube-owned URLs for metadata or user navigation. This is distinct from sending the Personal Algorithm Graph to MyAlgo infrastructure.
+The extension runs on YouTube and can request YouTube-owned URLs for metadata or user navigation. With explicit RSS discovery enabled it can also request public YouTube channel RSS feeds using already observed channel IDs. This is distinct from sending the Personal Algorithm Graph or behavioral evidence to MyAlgo infrastructure.
 
 Any future MyAlgo backend, telemetry, sync, cloud enrichment, or third-party processor is a material data-flow change and requires a new review before collection begins.
 

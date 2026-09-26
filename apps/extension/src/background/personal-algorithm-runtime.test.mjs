@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildLocalFeedbackSignals,
   buildLocalScoringPolicy,
+  calibrateLocalScore,
+  extractLocalCandidateFeatures,
   scoreLocalCandidates,
 } from './personal-algorithm-runtime.ts';
 
@@ -94,10 +96,11 @@ test('local runtime scores candidates from the persisted graph and returns deter
   ], 'Work');
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].score, 6);
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p1');
+  assert.equal(ranked[0].rawScore, 11);
+  assert.equal(ranked[0].score, calibrateLocalScore(11));
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p2');
   assert.equal(ranked[0].trace.graphRevision, 4);
-  assert.equal(ranked[0].trace.finalScore, 6);
+  assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
   assert.equal(ranked[0].trace.nodeContributions.length, 2);
   assert.equal(ranked[0].trace.suppressed, false);
@@ -113,8 +116,10 @@ test('explicit local feedback changes the score without treating watch evidence 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-b');
-  assert.equal(ranked[0].score, 11);
-  assert.equal(ranked[1].score, 6);
+  assert.equal(ranked[0].external_id, 'video-b');
+  assert.equal(ranked[0].rawScore, 21);
+  assert.equal(ranked[0].score, calibrateLocalScore(21));
+  assert.equal(ranked[1].rawScore, 11);
 });
 
 test('explicit not-interested feedback lowers the matching candidate score', () => {
@@ -127,11 +132,11 @@ test('explicit not-interested feedback lowers the matching candidate score', () 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].score, 6);
+  assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[1].external_id, 'video-b');
-  assert.equal(ranked[1].score, -9);
+  assert.equal(ranked[1].rawScore, -24);
   assert.equal(ranked[1].trace.feedbackContributions.length, 1);
-  assert.equal(ranked[1].trace.feedbackContributions[0].value, -10);
+  assert.equal(ranked[1].trace.feedbackContributions[0].value, -25);
 });
 
 test('duplicate feedback is reconciled to the latest event for a content item', () => {
@@ -144,7 +149,7 @@ test('duplicate feedback is reconciled to the latest event for a content item', 
     { external_id: 'video-a', title: 'Video A' },
     { external_id: 'video-b', title: 'Video B' },
   ], 'Work', signals);
-  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.score, -9);
+  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.rawScore, -24);
 });
 
 test('never-show-channel feedback matches the creator node rather than only the source video', () => {
@@ -157,8 +162,8 @@ test('never-show-channel feedback matches the creator node rather than only the 
     { external_id: 'video-c', title: 'Video C' },
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
-  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.score, -94);
-  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.score, -94);
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -89);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -89);
 });
 
 test('subscription and discovery filters apply to source-tagged candidates', () => {
@@ -186,6 +191,70 @@ test('local policy is graph-derived and does not use candidate base scores', () 
   const policy = buildLocalScoringPolicy(state);
   assert.equal(policy.baseScore, 0);
   assert.equal(policy.nodeWeights?.['content:youtube:video-a'], 1);
-  assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 2);
-  assert.equal(policy.edgeRelationWeights?.created_by, 3);
+  assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 8);
+  assert.equal(policy.edgeRelationWeights?.created_by, 2);
+});
+
+
+test('newly acquired videos can score through an already known creator node', () => {
+  const acquired = scoreLocalCandidates(state, [
+    {
+      external_id: 'rss-new-video',
+      title: 'New RSS video',
+      channel_id: 'Creator A',
+      source_kind: 'discovery',
+    },
+  ], 'Learning');
+
+  assert.equal(acquired[0].rawScore, 8);
+  assert.equal(acquired[0].score, calibrateLocalScore(8));
+  assert.equal(acquired[0].trace.nodeContributions.length, 1);
+  assert.equal(acquired[0].trace.nodeContributions[0].sourceId, 'creator:youtube:Creator%20A');
+  assert.equal(acquired[0].trace.edgeContributions.length, 0);
+});
+
+
+test('candidate feature extraction adds deterministic graph and freshness features', () => {
+  const featureState = structuredClone(state);
+  featureState.graph.nodes.push(
+    {
+      id: 'objective:learn-ai',
+      kind: 'objective',
+      label: 'Learn AI',
+      provenance: 'explicit',
+      confidence: 1,
+      attributes: { format: 'tutorial' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'topic:ai-agents',
+      kind: 'topic',
+      label: 'AI agents',
+      provenance: 'explicit',
+      confidence: 0.8,
+      attributes: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  );
+  const extracted = extractLocalCandidateFeatures(featureState, {
+    external_id: 'candidate',
+    title: 'Learn AI agents: complete tutorial',
+    published_at: '2026-09-25T12:00:00.000Z',
+    lastSeenAt: '2026-09-26T10:00:00.000Z',
+  });
+
+  assert.equal(extracted.nodeIds.includes('objective:learn-ai'), true);
+  assert.equal(extracted.nodeIds.includes('topic:ai-agents'), true);
+  assert.equal(extracted.features.some((item) => item.label === 'format match: tutorial'), true);
+  assert.equal(extracted.features.some((item) => item.id === 'freshness'), true);
+});
+
+test('calibrated scores are deterministic, monotonic, and bounded', () => {
+  assert.equal(calibrateLocalScore(0), 50);
+  assert.ok(calibrateLocalScore(20) > calibrateLocalScore(10));
+  assert.ok(calibrateLocalScore(-20) < calibrateLocalScore(-10));
+  assert.ok(calibrateLocalScore(1000) <= 100);
+  assert.ok(calibrateLocalScore(-1000) >= 0);
 });

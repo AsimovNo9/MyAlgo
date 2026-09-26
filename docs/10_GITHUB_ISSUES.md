@@ -4,13 +4,14 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #206 + #202 — source-neutral RSS/web-search candidate acquisition and retrieval provenance cleanup.
+1. #206 + #202 + #210 — source-neutral acquisition plus richer deterministic candidate scoring/calibration and replacement presentation hardening.
 2. #170 + #153 — graph provenance/visualization and per-item trace explanation.
 3. #162 — replay/evaluation baselines before richer enrichment.
-4. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
-5. #169 — finish explicit offline/signed-out local-runtime validation.
-6. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
-7. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+4. #209 — rebuildable local semantic embeddings for graph/retrieval/scoring/explanations.
+5. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
+6. #169 — finish explicit offline/signed-out local-runtime validation.
+7. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
+8. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
 
 #152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
 
@@ -242,10 +243,14 @@ Replay stored candidates against hypothetical graph versions.
 Only after measured gaps:
 
 - transcripts
-- embeddings
+- rebuildable local embeddings
 - thumbnail vision
 - bounded comment analysis
-- optional LLM resolver
+- optional local LLM resolver / explanation synthesis
+
+### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Add rebuildable local semantic embeddings for graph, retrieval, scoring, and explanations
+
+Treat embeddings as replaceable derived enrichment around the canonical Personal Algorithm Graph. Use them for semantic neighbours, bounded retrieval expansion, explicit semantic score contributions, interest-cluster suggestions, and symbolic Why-this paths. A later local generative model may verbalize exact trace/path data but must not become the preference or ranking authority.
 
 ### [#162](https://github.com/AsimovNo9/MyAlgo/issues/162): Build local graph replay and evaluation suite
 
@@ -258,7 +263,7 @@ Only after measured gaps:
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **next active task**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS implemented in PR #208; web search remains planned**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
@@ -279,3 +284,8 @@ Repository audit result: the current launch runtime contains no YouTube Data API
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
 Implementation and clean-profile browser validation are complete in PR #199. Remaining work is Store-dashboard publication/reconciliation plus #168.
+
+
+### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions
+
+Opened from PR #208 live testing after severe slowdown and an extension crash under large Home/infinite-scroll workloads. The first hardening slice bounds ranking and persistence working sets, moves metadata parsing to the extension worker, coalesces DOM mutation bursts, amortizes graph/revision computation, limits enrichment concurrency, and suppresses unchanged storage writes. Follow-up work includes incremental score caching, evidence/graph compaction, stress testing, and a dedicated CPU worker only if profiling still justifies it.

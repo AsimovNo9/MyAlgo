@@ -157,3 +157,37 @@ For #160, validate replacements as bounded presentation assignments rather than 
 8. replacement cards preserve the target slot footprint, media aspect ratio, focusability, accessible label/title, and canonical YouTube destination.
 
 Record filled and unfilled slot counts only; diagnostics must not log video titles or IDs by default.
+
+For #210/#208 scoring validation, also verify:
+
+1. candidate feature extraction produces deterministic objective/topic/concept/creator/format/freshness contributions from the same graph + metadata input;
+2. raw additive trace totals still reconcile exactly;
+3. calibrated display scores are deterministic, monotonic, and bounded to 0-100;
+4. a replacement is not made unless the replacement candidate clears the configured display-score uplift;
+5. replacement cards visibly retain title and creator/channel even when thumbnail metadata is null;
+6. the compact `Why this?` view reports the same contribution values as the trace;
+7. RSS/web-search acquisition mechanism does not itself add preference weight;
+8. web-search execution is not claimed as validated until a real provider adapter exists and is live-tested.
+
+
+## Long-session performance validation (#211)
+
+Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only short functional tests:
+
+1. `rankingWorkingSetSize` remains bounded while the persistent candidate pool grows.
+2. Mutation bursts collapse into one rank request rather than one request per DOM mutation.
+3. Unchanged observed candidates do not rewrite the full candidate pool inside the 30-second coalescing window.
+4. Metadata enrichment never exceeds the configured two-request concurrency.
+5. Rank latency is measured at small, medium, and maximum working-set sizes.
+6. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
+7. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
+
+
+### Replacement stability regression
+
+For live replacement validation, render at least one replacement and then allow ordinary Home mutations and `yt-page-data-updated` events to occur for at least 45 seconds. The same replacement should remain present while its source card and candidate stay valid. Confirm that `yt-navigate-start`, mode changes, feedback/graph invalidation, suppression, and stability expiry correctly permit teardown/reselection.
+
+
+### Overlay first-paint latency regression
+
+Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation.

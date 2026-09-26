@@ -12,7 +12,15 @@ export type RankedFeedItem = {
   channel_name?: string | null;
   thumbnail_url?: string | null;
   visible?: boolean;
+  rawScore?: number;
   score?: number;
+  explanation?: {
+    rawScore: number;
+    displayScore: number;
+    graphRevision: number;
+    acquisitionMechanism: string | null;
+    contributions: Array<{ label: string; value: number; kind: string }>;
+  };
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   traceId?: string;
@@ -120,11 +128,22 @@ export function getShelfCandidates(
   }).slice(0, limit);
 }
 
+function seededCandidateOrder(seed: string, id: string): number {
+  const value = `${seed}|${id}`;
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 export function getReplacementCandidates(
   items: RankedFeedItem[],
   blockedIds: Iterable<string | undefined>,
   limit = 6,
   minimumScore = 52,
+  selectionSeed = '',
 ): RankedFeedItem[] {
   const blocked = new Set(Array.from(blockedIds).filter((id): id is string => Boolean(id && id.trim())));
   const seen = new Set<string>();
@@ -146,7 +165,74 @@ export function getReplacementCandidates(
     }
     seen.add(id);
     return true;
-  }).slice(0, limit);
+  })
+    .sort((left, right) => {
+      const leftScore = left.score ?? 0;
+      const rightScore = right.score ?? 0;
+      const leftBand = Math.floor(leftScore / 5);
+      const rightBand = Math.floor(rightScore / 5);
+      if (rightBand !== leftBand || !selectionSeed) return rightScore - leftScore;
+      const seeded = seededCandidateOrder(selectionSeed, left.external_id ?? '')
+        - seededCandidateOrder(selectionSeed, right.external_id ?? '');
+      return seeded || rightScore - leftScore;
+    })
+    .slice(0, limit);
+}
+
+export type OpportunisticReplacementAssignment = {
+  target: OpportunisticReplacementTarget;
+  item: RankedFeedItem;
+};
+
+export function selectOpportunisticReplacementAssignments(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit = 6,
+  minimumUplift = 5,
+): OpportunisticReplacementAssignment[] {
+  const candidates = replacementCandidates
+    .filter((item) => (
+      Boolean(item.external_id && item.title && item.traceId)
+      && item.visible !== false
+      && item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    ))
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+
+  const targets = [...nativeTargets]
+    .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
+    .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
+
+  const selected: OpportunisticReplacementAssignment[] = [];
+  const count = Math.min(Math.max(0, limit), candidates.length, targets.length);
+  for (let index = 0; index < count; index += 1) {
+    const candidate = candidates[index];
+    const target = targets[index];
+    const candidateScore = candidate?.score ?? 0;
+    if (!candidate || !target || candidateScore < target.score + Math.max(0, minimumUplift)) break;
+    selected.push({ target, item: candidate });
+  }
+  return selected;
+}
+
+export type OpportunisticReplacementTarget = {
+  externalId: string;
+  score: number;
+  nativeIndex: number;
+};
+
+export function selectOpportunisticReplacementTargets(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit = 6,
+  minimumUplift = 5,
+): OpportunisticReplacementTarget[] {
+  return selectOpportunisticReplacementAssignments(
+    nativeTargets,
+    replacementCandidates,
+    limit,
+    minimumUplift,
+  ).map((assignment) => assignment.target);
 }
 
 export type ReplacementSlot = {
@@ -167,6 +253,20 @@ export type ReplacementAssignment = {
   slot: ReplacementSlot;
   item: RankedFeedItem;
 };
+
+export function getReplacementTextMetadata(item: RankedFeedItem): {
+  title: string;
+  creator: string;
+  displayScore: number;
+  rawScore: number | null;
+} {
+  return {
+    title: item.title?.trim() || 'Recommended video',
+    creator: item.channel_name?.trim() || 'Unknown creator',
+    displayScore: Number.isFinite(item.score) ? Number(item.score) : 0,
+    rawScore: Number.isFinite(item.rawScore) ? Number(item.rawScore) : null,
+  };
+}
 
 export type ReplacementPresentationMetadata = {
   generation: number;
@@ -199,6 +299,7 @@ export function planReplacementAssignments(
   slots: ReplacementSlot[],
   blockedIds: Iterable<string | undefined>,
   minimumScore = 52,
+  selectionSeed = '',
 ): ReplacementAssignment[] {
   const stableSlots = slots.filter((slot, index) => (
     Boolean(slot.slotId && slot.sourceVideoId && !slot.sourceVideoId.startsWith('title:'))
@@ -213,6 +314,7 @@ export function planReplacementAssignments(
     blocked,
     stableSlots.length,
     minimumScore,
+    selectionSeed,
   );
   return stableSlots.slice(0, candidates.length).map((slot, index) => ({
     slot,

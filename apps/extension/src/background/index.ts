@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -11,14 +11,25 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  channel_id?: string | null;
   thumbnail_url?: string | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
+  published_at?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
+  topics?: string[];
+  content_type?: string | null;
+  provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
   is_short?: boolean;
   is_live?: boolean;
 };
@@ -35,29 +46,58 @@ type VideoRecord = PageCandidate & {
 type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
+  lastAcquiredAt?: string;
 };
 
 type LocalFeedItem = CandidatePoolItem & {
   id: string;
+  rawScore: number;
   score: number;
   visible: boolean;
   suppressed: boolean;
   policyOutcome: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   source_kind: 'subscription' | 'discovery' | 'liked' | null;
   traceId: string;
+  explanation?: {
+    rawScore: number;
+    displayScore: number;
+    graphRevision: number;
+    acquisitionMechanism: string | null;
+    contributions: Array<{ label: string; value: number; kind: string }>;
+  };
 };
 
-const MAX_CANDIDATE_POOL_SIZE = 5000;
+const MAX_CANDIDATE_POOL_SIZE = 1500;
 const MAX_HISTORY_EVIDENCE = 10000;
-const MAX_FEED_CACHE_SIZE = 100;
-const MAX_VIDEO_STORE_SIZE = 2000;
-const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
-const MAX_SELECTION_EVENTS = 5000;
+const MAX_FEED_CACHE_SIZE = 80;
+const MAX_VIDEO_STORE_SIZE = 800;
+const MAX_METADATA_ENRICHMENTS_PER_SCAN = 6;
+const MAX_SELECTION_EVENTS = 2000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
+const MAX_RANK_WORKING_SET = 320;
+const MAX_REPLACEMENT_WORKING_SET = 180;
+const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
+  rssEnabled: false,
+};
+const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
+  lastRssSyncAt: null,
+  nextRssAllowedAt: null,
+  rssChannelsConsidered: 0,
+  rssFeedsSucceeded: 0,
+  rssFeedsFailed: 0,
+  rssCandidatesFetched: 0,
+  rssCandidatesAdded: 0,
+  rssCandidatesDeduplicated: 0,
+  rssConsecutiveFailures: 0,
+  lastError: null,
+};
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
+let lastPersistedTraceSignature = '';
+const metadataEnrichmentInFlight = new Set<string>();
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -79,6 +119,9 @@ void ensurePrivacyDisclosureLoaded();
 
 const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
+  'SET_RETRIEVAL_SETTINGS',
+  'REFRESH_RETRIEVAL',
+  'GET_RETRIEVAL_PLAN',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -125,24 +168,53 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   });
 }
 
-async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
-  if (!tabId || candidates.length === 0) return [];
+async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]> {
+  if (candidates.length === 0) return [];
   const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
   const now = Date.now();
   const missing = candidates
     .filter((candidate) => {
       const record = existing[candidate.external_id];
-      return !record || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
+      return needsYoutubeMetadataRefresh(record, now, METADATA_REFRESH_MS)
+        && !metadataEnrichmentInFlight.has(candidate.external_id);
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
+  missing.forEach((candidate) => metadataEnrichmentInFlight.add(candidate.external_id));
+
+  const enrichOne = async (candidate: PageCandidate): Promise<VideoRecord | null> => {
+    try {
+      const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
+      if (!response.ok) return null;
+      const html = await response.text();
+      const rich = extractYouTubeWatchMetadataFromHtml(html);
+      return {
+        ...candidate,
+        title: rich.title ?? candidate.title,
+        channel_name: rich.channelName ?? candidate.channel_name ?? null,
+        channel_id: rich.channelId ?? candidate.channel_id ?? null,
+        thumbnail_url: rich.thumbnailUrl ?? candidate.thumbnail_url ?? null,
+        description: rich.description?.slice(0, 1600) ?? null,
+        duration_seconds: rich.durationSeconds,
+        published_at: rich.publishedAt ?? candidate.published_at ?? null,
+        topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
+        content_type: rich.category ?? null,
+        is_live: candidate.is_live === true || rich.isLive,
+        view_count: rich.viewCount,
+        enrichedAt: new Date().toISOString(),
+      } satisfies VideoRecord;
+    } catch {
+      return null;
+    }
+  };
 
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: 'ENRICH_YOUTUBE_VIDEOS',
-      payload: { candidates: missing },
-    });
-    const enriched = Array.isArray(response?.videos) ? response.videos as VideoRecord[] : [];
+    const enrichedResults: Array<VideoRecord | null> = [];
+    for (let index = 0; index < missing.length; index += 2) {
+      enrichedResults.push(...await Promise.all(missing.slice(index, index + 2).map(enrichOne)));
+    }
+    const enriched = enrichedResults.filter((record): record is VideoRecord => record !== null);
+
     if (enriched.length === 0) return [];
     for (const record of enriched) existing[record.external_id] = record;
     const entries = Object.entries(existing)
@@ -150,9 +222,8 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
       .slice(0, MAX_VIDEO_STORE_SIZE);
     await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
     return enriched;
-  } catch (error) {
-    console.warn('YouTube metadata enrichment skipped', error);
-    return [];
+  } finally {
+    missing.forEach((candidate) => metadataEnrichmentInFlight.delete(candidate.external_id));
   }
 }
 
@@ -171,23 +242,70 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     [],
   );
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
   const byId = new Map<string, CandidatePoolItem>(
     existing.map((candidate) => [candidate.external_id, candidate]),
   );
+  let changed = false;
+
+  const materialSignature = (candidate: PageCandidate | CandidatePoolItem) => JSON.stringify({
+    title: candidate.title,
+    channel_name: candidate.channel_name ?? null,
+    channel_id: candidate.channel_id ?? null,
+    thumbnail_url: candidate.thumbnail_url ?? null,
+    description: candidate.description ?? null,
+    duration_seconds: candidate.duration_seconds ?? null,
+    published_at: candidate.published_at ?? null,
+    topics: candidate.topics ?? [],
+    content_type: candidate.content_type ?? null,
+    source_kind: candidate.source_kind ?? null,
+    is_short: candidate.is_short ?? false,
+    is_live: candidate.is_live ?? false,
+  });
 
   for (const candidate of candidates) {
     if (!candidate.external_id || !candidate.title) continue;
 
     const previous = byId.get(candidate.external_id);
+    const incomingProvenance = candidate.provenance ?? {
+      connector: 'youtube',
+      mechanism: 'observed_dom' as const,
+      acquired_at: now,
+      graph_revision: null,
+      source_url: null,
+    };
+    const observedNow = incomingProvenance.mechanism === 'observed_dom';
+    const materialChanged = !previous || materialSignature(previous) !== materialSignature(candidate);
+    const refreshObservation = observedNow
+      ? shouldRefreshObservedCandidate(previous?.lastSeenAt, nowMs, OBSERVED_CANDIDATE_REFRESH_MS)
+      : true;
+
+    if (previous && observedNow && !materialChanged && !refreshObservation) {
+      continue;
+    }
+
+    const acquisitionHistory = observedNow && previous
+      ? previous.acquisition_history
+        ?? (previous.provenance ? [previous.provenance] : undefined)
+      : mergeCandidateAcquisitionHistory(
+          previous?.acquisition_history
+            ?? (previous?.provenance ? [previous.provenance] : undefined),
+          incomingProvenance,
+        );
+
     byId.set(candidate.external_id, {
       ...previous,
       ...candidate,
+      provenance: previous?.provenance ?? incomingProvenance,
+      acquisition_history: acquisitionHistory,
       external_id: candidate.external_id,
       title: candidate.title,
       firstSeenAt: previous?.firstSeenAt ?? now,
-      lastSeenAt: now,
+      lastSeenAt: observedNow ? (refreshObservation ? now : previous?.lastSeenAt ?? now) : previous?.lastSeenAt ?? now,
+      lastAcquiredAt: observedNow ? previous?.lastAcquiredAt ?? incomingProvenance.acquired_at : incomingProvenance.acquired_at,
     });
+    changed = true;
   }
 
   const pool = [...byId.values()]
@@ -197,8 +315,138 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     )
     .slice(0, MAX_CANDIDATE_POOL_SIZE);
 
-  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  if (pool.length !== existing.length) changed = true;
+  if (changed) {
+    await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  }
   return pool;
+}
+
+const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+async function refreshRssCandidates(force = false): Promise<{ diagnostics: RetrievalDiagnostics; changed: boolean }> {
+  const settings = await getStorage<RetrievalSettings>(
+    STORAGE_KEYS.RETRIEVAL_SETTINGS,
+    DEFAULT_RETRIEVAL_SETTINGS,
+  );
+  const previous = await getStorage<RetrievalDiagnostics>(
+    STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+    EMPTY_RETRIEVAL_DIAGNOSTICS,
+  );
+  const nowMs = Date.now();
+
+  if (!settings.rssEnabled) return { diagnostics: previous, changed: false };
+  if (!force && !isRetrievalAllowed(previous.nextRssAllowedAt, nowMs)) {
+    return { diagnostics: previous, changed: false };
+  }
+
+  let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  let channelIds = selectRssChannelIds(Object.values(store));
+
+  // Older cached metadata can be fresh but lack channel IDs. Seed channel IDs
+  // directly in the extension worker from the bounded candidate reservoir.
+  if (channelIds.length === 0) {
+    const candidatePool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+    if (candidatePool.length > 0) {
+      await enrichVideos(candidatePool);
+      store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+      channelIds = selectRssChannelIds(Object.values(store));
+    }
+  }
+
+  if (channelIds.length === 0) {
+    const diagnostics: RetrievalDiagnostics = {
+      ...EMPTY_RETRIEVAL_DIAGNOSTICS,
+      lastRssSyncAt: new Date(nowMs).toISOString(),
+      nextRssAllowedAt: null,
+      lastError: 'No YouTube channel IDs are available yet. Refresh discovery after MyAlgo has observed a few videos.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+  const existingIds = new Set(existingPool.map((item) => item.external_id));
+  const acquiredAt = new Date(nowMs).toISOString();
+  const state = await personalAlgorithmStore.exportState();
+  const graphRevision = buildGraphRetrievalRevision(state);
+
+  const results = await Promise.all(channelIds.map(async (channelId) => {
+    const sourceUrl = buildYoutubeRssFeedUrl(channelId);
+    try {
+      const response = await fetchWithTimeout(sourceUrl);
+      if (!response.ok) throw new Error(`RSS HTTP ${response.status}`);
+      const xml = await response.text();
+      return {
+        ok: true as const,
+        candidates: parseYoutubeRssFeed(xml, acquiredAt, sourceUrl).map((candidate) => ({
+          ...candidate,
+          provenance: candidate.provenance
+            ? { ...candidate.provenance, graph_revision: graphRevision }
+            : undefined,
+        })),
+      };
+    } catch {
+      return { ok: false as const, candidates: [] };
+    }
+  }));
+
+  const fetched = results.flatMap((result) => result.candidates);
+  const uniqueFetched = [...new Map(fetched.map((item) => [item.external_id, item])).values()];
+  const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
+  if (uniqueFetched.length > 0) {
+    await mergeCandidatePool(uniqueFetched);
+
+    // RSS is intentionally lightweight. Before the new candidates are ranked,
+    // enrich a bounded batch from their canonical watch pages through an open
+    // YouTube tab. This gives the local scorer/title UI substantially richer
+    // metadata without introducing a native yt-dlp binary, backend, API key, or
+    // YouTube Data API dependency.
+    await enrichVideos(uniqueFetched.slice(0, 18));
+  }
+
+  const succeeded = results.filter((result) => result.ok).length;
+  const failed = results.length - succeeded;
+  const consecutiveFailures = results.length > 0 && succeeded === 0
+    ? (previous.rssConsecutiveFailures ?? 0) + 1
+    : 0;
+  const diagnostics: RetrievalDiagnostics = {
+    lastRssSyncAt: acquiredAt,
+    nextRssAllowedAt: nextRssAllowedAt(nowMs, consecutiveFailures),
+    rssChannelsConsidered: channelIds.length,
+    rssFeedsSucceeded: succeeded,
+    rssFeedsFailed: failed,
+    rssCandidatesFetched: uniqueFetched.length,
+    rssCandidatesAdded: addedCount,
+    rssCandidatesDeduplicated: Math.max(0, fetched.length - uniqueFetched.length)
+      + uniqueFetched.filter((item) => existingIds.has(item.external_id)).length,
+    rssConsecutiveFailures: consecutiveFailures,
+    lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
+  };
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  console.info('[MyAlgo] retrieval refresh', {
+    mechanism: 'rss',
+    channels: diagnostics.rssChannelsConsidered,
+    succeeded: diagnostics.rssFeedsSucceeded,
+    failed: diagnostics.rssFeedsFailed,
+    fetched: diagnostics.rssCandidatesFetched,
+    added: diagnostics.rssCandidatesAdded,
+    deduplicated: diagnostics.rssCandidatesDeduplicated,
+  });
+  return { diagnostics, changed: addedCount > 0 };
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
@@ -222,6 +470,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       STORAGE_KEYS.VIDEO_STORE,
       STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
+      STORAGE_KEYS.RETRIEVAL_SETTINGS,
+      STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
       STORAGE_KEYS.HISTORY_METRICS,
       STORAGE_KEYS.HOME_OBSERVATION_ENABLED,
@@ -249,6 +499,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         includeLive: true,
         includePlayables: true,
       },
+      [STORAGE_KEYS.RETRIEVAL_SETTINGS]: current[STORAGE_KEYS.RETRIEVAL_SETTINGS] ?? DEFAULT_RETRIEVAL_SETTINGS,
+      [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: current[STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS] ?? EMPTY_RETRIEVAL_DIAGNOSTICS,
       // User-owned/local observational state must survive extension updates.
       [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
       [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
@@ -289,21 +541,50 @@ async function rankLocalCandidates(
     sourceFilters,
   );
 
-  const traces = ranked.map((item) => ({
+  const traces = ranked.slice(0, 60).map((item) => ({
     traceId: item.trace.id,
     candidateId: item.id,
     score: item.score,
     recordedAt: new Date().toISOString(),
   }));
-  await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, MAX_FEED_CACHE_SIZE));
+  const traceSignature = traces.map((item) => `${item.traceId}:${item.score}`).join('|');
+  if (traceSignature !== lastPersistedTraceSignature) {
+    lastPersistedTraceSignature = traceSignature;
+    await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces);
+  }
 
-  return ranked.map(({ trace, ...item }) => ({
-    ...item,
-    suppressed: trace.suppressed,
-    policyOutcome: trace.policyOutcome,
-    source_kind: item.source_kind ?? null,
-    traceId: trace.id,
-  }));
+  return ranked.map(({ trace, ...item }) => {
+    const contributions = [
+      ...trace.featureContributions,
+      ...trace.nodeContributions,
+      ...trace.edgeContributions,
+      ...trace.feedbackContributions,
+      ...trace.modeContributions,
+    ]
+      .filter((contribution) => contribution.value !== 0)
+      .sort((left, right) => Math.abs(right.value) - Math.abs(left.value) || left.label.localeCompare(right.label))
+      .slice(0, 5)
+      .map((contribution) => ({
+        label: contribution.label,
+        value: contribution.value,
+        kind: contribution.kind,
+      }));
+
+    return {
+      ...item,
+      suppressed: trace.suppressed,
+      policyOutcome: trace.policyOutcome,
+      source_kind: item.source_kind ?? null,
+      traceId: trace.id,
+      explanation: {
+        rawScore: trace.finalScore,
+        displayScore: item.score,
+        graphRevision: trace.graphRevision,
+        acquisitionMechanism: item.provenance?.mechanism ?? null,
+        contributions,
+      },
+    };
+  });
 }
 
 async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', payload: unknown): Promise<void> {
@@ -314,7 +595,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -340,6 +621,7 @@ const handleRuntimeMessage = (
       externalId?: string;
       eventType?: string;
       sourceFilters?: FeedSourceFilters;
+      retrievalSettings?: RetrievalSettings;
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
@@ -384,7 +666,12 @@ const handleRuntimeMessage = (
     void (async () => {
       privacyDisclosureAccepted = false;
       privacyDisclosureReady = Promise.resolve(false);
+      historyReconciliationReady = null;
       await chrome.storage.local.clear();
+      // The store caches state in the service worker. Reset it after clearing
+      // storage so deleted graph/evidence cannot survive in memory or be
+      // persisted again by a later mutation in the same worker lifetime.
+      await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
         [STORAGE_KEYS.ENABLED]: false,
@@ -392,6 +679,8 @@ const handleRuntimeMessage = (
         [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
         [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
         [STORAGE_KEYS.SELECTION_EVENTS]: [],
+        [STORAGE_KEYS.RETRIEVAL_SETTINGS]: DEFAULT_RETRIEVAL_SETTINGS,
+        [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: EMPTY_RETRIEVAL_DIAGNOSTICS,
       });
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
@@ -465,25 +754,86 @@ const handleRuntimeMessage = (
 
   if (type === 'RANK_PAGE') {
     void (async () => {
+      const rankStartedAt = performance.now();
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
-        const enrichedCandidates = await enrichVideosInTab(
-          _sender.tab?.id,
-          incomingCandidates,
-        );
-        const enrichmentById = new Map(enrichedCandidates.map((item) => [item.external_id, item]));
-        const candidatesWithMetadata = incomingCandidates.map((candidate) => ({
-          ...candidate,
-          ...(enrichmentById.get(candidate.external_id) ?? {}),
-        }));
-        const candidatePool = await hydrateCandidatePool(await mergeCandidatePool(candidatesWithMetadata));
-        const ranked = await rankLocalCandidates(candidatePool, sourceFilters, payload?.mode ?? 'default');
+
+        // First paint must never wait on network enrichment. Merge the live DOM
+        // candidates immediately and hydrate only from metadata already cached
+        // in local storage. Rich watch-page enrichment runs after the rank
+        // response and requests a follow-up rerank only when it produced data.
+        const candidatePool = await mergeCandidatePool(incomingCandidates);
+        const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
+
+        // Do not rescore the entire persistent reservoir on every YouTube DOM
+        // mutation. Score every current-page item plus a bounded off-page
+        // replacement working set. The full pool remains persisted for later
+        // retrieval/rotation but is not materialized into every ranking pass.
+        const currentPagePool = candidatePool.filter((item) => currentPageIds.has(item.external_id));
+        const offPagePool = candidatePool
+          .filter((item) => !currentPageIds.has(item.external_id))
+          .sort((left, right) => (
+            new Date(right.lastAcquiredAt ?? right.lastSeenAt).getTime()
+            - new Date(left.lastAcquiredAt ?? left.lastSeenAt).getTime()
+          ))
+          .slice(0, MAX_REPLACEMENT_WORKING_SET);
+        const workingPool = [...currentPagePool, ...offPagePool].slice(0, MAX_RANK_WORKING_SET);
+        const hydratedWorkingPool = await hydrateCandidatePool(workingPool);
+        const ranked = await rankLocalCandidates(hydratedWorkingPool, sourceFilters, payload?.mode ?? 'default');
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
+
+        // The popup cache is intentionally bounded to the top-ranked reservoir,
+        // but presentation must always receive scores for every candidate on the
+        // current page. Otherwise a large/RSS-expanded reservoir can push all
+        // visible native cards outside the top 100, making them look "unmatched"
+        // and removing badges/replacement eligibility from the live page.
+        const currentPageFeed = ranked.filter((item) => currentPageIds.has(item.external_id));
+
+        // Replacement inventory must be independent of the global top-N cache.
+        // A large Home page can itself occupy the entire top 100, leaving the
+        // content script with no off-page RSS/search candidates after native IDs
+        // are blocked. Keep a separately bounded off-page reservoir in the live
+        // presentation response.
+        const replacementInventory = ranked
+          .filter((item) => !currentPageIds.has(item.external_id))
+          .slice(0, MAX_FEED_CACHE_SIZE);
+        const presentationFeed = [
+          ...currentPageFeed,
+          ...replacementInventory,
+        ];
+
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
-        sendResponse({ ok: true, feed: feedCache, poolSize: candidatePool.length, enriched: enrichedCandidates.length });
+        sendResponse({
+          ok: true,
+          feed: presentationFeed,
+          cachedFeedSize: feedCache.length,
+          currentPageScored: currentPageFeed.length,
+          replacementInventorySize: replacementInventory.length,
+          poolSize: candidatePool.length,
+          rankingWorkingSetSize: workingPool.length,
+          enriched: 0,
+          enrichmentPending: true,
+          elapsedMs: Math.round(performance.now() - rankStartedAt),
+        });
+
+        const senderTabId = _sender.tab?.id;
+        void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
+          if (enrichedCandidates.length === 0) return;
+          await mergeCandidatePool(enrichedCandidates);
+          if (senderTabId) {
+            await chrome.tabs.sendMessage(senderTabId, {
+              type: 'YOUTUBE_METADATA_ENRICHED',
+              payload: {
+                count: enrichedCandidates.length,
+              },
+            }).catch(() => undefined);
+          }
+        }).catch((error) => {
+          console.warn('[MyAlgo] asynchronous metadata enrichment failed', error);
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
         await setStorage('personal-algorithm-last-error', message);
@@ -521,6 +871,91 @@ const handleRuntimeMessage = (
         : undefined));
     })();
     sendResponse({ ok: true, enabled });
+    return true;
+  }
+
+  if (type === 'SET_RETRIEVAL_SETTINGS') {
+    void (async () => {
+      const previousSettings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      const next: RetrievalSettings = {
+        ...DEFAULT_RETRIEVAL_SETTINGS,
+        ...(payload?.retrievalSettings ?? {}),
+      };
+      await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
+      const refresh = next.rssEnabled
+        ? await refreshRssCandidates(!previousSettings.rssEnabled)
+        : {
+          diagnostics: await getStorage<RetrievalDiagnostics>(
+            STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+            EMPTY_RETRIEVAL_DIAGNOSTICS,
+          ),
+          changed: false,
+        };
+      if (refresh.changed) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics: refresh.diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
+    }));
+    return true;
+  }
+
+  if (type === 'REFRESH_RETRIEVAL') {
+    void (async () => {
+      const refresh = await refreshRssCandidates(true);
+      if (refresh.changed) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, diagnostics: refresh.diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_PLAN') {
+    void personalAlgorithmStore.exportState().then((state) => {
+      const profile = buildGraphRetrievalProfile(state);
+      const retrievalRevision = buildGraphRetrievalRevision(state);
+      const plans = buildRecommendationQueryPlans(
+        profile,
+        8,
+        retrievalRevision,
+        [],
+        [],
+        true,
+      );
+      sendResponse({
+        ok: true,
+        graphRevision: state.graph.currentRevision,
+        retrievalRevision,
+        topicCount: profile.explicitTopics.length,
+        creatorCount: profile.creatorTerms.length,
+        plans,
+      });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to build retrieval plan.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_DIAGNOSTICS') {
+    void Promise.all([
+      getStorage<RetrievalSettings>(STORAGE_KEYS.RETRIEVAL_SETTINGS, DEFAULT_RETRIEVAL_SETTINGS),
+      getStorage<RetrievalDiagnostics>(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, EMPTY_RETRIEVAL_DIAGNOSTICS),
+    ]).then(([retrievalSettings, diagnostics]) => {
+      sendResponse({ ok: true, retrievalSettings, diagnostics });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to read retrieval diagnostics.',
+    }));
     return true;
   }
 

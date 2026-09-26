@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText } from './youtube-dom.ts';
+import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, extractYouTubeWatchMetadataFromHtml, normalizeYouTubeText } from './youtube-dom.ts';
 import { collectHistoryEvidence, isYouTubeHistoryPage } from './youtube-history.ts';
 import { applyRecommendationOutcome, collectRecommendationObservations, isYouTubeHomePage, mergeRecommendationObservations } from './youtube-recommendations.ts';
 import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux.ts';
@@ -14,6 +14,35 @@ test('extractYouTubeVideoId handles watch URLs', () => {
   assert.equal(extractYouTubeVideoId('https://www.youtube.com/watch?v=abc123'), 'abc123');
   assert.equal(extractYouTubeVideoId('/watch?feature=share&v=abc123'), 'abc123');
   assert.equal(extractYouTubeVideoId('https://m.youtube.com/watch?v=mobile123&t=12'), 'mobile123');
+});
+
+test('extractYouTubeChannelIdFromWatchHtml recovers canonical channel IDs from watch HTML', () => {
+  assert.equal(
+    extractYouTubeChannelIdFromWatchHtml('<script>var ytInitialPlayerResponse={"videoDetails":{"channelId":"UC1234567890123456789012"}}</script>'),
+    'UC1234567890123456789012',
+  );
+  assert.equal(
+    extractYouTubeChannelIdFromWatchHtml('<meta itemprop="channelId" content="UCabcdefghijklmnopqrstuv">'),
+    'UCabcdefghijklmnopqrstuv',
+  );
+  assert.equal(extractYouTubeChannelIdFromWatchHtml('<html>no channel id</html>'), null);
+});
+
+test('extractYouTubeWatchMetadataFromHtml reads embedded player metadata like a lightweight yt-dlp pass', () => {
+  const html = `<script>var ytInitialPlayerResponse = {"videoDetails":{"title":"Deep systems tutorial","shortDescription":"A detailed description","lengthSeconds":"742","channelId":"UC1234567890123456789012","author":"Systems Lab","keywords":["systems","distributed"],"thumbnail":{"thumbnails":[{"url":"small.jpg","width":120},{"url":"large.jpg","width":1280}]},"isLiveContent":false},"microformat":{"playerMicroformatRenderer":{"publishDate":"2026-09-25","category":"Education"}}};</script>`;
+  assert.deepEqual(extractYouTubeWatchMetadataFromHtml(html), {
+    title: 'Deep systems tutorial',
+    description: 'A detailed description',
+    channelId: 'UC1234567890123456789012',
+    channelName: 'Systems Lab',
+    durationSeconds: 742,
+    publishedAt: '2026-09-25',
+    thumbnailUrl: 'large.jpg',
+    keywords: ['systems', 'distributed'],
+    category: 'Education',
+    isLive: false,
+    viewCount: null,
+  });
 });
 
 test('extractYouTubeVideoId handles Shorts URLs', () => {
@@ -153,7 +182,7 @@ test('Home extraction records surfaced context without inferring preference', ()
 
   assert.deepEqual(observation.observations, [{
     externalId: 'home-1',
-    exposureId: 'home-1|home|Recommended|0',
+    exposureId: 'home-1|home|Recommended|0|2026-09-24T12:00:00.000Z',
     title: 'Woodworking guide',
     creator: 'Maker',
     position: 0,
@@ -164,7 +193,7 @@ test('Home extraction records surfaced context without inferring preference', ()
     outcome: 'unobserved',
   }, {
     externalId: 'home-1',
-    exposureId: 'home-1|home||1',
+    exposureId: 'home-1|home||1|2026-09-24T12:00:00.000Z',
     title: 'Duplicate card',
     creator: null,
     position: 1,
@@ -178,6 +207,18 @@ test('Home extraction records surfaced context without inferring preference', ()
   assert.equal(observation.metrics.duplicateCandidates, 0);
   assert.equal(observation.metrics.injectedCandidates, 1);
   assert.equal(observation.metrics.missingTitle, 1);
+});
+
+test('repeated Home appearances in the same slot keep distinct exposure IDs', () => {
+  const first = collectRecommendationObservations([
+    { href: '/watch?v=home-repeat', title: 'Repeated video', section: 'Recommended' },
+  ], '2026-09-24T12:00:00.000Z').observations[0];
+  const second = collectRecommendationObservations([
+    { href: '/watch?v=home-repeat', title: 'Repeated video', section: 'Recommended' },
+  ], '2026-09-24T13:00:00.000Z').observations[0];
+
+  assert.notEqual(first.exposureId, second.exposureId);
+  assert.equal(first.externalId, second.externalId);
 });
 
 test('Home observations become contextual outcomes only after user interaction', () => {
@@ -329,7 +370,8 @@ test('YouTube connector declares bounded presentation and normalized provider be
   assert.equal(youtubeConnector.pageUrlPatterns.includes('https://www.youtube.com/*'), true);
   assert.equal(youtubeConnector.presentation.shelfBatchSize <= youtubeConnector.presentation.shelfDomLimit, true);
   assert.equal(youtubeConnector.presentation.horizontalAspectRatio, '16 / 9');
-  assert.equal(youtubeConnector.presentation.replacementMinimumScore, 1);
+  assert.equal(youtubeConnector.presentation.replacementMinimumScore, 55);
+  assert.equal(youtubeConnector.presentation.replacementMinimumUplift, 5);
   assert.equal(youtubeConnector.presentation.replacementLimit, 6);
 });
 

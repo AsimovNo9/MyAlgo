@@ -20,6 +20,7 @@ export type ProviderPresentationContract = {
   candidateLimit: number;
   minimumVisibleScore: number;
   replacementMinimumScore: number;
+  replacementMinimumUplift: number;
   replacementLimit: number;
   shelfBatchSize: number;
   shelfDomLimit: number;

@@ -70,7 +70,7 @@ export function collectRecommendationObservations(
     }
     const position = observations.length;
     const section = normalizeYouTubeText(candidate.section ?? '') || null;
-    const exposureId = createExposureId({ videoId: externalId, surface: 'home', section, position });
+    const exposureId = createExposureId({ videoId: externalId, surface: 'home', section, position, occurrenceKey: observedAt });
     if (seen.has(exposureId)) {
       metrics.duplicateCandidates += 1;
       continue;
@@ -119,7 +119,23 @@ export function collectRecommendationObservationsFromDom(document: Document, obs
       injected: Boolean(card.closest(MYALGO_INJECTED_SELECTOR)),
     };
   });
-  return collectRecommendationObservations(candidates, observedAt);
+  const result = collectRecommendationObservations(candidates, observedAt);
+  const remainingByVideo = new Map<string, RecommendationObservation[]>();
+  for (const observation of result.observations) {
+    const queue = remainingByVideo.get(observation.externalId) ?? [];
+    queue.push(observation);
+    remainingByVideo.set(observation.externalId, queue);
+  }
+  for (const card of cards) {
+    const link = card.querySelector<HTMLAnchorElement>(videoLinkSelector);
+    const externalId = link ? extractYouTubeVideoId(link.href) : undefined;
+    if (!externalId) continue;
+    const observation = remainingByVideo.get(externalId)?.shift();
+    if (observation) {
+      card.setAttribute('data-personal-algorithm-exposure-id', observation.exposureId);
+    }
+  }
+  return result;
 }
 
 export function applyRecommendationOutcome(

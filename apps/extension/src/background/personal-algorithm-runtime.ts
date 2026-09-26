@@ -1,10 +1,12 @@
-import type { FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
 import {
+  buildPersonalScoringRevisionContext,
   isScoreTraceConsistent,
   scorePersonalAlgorithm,
   type PersonalScoringPolicy,
   type ScoreCandidate,
   type ScoreFeedbackSignal,
+  type ScoreFeatureSignal,
   type PersonalScoreTrace,
 } from '@repo/recommender-core';
 
@@ -15,6 +17,8 @@ export type LocalRuntimeCandidate = {
   lastSeenAt: string;
   channel_name?: string | null;
   channel_id?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   published_at?: string | null;
   topics?: string[];
@@ -23,10 +27,13 @@ export type LocalRuntimeCandidate = {
   format?: string | null;
   is_short?: boolean;
   is_live?: boolean;
+  provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
 };
 
 export type LocalRuntimeRankedCandidate = LocalRuntimeCandidate & {
   id: string;
+  rawScore: number;
   score: number;
   visible: boolean;
   trace: PersonalScoreTrace;
@@ -42,23 +49,184 @@ export type LocalRuntimeFeedbackEvent = {
 const contentNodeId = (source: string, externalId: string) =>
   `content:${encodeURIComponent(source)}:${encodeURIComponent(externalId)}`;
 
-const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntimeCandidate): ScoreCandidate => {
+
+const FEATURE_WEIGHTS = {
+  objective: 18,
+  topic: 14,
+  concept: 10,
+  format: 6,
+} as const;
+
+const STOP_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'how', 'in',
+  'is', 'it', 'of', 'on', 'or', 'the', 'this', 'to', 'with', 'you', 'your',
+]);
+
+const normalizeFeatureText = (value: string | null | undefined): string =>
+  (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+const featureTokens = (value: string | null | undefined): string[] =>
+  normalizeFeatureText(value)
+    .split(' ')
+    .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
+
+const lexicalMatch = (label: string, candidateText: string): number => {
+  const normalizedLabel = normalizeFeatureText(label);
+  if (!normalizedLabel || !candidateText) return 0;
+  if (candidateText.includes(normalizedLabel)) return 1;
+  const labelTokens = featureTokens(normalizedLabel);
+  if (labelTokens.length === 0) return 0;
+  const candidateTokens = new Set(featureTokens(candidateText));
+  const overlap = labelTokens.filter((token) => candidateTokens.has(token)).length;
+  const ratio = overlap / labelTokens.length;
+  return ratio >= 0.5 ? ratio : 0;
+};
+
+type LocalScoringIndex = {
+  contentNodes: Map<string, PersonalAlgorithmState['graph']['nodes'][number]>;
+  creatorByContent: Map<string, string>;
+  creatorByLabel: Map<string, string>;
+  creatorIds: Set<string>;
+  featureNodes: PersonalAlgorithmState['graph']['nodes'];
+};
+
+function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringIndex {
+  const contentNodes = new Map<string, PersonalAlgorithmState['graph']['nodes'][number]>();
+  const creatorByLabel = new Map<string, string>();
+  const creatorIds = new Set<string>();
+  const featureNodes: PersonalAlgorithmState['graph']['nodes'] = [];
+
+  for (const node of state.graph.nodes) {
+    if (node.kind === 'content') contentNodes.set(node.id, node);
+    if (node.kind === 'creator') {
+      creatorIds.add(node.id);
+      const label = node.label.trim().toLowerCase();
+      if (label && !creatorByLabel.has(label)) creatorByLabel.set(label, node.id);
+    }
+    if (['objective', 'topic', 'concept'].includes(node.kind)) featureNodes.push(node);
+  }
+
+  const creatorByContent = new Map<string, string>();
+  for (const edge of state.graph.edges) {
+    if (edge.relation === 'created_by' && creatorIds.has(edge.targetNodeId) && !creatorByContent.has(edge.sourceNodeId)) {
+      creatorByContent.set(edge.sourceNodeId, edge.targetNodeId);
+    }
+  }
+
+  return { contentNodes, creatorByContent, creatorByLabel, creatorIds, featureNodes };
+}
+
+const inferredFormat = (candidate: LocalRuntimeCandidate): string | null => {
+  if (candidate.is_short) return 'short';
+  if (candidate.is_live) return 'live';
+  if (candidate.format?.trim()) return normalizeFeatureText(candidate.format);
+  const text = normalizeFeatureText(candidate.title);
+  if (/\b(podcast|interview)\b/.test(text)) return 'podcast';
+  if (/\b(tutorial|course|guide|explained|learn)\b/.test(text)) return 'tutorial';
+  if (/\b(album|music|song|mix)\b/.test(text)) return 'music';
+  if (/\b(review|benchmark)\b/.test(text)) return 'review';
+  return null;
+};
+
+export function extractLocalCandidateFeatures(
+  state: PersonalAlgorithmState,
+  candidate: LocalRuntimeCandidate,
+  featureNodes: PersonalAlgorithmState['graph']['nodes'] = state.graph.nodes,
+): { nodeIds: string[]; features: ScoreFeatureSignal[] } {
+  const text = normalizeFeatureText([
+    candidate.title,
+    candidate.description ?? '',
+    candidate.channel_name ?? '',
+    ...(candidate.topics ?? []),
+  ].join(' '));
+  const nodeIds: string[] = [];
+  const features: ScoreFeatureSignal[] = [];
+
+  for (const node of featureNodes) {
+    if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
+    const similarity = lexicalMatch(node.label, text);
+    if (similarity <= 0) continue;
+    const confidence = Math.min(1, Math.max(0, typeof node.confidence === 'number' && Number.isFinite(node.confidence) ? node.confidence : 1));
+    const weight = FEATURE_WEIGHTS[node.kind as keyof typeof FEATURE_WEIGHTS];
+    const value = Number((weight * similarity * confidence).toFixed(2));
+    if (value <= 0) continue;
+    nodeIds.push(node.id);
+    features.push({
+      id: `${node.kind}:${node.id}`,
+      label: `${node.kind} match: ${node.label}`,
+      value,
+      sourceId: node.id,
+    });
+  }
+
+  const format = inferredFormat(candidate);
+  if (format) {
+    const formatNode = featureNodes
+      .find((node) => ['objective', 'topic', 'concept'].includes(node.kind) && normalizeFeatureText(
+        typeof node.attributes?.format === 'string' ? node.attributes.format : '',
+      ) === format);
+    if (formatNode) {
+      const confidence = Math.min(1, Math.max(0, typeof formatNode.confidence === 'number' && Number.isFinite(formatNode.confidence) ? formatNode.confidence : 1));
+      features.push({
+        id: `format:${formatNode.id}:${format}`,
+        label: `format match: ${format}`,
+        value: Number((FEATURE_WEIGHTS.format * confidence).toFixed(2)),
+        sourceId: formatNode.id,
+      });
+      nodeIds.push(formatNode.id);
+    }
+  }
+
+  if (candidate.published_at && candidate.lastSeenAt) {
+    const published = new Date(candidate.published_at).getTime();
+    const observed = new Date(candidate.lastSeenAt).getTime();
+    if (Number.isFinite(published) && Number.isFinite(observed) && observed >= published) {
+      const ageDays = (observed - published) / (24 * 60 * 60 * 1000);
+      const freshness = ageDays <= 1 ? 4 : ageDays <= 7 ? 2.5 : ageDays <= 30 ? 1 : 0;
+      if (freshness > 0) {
+        features.push({
+          id: 'freshness',
+          label: ageDays <= 1 ? 'freshness: published today' : ageDays <= 7 ? 'freshness: published this week' : 'freshness: published this month',
+          value: freshness,
+        });
+      }
+    }
+  }
+
+  return {
+    nodeIds: [...new Set(nodeIds)].sort(),
+    features: features.sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
+export function calibrateLocalScore(rawScore: number): number {
+  if (!Number.isFinite(rawScore)) return 0;
+  return Math.max(0, Math.min(100, Math.round(50 + 50 * Math.tanh(rawScore / 30))));
+}
+
+const candidateContext = (
+  state: PersonalAlgorithmState,
+  candidate: LocalRuntimeCandidate,
+  index: LocalScoringIndex = buildLocalScoringIndex(state),
+): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
-  const contentNode = state.graph.nodes.find((node) => node.id === contentId);
-  const creatorEdge = contentNode
-    ? state.graph.edges.find((edge) => (
-      edge.relation === 'created_by'
-      && edge.sourceNodeId === contentNode.id
-      && state.graph.nodes.some((node) => node.id === edge.targetNodeId && node.kind === 'creator')
-    ))
-    : undefined;
-  const creatorNodeId = creatorEdge?.targetNodeId ?? null;
+  const contentNode = index.contentNodes.get(contentId);
+  const extracted = extractLocalCandidateFeatures(state, candidate, index.featureNodes);
+  const channelCreatorId = candidate.channel_id
+    ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
+    : null;
+  const creatorNodeId = index.creatorByContent.get(contentId)
+    ?? (channelCreatorId && index.creatorIds.has(channelCreatorId) ? channelCreatorId : null)
+    ?? (candidate.channel_name
+      ? index.creatorByLabel.get(candidate.channel_name.trim().toLowerCase()) ?? null
+      : null);
 
   return {
     id: `youtube:${candidate.external_id}`,
     content: { source: 'youtube', externalId: candidate.external_id },
-    nodeIds: contentNode ? [contentNode.id] : [],
+    nodeIds: [...new Set([...(contentNode ? [contentNode.id] : []), ...extracted.nodeIds])],
     creatorNodeId,
+    features: extracted.features,
   };
 };
 
@@ -66,15 +234,15 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   const nodeWeights: Record<string, number> = {};
   for (const node of state.graph.nodes) {
     if (node.kind === 'content') nodeWeights[node.id] = 1;
-    if (node.kind === 'creator') nodeWeights[node.id] = 2;
+    if (node.kind === 'creator') nodeWeights[node.id] = 8;
   }
 
   return {
-    revision: 'local-mvp-p1',
+    revision: 'local-mvp-p2',
     baseScore: 0,
     nodeWeights,
     edgeRelationWeights: {
-      created_by: 3,
+      created_by: 2,
     },
   };
 }
@@ -116,9 +284,9 @@ export function buildLocalFeedbackSignals(
         )
         : null;
       const value = event.eventType === 'more_like_this'
-        ? 10
+        ? 20
         : event.eventType === 'not_interested'
-          ? -10
+          ? -25
           : event.eventType === 'never_show_channel'
             ? -100
             : 0;
@@ -141,11 +309,13 @@ export function scoreLocalCandidates(
   sourceFilters: FeedSourceFilters = {},
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
+  const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
+  const scoringIndex = buildLocalScoringIndex(state);
 
   return candidates
     .map((candidate) => {
-      const context = candidateContext(state, candidate);
-      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals);
+      const context = candidateContext(state, candidate, scoringIndex);
+      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
         || (candidate.is_live && sourceFilters.includeLive === false)
@@ -160,12 +330,13 @@ export function scoreLocalCandidates(
       return {
         ...candidate,
         id: candidate.external_id,
-        score: result.score,
+        rawScore: result.score,
+        score: calibrateLocalScore(result.score),
         visible,
         trace: result.trace,
       };
     })
-    .sort((left, right) => right.score - left.score || left.external_id.localeCompare(right.external_id));
+    .sort((left, right) => right.score - left.score || right.rawScore - left.rawScore || left.external_id.localeCompare(right.external_id));
 }
 
 export function traceForLocalCandidate(

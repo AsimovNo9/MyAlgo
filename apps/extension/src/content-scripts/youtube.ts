@@ -1,8 +1,9 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
+
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
@@ -25,6 +26,7 @@ let rankingInFlight = false;
 let activeMode = 'Work';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
+let mutationRankTimer: number | undefined;
 let rankQueued = false;
 let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
@@ -40,6 +42,13 @@ let pendingWatchExposure: { videoId: string; exposureId: string | null; observed
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
+const REPLACEMENT_STABILITY_MS = 45_000;
+const stableReplacementBySourceId = new Map<string, {
+  candidateId: string;
+  item: RankedFeedItem;
+  routeKey: string;
+  expiresAt: number;
+}>();
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
@@ -47,6 +56,7 @@ document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 const getRouteKey = () => `${location.pathname}${location.search}`;
+const clearStableReplacements = () => stableReplacementBySourceId.clear();
 
 const logStaleRender = (phase: string, requestGeneration: number) => {
   console.info('[MyAlgo] skipped stale render', {
@@ -146,6 +156,7 @@ const clearExtensionPresentation = (showPaused = true) => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmReplacementCandidateId;
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -165,8 +176,11 @@ const createThumbnail = (
     media.loading = 'lazy';
   } else {
     media.setAttribute('aria-hidden', 'true');
+    media.textContent = 'Thumbnail unavailable';
+    media.style.cssText = `display:flex;width:100%;aspect-ratio:${aspectRatio};align-items:center;justify-content:center;border-radius:10px;background:var(--yt-spec-10-percent-layer, #272727);color:var(--yt-spec-text-secondary, #aaa);font:500 12px/1.3 Roboto,Arial,sans-serif;`;
+    return media;
   }
-  media.style.cssText = `display:block;width:100%;aspect-ratio:${aspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
+  media.style.cssText = `display:block;width:100%;aspect-ratio:${aspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #272727);`;
   return media;
 };
 
@@ -189,6 +203,7 @@ const createReplacementCard = (
     generation,
     activeMode,
   );
+  const displayMetadata = getReplacementTextMetadata(item);
   card.dataset.personalAlgorithmReplacement = 'true';
   card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
   card.dataset.personalAlgorithmTraceId = metadata.traceId;
@@ -214,20 +229,27 @@ const createReplacementCard = (
   link.style.cssText = 'display:block;color:inherit;text-decoration:none;min-width:0;';
   link.appendChild(createThumbnail(item, aspectRatio));
 
+  const videoMeta = document.createElement('div');
+  videoMeta.dataset.personalAlgorithmVideoMetadata = 'true';
+  videoMeta.style.cssText = 'display:block;margin-top:10px;min-width:0;padding:0 2px;';
+
   const title = document.createElement('div');
-  title.textContent = item.title ?? 'Recommended video';
-  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-  link.appendChild(title);
+  title.dataset.personalAlgorithmTitle = 'true';
+  title.textContent = displayMetadata.title;
+  title.style.cssText = 'display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:var(--yt-spec-text-primary,#f1f1f1);font-size:16px;font-weight:600;line-height:22px;white-space:normal;';
+  videoMeta.appendChild(title);
 
   const channel = document.createElement('div');
-  channel.textContent = item.channel_name ?? `${activeMode} replacement`;
-  channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
-  link.appendChild(channel);
+  channel.dataset.personalAlgorithmCreator = 'true';
+  channel.textContent = displayMetadata.creator;
+  channel.style.cssText = 'display:block;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary,#aaa);font-size:14px;line-height:20px;';
+  videoMeta.appendChild(channel);
+  link.appendChild(videoMeta);
   card.appendChild(link);
 
   const meta = document.createElement('div');
-  meta.textContent = `Generated by MyAlgo · ${activeMode} mode · score ${item.score ?? 0}`;
-  meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary, #aaa);font-size:12px;line-height:17px;font-weight:600;';
+  meta.textContent = `MyAlgo · ${activeMode} · ${item.score ?? 0}/100`;
+  meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary,#aaa);font-size:12px;line-height:17px;font-weight:600;';
   card.appendChild(meta);
 
   const why = document.createElement('button');
@@ -237,12 +259,42 @@ const createReplacementCard = (
   why.textContent = 'Why this?';
   why.setAttribute('aria-label', 'Why MyAlgo showed this replacement');
   why.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;margin-top:7px;padding:6px 10px;border-radius:999px;border:1px solid #475569;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;';
+  const explanation = document.createElement('div');
+  explanation.dataset.personalAlgorithmExplanationPanel = 'true';
+  explanation.hidden = true;
+  explanation.style.cssText = 'margin-top:8px;padding:9px 10px;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:rgba(15,23,42,.88);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;';
+
+  const explanationData = item.explanation;
+  const scoreLine = document.createElement('div');
+  scoreLine.textContent = explanationData
+    ? `Score ${explanationData.displayScore}/100 · raw ${explanationData.rawScore} · graph r${explanationData.graphRevision}`
+    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
+  explanation.appendChild(scoreLine);
+
+  if (explanationData?.acquisitionMechanism) {
+    const acquired = document.createElement('div');
+    acquired.textContent = `Acquired via ${explanationData.acquisitionMechanism} · acquisition is not preference evidence`;
+    acquired.style.cssText = 'margin-top:4px;color:#cbd5e1;';
+    explanation.appendChild(acquired);
+  }
+
+  for (const contribution of explanationData?.contributions ?? []) {
+    const row = document.createElement('div');
+    const sign = contribution.value > 0 ? '+' : '';
+    row.textContent = `${contribution.label}: ${sign}${contribution.value}`;
+    row.style.cssText = 'margin-top:4px;';
+    explanation.appendChild(row);
+  }
+
   why.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    showStatus(`Personal Algorithm trace ${item.traceId ?? 'unavailable'} · score ${item.score ?? 0}`);
+    explanation.hidden = !explanation.hidden;
+    why.setAttribute('aria-expanded', String(!explanation.hidden));
   });
+  why.setAttribute('aria-expanded', 'false');
   card.appendChild(why);
+  card.appendChild(explanation);
 
   return card;
 };
@@ -523,9 +575,16 @@ const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
+  const rankById = new Map(cachedFeed.map((item, index) => [item.external_id, index]));
   const knownElements = getVideoElements();
+  const nativeCards = knownElements.map((element) => ({
+    element,
+    id: getVideoId(element),
+    title: getVideoTitle(element),
+    flags: getVideoSourceFlags(element),
+  }));
 
-  knownElements.forEach((element, nativeIndex) => {
+  nativeCards.forEach(({ element, id, title, flags }, nativeIndex) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
@@ -535,15 +594,14 @@ const applyRankedFeed = () => {
     delete element.dataset.personalAlgorithmSlotWidth;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
-    const title = getVideoTitle(element);
-    const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
+    const item = feedById.get(id) ?? feedByTitle.get(title);
     const decision = getNativeCardDecision(item, {
-      sourceFiltered: shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters),
+      sourceFiltered: shouldHideForSourceFilters(flags, sourceFilters),
       minimumVisibleScore: youtubeConnector.presentation.minimumVisibleScore,
     });
 
     if (decision.action === 'hide') {
-      const sourceVideoId = getVideoId(element);
+      const sourceVideoId = id;
       const slotWidth = element.getBoundingClientRect().width;
       if (
         isReplacementEligibleNativeDecision(decision)
@@ -568,7 +626,7 @@ const applyRankedFeed = () => {
 
     const score = item.score ?? 0;
     element.dataset.personalAlgorithmScore = String(score);
-    element.dataset.personalAlgorithmRank = String(cachedFeed.indexOf(item));
+    element.dataset.personalAlgorithmRank = String(rankById.get(item.external_id) ?? -1);
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
 
@@ -590,6 +648,130 @@ const applyRankedFeed = () => {
     badge.textContent = `MyAlgo · ${activeMode} · ${score}`;
   });
 
+  // If policy/score filtering did not naturally create enough replacement
+  // slots, allow a bounded swap only when a distinct reservoir candidate scores
+  // higher than a currently visible native card. Never hide a card unless an
+  // actual replacement candidate is already available.
+  const existingReplacementSlots = knownElements.filter((element) => Boolean(
+    element.dataset.personalAlgorithmSlotId
+    && element.style.getPropertyValue('display') === 'none',
+  )).length;
+  let remainingReplacementCapacity = Math.max(
+    0,
+    youtubeConnector.presentation.replacementLimit - existingReplacementSlots,
+  );
+
+  let stableReplacementAssignments = 0;
+  let opportunisticReplacementCandidates = 0;
+  let opportunisticNativeTargets = 0;
+  let opportunisticSelectedTargets = 0;
+  let opportunisticUpliftQualified = 0;
+
+  if (remainingReplacementCapacity > 0) {
+    const routeKey = getRouteKey();
+    const now = Date.now();
+    const nativeIds = new Set(
+      nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
+    );
+    const usedCandidateIds = new Set<string>();
+
+    // Keep a recently rendered replacement stable across ordinary YouTube DOM
+    // churn. The hold is invalidated if the route changes, the candidate becomes
+    // ineligible, the native target disappears, or the candidate actually drops
+    // below the native card's score.
+    for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
+      const { element, id } = nativeCards[nativeIndex];
+      const sticky = stableReplacementBySourceId.get(id);
+      if (!sticky) continue;
+      if (sticky.routeKey !== routeKey || sticky.expiresAt <= now) {
+        stableReplacementBySourceId.delete(id);
+        continue;
+      }
+      const item = feedById.get(sticky.candidateId) ?? sticky.item;
+      const nativeScore = Number(element.dataset.personalAlgorithmScore);
+      const candidateScore = item?.score ?? -Infinity;
+      const valid = Boolean(
+        item
+        && !nativeIds.has(sticky.candidateId)
+        && !usedCandidateIds.has(sticky.candidateId)
+        && item.visible !== false
+        && item.suppressed !== true
+        && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+        && candidateScore >= youtubeConnector.presentation.replacementMinimumScore
+        && Number.isFinite(nativeScore)
+        && candidateScore >= nativeScore
+        && element.parentElement
+        && element.style.getPropertyValue('display') !== 'none'
+      );
+      if (!valid) {
+        stableReplacementBySourceId.delete(id);
+        continue;
+      }
+
+      const slotWidth = element.getBoundingClientRect().width;
+      if (slotWidth < 120) continue;
+      element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
+        rankGeneration,
+        routeKey,
+        nativeIndex,
+        id,
+      );
+      element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
+      element.style.setProperty('display', 'none', 'important');
+      element.dataset.personalAlgorithmScore = 'replacement_slot';
+      usedCandidateIds.add(sticky.candidateId);
+      stableReplacementAssignments += 1;
+      remainingReplacementCapacity -= 1;
+    }
+
+    if (remainingReplacementCapacity > 0) {
+      const replacementSelectionSeed = `${rankGeneration}|${routeKey}`;
+      const replacementCandidates = getReplacementCandidates(
+        cachedFeed,
+        [...nativeIds, ...usedCandidateIds],
+        remainingReplacementCapacity,
+        youtubeConnector.presentation.replacementMinimumScore,
+        replacementSelectionSeed,
+      );
+      const nativeTargets = nativeCards.flatMap(({ element, id }, nativeIndex) => {
+        if (element.style.getPropertyValue('display') === 'none') return [];
+        const score = Number(element.dataset.personalAlgorithmScore);
+        if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
+        return [{ externalId: id, score, nativeIndex }];
+      });
+      const selectedAssignments = selectOpportunisticReplacementAssignments(
+        nativeTargets,
+        replacementCandidates,
+        remainingReplacementCapacity,
+        youtubeConnector.presentation.replacementMinimumUplift,
+      );
+
+      opportunisticReplacementCandidates = replacementCandidates.length;
+      opportunisticNativeTargets = nativeTargets.length;
+      opportunisticSelectedTargets = selectedAssignments.length;
+      opportunisticUpliftQualified = selectedAssignments.length;
+
+      for (const assignment of selectedAssignments) {
+        const selected = assignment.target;
+        const element = knownElements[selected.nativeIndex];
+        if (!element?.parentElement || element.style.getPropertyValue('display') === 'none') continue;
+        const slotWidth = element.getBoundingClientRect().width;
+        if (slotWidth < 120) continue;
+        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
+          rankGeneration,
+          routeKey,
+          selected.nativeIndex,
+          selected.externalId,
+        );
+        element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+        element.dataset.personalAlgorithmReplacementCandidateId = assignment.item.external_id ?? '';
+        element.style.setProperty('display', 'none', 'important');
+        element.dataset.personalAlgorithmScore = 'replacement_slot';
+      }
+    }
+  }
+
   syncSourceFilteredContainers();
 
   console.info('[MyAlgo] native presentation', {
@@ -610,6 +792,12 @@ const applyRankedFeed = () => {
     hiddenSourceLayoutItems: document.querySelectorAll(
       '[data-personal-algorithm-source-layout-hidden]',
     ).length,
+    stableReplacementAssignments,
+    opportunisticReplacementCandidates,
+    opportunisticNativeTargets,
+    opportunisticSelectedTargets,
+    opportunisticUpliftQualified,
+    replacementMinimumUplift: youtubeConnector.presentation.replacementMinimumUplift,
   });
 };
 
@@ -658,13 +846,35 @@ const renderReplacementSlots = (generation: number) => {
     && (item.policyOutcome == null || item.policyOutcome === 'eligible')
     && (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
   )).length;
-  const assignments = planReplacementAssignments(
-    cachedFeed,
-    slots,
-    blockedIds,
-    youtubeConnector.presentation.replacementMinimumScore,
-  ).slice(0, youtubeConnector.presentation.replacementLimit);
   const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
+  const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
+  const boundAssignments = slots.flatMap((slot) => {
+    const target = targetBySlot.get(slot.slotId);
+    const candidateId = target?.dataset.personalAlgorithmReplacementCandidateId?.trim();
+    const item = candidateId ? feedById.get(candidateId) : undefined;
+    if (
+      !item
+      || blockedIds.has(candidateId ?? '')
+      || item.visible === false
+      || item.suppressed === true
+      || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+      || (item.score ?? 0) < youtubeConnector.presentation.replacementMinimumScore
+    ) {
+      return [];
+    }
+    return [{ slot, item }];
+  });
+  const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
+  const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
+  const fallbackAssignments = planReplacementAssignments(
+    cachedFeed,
+    slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
+    [...blockedIds, ...boundCandidateIds],
+    youtubeConnector.presentation.replacementMinimumScore,
+    `${generation}|${getRouteKey()}`,
+  );
+  const assignments = [...boundAssignments, ...fallbackAssignments]
+    .slice(0, youtubeConnector.presentation.replacementLimit);
   let filled = 0;
 
   for (const assignment of assignments) {
@@ -686,6 +896,12 @@ const renderReplacementSlots = (generation: number) => {
       generation,
     );
     target.parentElement.insertBefore(replacement, target);
+    stableReplacementBySourceId.set(assignment.slot.sourceVideoId, {
+      candidateId: assignment.item.external_id ?? '',
+      item: assignment.item,
+      routeKey: getRouteKey(),
+      expiresAt: Date.now() + REPLACEMENT_STABILITY_MS,
+    });
     filled += 1;
   }
 
@@ -696,11 +912,15 @@ const renderReplacementSlots = (generation: number) => {
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
+    blockedNativeIds: blockedIds.size,
+    offPageCandidates: cachedFeed.filter((item) => item.external_id && !blockedIds.has(item.external_id)).length,
+    boundAssignments: boundAssignments.length,
+    fallbackAssignments: fallbackAssignments.length,
     candidates: replacementCandidateDiagnostics,
   });
 };
 
-const scheduleRankGeneration = (generation: number) => {
+const scheduleRankGeneration = (generation: number, delayMs = 320) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
     rankTimer = undefined;
@@ -710,12 +930,12 @@ const scheduleRankGeneration = (generation: number) => {
       return;
     }
     void rankCurrentPage(generation);
-  }, 180);
+  }, delayMs);
 };
 
 const scheduleLatestRank = () => {
   rankQueued = false;
-  scheduleRankGeneration(rankGeneration);
+  scheduleRankGeneration(rankGeneration, 120);
 };
 
 const rankCurrentPage = async (requestGeneration: number) => {
@@ -734,13 +954,6 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
   rankingInFlight = true;
   showStatus(`Personal Algorithm: ranking ${candidates.length} videos`);
-  const result = await safeStorageGet(['personal-algorithm-mode']);
-  if (!isCurrentInstance()) {
-    rankingInFlight = false;
-    return;
-  }
-
-  activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
   const requestMode = activeMode;
   const requestContext = { generation: requestGeneration, routeKey: requestRouteKey, mode: requestMode };
   const currentContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
@@ -754,6 +967,9 @@ const rankCurrentPage = async (requestGeneration: number) => {
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
     rankingInFlight = false;
+    applyRankedFeed();
+    clearLegacyRecommendationShelf();
+    renderReplacementSlots(rankGeneration);
     if (rankQueued) scheduleLatestRank();
     return;
   }
@@ -768,6 +984,15 @@ const rankCurrentPage = async (requestGeneration: number) => {
     }
 
     if (response?.ok && Array.isArray(response.feed)) {
+      console.info('[MyAlgo] rank response', {
+        generation: requestGeneration,
+        pageCandidates: candidates.length,
+        feed: response.feed.length,
+        backgroundElapsedMs: response.elapsedMs ?? null,
+        rankingWorkingSetSize: response.rankingWorkingSetSize ?? null,
+        replacementInventorySize: response.replacementInventorySize ?? null,
+        enrichmentPending: response.enrichmentPending === true,
+      });
       cachedFeed = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
@@ -796,41 +1021,42 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: 'navigation' | 'mutation' | 'metadata' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation') {
+  if (reason !== 'mutation' && reason !== 'metadata') {
+    if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
+      clearStableReplacements();
+    }
     document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
   }
 
-  const currentCandidates = collectCandidates();
-  const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
-  const hasMeaningfulCards = currentCandidates.length >= 2;
-
-  // Only a native DOM mutation may reuse the current scored generation.
-  // Mode, feedback, graph, and navigation changes must request fresh scores.
-  if (
-    reason === 'mutation'
-    && hasMeaningfulCards
-    && candidateSignature === lastCandidateSignature
-    && activeMode === lastRankMode
-    && cachedFeed.length > 0
-  ) {
-    applyRankedFeed();
-    clearLegacyRecommendationShelf();
-    renderReplacementSlots(rankGeneration);
-    return;
+  if (reason === 'metadata') {
+    // Force a new score pass because cached watch metadata changed, but keep
+    // stable replacement assignments until the new scores actually render.
+    lastCandidateSignature = '';
   }
 
-  if (!hasMeaningfulCards && reason !== 'manual') return;
-
-  const generation = ++rankGeneration;
   if (rankingInFlight) {
     rankQueued = true;
+    // Ordinary feed churn must not invalidate the response already in flight;
+    // otherwise a continuously mutating YouTube Home page can starve MyAlgo
+    // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
+    // changes still invalidate the active generation.
+    if (reason !== 'mutation' && reason !== 'metadata') {
+      rankGeneration += 1;
+    }
     return;
   }
-  scheduleRankGeneration(generation);
+
+  const generation = ++rankGeneration;
+  const delayMs = reason === 'mutation'
+    ? 320
+    : reason === 'metadata'
+      ? 120
+      : 60;
+  scheduleRankGeneration(generation, delayMs);
 };
 const scheduleInitialRank = (attempt = 0) => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
@@ -842,7 +1068,7 @@ const scheduleInitialRank = (attempt = 0) => {
       return;
     }
     if (attempt < 8) scheduleInitialRank(attempt + 1);
-  }, attempt === 0 ? 100 : 250);
+  }, attempt === 0 ? 40 : 180);
 };
 
 safeStorageGet([
@@ -870,56 +1096,6 @@ safeStorageGet([
   clearLegacyRecommendationShelf();
   scheduleInitialRank();
 });
-
-const parseIsoDuration = (value: string | null): number | null => {
-  if (!value) return null;
-  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
-  if (!match) return null;
-  return (Number(match[1] ?? 0) * 3600) + (Number(match[2] ?? 0) * 60) + Number(match[3] ?? 0);
-};
-
-const enrichYouTubeVideo = async (candidate: { external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }) => {
-  const fallback = { ...candidate, enrichedAt: new Date().toISOString() };
-  try {
-    const url = youtubeConnector.getCanonicalUrl(candidate.external_id);
-    const response = await fetch(url, { credentials: 'same-origin' });
-    if (!response.ok) return fallback;
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const meta = (selector: string) => doc.querySelector<HTMLMetaElement>(selector)?.content?.trim() || null;
-    const title = meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title;
-    const description = meta('meta[name="description"]') ?? meta('meta[property="og:description"]');
-    const thumbnail = meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null;
-    const duration = parseIsoDuration(meta('meta[itemprop="duration"]'));
-    const publishedAt = meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]');
-    const viewCountRaw = meta('meta[itemprop="interactionCount"]');
-    const viewCount = viewCountRaw && /^\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
-    const channelId = meta('meta[itemprop="channelId"]');
-    const channelName = meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null;
-    return {
-      ...fallback,
-      title,
-      channel_name: channelName,
-      channel_id: channelId,
-      thumbnail_url: thumbnail,
-      description: description?.slice(0, 600) ?? null,
-      duration_seconds: duration,
-      published_at: publishedAt,
-      view_count: viewCount,
-    };
-  } catch {
-    return fallback;
-  }
-};
-
-const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; title: string; channel_name?: string | null; thumbnail_url?: string | null; is_short?: boolean; is_live?: boolean }>) => {
-  const results: unknown[] = [];
-  for (let index = 0; index < candidates.length; index += 3) {
-    const batch = candidates.slice(index, index + 3);
-    results.push(...await Promise.all(batch.map(enrichYouTubeVideo)));
-  }
-  return results;
-};
 
 const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) => (
   left.subscribedOnly === right.subscribedOnly
@@ -956,10 +1132,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
-  if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
-    const candidates = Array.isArray(message.payload?.candidates) ? message.payload.candidates : [];
-    void enrichYouTubeVideos(candidates).then((videos) => sendResponse({ ok: true, videos }));
-    return true;
+  if (message?.type === 'YOUTUBE_METADATA_ENRICHED') {
+    if (extensionEnabled) triggerRank('metadata');
+    return;
   }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
@@ -1003,6 +1178,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {
+    clearStableReplacements();
     rankGeneration += 1;
     cachedFeed = [];
     lastCandidateSignature = '';
@@ -1012,6 +1188,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
+  clearStableReplacements();
   rankGeneration += 1;
   activeMode = message.payload.mode;
   cachedFeed = [];
@@ -1215,6 +1392,11 @@ window.addEventListener('load', () => {
   attachTemporalWatchObserver();
 });
 window.addEventListener('yt-navigate-start', () => {
+  clearStableReplacements();
+  if (mutationRankTimer !== undefined) {
+    window.clearTimeout(mutationRankTimer);
+    mutationRankTimer = undefined;
+  }
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
@@ -1236,7 +1418,10 @@ window.addEventListener('yt-navigate-finish', () => {
   }
 });
 window.addEventListener('yt-page-data-updated', () => {
-  triggerRank('navigation');
+  // YouTube emits this during ordinary in-route Home refreshes as well as
+  // navigation-adjacent updates. The actual navigation lifecycle already
+  // clears state on yt-navigate-start, so treat this as mutation churn here.
+  triggerRank('mutation');
 });
 window.addEventListener('popstate', () => {
   if (!isYouTubeHistoryPage(location.pathname)) triggerRank('navigation');
@@ -1267,7 +1452,15 @@ const pageObserver = new MutationObserver((records) => {
       // appends native cards; fresh scoring can follow asynchronously.
       applyRankedFeed();
     }
-    triggerRank('mutation');
+
+    // YouTube can emit dozens of subtree mutations for one visual feed update.
+    // Coalesce them before collecting/scoring the DOM rather than invoking
+    // collectCandidates() for every observer callback.
+    if (mutationRankTimer !== undefined) window.clearTimeout(mutationRankTimer);
+    mutationRankTimer = window.setTimeout(() => {
+      mutationRankTimer = undefined;
+      if (isCurrentInstance() && extensionEnabled) triggerRank('mutation');
+    }, 450);
   }
 
   const hasSourceShelfMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
@@ -1290,7 +1483,7 @@ pageObserver.observe(document.documentElement, { childList: true, subtree: true 
 
 window.setInterval(() => {
   if (isWatchPage()) attachTemporalWatchObserver();
-}, 1000);
+}, 2500);
 
 const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'auxclick' | 'keyboard') => {
   if (!isCurrentInstance() || !extensionEnabled) return;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -216,4 +216,119 @@ test('source shelf policy removes Shorts and Playables only when disabled', () =
     ),
     null,
   );
+});
+
+
+test('opportunistic replacements select only lower-scoring native cards', () => {
+  const targets = [
+    { externalId: 'native-a', score: 0, nativeIndex: 0 },
+    { externalId: 'native-b', score: 2, nativeIndex: 1 },
+    { externalId: 'native-c', score: 5, nativeIndex: 2 },
+  ];
+  const replacements = [
+    { external_id: 'rss-a', title: 'RSS A', score: 6, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'rss-b', title: 'RSS B', score: 3, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+  ];
+
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(targets, replacements, 6, 5),
+    [
+      { externalId: 'native-a', score: 0, nativeIndex: 0 },
+    ],
+  );
+});
+
+test('opportunistic replacement requires configured score uplift', () => {
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(
+      [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 64, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      6,
+      5,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(
+      [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 65, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      6,
+      5,
+    ),
+    [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+  );
+});
+
+
+test('replacement text metadata always provides visible title and creator fallbacks', () => {
+  assert.deepEqual(
+    getReplacementTextMetadata({ title: '  Video title  ', channel_name: ' Creator ', score: 72, rawScore: 14.5 }),
+    { title: 'Video title', creator: 'Creator', displayScore: 72, rawScore: 14.5 },
+  );
+  assert.deepEqual(
+    getReplacementTextMetadata({ title: '', channel_name: null, score: 50 }),
+    { title: 'Recommended video', creator: 'Unknown creator', displayScore: 50, rawScore: null },
+  );
+});
+
+
+test('replacement candidate rotation changes across generation seeds but is stable within one seed', () => {
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    external_id: `candidate-${index}`,
+    title: `Candidate ${index}`,
+    score: 80,
+    visible: true,
+    traceId: `trace-${index}`,
+    policyOutcome: 'eligible',
+  }));
+
+  const first = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
+  const firstReplay = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
+  const second = getReplacementCandidates(items, [], 3, 55, 'generation-2').map((item) => item.external_id);
+
+  assert.deepEqual(firstReplay, first);
+  assert.notDeepEqual(second, first);
+});
+
+
+test('replacement rotation can vary candidates within the same 5-point score band', () => {
+  const items = [
+    { external_id: 'a', title: 'A', score: 80, visible: true, traceId: 'ta', policyOutcome: 'eligible' },
+    { external_id: 'b', title: 'B', score: 79, visible: true, traceId: 'tb', policyOutcome: 'eligible' },
+    { external_id: 'c', title: 'C', score: 78, visible: true, traceId: 'tc', policyOutcome: 'eligible' },
+    { external_id: 'd', title: 'D', score: 77, visible: true, traceId: 'td', policyOutcome: 'eligible' },
+    { external_id: 'e', title: 'E', score: 70, visible: true, traceId: 'te', policyOutcome: 'eligible' },
+  ];
+
+  const orders = Array.from({ length: 12 }, (_, index) =>
+    getReplacementCandidates(items, [], 3, 55, `seed-${index}`).map((item) => item.external_id),
+  );
+  const uniqueOrders = new Set(orders.map((order) => order.join('|')));
+
+  assert.ok(uniqueOrders.size > 1);
+  assert.equal(orders.every((order) => !order.includes('e')), true);
+  assert.deepEqual(
+    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
+    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
+  );
+});
+
+
+test('opportunistic replacement assignments bind the selected candidate to its native target', () => {
+  const assignments = selectOpportunisticReplacementAssignments(
+    [
+      { externalId: 'native-low', score: 60, nativeIndex: 4 },
+      { externalId: 'native-high', score: 75, nativeIndex: 8 },
+    ],
+    [
+      { external_id: 'replacement-a', title: 'A', score: 82, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+      { external_id: 'replacement-b', title: 'B', score: 69, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+    ],
+    2,
+    5,
+  );
+
+  assert.equal(assignments.length, 1);
+  assert.equal(assignments[0].target.externalId, 'native-low');
+  assert.equal(assignments[0].item.external_id, 'replacement-a');
 });

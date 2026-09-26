@@ -43,7 +43,7 @@ The 2026-09-26 audit of `main` found:
 | Server/backend API-ranked runtime | No server/backend application exists in the current repository tree | absent from current launch tree |
 | Browser page metadata fetch | The content script may fetch the canonical `youtube.com/watch?v=...` page with same-origin credentials to enrich page-observed metadata | browser/page path, not YouTube Data API |
 | Connector capability flags | `search`, `subscriptions`, and `userContent` flags describe provider/page capabilities; they do not instantiate a Data API client | local connector metadata |
-| Legacy retrieval vocabulary | Shared/recommender types still contain names such as `youtube_subscription`, `youtube_search`, and `youtube_liked`; code search finds no network/API implementation behind them | legacy planning vocabulary; follow-up cleanup |
+| Candidate acquisition provenance | Shared types separate connector/provider from acquisition mechanism (`observed_dom`, `rss`, `web_search`, `exploration`) and query lane; provider/API-like labels were removed in #202/#206 | source-neutral planning/runtime provenance |
 
 The extension imports the local recommender-core package for deterministic scoring, but the launch package contains no YouTube API network/auth implementation.
 

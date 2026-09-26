@@ -89,7 +89,7 @@ type EvidenceProvenance = {
 };
 ```
 
-The connector identifies the adapter that observed the evidence. The mechanism identifies how the connector observed it, such as DOM, player telemetry, user interaction, RSS, or another provider-specific mechanism.
+The connector identifies the adapter that observed the evidence. The mechanism identifies how the connector observed it, such as DOM, player telemetry, user interaction, or another provider-specific observation mechanism.
 
 Platform-specific provenance unions belong in the connector, not in the source-neutral contract.
 
@@ -107,6 +107,12 @@ Metadata is descriptive content information, not a preference decision:
 - content type.
 
 Connectors normalize provider-specific metadata into this shape.
+
+## Candidate acquisition is a separate provenance domain
+
+RSS and web search are candidate-acquisition mechanisms, not evidence mechanisms. Acquisition provenance records how content entered the bounded candidate reservoir (`connector`, `mechanism`, query lane, graph/retrieval revision, source URL, acquisition time). Merely retrieving an item must not create `ExposureEvidence`, `InteractionEvidence`, graph edges, or preference weight.
+
+A candidate can have multiple acquisition paths over time (for example, observed in the native DOM and later found in RSS). The runtime preserves that acquisition history instead of letting the latest merge overwrite the earlier provenance.
 
 ## Connector contract
 
