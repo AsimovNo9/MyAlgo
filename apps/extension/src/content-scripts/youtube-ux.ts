@@ -60,6 +60,13 @@ export function getNativeCardDecision(
   return { action: 'show', reason: 'ranked' };
 }
 
+export function isReplacementEligibleNativeDecision(
+  decision: NativeCardDecision,
+): boolean {
+  return decision.action === 'hide'
+    && decision.reason !== 'source_filter';
+}
+
 export type RenderContext = {
   generation: number;
   routeKey: string;
