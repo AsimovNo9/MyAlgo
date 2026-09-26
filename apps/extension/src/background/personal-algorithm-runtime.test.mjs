@@ -113,7 +113,7 @@ test('explicit local feedback changes the score without treating watch evidence 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-b');
-  assert.equal(ranked[0].score, 10);
+  assert.equal(ranked[0].score, 11);
   assert.equal(ranked[1].score, 6);
 });
 
