@@ -128,11 +128,12 @@ const clearExtensionPresentation = (showPaused = true) => {
   ).forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden]',
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden]',
   ).forEach((container) => {
     container.style.removeProperty('display');
     delete container.dataset.personalAlgorithmSourceShelfHidden;
     delete container.dataset.personalAlgorithmSourceRowHidden;
+    delete container.dataset.personalAlgorithmSourceSectionHidden;
   });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
     element.style.removeProperty('position');
@@ -554,6 +555,16 @@ const syncSourceFilteredContainers = () => {
         shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
       );
       if (!hasShorts) return;
+
+      const structuralHost = shelf.closest<HTMLElement>(
+        'ytd-rich-section-renderer, ytd-item-section-renderer',
+      );
+      if (structuralHost) {
+        structuralHost.dataset.personalAlgorithmSourceSectionHidden = 'shorts';
+        structuralHost.style.setProperty('display', 'none', 'important');
+        return;
+      }
+
       shelf.dataset.personalAlgorithmSourceShelfHidden = 'shorts';
       shelf.style.setProperty('display', 'none', 'important');
     });
@@ -647,6 +658,23 @@ const applyRankedFeed = () => {
   });
 
   syncSourceFilteredContainers();
+
+  console.info('[MyAlgo] native presentation', {
+    generation: rankGeneration,
+    scoredCards: document.querySelectorAll('[data-personal-algorithm-score]').length,
+    nativeBadges: document.querySelectorAll(
+      '[data-personal-algorithm-score] [data-personal-algorithm-badge]',
+    ).length,
+    sourceFilteredCards: document.querySelectorAll(
+      '[data-personal-algorithm-score="source_filter"]',
+    ).length,
+    hiddenSourceSections: document.querySelectorAll(
+      '[data-personal-algorithm-source-section-hidden]',
+    ).length,
+    hiddenSourceRows: document.querySelectorAll(
+      '[data-personal-algorithm-source-row-hidden]',
+    ).length,
+  });
 };
 
 const renderReplacementSlots = (generation: number) => {
