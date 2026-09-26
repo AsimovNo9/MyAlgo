@@ -196,6 +196,15 @@ export function parseYoutubeRssFeed(
   return candidates;
 }
 
+export function shouldRefreshObservedCandidate(
+  lastSeenAt: string | null | undefined,
+  nowMs: number,
+  intervalMs = 30_000,
+): boolean {
+  const previous = new Date(lastSeenAt ?? 0).getTime();
+  return !Number.isFinite(previous) || nowMs - previous >= Math.max(0, intervalMs);
+}
+
 export function needsYoutubeMetadataRefresh(
   record: { channel_id?: string | null; enrichedAt?: string | null } | undefined,
   nowMs: number,
