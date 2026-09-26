@@ -19,6 +19,8 @@ export type ProviderCapabilities = {
 export type ProviderPresentationContract = {
   candidateLimit: number;
   minimumVisibleScore: number;
+  replacementMinimumScore: number;
+  replacementLimit: number;
   shelfBatchSize: number;
   shelfDomLimit: number;
   horizontalAspectRatio: `${number} / ${number}`;
