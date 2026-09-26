@@ -6,6 +6,7 @@
 |---|---|---|---|
 | Rendered history | Browser | Graph evidence | Local |
 | Rendered feed candidates | Browser | Candidate/evidence | Local |
+| RSS-acquired candidate metadata | YouTube public RSS, opt-in | Candidate acquisition only; **not preference evidence** | Local bounded candidate reservoir/provenance |
 | User interactions | Browser/user | Graph evidence | Local |
 | User-created graph | User | Personal model | Local |
 | YouTube API account facts | API | **Not currently integrated**; future display/account-fact use only after review | No launch store |
@@ -17,7 +18,7 @@
 
 Do not merge provider-originated API Data and browser-observed evidence into one undifferentiated permanent store.
 
-Maintain provenance.
+Maintain provenance. Candidate acquisition provenance is distinct from evidence provenance: RSS/web-search acquisition records how a candidate entered the reservoir and must not become graph evidence merely because it was retrieved.
 
 ```text
 Evidence {
@@ -63,6 +64,10 @@ the reset/delete controls must remove retained evidence before launch.
 The local-only MVP uses a versioned in-product privacy disclosure. Observation and ranking remain disabled until the current version is affirmatively accepted. A material data-flow change requires a disclosure-version increment and renewed acceptance before changed collection begins.
 
 A full local-data deletion clears disclosure acceptance as well as retained extension state, so observation cannot silently restart after reset.
+
+### RSS candidate retention
+
+RSS discovery is disabled by default. When enabled, MyAlgo sends bounded channel-feed requests to YouTube-owned HTTPS endpoints using channel IDs already observed from YouTube metadata. RSS results enter the existing bounded local candidate reservoir; acquisition history is retained separately from browser-observation evidence and does not itself alter the Personal Algorithm Graph.
 
 ## Cloud processing
 
