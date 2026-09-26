@@ -314,7 +314,7 @@ const getVideoSourceFlags = (element: HTMLElement) => {
 };
 
 const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => {
-  if (!externalId || externalId.startsWith('title:')) return;
+  if (!extensionEnabled || !externalId || externalId.startsWith('title:')) return;
   safeSendMessage({
     type: 'ACTIVITY',
     payload: { externalId, eventType: youtubeConnector.mapPresentationEvent(eventType) },
@@ -404,20 +404,23 @@ const collectCandidates = () => {
 };
 
 const observeHistoryPage = () => {
-  if (!isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
+  if (!extensionEnabled || !isCurrentInstance() || !isYouTubeHistoryPage(location.pathname)) return;
 
-  const observation = collectHistoryEvidenceFromDom(document);
-  console.info('Personal Algorithm history extraction diagnostic', {
-    observedAt: observation.evidence[0]?.observedAt ?? new Date().toISOString(),
-    scrollTop: Math.round(window.scrollY),
-    viewportHeight: Math.round(window.innerHeight),
-    scrollHeight: Math.round(document.documentElement.scrollHeight),
-    metrics: observation.metrics,
-  });
-  if (observation.evidence.length === 0) return;
-  safeSendMessage({
-    type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
-    payload: observation,
+  void safeStorageGet([STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED]).then((result) => {
+    if (!extensionEnabled || result[STORAGE_KEYS.HISTORY_OBSERVATION_ENABLED] !== true) return;
+    const observation = collectHistoryEvidenceFromDom(document);
+    console.info('Personal Algorithm history extraction diagnostic', {
+      observedAt: observation.evidence[0]?.observedAt ?? new Date().toISOString(),
+      scrollTop: Math.round(window.scrollY),
+      viewportHeight: Math.round(window.innerHeight),
+      scrollHeight: Math.round(document.documentElement.scrollHeight),
+      metrics: observation.metrics,
+    });
+    if (observation.evidence.length === 0) return;
+    safeSendMessage({
+      type: EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
+      payload: observation,
+    });
   });
 };
 
@@ -430,7 +433,7 @@ const scheduleHistoryObservation = () => {
 };
 
 const observeHomeRecommendations = () => {
-  if (!isCurrentInstance() || !isYouTubeHomePage(location.pathname)) return;
+  if (!extensionEnabled || !isCurrentInstance() || !isYouTubeHomePage(location.pathname)) return;
   safeStorageGet([STORAGE_KEYS.HOME_OBSERVATION_ENABLED]).then((result) => {
     if (result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
     const observation = collectRecommendationObservationsFromDom(document);
@@ -776,7 +779,7 @@ const emitTemporalWatch = (ended = false) => {
 };
 
 const attachTemporalWatchObserver = () => {
-  if (!isCurrentInstance()) return;
+  if (!extensionEnabled || !isCurrentInstance()) return;
   const video = getActiveWatchVideo();
   if (!video) return;
   if (video === watchedVideo) return;
