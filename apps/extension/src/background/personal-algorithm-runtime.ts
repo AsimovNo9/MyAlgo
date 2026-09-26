@@ -36,6 +36,7 @@ export type LocalRuntimeCandidate = {
     node_id: string;
     node_label: string;
     similarity: number;
+    weight: number;
   }>;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
@@ -262,14 +263,19 @@ const semanticAlignmentFeatures = (
       .filter((match) => Number.isFinite(match.similarity) && match.similarity > 0)
       .slice(0, 3);
     const semanticValue = 18 * Math.min(1, graphSimilarity);
-    const totalSimilarity = matches.reduce((sum, match) => sum + match.similarity, 0);
+    const totalWeight = matches.reduce((sum, match) => (
+      sum + (Number.isFinite(match.weight) && match.weight > 0 ? match.weight : match.similarity)
+    ), 0);
 
-    if (matches.length > 0 && totalSimilarity > 0) {
+    if (matches.length > 0 && totalWeight > 0) {
       for (const match of matches) {
         features.push({
           id: `semantic:graph:${match.node_id}`,
           label: `semantic match: ${match.node_label}`,
-          value: Number((semanticValue * (match.similarity / totalSimilarity)).toFixed(2)),
+          value: Number((semanticValue * (
+            (Number.isFinite(match.weight) && match.weight > 0 ? match.weight : match.similarity)
+            / totalWeight
+          )).toFixed(2)),
           sourceId: candidate.semantic_model_version
             ? `embedding:${candidate.semantic_model_version}`
             : 'embedding',
