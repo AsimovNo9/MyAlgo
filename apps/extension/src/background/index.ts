@@ -277,6 +277,16 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): Promise<void> {
+  const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+  await Promise.all(tabs.map((tab) => tab.id
+    ? chrome.tabs.sendMessage(tab.id, {
+      type: 'PERSONAL_ALGORITHM_CHANGED',
+      payload: { reason },
+    }).catch(() => undefined)
+    : undefined));
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const { type, payload } = message as {
     type: string;
@@ -345,7 +355,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'PERSONAL_ALGORITHM_REBUILD') {
     void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
-      .then((graph) => sendResponse({ ok: true, graph }))
+      .then(async (graph) => {
+        await notifyPersonalAlgorithmChanged('rebuild');
+        sendResponse({ ok: true, graph });
+      })
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to rebuild Personal Algorithm Graph.' }));
     return true;
   }
@@ -457,6 +470,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       await recordLocalEvent('feedback', payload);
       await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+      await notifyPersonalAlgorithmChanged('feedback');
       sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
     })().catch((error) => sendResponse({
       ok: false,
