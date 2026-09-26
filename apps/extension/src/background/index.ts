@@ -128,6 +128,7 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 const semanticEmbeddingProvider = createLocalHashEmbeddingProvider(192);
 const semanticEmbeddingCache = createChromeEmbeddingCache(600);
+const semanticModelIdentity = `${semanticEmbeddingProvider.modelId}@${semanticEmbeddingProvider.modelVersion}`;
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
@@ -683,7 +684,7 @@ async function hydrateSemanticScoreFeatures(
       inputHash,
       state.graph.currentRevision,
       mode,
-      semanticEmbeddingProvider.modelVersion,
+      semanticModelIdentity,
     );
     const record = cache[key];
     if (!record) return candidate;
@@ -702,7 +703,7 @@ async function refreshSemanticScoreFeatures(
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) return { changed: 0, diagnostics: null };
   const state = await personalAlgorithmStore.exportState();
-  const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${semanticEmbeddingProvider.modelVersion}`;
+  const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) return { changed: 0, diagnostics: null };
   semanticRefreshInFlight.add(refreshKey);
 
@@ -736,14 +737,14 @@ async function refreshSemanticScoreFeatures(
         inputHash,
         state.graph.currentRevision,
         mode,
-        semanticEmbeddingProvider.modelVersion,
+        semanticModelIdentity,
       );
       const record: SemanticFeatureRecord = {
         externalId: original.external_id,
         inputHash,
         graphRevision: state.graph.currentRevision,
         mode,
-        modelVersion: semanticEmbeddingProvider.modelVersion,
+        modelVersion: semanticModelIdentity,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
         generatedAt,
@@ -1129,7 +1130,7 @@ const handleRuntimeMessage = (
             type: 'YOUTUBE_SEMANTICS_ENRICHED',
             payload: {
               count: semanticRefresh.changed,
-              modelVersion: semanticEmbeddingProvider.modelVersion,
+              modelVersion: semanticModelIdentity,
             },
           }).catch(() => undefined);
         }).catch((error) => {
