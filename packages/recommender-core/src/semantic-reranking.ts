@@ -10,7 +10,7 @@ import {
   cosineSimilarity,
   semanticModeSeed,
   weightedEmbeddingCentroid,
-} from './index';
+} from './semantic-primitives';
 
 export interface LocalEmbeddingProvider {
   readonly modelId: string;
