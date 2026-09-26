@@ -512,6 +512,13 @@ export class LocalPersonalAlgorithmStore {
         ? { ...edge, evidenceIds: edge.evidenceIds.filter((id) => id !== evidenceId) }
         : edge)
       .filter((edge) => edge.relation !== 'created_by' || edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+    const referencedNodeIds = new Set(state.graph.edges.map((edge) => edge.targetNodeId));
+    state.graph.nodes = state.graph.nodes.filter(
+      (node) => node.provenance !== 'inferred'
+        || node.kind !== 'creator'
+        || referencedNodeIds.has(node.id),
+    );
   }
 
   private ensureCreatorRelationship(
