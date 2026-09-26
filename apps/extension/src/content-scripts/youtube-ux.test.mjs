@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -231,29 +231,42 @@ test('opportunistic replacements select only lower-scoring native cards', () => 
   ];
 
   assert.deepEqual(
-    selectOpportunisticReplacementTargets(targets, replacements, 6),
+    selectOpportunisticReplacementTargets(targets, replacements, 6, 5),
     [
       { externalId: 'native-a', score: 0, nativeIndex: 0 },
-      { externalId: 'native-b', score: 2, nativeIndex: 1 },
     ],
   );
 });
 
-test('opportunistic replacement permits an equal-score distinct candidate but never a worse one', () => {
+test('opportunistic replacement requires configured score uplift', () => {
   assert.deepEqual(
     selectOpportunisticReplacementTargets(
-      [{ externalId: 'native-a', score: 4, nativeIndex: 0 }],
-      [{ external_id: 'rss-a', title: 'RSS A', score: 4, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 64, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
       6,
+      5,
     ),
-    [{ externalId: 'native-a', score: 4, nativeIndex: 0 }],
+    [],
   );
   assert.deepEqual(
     selectOpportunisticReplacementTargets(
-      [{ externalId: 'native-a', score: 5, nativeIndex: 0 }],
-      [{ external_id: 'rss-a', title: 'RSS A', score: 4, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 65, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
       6,
+      5,
     ),
-    [],
+    [{ externalId: 'native-a', score: 60, nativeIndex: 0 }],
+  );
+});
+
+
+test('replacement text metadata always provides visible title and creator fallbacks', () => {
+  assert.deepEqual(
+    getReplacementTextMetadata({ title: '  Video title  ', channel_name: ' Creator ', score: 72, rawScore: 14.5 }),
+    { title: 'Video title', creator: 'Creator', displayScore: 72, rawScore: 14.5 },
+  );
+  assert.deepEqual(
+    getReplacementTextMetadata({ title: '', channel_name: null, score: 50 }),
+    { title: 'Recommended video', creator: 'Unknown creator', displayScore: 50, rawScore: null },
   );
 });
