@@ -224,6 +224,19 @@ export function isRenderGenerationStale(requestGeneration: number, latestGenerat
   return requestGeneration !== latestGeneration;
 }
 
+export function getSourceShelfHideReason(
+  input: { heading?: string; hasShortsLink?: boolean; hasPlayableLink?: boolean },
+  filters: { includeShorts?: boolean; includePlayables?: boolean },
+): 'shorts' | 'playables' | null {
+  const heading = (input.heading ?? '').trim().toLowerCase();
+  if (filters.includeShorts === false && input.hasShortsLink === true) return 'shorts';
+  if (
+    filters.includePlayables === false
+    && (input.hasPlayableLink === true || heading.includes('playables'))
+  ) return 'playables';
+  return null;
+}
+
 export function shouldHideForSourceFilters(
   source: { is_short?: boolean; is_live?: boolean },
   filters: { includeShorts?: boolean; includeLive?: boolean },
