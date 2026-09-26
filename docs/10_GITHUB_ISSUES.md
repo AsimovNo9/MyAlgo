@@ -109,6 +109,8 @@ Implemented scope:
 - evidence create/read/update/delete and targeted content deletion;
 - graph node/edge create/update/delete;
 - deterministic semantic graph materialization from retained evidence for creator relationships;
+- incremental evidence ingestion maintains creator nodes and `created_by` edges immediately when creator metadata is present, merging supporting `evidenceIds` without duplicate edges;
+- full graph rebuild remains a deterministic reconciliation/recovery path for existing state;
 - deterministic graph-review summary for node/edge counts, semantic kinds/relations, and evidence-support coverage;
 - reset, restart-safe initialization, and export-ready serialization (`exportState()` / JSON);
 - v1 → v2 migration preserves existing evidence/nodes and initializes legacy edge evidence references safely;
