@@ -183,13 +183,23 @@ export interface ContentFacet {
  * replaced by source-neutral acquisition mechanisms in #202. No YouTube Data API
  * integration is implied by these values. See #168/#202/#206.
  */
-export interface RetrievalProvenance {
-  source: 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
+export type CandidateAcquisitionMechanism =
+  | 'observed_dom'
+  | 'rss'
+  | 'web_search'
+  | 'exploration';
+
+export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
+
+export interface CandidateAcquisitionProvenance {
+  connector: string;
+  mechanism: CandidateAcquisitionMechanism;
   query?: string | null;
-  query_lane?: 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness' | null;
+  query_lane?: CandidateQueryLane | null;
   query_topics?: string[];
-  retrieved_at: string;
-  algorithm_revision?: string | null;
+  acquired_at: string;
+  graph_revision?: string | null;
+  source_url?: string | null;
 }
 
 export interface SemanticProfile {
@@ -212,15 +222,24 @@ export interface EmbeddingRecord {
   generated_at: string;
 }
 
-/** @deprecated Provider/API-like retrieval naming; #202/#206 replace this with source-neutral acquisition provenance. */
-export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
+/** @deprecated Use CandidateAcquisitionProvenance. */
+export type CandidateProvenance = CandidateAcquisitionProvenance;
 
-export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
+export interface RetrievalSettings {
+  rssEnabled: boolean;
+  webSearchEnabled: boolean;
+}
 
-export interface CandidateProvenance extends RetrievalProvenance {
-  source: CandidateRetrievalSource;
-  query_lane?: CandidateQueryLane | null;
-  channel_id?: string | null;
+export interface RetrievalDiagnostics {
+  lastRssSyncAt: string | null;
+  nextRssAllowedAt: string | null;
+  rssChannelsConsidered: number;
+  rssFeedsSucceeded: number;
+  rssFeedsFailed: number;
+  rssCandidatesFetched: number;
+  rssCandidatesAdded: number;
+  rssCandidatesDeduplicated: number;
+  lastError: string | null;
 }
 
 export interface RecommendationCandidate {
@@ -240,7 +259,7 @@ export interface RecommendationCandidate {
   content_type?: string | null;
   language?: string | null;
   format?: string | null;
-  provenance?: CandidateProvenance;
+  provenance?: CandidateAcquisitionProvenance;
   is_short?: boolean;
   is_live?: boolean;
   subscription_affinity?: number;
