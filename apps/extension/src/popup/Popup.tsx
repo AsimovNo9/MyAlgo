@@ -233,6 +233,9 @@ export function Popup() {
             {retrievalDiagnostics.lastError}
           </p>
         ) : null}
+        <p style={{ margin: '8px 0 0', maxWidth: 280, fontSize: 12 }}>
+          Web search: planned. Graph-derived query planning is available, but no network search provider is connected yet.
+        </p>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
