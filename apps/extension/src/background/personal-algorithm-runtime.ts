@@ -82,6 +82,40 @@ const lexicalMatch = (label: string, candidateText: string): number => {
   return ratio >= 0.5 ? ratio : 0;
 };
 
+type LocalScoringIndex = {
+  contentNodes: Map<string, PersonalAlgorithmState['graph']['nodes'][number]>;
+  creatorByContent: Map<string, string>;
+  creatorByLabel: Map<string, string>;
+  creatorIds: Set<string>;
+  featureNodes: PersonalAlgorithmState['graph']['nodes'];
+};
+
+function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringIndex {
+  const contentNodes = new Map<string, PersonalAlgorithmState['graph']['nodes'][number]>();
+  const creatorByLabel = new Map<string, string>();
+  const creatorIds = new Set<string>();
+  const featureNodes: PersonalAlgorithmState['graph']['nodes'] = [];
+
+  for (const node of state.graph.nodes) {
+    if (node.kind === 'content') contentNodes.set(node.id, node);
+    if (node.kind === 'creator') {
+      creatorIds.add(node.id);
+      const label = node.label.trim().toLowerCase();
+      if (label && !creatorByLabel.has(label)) creatorByLabel.set(label, node.id);
+    }
+    if (['objective', 'topic', 'concept'].includes(node.kind)) featureNodes.push(node);
+  }
+
+  const creatorByContent = new Map<string, string>();
+  for (const edge of state.graph.edges) {
+    if (edge.relation === 'created_by' && creatorIds.has(edge.targetNodeId) && !creatorByContent.has(edge.sourceNodeId)) {
+      creatorByContent.set(edge.sourceNodeId, edge.targetNodeId);
+    }
+  }
+
+  return { contentNodes, creatorByContent, creatorByLabel, creatorIds, featureNodes };
+}
+
 const inferredFormat = (candidate: LocalRuntimeCandidate): string | null => {
   if (candidate.is_short) return 'short';
   if (candidate.is_live) return 'live';
@@ -97,6 +131,7 @@ const inferredFormat = (candidate: LocalRuntimeCandidate): string | null => {
 export function extractLocalCandidateFeatures(
   state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
+  featureNodes: PersonalAlgorithmState['graph']['nodes'] = state.graph.nodes,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } {
   const text = normalizeFeatureText([
     candidate.title,
@@ -107,7 +142,7 @@ export function extractLocalCandidateFeatures(
   const nodeIds: string[] = [];
   const features: ScoreFeatureSignal[] = [];
 
-  for (const node of state.graph.nodes) {
+  for (const node of featureNodes) {
     if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
     const similarity = lexicalMatch(node.label, text);
     if (similarity <= 0) continue;
@@ -126,9 +161,8 @@ export function extractLocalCandidateFeatures(
 
   const format = inferredFormat(candidate);
   if (format) {
-    const formatNode = state.graph.nodes
-      .filter((node) => ['objective', 'topic', 'concept'].includes(node.kind))
-      .find((node) => normalizeFeatureText(
+    const formatNode = featureNodes
+      .find((node) => ['objective', 'topic', 'concept'].includes(node.kind) && normalizeFeatureText(
         typeof node.attributes?.format === 'string' ? node.attributes.format : '',
       ) === format);
     if (formatNode) {
@@ -170,29 +204,21 @@ export function calibrateLocalScore(rawScore: number): number {
   return Math.max(0, Math.min(100, Math.round(50 + 50 * Math.tanh(rawScore / 30))));
 }
 
-const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntimeCandidate): ScoreCandidate => {
+const candidateContext = (
+  state: PersonalAlgorithmState,
+  candidate: LocalRuntimeCandidate,
+  index: LocalScoringIndex = buildLocalScoringIndex(state),
+): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
-  const contentNode = state.graph.nodes.find((node) => node.id === contentId);
-  const extracted = extractLocalCandidateFeatures(state, candidate);
-  const creatorEdge = contentNode
-    ? state.graph.edges.find((edge) => (
-      edge.relation === 'created_by'
-      && edge.sourceNodeId === contentNode.id
-      && state.graph.nodes.some((node) => node.id === edge.targetNodeId && node.kind === 'creator')
-    ))
-    : undefined;
-  const creatorNodeId = creatorEdge?.targetNodeId
-    ?? (candidate.channel_id
-      ? state.graph.nodes.find((node) => (
-        node.kind === 'creator'
-        && node.id === `creator:youtube:${encodeURIComponent(candidate.channel_id ?? '')}`
-      ))?.id ?? null
-      : null)
+  const contentNode = index.contentNodes.get(contentId);
+  const extracted = extractLocalCandidateFeatures(state, candidate, index.featureNodes);
+  const channelCreatorId = candidate.channel_id
+    ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
+    : null;
+  const creatorNodeId = index.creatorByContent.get(contentId)
+    ?? (channelCreatorId && index.creatorIds.has(channelCreatorId) ? channelCreatorId : null)
     ?? (candidate.channel_name
-      ? state.graph.nodes.find((node) => (
-        node.kind === 'creator'
-        && node.label.trim().toLowerCase() === candidate.channel_name?.trim().toLowerCase()
-      ))?.id ?? null
+      ? index.creatorByLabel.get(candidate.channel_name.trim().toLowerCase()) ?? null
       : null);
 
   return {
@@ -284,10 +310,11 @@ export function scoreLocalCandidates(
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
   const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
+  const scoringIndex = buildLocalScoringIndex(state);
 
   return candidates
     .map((candidate) => {
-      const context = candidateContext(state, candidate);
+      const context = candidateContext(state, candidate, scoringIndex);
       const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
