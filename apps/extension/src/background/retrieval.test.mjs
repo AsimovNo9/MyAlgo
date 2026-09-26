@@ -5,7 +5,9 @@ import {
   acquireWebSearchCandidates,
   buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
+  createDefaultWebSearchProvider,
   createSearxngWebSearchProvider,
+  DEFAULT_WEB_SEARCH_ENDPOINT,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
   needsYoutubeMetadataRefresh,
@@ -199,7 +201,7 @@ test('observed candidate refreshes are coalesced inside the short persistence wi
 
 test('SearXNG provider normalizes endpoint, constrains results to YouTube search, and maps JSON results', async () => {
   const requests = [];
-  const provider = createSearxngWebSearchProvider('https://search.example.org/', async (url, options) => {
+  const provider = createSearxngWebSearchProvider('https://search.example.org/', { fetcher: async (url, options) => {
     requests.push({ url, options });
     return new Response(JSON.stringify({
       results: [
@@ -207,7 +209,7 @@ test('SearXNG provider normalizes endpoint, constrains results to YouTube search
         { url: 'https://example.com/nope', title: 'B' },
       ],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
-  });
+  } });
   const results = await provider.search({
     query: 'distributed systems tutorial',
     lane: 'goal',
@@ -236,4 +238,31 @@ test('web-search refresh policy applies TTL and bounded failure backoff', () => 
   const failure = nextWebSearchAllowedAt(now, 2);
   assert.equal(Date.parse(success) - now, 15 * 60 * 1000);
   assert.equal(Date.parse(failure) - now, 4 * 60 * 1000);
+});
+
+
+test('PrivAU default provider uses the documented endpoint and API-key header', async () => {
+  const requests = [];
+  const provider = createDefaultWebSearchProvider('test-key', async (url, options) => {
+    requests.push({ url, options });
+    return new Response(JSON.stringify({ results: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  });
+
+  await provider.search({
+    query: 'local first tutorial',
+    lane: 'goal',
+    topics: ['local first'],
+    graphRevision: 'graph-x',
+    limit: 4,
+  });
+
+  assert.equal(provider.id, 'privau');
+  assert.equal(DEFAULT_WEB_SEARCH_ENDPOINT, 'https://priv.au');
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /^https:\/\/priv\.au\/search\?/);
+  assert.equal(requests[0].options.headers['X-API-Key'], 'test-key');
+  assert.equal(requests[0].options.credentials, 'omit');
 });
