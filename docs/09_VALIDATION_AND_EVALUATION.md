@@ -181,3 +181,8 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 5. Rank latency is measured at small, medium, and maximum working-set sizes.
 6. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
 7. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
+
+
+### Replacement stability regression
+
+For live replacement validation, render at least one replacement and then allow ordinary Home mutations and `yt-page-data-updated` events to occur for at least 45 seconds. The same replacement should remain present while its source card and candidate stay valid. Confirm that `yt-navigate-start`, mode changes, feedback/graph invalidation, suppression, and stability expiry correctly permit teardown/reselection.
