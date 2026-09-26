@@ -227,6 +227,8 @@ export type CandidateProvenance = CandidateAcquisitionProvenance;
 
 export interface RetrievalSettings {
   rssEnabled: boolean;
+  webSearchEnabled?: boolean;
+  webSearchEndpoint?: string | null;
 }
 
 export interface RetrievalDiagnostics {
@@ -239,6 +241,14 @@ export interface RetrievalDiagnostics {
   rssCandidatesAdded: number;
   rssCandidatesDeduplicated: number;
   rssConsecutiveFailures: number;
+  lastWebSearchAt?: string | null;
+  nextWebSearchAllowedAt?: string | null;
+  webSearchPlansAttempted?: number;
+  webSearchPlansSucceeded?: number;
+  webSearchCandidatesFetched?: number;
+  webSearchCandidatesAdded?: number;
+  webSearchCandidatesDeduplicated?: number;
+  webSearchConsecutiveFailures?: number;
   lastError: string | null;
 }
 
@@ -267,6 +277,8 @@ export interface RecommendationCandidate {
   candidate_relevance?: 'matched' | 'unmatched';
   base_score?: number;
   semantic_similarity?: number | null;
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
 }
 
 export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
