@@ -197,6 +197,18 @@ Hard policies are evaluated separately and first.
 hard exclusion → eligibility → additive score → ordering
 ```
 
+## Local runtime scoring and explicit feedback
+
+PR #195 wires the deterministic scorer into the extension background runtime for the MVP feed-ranking path. The runtime reads the persisted Personal Algorithm Graph, applies an explicit versioned local policy, evaluates candidate eligibility/source filters, produces additive scores and RecommendationTrace records, and persists compact local trace metadata.
+
+Explicit YouTube feedback is replayed from the local event store into scoring signals. Feedback is reconciled by content identity so repeated not_interested events do not accumulate indefinitely. The latest feedback state is used for a content item; more_like_this contributes +10, not_interested contributes -10, and never_show_channel contributes -100. Channel suppression resolves through the persisted content → creator relationship when available, so it can affect sibling content from the same creator rather than only the clicked video.
+
+The live validation path on 2026-09-26 confirmed the persisted-feedback chain: a real YouTube Home-feed Not interested action for kDqb9IzhxjE created a local not_interested event, the candidate was subsequently ranked by the extension runtime, and its compact local trace recorded score -9 (+1 baseline content contribution and -10 explicit feedback contribution). This verifies event persistence and scorer consumption in the real browser runtime.
+
+Source filters are also enforced locally. Candidate collection records subscription/discovery/liked context where the YouTube DOM exposes it; subscribedOnly and includeDiscovery are applied before additive ranking. This remains candidate eligibility/filtering, not a claim about YouTube's proprietary ranking decisions.
+
+not_interested undo/reversal semantics are not part of #195. The current persisted event model is append-only and the MVP validation scope is positive feedback capture → persistence → scoring consumption.
+
 ## 5. Explanation
 
 The explanation engine consumes the same scoring trace used by ranking.
