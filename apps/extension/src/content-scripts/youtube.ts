@@ -920,7 +920,7 @@ const renderReplacementSlots = (generation: number) => {
   });
 };
 
-const scheduleRankGeneration = (generation: number) => {
+const scheduleRankGeneration = (generation: number, delayMs = 320) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
     rankTimer = undefined;
@@ -930,12 +930,12 @@ const scheduleRankGeneration = (generation: number) => {
       return;
     }
     void rankCurrentPage(generation);
-  }, 320);
+  }, delayMs);
 };
 
 const scheduleLatestRank = () => {
   rankQueued = false;
-  scheduleRankGeneration(rankGeneration);
+  scheduleRankGeneration(rankGeneration, 120);
 };
 
 const rankCurrentPage = async (requestGeneration: number) => {
@@ -954,13 +954,6 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
   rankingInFlight = true;
   showStatus(`Personal Algorithm: ranking ${candidates.length} videos`);
-  const result = await safeStorageGet(['personal-algorithm-mode']);
-  if (!isCurrentInstance()) {
-    rankingInFlight = false;
-    return;
-  }
-
-  activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
   const requestMode = activeMode;
   const requestContext = { generation: requestGeneration, routeKey: requestRouteKey, mode: requestMode };
   const currentContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
@@ -974,6 +967,9 @@ const rankCurrentPage = async (requestGeneration: number) => {
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
     rankingInFlight = false;
+    applyRankedFeed();
+    clearLegacyRecommendationShelf();
+    renderReplacementSlots(rankGeneration);
     if (rankQueued) scheduleLatestRank();
     return;
   }
@@ -1016,44 +1012,35 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: 'navigation' | 'mutation' | 'metadata' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation') {
+  if (reason !== 'mutation' && reason !== 'metadata') {
     if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
       clearStableReplacements();
     }
     document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
   }
 
-  const currentCandidates = collectCandidates();
-  const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
-  const hasMeaningfulCards = currentCandidates.length >= 2;
-
-  // Only a native DOM mutation may reuse the current scored generation.
-  // Mode, feedback, graph, and navigation changes must request fresh scores.
-  if (
-    reason === 'mutation'
-    && hasMeaningfulCards
-    && candidateSignature === lastCandidateSignature
-    && activeMode === lastRankMode
-    && cachedFeed.length > 0
-  ) {
-    applyRankedFeed();
-    clearLegacyRecommendationShelf();
-    renderReplacementSlots(rankGeneration);
-    return;
+  if (reason === 'metadata') {
+    // Force a new score pass because cached watch metadata changed, but keep
+    // stable replacement assignments until the new scores actually render.
+    lastCandidateSignature = '';
   }
-
-  if (!hasMeaningfulCards && reason !== 'manual') return;
 
   const generation = ++rankGeneration;
   if (rankingInFlight) {
     rankQueued = true;
     return;
   }
-  scheduleRankGeneration(generation);
+
+  const delayMs = reason === 'mutation'
+    ? 320
+    : reason === 'metadata'
+      ? 120
+      : 60;
+  scheduleRankGeneration(generation, delayMs);
 };
 const scheduleInitialRank = (attempt = 0) => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
@@ -1065,7 +1052,7 @@ const scheduleInitialRank = (attempt = 0) => {
       return;
     }
     if (attempt < 8) scheduleInitialRank(attempt + 1);
-  }, attempt === 0 ? 100 : 250);
+  }, attempt === 0 ? 40 : 180);
 };
 
 safeStorageGet([
@@ -1129,6 +1116,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
+  if (message?.type === 'YOUTUBE_METADATA_ENRICHED') {
+    if (extensionEnabled) triggerRank('metadata');
+    return;
+  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
