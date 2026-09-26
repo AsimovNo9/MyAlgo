@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -215,5 +215,37 @@ test('source shelf policy removes Shorts and Playables only when disabled', () =
       { includeShorts: true, includePlayables: true },
     ),
     null,
+  );
+});
+
+
+test('opportunistic replacements select only lower-scoring native cards', () => {
+  const targets = [
+    { externalId: 'native-a', score: 0, nativeIndex: 0 },
+    { externalId: 'native-b', score: 2, nativeIndex: 1 },
+    { externalId: 'native-c', score: 5, nativeIndex: 2 },
+  ];
+  const replacements = [
+    { external_id: 'rss-a', title: 'RSS A', score: 6, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'rss-b', title: 'RSS B', score: 3, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+  ];
+
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(targets, replacements, 6),
+    [
+      { externalId: 'native-a', score: 0, nativeIndex: 0 },
+      { externalId: 'native-b', score: 2, nativeIndex: 1 },
+    ],
+  );
+});
+
+test('opportunistic replacement never hides a native card without a strictly better candidate', () => {
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(
+      [{ externalId: 'native-a', score: 4, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 4, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      6,
+    ),
+    [],
   );
 });
