@@ -1071,7 +1071,14 @@ export function buildRecommendationQueries(
   relations: ConceptRelationEntry[] = [],
   includeFreshness = false,
 ): RecommendationQuery[] {
-  if (limit <= 0 || profile.explicitTopics.length === 0) {
+  if (
+    limit <= 0
+    || (
+      profile.explicitTopics.length === 0
+      && !profile.goal.trim()
+      && profile.creatorTerms.length === 0
+    )
+  ) {
     return [];
   }
 
