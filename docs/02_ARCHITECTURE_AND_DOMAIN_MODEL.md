@@ -274,9 +274,11 @@ Do not permanently store raw provider/API payloads merely because they are conve
 
 ## 8. API role
 
-The YouTube Data API is deliberately excluded from graph derivation at launch.
+The current launch runtime contains no YouTube Data API endpoint, client library, OAuth scope/token path, API credential path, or API Data cache. Browser-observed YouTube pages supply launch evidence.
 
-If API use expands later, it must pass a dedicated policy review and may require a different architecture/permission path.
+If YouTube Data API use is introduced later, its default reviewed role is account facts/display only. API Data must remain excluded from graph derivation, scoring, traces, and explanations unless a dedicated policy/product/privacy review explicitly approves a changed architecture.
+
+CI enforces this boundary with a static launch-source/artifact audit plus manifest checks that forbid an OAuth/identity surface. See `docs/compliance/YOUTUBE_API.md`.
 
 
 ## Source-neutral connector/evidence boundary
