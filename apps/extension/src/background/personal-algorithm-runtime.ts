@@ -1,4 +1,4 @@
-import type { FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
 import {
   isScoreTraceConsistent,
   scorePersonalAlgorithm,
@@ -26,6 +26,8 @@ export type LocalRuntimeCandidate = {
   format?: string | null;
   is_short?: boolean;
   is_live?: boolean;
+  provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
 };
 
 export type LocalRuntimeRankedCandidate = LocalRuntimeCandidate & {
@@ -108,7 +110,7 @@ export function extractLocalCandidateFeatures(
     if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
     const similarity = lexicalMatch(node.label, text);
     if (similarity <= 0) continue;
-    const confidence = Math.min(1, Math.max(0, Number.isFinite(node.confidence) ? node.confidence : 1));
+    const confidence = Math.min(1, Math.max(0, typeof node.confidence === 'number' && Number.isFinite(node.confidence) ? node.confidence : 1));
     const weight = FEATURE_WEIGHTS[node.kind as keyof typeof FEATURE_WEIGHTS];
     const value = Number((weight * similarity * confidence).toFixed(2));
     if (value <= 0) continue;
@@ -129,7 +131,7 @@ export function extractLocalCandidateFeatures(
         typeof node.attributes?.format === 'string' ? node.attributes.format : '',
       ) === format);
     if (formatNode) {
-      const confidence = Math.min(1, Math.max(0, Number.isFinite(formatNode.confidence) ? formatNode.confidence : 1));
+      const confidence = Math.min(1, Math.max(0, typeof formatNode.confidence === 'number' && Number.isFinite(formatNode.confidence) ? formatNode.confidence : 1));
       features.push({
         id: `format:${formatNode.id}:${format}`,
         label: `format match: ${format}`,
