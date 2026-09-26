@@ -12,7 +12,15 @@ export type RankedFeedItem = {
   channel_name?: string | null;
   thumbnail_url?: string | null;
   visible?: boolean;
+  rawScore?: number;
   score?: number;
+  explanation?: {
+    rawScore: number;
+    displayScore: number;
+    graphRevision: number;
+    acquisitionMechanism: string | null;
+    contributions: Array<{ label: string; value: number; kind: string }>;
+  };
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   traceId?: string;
@@ -159,6 +167,7 @@ export function selectOpportunisticReplacementTargets(
   nativeTargets: OpportunisticReplacementTarget[],
   replacementCandidates: RankedFeedItem[],
   limit = 6,
+  minimumUplift = 5,
 ): OpportunisticReplacementTarget[] {
   const candidates = replacementCandidates
     .filter((item) => (
@@ -178,7 +187,7 @@ export function selectOpportunisticReplacementTargets(
   for (let index = 0; index < count; index += 1) {
     const candidateScore = candidates[index]?.score ?? 0;
     const target = targets[index];
-    if (!target || candidateScore < target.score) break;
+    if (!target || candidateScore < target.score + Math.max(0, minimumUplift)) break;
     selected.push(target);
   }
   return selected;
