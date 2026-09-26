@@ -79,4 +79,4 @@ Foundation models understand **content**.
 
 The Personal Algorithm Graph models the **user**.
 
-Changing an embedding model, classifier, transcript parser, or vision model must not silently rebuild or invalidate the user's graph. Explicit schema/model migrations are allowed and must be versioned.
+Changing an embedding model, classifier, transcript parser, or vision model must not silently rebuild or invalidate the user's graph. Embeddings are rebuildable derived enrichment rather than canonical graph state. They may support semantic neighbourhoods, retrieval expansion, candidate matching, clustering, and explanation paths, while symbolic graph provenance and deterministic traces remain authoritative. Optional local generative explanation synthesis must stay grounded in those structured paths and traces. Explicit schema/model migrations are allowed and must be versioned. See #209.
