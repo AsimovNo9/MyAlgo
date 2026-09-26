@@ -19,6 +19,8 @@ test('MV3 manifest requests only local storage and YouTube host access', async (
   ]));
   assert.equal(manifest.host_permissions.includes('https://*.youtube.com/*'), true);
   assert.equal(manifest.host_permissions.includes('<all_urls>'), false);
+  assert.deepEqual(new Set(manifest.optional_host_permissions), new Set(['https://*/*']));
+  assert.equal(manifest.optional_host_permissions.includes('<all_urls>'), false);
   assert.equal(manifest.content_scripts[0].matches.includes('https://*.youtube.com/*'), true);
   assert.deepEqual(manifest.web_accessible_resources, [{
     resources: ['assets/*.js'],
