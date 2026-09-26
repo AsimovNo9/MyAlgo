@@ -658,10 +658,30 @@ const handleRuntimeMessage = (
         const candidatePool = await hydrateCandidatePool(await mergeCandidatePool(candidatesWithMetadata));
         const ranked = await rankLocalCandidates(candidatePool, sourceFilters, payload?.mode ?? 'default');
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
+
+        // The popup cache is intentionally bounded to the top-ranked reservoir,
+        // but presentation must always receive scores for every candidate on the
+        // current page. Otherwise a large/RSS-expanded reservoir can push all
+        // visible native cards outside the top 100, making them look "unmatched"
+        // and removing badges/replacement eligibility from the live page.
+        const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
+        const currentPageFeed = ranked.filter((item) => currentPageIds.has(item.external_id));
+        const presentationFeed = [
+          ...currentPageFeed,
+          ...feedCache.filter((item) => !currentPageIds.has(item.external_id)),
+        ];
+
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
-        sendResponse({ ok: true, feed: feedCache, poolSize: candidatePool.length, enriched: enrichedCandidates.length });
+        sendResponse({
+          ok: true,
+          feed: presentationFeed,
+          cachedFeedSize: feedCache.length,
+          currentPageScored: currentPageFeed.length,
+          poolSize: candidatePool.length,
+          enriched: enrichedCandidates.length,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
         await setStorage('personal-algorithm-last-error', message);
