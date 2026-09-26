@@ -14,7 +14,7 @@
 
 - [ ] Graph visualization works
 - [x] Additive scorer has reproducible traces (#151/#193)
-- [ ] Native feed enforcement works
+- [x] Native feed enforcement works (#152/#204)
 - [ ] “Why am I seeing this?” works
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
