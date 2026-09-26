@@ -112,6 +112,7 @@ export function Popup() {
         payload: { retrievalSettings: nextSettings },
       }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
       if (!response?.ok) {
+        setRetrievalSettings(retrievalSettings);
         setLastError(response?.error ?? 'Unable to update retrieval settings.');
         return;
       }
@@ -227,6 +228,11 @@ export function Popup() {
         <p style={{ margin: '6px 0 0', fontSize: 12 }}>
           RSS: {retrievalDiagnostics.rssCandidatesAdded} added · {retrievalDiagnostics.rssCandidatesDeduplicated} deduplicated · {retrievalDiagnostics.rssFeedsSucceeded}/{retrievalDiagnostics.rssChannelsConsidered} feeds succeeded
         </p>
+        {retrievalDiagnostics.lastError ? (
+          <p role="status" style={{ margin: '6px 0 0', maxWidth: 280, fontSize: 12 }}>
+            {retrievalDiagnostics.lastError}
+          </p>
+        ) : null}
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
