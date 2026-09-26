@@ -975,6 +975,15 @@ const handleRuntimeMessage = (
     const nextMode = payload?.mode ?? 'Work';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
+      const settings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      if (settings.webSearchEnabled) {
+        void refreshWebSearchCandidates(true, nextMode).then(async (refresh) => {
+          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
+        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
+      }
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
@@ -1012,19 +1021,29 @@ const handleRuntimeMessage = (
         ...(payload?.retrievalSettings ?? {}),
       };
       await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
-      const refresh = next.rssEnabled
-        ? await refreshRssCandidates(!previousSettings.rssEnabled)
-        : {
-          diagnostics: await getStorage<RetrievalDiagnostics>(
-            STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
-            EMPTY_RETRIEVAL_DIAGNOSTICS,
-          ),
-          changed: false,
-        };
-      if (refresh.changed) {
+      let diagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      let changed = false;
+
+      if (next.rssEnabled) {
+        const rssRefresh = await refreshRssCandidates(!previousSettings.rssEnabled);
+        diagnostics = rssRefresh.diagnostics;
+        changed = changed || rssRefresh.changed;
+      }
+      if (next.webSearchEnabled) {
+        const searchRefresh = await refreshWebSearchCandidates(
+          !previousSettings.webSearchEnabled
+            || previousSettings.webSearchEndpoint !== next.webSearchEndpoint,
+        );
+        diagnostics = searchRefresh.diagnostics;
+        changed = changed || searchRefresh.changed;
+      }
+      if (changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, retrievalSettings: next, diagnostics: refresh.diagnostics });
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
@@ -1034,11 +1053,29 @@ const handleRuntimeMessage = (
 
   if (type === 'REFRESH_RETRIEVAL') {
     void (async () => {
-      const refresh = await refreshRssCandidates(true);
-      if (refresh.changed) {
+      const settings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
+      let diagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      let changed = false;
+      if (settings.rssEnabled) {
+        const rssRefresh = await refreshRssCandidates(true);
+        diagnostics = rssRefresh.diagnostics;
+        changed = changed || rssRefresh.changed;
+      }
+      if (settings.webSearchEnabled) {
+        const searchRefresh = await refreshWebSearchCandidates(true);
+        diagnostics = searchRefresh.diagnostics;
+        changed = changed || searchRefresh.changed;
+      }
+      if (changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, diagnostics: refresh.diagnostics });
+      sendResponse({ ok: true, diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
@@ -1047,21 +1084,27 @@ const handleRuntimeMessage = (
   }
 
   if (type === 'GET_RETRIEVAL_PLAN') {
-    void personalAlgorithmStore.exportState().then((state) => {
-      const profile = buildGraphRetrievalProfile(state);
+    void Promise.all([
+      personalAlgorithmStore.exportState(),
+      getStorage<string>(STORAGE_KEYS.MODE, 'Work'),
+    ]).then(([state, mode]) => {
+      const baseProfile = buildGraphRetrievalProfile(state);
+      const profile = applyModeToRetrievalProfile(baseProfile, mode);
       const retrievalRevision = buildGraphRetrievalRevision(state);
       const plans = buildRecommendationQueryPlans(
         profile,
         8,
-        retrievalRevision,
+        `${retrievalRevision}:mode-${mode.toLowerCase()}`,
         [],
         [],
         true,
       );
       sendResponse({
         ok: true,
+        mode,
         graphRevision: state.graph.currentRevision,
         retrievalRevision,
+        goal: profile.goal,
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
