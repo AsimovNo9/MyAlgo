@@ -613,6 +613,13 @@ const renderReplacementSlots = (generation: number) => {
     if (id) blockedIds.add(id);
   });
 
+  const replacementQualifiedBeforeBlocking = cachedFeed.filter((item) => (
+    Boolean(item.external_id && item.title && item.traceId)
+    && item.visible !== false
+    && item.suppressed !== true
+    && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    && (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+  )).length;
   const assignments = planReplacementAssignments(
     cachedFeed,
     slots,
@@ -649,6 +656,8 @@ const renderReplacementSlots = (generation: number) => {
     eligibleSlots: slots.length,
     filled,
     unfilled: Math.max(0, slots.length - filled),
+    qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
+    assignableAfterBlocking: assignments.length,
   });
 };
 
@@ -870,6 +879,30 @@ const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; titl
   return results;
 };
 
+const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) => (
+  left.subscribedOnly === right.subscribedOnly
+  && left.includeDiscovery === right.includeDiscovery
+  && left.includeShorts === right.includeShorts
+  && left.includeLive === right.includeLive
+);
+
+const applySourceFilters = (nextFilters: FeedSourceFilters) => {
+  if (!isCurrentInstance() || sourceFiltersEqual(sourceFilters, nextFilters)) return;
+  sourceFilters = nextFilters;
+  rankGeneration += 1;
+  cachedFeed = [];
+  lastCandidateSignature = '';
+  lastRankMode = '';
+  clearExtensionPresentation(false);
+  triggerRank('mode');
+};
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !isCurrentInstance()) return;
+  const nextFilters = changes[STORAGE_KEYS.SOURCE_FILTERS]?.newValue as FeedSourceFilters | undefined;
+  if (nextFilters) applySourceFilters(nextFilters);
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
   if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
@@ -904,15 +937,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'SOURCE_FILTERS_CHANGED') {
-    rankGeneration += 1;
-    cachedFeed = [];
-    lastCandidateSignature = '';
-    lastRankMode = '';
-    clearExtensionPresentation(false);
-    void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
-      sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
+    const nextFilters = message.payload?.sourceFilters as FeedSourceFilters | undefined;
+    if (nextFilters) {
+      applySourceFilters(nextFilters);
       refreshRecommendationShelf();
-      triggerRank('mode');
+      return;
+    }
+    void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
+      applySourceFilters(
+        result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {},
+      );
+      refreshRecommendationShelf();
     });
     return;
   }
