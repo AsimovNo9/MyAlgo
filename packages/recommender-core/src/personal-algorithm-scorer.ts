@@ -1,0 +1,41 @@
+import type { ContentIdentity, EvidenceRecord, GraphEdge, GraphNode, PersonalAlgorithmGraph, PersonalAlgorithmState } from '@repo/shared-types';
+
+export type ScoreContributionKind = 'base' | 'node' | 'edge' | 'feedback' | 'mode' | 'suppression';
+export type ScoreContribution = { id:string; kind:ScoreContributionKind; label:string; value:number; sourceId?:string; evidenceIds:string[] };
+export type ScoreMatchedPath = { nodeIds:string[]; edgeIds:string[]; evidenceIds:string[] };
+export type ScoreCandidate = { id:string; content:ContentIdentity; nodeIds?:string[]; creatorNodeId?:string|null };
+export type ScoreFeedbackSignal = { id:string; contentId?:string|null; nodeId?:string|null; value:number; label?:string; evidenceIds?:string[] };
+export type ScoreModePolicy = { baseDelta?:number; nodeWeights?:Record<string,number>; edgeRelationWeights?:Record<string,number>; suppressNodeIds?:string[]; suppressRelations?:string[] };
+export type PersonalScoringPolicy = { revision:string; baseScore?:number; nodeWeights?:Record<string,number>; edgeRelationWeights?:Record<string,number>; exclusions?:{contentIds?:string[];nodeIds?:string[];creatorNodeIds?:string[];relations?:string[]}; eligibility?:{requiredNodeIds?:string[];requiredRelations?:string[]}; feedback?:ScoreFeedbackSignal[]; modes?:Record<string,ScoreModePolicy>; suppression?:{belowScore?:number;nodeIds?:string[];relations?:string[]} };
+export type PersonalScoreTrace = { id:string; scorerRevision:string; policyRevision:string; graphRevision:number; evidenceRevision:string; candidateId:string; content:ContentIdentity; eligible:boolean; suppressed:boolean; policyOutcome:'eligible'|'ineligible'|'excluded'|'suppressed'; finalScore:number; baseScore:number; nodeContributions:ScoreContribution[]; edgeContributions:ScoreContribution[]; feedbackContributions:ScoreContribution[]; modeContributions:ScoreContribution[]; suppressionContributions:ScoreContribution[]; matchedPaths:ScoreMatchedPath[]; createdAt:string };
+export type PersonalScoreResult = { score:number; trace:PersonalScoreTrace };
+const SCORER_REVISION='1';
+const finite=(v:number|undefined|null,f=0)=>Number.isFinite(v)?Number(v):f;
+const sorted=(v:string[])=>[...new Set(v.filter(Boolean))].sort();
+function hash(v:unknown){const s=JSON.stringify(v);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16).padStart(8,'0')}
+function evidenceRevision(e:EvidenceRecord[]){return hash(e.map(r=>({id:r.id,observedAt:r.evidence.observedAt,kind:r.evidence.kind,content:r.evidence.content,provenance:r.evidence.provenance})).sort((a,b)=>a.id.localeCompare(b.id)))}
+function ids(c:ScoreCandidate){return sorted([...(c.nodeIds??[]),...(c.creatorNodeId?[c.creatorNodeId]:[])])}
+function edges(g:PersonalAlgorithmGraph,ns:Set<string>){return g.edges.filter(e=>ns.has(e.sourceNodeId)||ns.has(e.targetNodeId)).sort((a,b)=>a.id.localeCompare(b.id))}
+function contrib(id:string,kind:ScoreContributionKind,label:string,value:number,sourceId?:string,evidenceIds:string[]=[]):ScoreContribution{return {id,kind,label,value:finite(value),...(sourceId?{sourceId}:{}),evidenceIds:sorted(evidenceIds)}}
+function paths(c:ScoreCandidate,ns:GraphNode[],es:GraphEdge[]):ScoreMatchedPath[]{if(es.length)return es.map(e=>({nodeIds:sorted([e.sourceNodeId,e.targetNodeId]),edgeIds:[e.id],evidenceIds:sorted(e.evidenceIds)}));return [{nodeIds:ids(c),edgeIds:[],evidenceIds:[]}]}
+function feedbackMatch(s:ScoreFeedbackSignal,c:ScoreCandidate,n:Set<string>){return (s.contentId!=null&&(s.contentId===c.content.externalId||s.contentId===`${c.content.source}:${c.content.externalId}`))||(s.nodeId!=null&&n.has(s.nodeId))}
+export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:ScoreCandidate,policy:PersonalScoringPolicy,mode='default',feedbackSignals:ScoreFeedbackSignal[]=policy.feedback??[]):PersonalScoreResult{
+ const nids=ids(candidate), ns=new Set(nids), es=edges(state.graph,ns), rels=new Set(es.map(e=>e.relation)), ex=policy.exclusions??{};
+ const excluded=(ex.contentIds??[]).includes(candidate.content.externalId)||(ex.contentIds??[]).includes(`${candidate.content.source}:${candidate.content.externalId}`)||nids.some(id=>(ex.nodeIds??[]).includes(id))||(candidate.creatorNodeId!=null&&(ex.creatorNodeIds??[]).includes(candidate.creatorNodeId))||es.some(e=>(ex.relations??[]).includes(e.relation));
+ const eligible=!excluded&&(policy.eligibility?.requiredNodeIds??[]).every(id=>ns.has(id))&&(policy.eligibility?.requiredRelations??[]).every(r=>rels.has(r));
+ const er=evidenceRevision(state.evidence), traceId=`trace-${hash({candidate,policyRevision:policy.revision,mode,graphRevision:state.graph.currentRevision,evidenceRevision:er})}`;
+ const empty=(outcome:PersonalScoreTrace['policyOutcome']):PersonalScoreResult=>({score:0,trace:{id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible,suppressed:outcome!=='eligible',policyOutcome:outcome,finalScore:0,baseScore:0,nodeContributions:[],edgeContributions:[],feedbackContributions:[],modeContributions:[],suppressionContributions:[],matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()}});
+ if(excluded)return empty('excluded'); if(!eligible)return empty('ineligible');
+ const mp=policy.modes?.[mode]??{}, nc:ScoreContribution[]=[],ec:ScoreContribution[]=[],fc:ScoreContribution[]=[],mc:ScoreContribution[]=[],sc:ScoreContribution[]=[];
+ for(const id of nids){const v=finite(policy.nodeWeights?.[id]);if(v)nc.push(contrib(`node:${id}`,'node',id,v,id));const mv=finite(mp.nodeWeights?.[id]);if(mv)mc.push(contrib(`mode-node:${id}`,'mode',`${mode}:${id}`,mv,id))}
+ for(const e of es){const v=finite(policy.edgeRelationWeights?.[e.relation]);if(v)ec.push(contrib(`edge:${e.id}`,'edge',e.relation,v,e.id,e.evidenceIds));const mv=finite(mp.edgeRelationWeights?.[e.relation]);if(mv)mc.push(contrib(`mode-edge:${e.id}`,'mode',`${mode}:${e.relation}`,mv,e.id,e.evidenceIds))}
+ for(const s of [...feedbackSignals].sort((a,b)=>a.id.localeCompare(b.id)))if(feedbackMatch(s,candidate,ns))fc.push(contrib(`feedback:${s.id}`,'feedback',s.label??s.id,s.value,s.id,s.evidenceIds??[]));
+ const base=finite(policy.baseScore)+finite(mp.baseDelta); let score=base+nc.reduce((a,x)=>a+x.value,0)+ec.reduce((a,x)=>a+x.value,0)+fc.reduce((a,x)=>a+x.value,0)+mc.reduce((a,x)=>a+x.value,0);
+ const reasons:string[]=[];if(mp.suppressNodeIds?.some(id=>ns.has(id)))reasons.push('mode_node');if(mp.suppressRelations?.some(r=>rels.has(r)))reasons.push('mode_relation');if(policy.suppression?.nodeIds?.some(id=>ns.has(id)))reasons.push('node');if(policy.suppression?.relations?.some(r=>rels.has(r)))reasons.push('relation');if(policy.suppression?.belowScore!=null&&score<policy.suppression.belowScore)reasons.push('below_score');
+ if(reasons.length){sc.push(contrib(`suppression:${hash(reasons.sort())}`,'suppression',reasons.join(','),-score));score=0}
+ const trace:PersonalScoreTrace={id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible:true,suppressed:reasons.length>0,policyOutcome:reasons.length?'suppressed':'eligible',finalScore:score,baseScore:base,nodeContributions:nc,edgeContributions:ec,feedbackContributions:fc,modeContributions:mc,suppressionContributions:sc,matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()};
+ return {score,trace};
+}
+export function replayPersonalAlgorithmScore(state:PersonalAlgorithmState,candidate:ScoreCandidate,policy:PersonalScoringPolicy,mode='default',feedbackSignals:ScoreFeedbackSignal[]=policy.feedback??[]){return scorePersonalAlgorithm(state,candidate,policy,mode,feedbackSignals)}
+export function traceContributionTotal(t:PersonalScoreTrace){return [t.baseScore,...t.nodeContributions,...t.edgeContributions,...t.feedbackContributions,...t.modeContributions,...t.suppressionContributions].reduce((s,x)=>s+(typeof x==='number'?x:x.value),0)}
+export function isScoreTraceConsistent(t:PersonalScoreTrace){return traceContributionTotal(t)===t.finalScore}
