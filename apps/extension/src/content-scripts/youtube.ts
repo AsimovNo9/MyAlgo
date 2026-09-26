@@ -4,7 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
-import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 import { createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions';
