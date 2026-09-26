@@ -176,6 +176,10 @@ export interface ContentFacet {
   concepts?: SemanticConceptMatch[];
 }
 
+/**
+ * Legacy/future retrieval planning vocabulary. These labels do not imply a
+ * YouTube Data API integration in the launch runtime. See #168/#202.
+ */
 export interface RetrievalProvenance {
   source: 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
   query?: string | null;
@@ -205,6 +209,7 @@ export interface EmbeddingRecord {
   generated_at: string;
 }
 
+/** @deprecated Legacy retrieval-source naming; retained temporarily for compatibility. See #202. */
 export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
 
 export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
