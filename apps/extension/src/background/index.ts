@@ -296,11 +296,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'ACCEPT_PRIVACY_DISCLOSURE') {
     void (async () => {
-      privacyDisclosureAccepted = true;
       await chrome.storage.local.set({
         [STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION]: PRIVACY_DISCLOSURE_VERSION,
         [STORAGE_KEYS.ENABLED]: true,
       });
+      privacyDisclosureAccepted = true;
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: true } }).catch(() => undefined)
