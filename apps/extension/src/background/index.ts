@@ -67,12 +67,15 @@ type LocalFeedItem = CandidatePoolItem & {
   };
 };
 
-const MAX_CANDIDATE_POOL_SIZE = 1500;
-const MAX_HISTORY_EVIDENCE = 10000;
+const MAX_CANDIDATE_POOL_SIZE = 800;
+const MAX_HISTORY_EVIDENCE = 2000;
 const MAX_FEED_CACHE_SIZE = 80;
-const MAX_VIDEO_STORE_SIZE = 800;
+const MAX_VIDEO_STORE_SIZE = 500;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 6;
-const MAX_SELECTION_EVENTS = 2000;
+const MAX_SELECTION_EVENTS = 750;
+const MAX_HOME_OBSERVATIONS = 300;
+const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
+const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -1161,6 +1164,9 @@ const handleRuntimeMessage = (
         toNormalizedInteraction(observation),
         `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`,
       );
+      if (events.length >= MAX_SELECTION_EVENTS) {
+        await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
+      }
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store selection observation.' }));
@@ -1201,6 +1207,9 @@ const handleRuntimeMessage = (
         toNormalizedInteraction(observation),
         `interaction:watched:${observation.videoId}:${observation.sessionId}`,
       );
+      if (events.length >= MAX_SELECTION_EVENTS) {
+        await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
+      }
       await recordLocalEvent('selection', observation);
       sendResponse({ ok: true, storedEvents: events.length });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to store temporal watch observation.' }));
@@ -1241,9 +1250,11 @@ const handleRuntimeMessage = (
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
-      const validHistoryEvidence = historyEvidence.filter((item) => (
-        item?.externalId && item.title && item.provenance === 'youtube_history_dom'
-      ));
+      const validHistoryEvidence = historyEvidence
+        .filter((item) => (
+          item?.externalId && item.title && item.provenance === 'youtube_history_dom'
+        ))
+        .slice(0, MAX_HISTORY_ITEMS_PER_OBSERVATION);
       const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
         .slice(0, MAX_HISTORY_EVIDENCE);
       console.info('[MyAlgo] history observation prepared', {
@@ -1279,6 +1290,7 @@ const handleRuntimeMessage = (
           confidence: 1,
         })),
       );
+      await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
       console.info('[MyAlgo] history observation persisted', {
         storedEvidence: evidence.length,
       });
@@ -1298,7 +1310,11 @@ const handleRuntimeMessage = (
       const validIncoming = incoming.filter((observation) => (
         observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
       ));
-      const observations = mergeRecommendationObservations(existing, validIncoming);
+      const observations = mergeRecommendationObservations(
+        existing,
+        validIncoming,
+        MAX_HOME_OBSERVATIONS,
+      );
       console.info('[MyAlgo] recommendation observation prepared', {
         incoming: incoming.length,
         validIncoming: validIncoming.length,
@@ -1307,10 +1323,15 @@ const handleRuntimeMessage = (
       });
       await setStorage(STORAGE_KEYS.HOME_OBSERVATIONS, observations);
       await setStorage(STORAGE_KEYS.HOME_METRICS, payload?.metrics as RecommendationObservationMetrics);
-      await Promise.all(validIncoming.map((observation) => persistNormalizedEvidence(
-        toNormalizedExposure(observation),
-        `exposure:${observation.exposureId}`,
-      )));
+      await personalAlgorithmStore.reconcileExposureEvidence(
+        observations.map((observation) => ({
+          id: `exposure:${observation.exposureId}`,
+          evidence: toNormalizedExposure(observation),
+          confidence: 1,
+        })),
+        'home_dom',
+      );
+      await personalAlgorithmStore.compactEvidence(MAX_DEFAULT_ALGORITHM_EVIDENCE);
       console.info('[MyAlgo] recommendation observation persisted', {
         storedObservations: observations.length,
       });
