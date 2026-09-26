@@ -26,11 +26,11 @@ The launch extension handles web activity / website content and user interaction
 | Playback evidence | video identity, bounded playback metrics | deterministic watched evidence | local |
 | User interactions | selections and explicit feedback | evidence and scoring policy input | local |
 | Personal Algorithm state | evidence, graph nodes/edges, revisions | user model | local |
-| Recommendation state | candidate cache, scores, compact traces | feed control/debugging | local |
+| Recommendation state | candidate cache, scores, compact traces, rebuildable semantic embeddings/similarities | feed control/debugging and semantic reranking | local; derived caches are bounded and deletable |
 | Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
 | Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned YouTube video IDs/titles/snippets | expand candidate reservoir | bounded requests to YouTube search pages under the existing YouTube host permission; results stored locally and enriched from canonical YouTube watch pages before scoring |
 
-The local-first MVP does not send observed activity, raw evidence, full graph state, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages.
+The local-first MVP does not send observed activity, raw evidence, full graph state, derived embedding vectors/similarity features, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages.
 
 ## Disclosure and affirmative acceptance
 
@@ -77,7 +77,7 @@ Limited Use: certify only after verifying the release artifact and policy remain
 
 ## Retention and deletion
 
-Operational stores are bounded where implemented. Personal Algorithm evidence/graph state can persist in `chrome.storage.local` until deleted/reset or an explicit future retention rule applies.
+Operational stores are bounded where implemented. PR #213 additionally bounds derived semantic embedding records and graph/mode similarity records to 600 entries each. These derived records are model/version/input keyed and safe to discard/rebuild. Personal Algorithm evidence/graph state can persist in `chrome.storage.local` until deleted/reset or an explicit future retention rule applies.
 
 Settings provides **Delete all local MyAlgo data**, which clears extension-local state and disclosure acceptance. Observation stays disabled after deletion until the current disclosure is accepted again.
 
