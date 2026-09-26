@@ -1,21 +1,24 @@
 # GitHub Issues / Execution Backlog
 
-This backlog is ordered by dependency and risk.
+This backlog is ordered by dependency and risk. Historical P-labels in issue titles are retained for continuity; the current execution order below is authoritative when it differs from those labels.
+
+## Current execution order
+
+1. #168 — YouTube Data API display-only boundary audit.
+2. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
+3. #160 — safe replacement slots.
+4. #170 + #153 — graph provenance/visualization and per-item trace explanation.
+5. #162 — replay/evaluation baselines before richer enrichment.
+6. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
+7. #169 — discharge remaining local-runtime umbrella criteria.
+8. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
+9. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
 
 ## P0 — Validate the data boundary
 
-### [#156](https://github.com/AsimovNo9/MyAlgo/issues/156): Spike YouTube watch-history DOM extraction
+### [#156](https://github.com/AsimovNo9/MyAlgo/issues/156): Spike YouTube watch-history DOM extraction — **completed**
 
-**Why:** The current launch architecture depends on browser-observed history rather than API-derived graph bootstrap.
-
-Acceptance criteria:
-
-- enumerate realistic history volume
-- capture stable video identity
-- capture useful metadata
-- handle pagination/infinite scroll
-- document failure cases
-- measure usable evidence yield
+The live-browser spike established that modern History cards expose usable creator/title metadata, repeated scans can be reconciled by stable video identity, and the original creator-coverage gap was primarily an extraction/selector problem. #156 is closed; shared-history attribution remains separately tracked in #178.
 
 ### [#150](https://github.com/AsimovNo9/MyAlgo/issues/150): Observe live-feed candidates and Home recommendation context — **completed**
 
@@ -72,11 +75,21 @@ Implemented in PR #184. The collector:
 
 Automated tests and real-browser validation are complete. PR #184 was merged; #183 is closed.
 
-### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review — **implementation/reconciliation in PR #199**
+### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Complete Chrome Web Store disclosure and local data-flow privacy review — **PR #199 merged; local browser validation complete**
 
-Current #167 work adds a versioned affirmative disclosure gate before YouTube observation, keeps the content script paused before acceptance, rejects privacy-gated background messages before acceptance, adds a full local-data deletion control, narrows manifest access to HTTPS YouTube + `storage`, publishes an implementation-matched privacy policy, documents the Store Privacy-practices reconciliation, and adds a built-artifact secret scan. Chrome Web Store dashboard submission fields and clean-profile manual validation remain release-owner checks; #168 remains a separate launch gate.
+Implemented and validated:
 
-### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary
+- versioned affirmative disclosure before observation/ranking;
+- content/background guards before acceptance;
+- full local-data deletion and re-acceptance requirement;
+- HTTPS-only YouTube host matching plus `storage`;
+- implementation-matched privacy policy/data inventory;
+- built-artifact secret scan;
+- clean-profile validation of pre-acceptance blocking, acceptance → observation, and deletion → disabled observation.
+
+#167 stays open only for Store-facing release work: publish/verify the stable privacy-policy URL, reconcile the final Store listing/Privacy practices fields, and complete #168.
+
+### [#168](https://github.com/AsimovNo9/MyAlgo/issues/168): Audit the YouTube Data API display-only boundary — **next active gate**
 
 ### [#187](https://github.com/AsimovNo9/MyAlgo/issues/187): Define source-neutral evidence and connector contracts — **completed in PR #188**
 
@@ -142,6 +155,18 @@ Still intentionally excluded from #148:
 
 Those remain downstream work. The next graph-layer work should build semantic entities/relationships and then a separately specified preference-inference layer rather than treating every `watched` record as a preference.
 
+### Creator graph consistency hardening — **completed in PR #198**
+
+PR #198 fixed the stale-graph condition found in exported real-browser state. Ordinary evidence ingestion now materializes/merges inferred creator nodes and `created_by` edges immediately, reconciles stale support when evidence is replaced, and keeps deterministic full rebuild as recovery/migration.
+
+Validation sequence:
+
+- stale export exposed hundreds of missing expected creator relationships;
+- `rebuildGraphFromEvidence()` reconciled the export to zero missing relationships;
+- subsequent real browsing without another rebuild preserved zero missing/duplicate/dangling creator relationships and complete supporting `evidenceIds`.
+
+This is maintenance hardening of #148's graph invariant, not new preference-inference scope.
+
 ### History persistence and reconciliation regression coverage
 
 PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
@@ -171,7 +196,7 @@ PR #195 is merged. Treat this entry as the status record for the runtime-scoring
 
 PR #193 was merged after CI and live browser/runtime validation. The live diagnostic exercised the actual persisted Personal Algorithm state (792 evidence records, 516 nodes, 269 edges) and confirmed score 10.5, exact contribution accounting, trace consistency, and replay stability. Live validation also exposed an edge-scoping bug; the scorer was corrected so only edges whose endpoints are both part of the candidate path contribute.
 
-### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization — **next P1 candidate**
+### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization — **sequenced after #168 and native-feed hardening**
 
 ## P2 — Feed enforcement
 
@@ -231,4 +256,4 @@ Confirm implementation never feeds YouTube API Data into graph derivation.
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
-Finalize permissions, disclosures, privacy policy, retention, and deletion behavior.
+Implementation and clean-profile browser validation are complete in PR #199. Remaining work is Store-dashboard publication/reconciliation plus #168.
