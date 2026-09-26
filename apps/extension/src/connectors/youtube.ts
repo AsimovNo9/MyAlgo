@@ -1,6 +1,6 @@
 import { extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from '../content-scripts/youtube-dom.ts';
 import type { PageProviderConnector } from './types';
-import { youtubeAcquisition } from './youtube-acquisition';
+import { youtubeAcquisition } from './youtube-acquisition.ts';
 
 const createYouTubeContentIdentity = (externalId: string) => ({
   source: 'youtube',
