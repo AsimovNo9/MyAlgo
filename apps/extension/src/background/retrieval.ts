@@ -95,13 +95,20 @@ export function webSearchOriginPattern(value: string | null | undefined): string
 
 export function createSearxngWebSearchProvider(
   endpointValue: string,
-  fetcher: typeof fetch = fetch,
+  options: {
+    apiKey?: string | null;
+    providerId?: string;
+    fetcher?: typeof fetch;
+  } = {},
 ): WebSearchProvider {
   const endpoint = normalizeWebSearchEndpoint(endpointValue);
   if (!endpoint) throw new Error('Web-search endpoint must be an HTTPS SearXNG base URL.');
 
+  const fetcher = options.fetcher ?? fetch;
+  const apiKey = options.apiKey?.trim() || null;
+
   return {
-    id: 'searxng',
+    id: options.providerId ?? 'searxng',
     async search(request) {
       const url = new URL(`${endpoint}/search`);
       url.searchParams.set('q', `${request.query} site:youtube.com/watch`);
@@ -109,11 +116,13 @@ export function createSearxngWebSearchProvider(
       url.searchParams.set('categories', 'general');
       url.searchParams.set('language', 'auto');
 
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (apiKey) headers['X-API-Key'] = apiKey;
       const response = await fetcher(url.toString(), {
         method: 'GET',
         credentials: 'omit',
         cache: 'no-store',
-        headers: { Accept: 'application/json' },
+        headers,
       });
       if (!response.ok) throw new Error(`Web search HTTP ${response.status}`);
       const payload = await response.json() as {
@@ -140,6 +149,21 @@ export function createSearxngWebSearchProvider(
         .slice(0, request.limit);
     },
   };
+}
+
+export const DEFAULT_WEB_SEARCH_ENDPOINT = 'https://priv.au';
+export const DEFAULT_WEB_SEARCH_PROVIDER = 'privau' as const;
+
+export function createDefaultWebSearchProvider(
+  apiKey: string,
+  fetcher: typeof fetch = fetch,
+): WebSearchProvider {
+  if (!apiKey.trim()) throw new Error('PrivAU API key is required for web search.');
+  return createSearxngWebSearchProvider(DEFAULT_WEB_SEARCH_ENDPOINT, {
+    apiKey,
+    providerId: DEFAULT_WEB_SEARCH_PROVIDER,
+    fetcher,
+  });
 }
 
 export interface WebSearchProvider {
