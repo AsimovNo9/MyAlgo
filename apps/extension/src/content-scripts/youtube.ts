@@ -466,33 +466,53 @@ const syncSourceFilteredContainers = () => {
     delete container.dataset.personalAlgorithmSourceRowHidden;
   });
 
-  if (sourceFilters.includeShorts === false) {
-    document.querySelectorAll<HTMLElement>(
-      'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
-    ).forEach((shelf) => {
+  const hideShelf = (shelf: HTMLElement, reason: 'shorts' | 'playables') => {
+    const structuralHost = shelf.closest<HTMLElement>(
+      'ytd-rich-section-renderer, ytd-item-section-renderer',
+    );
+    const layoutItem = getFeedLayoutItem(structuralHost ?? shelf);
+    if (layoutItem) {
+      layoutItem.dataset.personalAlgorithmSourceLayoutHidden = reason;
+      layoutItem.style.setProperty('display', 'none', 'important');
+    }
+    if (structuralHost) {
+      structuralHost.dataset.personalAlgorithmSourceSectionHidden = reason;
+      structuralHost.style.setProperty('display', 'none', 'important');
+      return;
+    }
+    shelf.dataset.personalAlgorithmSourceShelfHidden = reason;
+    shelf.style.setProperty('display', 'none', 'important');
+  };
+
+  document.querySelectorAll<HTMLElement>(
+    'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
+  ).forEach((shelf) => {
+    if (sourceFilters.includeShorts === false) {
       const hasShorts = Boolean(
         shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
       );
-      if (!hasShorts) return;
-
-      const structuralHost = shelf.closest<HTMLElement>(
-        'ytd-rich-section-renderer, ytd-item-section-renderer',
-      );
-      const layoutItem = getFeedLayoutItem(structuralHost ?? shelf);
-      if (layoutItem) {
-        layoutItem.dataset.personalAlgorithmSourceLayoutHidden = 'shorts';
-        layoutItem.style.setProperty('display', 'none', 'important');
-      }
-      if (structuralHost) {
-        structuralHost.dataset.personalAlgorithmSourceSectionHidden = 'shorts';
-        structuralHost.style.setProperty('display', 'none', 'important');
+      if (hasShorts) {
+        hideShelf(shelf, 'shorts');
         return;
       }
+    }
 
-      shelf.dataset.personalAlgorithmSourceShelfHidden = 'shorts';
-      shelf.style.setProperty('display', 'none', 'important');
-    });
-  }
+    if (sourceFilters.includePlayables === false) {
+      const heading = normalizeText(
+        shelf.querySelector<HTMLElement>(
+          '#title, #title-container, h2, h3, yt-formatted-string',
+        )?.textContent ?? '',
+      );
+      const hasPlayableLink = Boolean(
+        shelf.querySelector(
+          'a[href*="/playables"], a[href*="playables?"], a[href*="/game/"]',
+        ),
+      );
+      if (heading.includes('playables') || hasPlayableLink) {
+        hideShelf(shelf, 'playables');
+      }
+    }
+  });
 
   // YouTube can retain an otherwise-empty rich-grid row after every card in it
   // has been source-filtered. Collapse only rows whose native card renderers are
@@ -837,9 +857,11 @@ const scheduleInitialRank = () => {
 safeStorageGet([
   STORAGE_KEYS.MODE,
   STORAGE_KEYS.ENABLED,
+  STORAGE_KEYS.SOURCE_FILTERS,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+  sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
   const disclosureAccepted = isPrivacyDisclosureAccepted(
     result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
   );
@@ -849,13 +871,13 @@ safeStorageGet([
     clearExtensionPresentation(false);
     return;
   }
+
+  // Apply persisted presentation controls before the initial rank request so
+  // Home starts in the user's chosen shape instead of flashing unfiltered UI.
+  applyRankedFeed();
   showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
   clearLegacyRecommendationShelf();
   scheduleInitialRank();
-});
-
-safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
-  sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
 });
 
 const parseIsoDuration = (value: string | null): number | null => {
@@ -913,6 +935,7 @@ const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) =
   && left.includeDiscovery === right.includeDiscovery
   && left.includeShorts === right.includeShorts
   && left.includeLive === right.includeLive
+  && left.includePlayables === right.includePlayables
 );
 
 const applySourceFilters = (nextFilters: FeedSourceFilters) => {
@@ -1245,6 +1268,19 @@ const pageObserver = new MutationObserver((records) => {
   }));
 
   if (hasNativeVideoMutation) triggerRank('mutation');
+
+  const hasSourceShelfMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
+    if (!(node instanceof Element)) return false;
+    return node.matches('ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer')
+      || Boolean(node.querySelector('ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer'));
+  }));
+  if (hasSourceShelfMutation && (
+    sourceFilters.includeShorts === false
+    || sourceFilters.includePlayables === false
+  )) {
+    syncSourceFilteredContainers();
+  }
+
   if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
   if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
   attachTemporalWatchObserver();
