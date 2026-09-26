@@ -1170,6 +1170,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (extensionEnabled) triggerRank('metadata');
     return;
   }
+  if (message?.type === 'YOUTUBE_SEMANTICS_ENRICHED') {
+    if (extensionEnabled) triggerRank('semantic');
+    return;
+  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
