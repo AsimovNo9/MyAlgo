@@ -244,3 +244,22 @@ Live rank diagnostics expose:
 - `maxSearchCandidateScore`.
 
 A healthy search run can fetch candidates without producing replacements when none clear the score/native-quality gates. Validation should distinguish acquisition failure from ranking/presentation rejection. Retrieved-discovery exploration may fill at most two replacement opportunities and must never replace a higher-scoring native target.
+
+
+## Semantic mode reranking validation
+
+Validate #209/#210 on the same stored candidate set under multiple modes.
+
+Required invariants:
+1. the first rank response does not wait for missing embeddings;
+2. semantic enrichment triggers at most one follow-up rerank when cached values actually change;
+3. changing Work/Learning/Relax changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
+4. semantic mode similarity replaces, rather than double-counts, the legacy heuristic mode boost;
+5. hard exclusions and explicit negative feedback remain authoritative;
+6. embedding cache hits produce the same vectors/similarities as the original computation;
+7. changing model version or candidate/node input invalidates the relevant cache entry without changing canonical graph/evidence;
+8. the same model/version/input yields deterministic semantic features;
+9. ranking traces expose semantic graph/mode contributions exactly;
+10. no candidate gains preference weight merely because it came from search or RSS.
+
+Compare the baseline local hash provider against the selected compact neural encoder using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
