@@ -167,7 +167,8 @@ export function getReplacementCandidates(
     return true;
   })
     .sort((left, right) => {
-      if (!selectionSeed) return (right.score ?? 0) - (left.score ?? 0);
+      const scoreDelta = (right.score ?? 0) - (left.score ?? 0);
+      if (scoreDelta !== 0 || !selectionSeed) return scoreDelta;
       return seededCandidateOrder(selectionSeed, left.external_id ?? '')
         - seededCandidateOrder(selectionSeed, right.external_id ?? '');
     })
