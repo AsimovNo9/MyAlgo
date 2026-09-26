@@ -13,6 +13,8 @@ const defaultSourceFilters: FeedSourceFilters = {
 
 const defaultRetrievalSettings: RetrievalSettings = {
   rssEnabled: false,
+  webSearchEnabled: false,
+  webSearchEndpoint: null,
 };
 
 const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
@@ -25,6 +27,14 @@ const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
   rssCandidatesAdded: 0,
   rssCandidatesDeduplicated: 0,
   rssConsecutiveFailures: 0,
+  lastWebSearchAt: null,
+  nextWebSearchAllowedAt: null,
+  webSearchPlansAttempted: 0,
+  webSearchPlansSucceeded: 0,
+  webSearchCandidatesFetched: 0,
+  webSearchCandidatesAdded: 0,
+  webSearchCandidatesDeduplicated: 0,
+  webSearchConsecutiveFailures: 0,
   lastError: null,
 };
 
@@ -40,6 +50,7 @@ export function Popup() {
   const [retrievalSettings, setRetrievalSettings] = React.useState<RetrievalSettings>(defaultRetrievalSettings);
   const [retrievalDiagnostics, setRetrievalDiagnostics] = React.useState<RetrievalDiagnostics>(emptyRetrievalDiagnostics);
   const [retrievalBusy, setRetrievalBusy] = React.useState(false);
+  const [webSearchEndpoint, setWebSearchEndpoint] = React.useState('');
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
@@ -51,7 +62,9 @@ export function Popup() {
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
       setEnabled(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']) && result['personal-algorithm-enabled'] !== false);
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
-      setRetrievalSettings({ ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) });
+      const nextRetrievalSettings = { ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) };
+      setRetrievalSettings(nextRetrievalSettings);
+      setWebSearchEndpoint(nextRetrievalSettings.webSearchEndpoint ?? '');
       setRetrievalDiagnostics({ ...emptyRetrievalDiagnostics, ...(result['personal-algorithm-retrieval-diagnostics'] as RetrievalDiagnostics | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
@@ -102,8 +115,8 @@ export function Popup() {
     }
   };
 
-  const handleRetrievalChange = async (rssEnabled: boolean) => {
-    const nextSettings = { ...retrievalSettings, rssEnabled };
+  const updateRetrievalSettings = async (nextSettings: RetrievalSettings) => {
+    const previousSettings = retrievalSettings;
     setRetrievalSettings(nextSettings);
     setRetrievalBusy(true);
     try {
@@ -112,15 +125,71 @@ export function Popup() {
         payload: { retrievalSettings: nextSettings },
       }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
       if (!response?.ok) {
-        setRetrievalSettings(retrievalSettings);
+        setRetrievalSettings(previousSettings);
         setLastError(response?.error ?? 'Unable to update retrieval settings.');
-        return;
+        return false;
       }
       if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
       setLastError(null);
+      return true;
     } finally {
       setRetrievalBusy(false);
     }
+  };
+
+  const handleRetrievalChange = async (rssEnabled: boolean) => {
+    await updateRetrievalSettings({ ...retrievalSettings, rssEnabled });
+  };
+
+  const handleWebSearchChange = async (webSearchEnabled: boolean) => {
+    let endpoint: URL;
+    try {
+      endpoint = new URL(webSearchEndpoint.trim());
+      if (endpoint.protocol !== 'https:') throw new Error('HTTPS required');
+    } catch {
+      setLastError('Enter a valid HTTPS SearXNG endpoint before enabling web search.');
+      return;
+    }
+
+    if (webSearchEnabled) {
+      const granted = await chrome.permissions.request({
+        origins: [`${endpoint.origin}/*`],
+      });
+      if (!granted) {
+        setLastError('Search-provider access was not granted.');
+        return;
+      }
+    }
+
+    await updateRetrievalSettings({
+      ...retrievalSettings,
+      webSearchEnabled,
+      webSearchEndpoint: endpoint.origin + endpoint.pathname.replace(/\/$/, ''),
+    });
+  };
+
+  const handleSaveWebSearchEndpoint = async () => {
+    let endpoint: URL;
+    try {
+      endpoint = new URL(webSearchEndpoint.trim());
+      if (endpoint.protocol !== 'https:') throw new Error('HTTPS required');
+    } catch {
+      setLastError('Enter a valid HTTPS SearXNG endpoint.');
+      return;
+    }
+    const granted = await chrome.permissions.request({
+      origins: [`${endpoint.origin}/*`],
+    });
+    if (!granted) {
+      setLastError('Search-provider access was not granted.');
+      return;
+    }
+    const normalized = endpoint.origin + endpoint.pathname.replace(/\/$/, '');
+    setWebSearchEndpoint(normalized);
+    await updateRetrievalSettings({
+      ...retrievalSettings,
+      webSearchEndpoint: normalized,
+    });
   };
 
   const handleRefreshRetrieval = async () => {
@@ -233,9 +302,40 @@ export function Popup() {
             {retrievalDiagnostics.lastError}
           </p>
         ) : null}
-        <p style={{ margin: '8px 0 0', maxWidth: 280, fontSize: 12 }}>
-          Web search: planned. Graph-derived query planning is available, but no network search provider is connected yet.
-        </p>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e7eb' }}>
+          <label htmlFor="web-search-endpoint" style={{ display: 'block', fontWeight: 600 }}>SearXNG search endpoint</label>
+          <input
+            id="web-search-endpoint"
+            type="url"
+            placeholder="https://search.example.org"
+            value={webSearchEndpoint}
+            disabled={retrievalBusy}
+            onChange={(event) => setWebSearchEndpoint(event.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: 6 }}
+          />
+          <button
+            type="button"
+            disabled={retrievalBusy || !webSearchEndpoint.trim()}
+            onClick={() => void handleSaveWebSearchEndpoint()}
+            style={{ marginTop: 6 }}
+          >
+            Save search endpoint
+          </button>
+          <label style={{ display: 'block', marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={retrievalSettings.webSearchEnabled === true}
+              disabled={retrievalBusy}
+              onChange={(event) => void handleWebSearchChange(event.target.checked)}
+            /> Enable graph + mode web search
+          </label>
+          <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
+            Sends only bounded graph-derived goal/topic queries plus the active mode intent to the configured SearXNG endpoint. Search results are discovery candidates, then YouTube metadata is enriched locally before scoring.
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+            Search: {retrievalDiagnostics.webSearchCandidatesAdded ?? 0} added · {retrievalDiagnostics.webSearchCandidatesDeduplicated ?? 0} deduplicated · {retrievalDiagnostics.webSearchPlansSucceeded ?? 0}/{retrievalDiagnostics.webSearchPlansAttempted ?? 0} plans succeeded
+          </p>
+        </div>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
