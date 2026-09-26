@@ -288,6 +288,6 @@ The active mode must not be rendered as a label on every video. A visible `Learn
 
 ### Web search adapter
 
-The first concrete provider is SearXNG-compatible and remains behind the source-neutral `WebSearchProvider` interface. The user configures an HTTPS endpoint and grants that exact origin at runtime. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
+The first concrete provider is PrivAU at `https://priv.au`, using its documented SearXNG-compatible JSON API. PrivAU requires an API key for JSON search, so the key is user-supplied in Advanced settings, stored only in extension-local storage, and sent only as a PrivAU authentication header. The provider remains behind the source-neutral `WebSearchProvider` interface; advanced users may select a custom SearXNG endpoint. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
 
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
