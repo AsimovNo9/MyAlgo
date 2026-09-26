@@ -1,6 +1,7 @@
 import type { InteractionEvidence } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { extractYouTubeVideoId } from './youtube-dom.ts';
+import { MYALGO_INJECTED_SELECTOR } from './youtube-ux.ts';
 
 export type YouTubeSurface = 'home' | 'search' | 'subscriptions' | 'shorts' | 'watch' | 'other';
 
@@ -107,7 +108,7 @@ export function getSelectionFromTarget(
   videoSelector: string,
   surfaceOrPathname: YouTubeSurface | string,
 ): { videoId: string; exposure: CandidateExposure; source: SelectionSource } | null {
-  if (!target || target.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')) {
+  if (!target || target.closest(MYALGO_INJECTED_SELECTOR)) {
     return null;
   }
 

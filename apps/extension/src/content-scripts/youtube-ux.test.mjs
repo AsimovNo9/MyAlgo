@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getReplacementCandidates, getShelfCandidates } from './youtube-ux.ts';
+import { getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -21,4 +21,81 @@ test('MVP scores are eligible for replacement while negative feedback stays hidd
     getReplacementCandidates(lowScoreFeed, ['video-a'], 6, 0),
     [lowScoreFeed[1]],
   );
+});
+
+
+test('native-card policy gates run before score visibility', () => {
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-a', title: 'Video A', score: 99, visible: true },
+      { sourceFiltered: true, minimumVisibleScore: 0 },
+    ),
+    { action: 'hide', reason: 'source_filter' },
+  );
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-a', title: 'Video A', score: 99, visible: false },
+      { sourceFiltered: false, minimumVisibleScore: 0 },
+    ),
+    { action: 'hide', reason: 'runtime_policy' },
+  );
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-a', title: 'Video A', score: 99, visible: true, suppressed: true, policyOutcome: 'suppressed' },
+      { sourceFiltered: false, minimumVisibleScore: 0 },
+    ),
+    { action: 'hide', reason: 'runtime_policy' },
+  );
+});
+
+test('native-card score threshold applies only to ranked candidates', () => {
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-a', title: 'Video A', score: -9, visible: true },
+      { sourceFiltered: false, minimumVisibleScore: 0 },
+    ),
+    { action: 'hide', reason: 'score' },
+  );
+  assert.deepEqual(
+    getNativeCardDecision(
+      { external_id: 'video-b', title: 'Video B', score: 1, visible: true },
+      { sourceFiltered: false, minimumVisibleScore: 0 },
+    ),
+    { action: 'show', reason: 'ranked' },
+  );
+});
+
+test('unmatched native cards pass through in degraded coverage', () => {
+  assert.deepEqual(
+    getNativeCardDecision(undefined, { sourceFiltered: false, minimumVisibleScore: 0 }),
+    { action: 'show', reason: 'unmatched' },
+  );
+});
+
+test('render context rejects stale generation, route, or mode', () => {
+  const current = { generation: 4, routeKey: '/results?search_query=test', mode: 'Work' };
+  assert.equal(isRenderContextStale(current, current), false);
+  assert.equal(isRenderContextStale({ ...current, generation: 3 }, current), true);
+  assert.equal(isRenderContextStale({ ...current, routeKey: '/' }, current), true);
+  assert.equal(isRenderContextStale({ ...current, mode: 'Relax' }, current), true);
+});
+
+
+test('outermost-card selection removes nested duplicate presentation targets', () => {
+  const outer = { id: 'outer' };
+  const inner = { id: 'inner' };
+  const sibling = { id: 'sibling' };
+  const contains = (parent, child) => parent === outer && child === inner;
+
+  assert.deepEqual(
+    keepOutermostElements([outer, inner, sibling], contains),
+    [outer, sibling],
+  );
+});
+
+
+test('reactivation semantics require a fresh manual generation rather than stale mutation reuse', () => {
+  const stale = { generation: 7, routeKey: '/', mode: 'Work' };
+  const current = { generation: 8, routeKey: '/', mode: 'Work' };
+  assert.equal(isRenderContextStale(stale, current), true);
 });

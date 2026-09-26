@@ -125,3 +125,18 @@ edited graph
 on the same stored candidate set.
 
 This avoids conflating graph changes with candidate-pool changes.
+
+
+## Native-feed enforcement validation
+
+For #152/#171, validate the browser path as a state-transition problem rather than only a visual check:
+
+1. load Home and confirm unmatched native cards remain visible until they receive a local score;
+2. confirm hard/runtime-hidden candidates stay hidden even if their numeric score would otherwise pass the threshold;
+3. navigate Home → Search → Subscriptions → Shorts while an earlier rank request is in flight and verify stale results do not reapply;
+4. trigger infinite-scroll/native DOM recycling and verify MyAlgo's own shelf/status/control DOM never appears in the candidate/evidence stream;
+5. record explicit feedback and confirm the previous generation is invalidated and replaced by a fresh local ranking;
+6. run `PERSONAL_ALGORITHM_REBUILD` and confirm active YouTube tabs invalidate stale presentation;
+7. verify no synthetic replacement cards are inserted before #160.
+
+Diagnostics must remain privacy-safe: counts, phases, and generation numbers are acceptable; titles/video IDs should not be emitted merely to diagnose stale/self-observation handling.

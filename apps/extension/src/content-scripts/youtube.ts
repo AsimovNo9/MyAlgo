@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isRenderGenerationStale, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -48,6 +48,15 @@ const instanceAttribute = 'data-personal-algorithm-instance';
 document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
+const getRouteKey = () => `${location.pathname}${location.search}`;
+
+const logStaleRender = (phase: string, requestGeneration: number) => {
+  console.info('[MyAlgo] skipped stale render', {
+    phase,
+    requestGeneration,
+    latestGeneration: rankGeneration,
+  });
+};
 
 const isExtensionContextValid = () => {
   try {
@@ -114,24 +123,26 @@ const normalizeText = (value: string) => youtubeConnector.normalizeText(value).t
 
 const clearExtensionPresentation = (showPaused = true) => {
   document.querySelector('[data-personal-algorithm-shelf]')?.remove();
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
+  ).forEach((element) => element.remove());
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
-    element.querySelector('[data-personal-algorithm-badge]')?.remove();
+    if (element.dataset.personalAlgorithmPositionPatched === 'true') {
+      element.style.removeProperty('position');
+      delete element.dataset.personalAlgorithmPositionPatched;
+    }
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
   } else {
     document.querySelector('[data-personal-algorithm-status]')?.remove();
   }
-};
-
-const removeReplacementCards = () => {
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
 };
 
 const createThumbnail = (item: RankedFeedItem): HTMLElement => {
@@ -145,32 +156,6 @@ const createThumbnail = (item: RankedFeedItem): HTMLElement => {
   }
   media.style.cssText = `display:block;width:100%;aspect-ratio:${youtubeConnector.presentation.horizontalAspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
   return media;
-};
-
-const createReplacementCard = (item: RankedFeedItem, target: HTMLElement): HTMLElement => {
-  const card = document.createElement(target.localName);
-  card.className = target.className;
-  card.dataset.personalAlgorithmReplacement = 'true';
-  card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
-  card.style.cssText = 'display:block;min-width:0;align-self:start;box-sizing:border-box;background:var(--yt-spec-base-background, #fff);';
-
-  const link = document.createElement('a');
-  link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
-  link.style.cssText = 'display:block;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
-
-  link.appendChild(createThumbnail(item));
-
-  const title = document.createElement('div');
-  title.textContent = item.title ?? 'Recommended video';
-  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-  link.appendChild(title);
-
-  const channel = document.createElement('div');
-  channel.textContent = item.channel_name ?? `${activeMode} pick`;
-  channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
-  link.appendChild(channel);
-  card.appendChild(link);
-  return card;
 };
 
 const syncShelfCardWidth = (cards: HTMLElement) => {
@@ -322,7 +307,7 @@ const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => 
 };
 
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
-  if (link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]')) return null;
+  if (isMyAlgoInjectedElement(link)) return null;
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
 
@@ -343,12 +328,23 @@ const getChannelName = (element: HTMLElement) => normalizeText(
   element.querySelector('#channel-name, ytd-channel-name, .ytd-channel-name')?.textContent ?? '',
 );
 
-const getVideoElements = () => {
+const getVideoElements = (diagnoseInjected = false) => {
   const knownElements = Array.from(document.querySelectorAll(videoSelectors.join(','))) as HTMLElement[];
   const linkElements = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
     .map(getCardForVideoLink)
     .filter((element): element is HTMLElement => Boolean(element));
-  return Array.from(new Set([...knownElements, ...linkElements]));
+  const uniqueElements = Array.from(new Set([...knownElements, ...linkElements]));
+  const nativeElements = keepOutermostElements(
+    uniqueElements.filter((element) => !isMyAlgoInjectedElement(element)),
+    (parent, child) => parent.contains(child),
+  );
+  const skippedInjected = uniqueElements.length - uniqueElements.filter(
+    (element) => !isMyAlgoInjectedElement(element),
+  ).length;
+  if (diagnoseInjected && skippedInjected > 0) {
+    console.info('[MyAlgo] skipped injected candidate elements', { count: skippedInjected });
+  }
+  return nativeElements;
 };
 
 const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
@@ -361,7 +357,7 @@ const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
 
 const collectCandidates = () => {
   const sourceKind = getPageSourceKind();
-  const cardCandidates = getVideoElements()
+  const cardCandidates = getVideoElements(true)
     .map((element) => ({
       external_id: getVideoId(element),
       title: getVideoTitle(element),
@@ -374,7 +370,7 @@ const collectCandidates = () => {
     .slice(0, youtubeConnector.presentation.candidateLimit);
 
   const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
-    .filter((link) => !link.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]'))
+    .filter((link) => !isMyAlgoInjectedElement(link))
     .map((link) => ({
       external_id: youtubeConnector.getExternalId(link.href) ?? '',
       title: normalizeText(youtubeConnector.getLinkTitle({
@@ -435,7 +431,7 @@ const scheduleHistoryObservation = () => {
 const observeHomeRecommendations = () => {
   if (!extensionEnabled || !isCurrentInstance() || !isYouTubeHomePage(location.pathname)) return;
   safeStorageGet([STORAGE_KEYS.HOME_OBSERVATION_ENABLED]).then((result) => {
-    if (result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
+    if (!extensionEnabled || !isCurrentInstance() || result[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] !== true) return;
     const observation = collectRecommendationObservationsFromDom(document);
     safeSendMessage({
       type: EXTENSION_MESSAGE_TYPES.RECOMMENDATION_OBSERVATION,
@@ -454,10 +450,8 @@ const scheduleHomeRecommendationObservation = () => {
 
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
-  removeReplacementCards();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
-  const replacementTargets: HTMLElement[] = [];
   const knownElements = getVideoElements();
 
   knownElements.forEach((element) => {
@@ -466,64 +460,48 @@ const applyRankedFeed = () => {
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
-    if (shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters)) {
+    const decision = getNativeCardDecision(item, {
+      sourceFiltered: shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters),
+      minimumVisibleScore: youtubeConnector.presentation.minimumVisibleScore,
+    });
+
+    if (decision.action === 'hide') {
       element.style.setProperty('display', 'none', 'important');
-      element.dataset.personalAlgorithmScore = 'source-filtered';
-      element.querySelector('[data-personal-algorithm-badge]')?.remove();
+      element.dataset.personalAlgorithmScore = decision.reason;
       return;
     }
+
     if (!item) {
-      element.style.setProperty('display', 'none', 'important');
+      // Degraded coverage is pass-through: MyAlgo must not erase a native card
+      // merely because the local candidate pool did not produce a score for it.
       element.dataset.personalAlgorithmScore = 'unmatched';
-      element.querySelector('[data-personal-algorithm-badge]')?.remove();
-      replacementTargets.push(element);
       return;
     }
 
     const score = item.score ?? 0;
-    const shouldHide = item.visible === false || score < youtubeConnector.presentation.minimumVisibleScore;
-    if (shouldHide) {
-      element.style.setProperty('display', 'none', 'important');
-      replacementTargets.push(element);
-    } else {
-      element.style.removeProperty('display');
-    }
+    element.dataset.personalAlgorithmScore = String(score);
+    element.dataset.personalAlgorithmRank = String(cachedFeed.indexOf(item));
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
-    element.dataset.personalAlgorithmScore = String(score);
-    const rank = cachedFeed.indexOf(item);
-    element.dataset.personalAlgorithmRank = String(rank);
 
     let badge = element.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
     if (!badge) {
       badge = document.createElement('span');
       badge.dataset.personalAlgorithmBadge = 'true';
       badge.style.cssText = 'position:absolute;z-index:20;top:8px;left:8px;padding:4px 7px;border-radius:999px;background:#0f172a;color:#fff;font:600 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);';
-      element.style.position = 'relative';
+      if (!element.style.position) {
+        element.style.position = 'relative';
+        element.dataset.personalAlgorithmPositionPatched = 'true';
+      }
       element.appendChild(badge);
     }
     badge.textContent = `${activeMode} · ${score}`;
   });
-
-  const blockedIds = new Set(getVideoElements().map(getVideoId));
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-video-id]').forEach((element) => {
-    blockedIds.add(element.dataset.personalAlgorithmVideoId ?? '');
-  });
-  const replacements = getReplacementCandidates(
-    personalPicks,
-    blockedIds,
-    replacementTargets.length,
-    youtubeConnector.presentation.minimumVisibleScore,
-  );
-  replacementTargets.forEach((target, index) => {
-    const replacement = replacements[index];
-    if (replacement) target.parentElement?.insertBefore(createReplacementCard(replacement, target), target);
-  });
 };
-
 const scheduleRankGeneration = (generation: number) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
@@ -548,6 +526,8 @@ const rankCurrentPage = async (requestGeneration: number) => {
     rankQueued = true;
     return;
   }
+
+  const requestRouteKey = getRouteKey();
   const candidates = collectCandidates();
   if (candidates.length === 0) {
     showStatus(`Personal Algorithm: no cards on ${location.hostname}`, true);
@@ -561,57 +541,85 @@ const rankCurrentPage = async (requestGeneration: number) => {
     rankingInFlight = false;
     return;
   }
+
   activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
-  if (isRenderGenerationStale(requestGeneration, rankGeneration)) {
+  const requestMode = activeMode;
+  const requestContext = { generation: requestGeneration, routeKey: requestRouteKey, mode: requestMode };
+  const currentContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
+  if (isRenderContextStale(requestContext, currentContext)) {
     rankingInFlight = false;
+    logStaleRender('before-request', requestGeneration);
     scheduleLatestRank();
     return;
   }
+
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
     rankingInFlight = false;
     if (rankQueued) scheduleLatestRank();
     return;
   }
-  const requestMode = activeMode;
+
   safeSendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
     rankingInFlight = false;
-    if (!isCurrentInstance() || isRenderGenerationStale(requestGeneration, rankGeneration)) {
+    const latestContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
+    if (!isCurrentInstance() || isRenderContextStale(requestContext, latestContext)) {
+      if (isCurrentInstance()) logStaleRender('rank-response', requestGeneration);
       if (isCurrentInstance() && extensionEnabled) scheduleLatestRank();
       return;
     }
+
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
-      renderRecommendationShelf();
+
+      // A generation is rendered from a clean MyAlgo presentation surface.
+      // This restores native cards first, then applies only this generation's
+      // decisions without reordering YouTube-owned renderers.
+      clearExtensionPresentation(false);
       applyRankedFeed();
+      renderRecommendationShelf();
+
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
-        item.visible !== false && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
+        item.visible !== false
+        && item.suppressed !== true
+        && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+        && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
-      showStatus(`${requestMode}: ${visibleCount} shown · ${response.feed.length - visibleCount} hidden`);
+      showStatus(`${requestMode}: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
     } else {
+      console.warn('[MyAlgo] native feed ranking failed', { phase: 'rank-response' });
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
     }
     if (rankQueued) scheduleLatestRank();
   });
 };
 
-const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'manual') => {
+const triggerRank = (
+  reason: 'navigation' | 'mutation' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
   const hasMeaningfulCards = currentCandidates.length >= 2;
-  if (reason !== 'manual' && hasMeaningfulCards && candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
-    renderRecommendationShelf();
+
+  // Only a native DOM mutation may reuse the current scored generation.
+  // Mode, feedback, graph, and navigation changes must request fresh scores.
+  if (
+    reason === 'mutation'
+    && hasMeaningfulCards
+    && candidateSignature === lastCandidateSignature
+    && activeMode === lastRankMode
+    && cachedFeed.length > 0
+  ) {
     applyRankedFeed();
+    renderRecommendationShelf();
     return;
   }
 
-  if (!hasMeaningfulCards && reason !== 'manual') {
-    return;
-  }
+  if (!hasMeaningfulCards && reason !== 'manual') return;
 
   const generation = ++rankGeneration;
   if (rankingInFlight) {
@@ -620,7 +628,6 @@ const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'ma
   }
   scheduleRankGeneration(generation);
 };
-
 const scheduleInitialRank = () => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
@@ -633,9 +640,11 @@ const scheduleInitialRank = () => {
 };
 
 safeStorageGet([
+  STORAGE_KEYS.MODE,
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
+  activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
   const disclosureAccepted = isPrivacyDisclosureAccepted(
     result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
   );
@@ -720,12 +729,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
+    clearExtensionPresentation(!extensionEnabled);
+
     if (extensionEnabled) {
-      showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-      refreshRecommendationShelf();
-      triggerRank('mode');
-    } else {
-      clearExtensionPresentation();
+      // Activation is a hard lifecycle boundary. Do not let an in-flight
+      // request from before the pause strand the clean page waiting for its
+      // callback; its generation is already stale and cannot render.
+      rankingInFlight = false;
+      void safeStorageGet([STORAGE_KEYS.MODE]).then((result) => {
+        if (!isCurrentInstance() || !extensionEnabled) return;
+        activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+        showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+        refreshRecommendationShelf();
+        triggerRank('manual');
+      });
     }
     return;
   }
@@ -734,6 +751,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
+    clearExtensionPresentation(false);
     void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
       sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
       refreshRecommendationShelf();
@@ -741,10 +759,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return;
   }
+  if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {
+    rankGeneration += 1;
+    cachedFeed = [];
+    lastCandidateSignature = '';
+    lastRankMode = '';
+    clearExtensionPresentation(false);
+    triggerRank('graph');
+    return;
+  }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
   rankGeneration += 1;
   activeMode = message.payload.mode;
   cachedFeed = [];
+  lastCandidateSignature = '';
+  lastRankMode = '';
+  clearExtensionPresentation(false);
   refreshRecommendationShelf();
   triggerRank('mode');
 });
@@ -899,7 +929,7 @@ const registerFeedbackHandlers = () => {
     if (!isCurrentInstance() || !extensionEnabled) return;
 
     const target = event.target instanceof Element ? event.target : null;
-    if (!target) return;
+    if (!target || isMyAlgoInjectedElement(target)) return;
 
     const trigger = getMoreActionsTrigger(target);
     if (trigger) {
@@ -961,7 +991,6 @@ window.addEventListener('yt-navigate-finish', () => {
     triggerRank('navigation');
     scheduleHomeRecommendationObservation();
   }
-  scheduleHomeRecommendationObservation();
 });
 window.addEventListener('yt-page-data-updated', () => {
   triggerRank('navigation');
@@ -981,7 +1010,7 @@ window.addEventListener('resize', () => {
 const pageObserver = new MutationObserver((records) => {
   const hasNativeVideoMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
-    if (node.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement]')) return false;
+    if (node.closest(MYALGO_INJECTED_SELECTOR)) return false;
     return node.matches(`${videoSelectors.join(',')}, ${videoLinkSelector}`)
       || Boolean(node.querySelector(`${videoSelectors.join(',')}, ${videoLinkSelector}`));
   }));

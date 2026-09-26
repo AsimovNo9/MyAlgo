@@ -41,6 +41,8 @@ type LocalFeedItem = CandidatePoolItem & {
   id: string;
   score: number;
   visible: boolean;
+  suppressed: boolean;
+  policyOutcome: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   source_kind: 'subscription' | 'discovery' | 'liked' | null;
   traceId: string;
 };
@@ -264,6 +266,8 @@ async function rankLocalCandidates(
 
   return ranked.map(({ trace, ...item }) => ({
     ...item,
+    suppressed: trace.suppressed,
+    policyOutcome: trace.policyOutcome,
     source_kind: item.source_kind ?? null,
     traceId: trace.id,
   }));
@@ -275,6 +279,16 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
     ...events.slice(-199),
     { kind, payload, recordedAt: new Date().toISOString() },
   ]);
+}
+
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): Promise<void> {
+  const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+  await Promise.all(tabs.map((tab) => tab.id
+    ? chrome.tabs.sendMessage(tab.id, {
+      type: 'PERSONAL_ALGORITHM_CHANGED',
+      payload: { reason },
+    }).catch(() => undefined)
+    : undefined));
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -345,7 +359,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'PERSONAL_ALGORITHM_REBUILD') {
     void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
-      .then((graph) => sendResponse({ ok: true, graph }))
+      .then(async (graph) => {
+        await notifyPersonalAlgorithmChanged('rebuild');
+        sendResponse({ ok: true, graph });
+      })
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to rebuild Personal Algorithm Graph.' }));
     return true;
   }
@@ -457,6 +474,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void (async () => {
       await recordLocalEvent('feedback', payload);
       await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+      await notifyPersonalAlgorithmChanged('feedback');
       sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
     })().catch((error) => sendResponse({
       ok: false,

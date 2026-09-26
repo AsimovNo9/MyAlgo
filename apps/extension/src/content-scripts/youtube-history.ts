@@ -1,4 +1,5 @@
 import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
+import { MYALGO_INJECTED_SELECTOR } from './youtube-ux.ts';
 
 export type HistoryEvidence = {
   externalId: string;
@@ -168,7 +169,7 @@ export function collectHistoryEvidenceFromDom(document: Document, observedAt = n
       creator,
       historyTimestamp: timestampNode?.textContent,
       position,
-      injected: Boolean(row.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
+      injected: Boolean(row.closest(MYALGO_INJECTED_SELECTOR)),
     };
   });
 

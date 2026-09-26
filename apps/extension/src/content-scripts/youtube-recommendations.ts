@@ -2,6 +2,7 @@ import type { ExposureEvidence } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube.ts';
 import { extractYouTubeCreator, extractYouTubeLinkTitle, extractYouTubeShortsTitle, extractYouTubeVideoId, normalizeYouTubeText, videoLinkSelector } from './youtube-dom.ts';
 import { createExposureId } from './youtube-interactions.ts';
+import { MYALGO_INJECTED_SELECTOR } from './youtube-ux.ts';
 
 export type RecommendationObservation = {
   externalId: string;
@@ -115,7 +116,7 @@ export function collectRecommendationObservationsFromDom(document: Document, obs
           }),
       creator,
       section: sectionNode?.textContent,
-      injected: Boolean(card.closest('[data-personal-algorithm-shelf], [data-personal-algorithm-replacement], [data-personal-algorithm-status]')),
+      injected: Boolean(card.closest(MYALGO_INJECTED_SELECTOR)),
     };
   });
   return collectRecommendationObservations(candidates, observedAt);

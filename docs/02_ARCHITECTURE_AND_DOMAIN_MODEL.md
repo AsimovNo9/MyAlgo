@@ -209,6 +209,26 @@ Source filters are also enforced locally. Candidate collection records subscript
 
 not_interested undo/reversal semantics are not part of #195. The current persisted event model is append-only and the MVP validation scope is positive feedback capture → persistence → scoring consumption.
 
+## Native-feed enforcement boundary
+
+Native YouTube cards remain YouTube-owned DOM. MyAlgo may apply local visibility/decorative decisions to those cards, but it does not reorder the underlying native renderer sequence or claim control over YouTube's ranking system.
+
+Presentation decisions are evaluated in this order:
+
+```text
+provider/source filter or hard scorer policy
+        ↓
+local score threshold
+        ↓
+show/hide native card
+```
+
+If MyAlgo has no ranked result for a native card, the card remains visible as a degraded/pass-through state. Missing local candidate coverage must not be interpreted as a negative decision.
+
+Each successful render generation starts from a cleared MyAlgo presentation state. Stale responses are rejected against generation, route, and mode. MyAlgo-generated shelf/replacement/status/explanation/control DOM is excluded from candidate, evidence, and interaction extraction.
+
+Safe native replacement is a separate concern tracked in #160; the #152/#171 enforcement path does not manufacture replacement content.
+
 ## 5. Explanation
 
 The explanation engine consumes the same scoring trace used by ranking.
