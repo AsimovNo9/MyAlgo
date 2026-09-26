@@ -34,6 +34,7 @@ export type YouTubeWatchMetadata = {
   keywords: string[];
   category: string | null;
   isLive: boolean;
+  viewCount: number | null;
 };
 
 function extractBalancedJsonObject(source: string, marker: string): string | null {
@@ -130,6 +131,7 @@ export function extractYouTubeWatchMetadataFromHtml(html: string): YouTubeWatchM
     keywords,
     category,
     isLive: Boolean(details?.isLiveContent || renderer?.liveBroadcastDetails),
+    viewCount: Number.isFinite(Number(details?.viewCount)) ? Number(details.viewCount) : null,
   };
 }
 
