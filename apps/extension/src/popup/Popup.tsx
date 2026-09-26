@@ -151,9 +151,10 @@ export function Popup() {
       return;
     }
 
+    const originPattern = `${endpoint.origin}/*`;
     if (webSearchEnabled) {
       const granted = await chrome.permissions.request({
-        origins: [`${endpoint.origin}/*`],
+        origins: [originPattern],
       });
       if (!granted) {
         setLastError('Search-provider access was not granted.');
@@ -161,11 +162,14 @@ export function Popup() {
       }
     }
 
-    await updateRetrievalSettings({
+    const updated = await updateRetrievalSettings({
       ...retrievalSettings,
       webSearchEnabled,
       webSearchEndpoint: endpoint.origin + endpoint.pathname.replace(/\/$/, ''),
     });
+    if (updated && !webSearchEnabled) {
+      await chrome.permissions.remove({ origins: [originPattern] });
+    }
   };
 
   const handleSaveWebSearchEndpoint = async () => {
@@ -185,11 +189,22 @@ export function Popup() {
       return;
     }
     const normalized = endpoint.origin + endpoint.pathname.replace(/\/$/, '');
+    const previousEndpoint = retrievalSettings.webSearchEndpoint;
     setWebSearchEndpoint(normalized);
-    await updateRetrievalSettings({
+    const updated = await updateRetrievalSettings({
       ...retrievalSettings,
       webSearchEndpoint: normalized,
     });
+    if (updated && previousEndpoint && previousEndpoint !== normalized) {
+      try {
+        const previousOrigin = new URL(previousEndpoint).origin;
+        if (previousOrigin !== endpoint.origin) {
+          await chrome.permissions.remove({ origins: [`${previousOrigin}/*`] });
+        }
+      } catch {
+        // Invalid legacy endpoint has no permission pattern to remove.
+      }
+    }
   };
 
   const handleRefreshRetrieval = async () => {
