@@ -199,9 +199,9 @@ Validate the search/classification slice with the following invariants:
 
 1. Changing mode changes generated search intent while preserving the underlying graph goal.
 2. Search sends only bounded normalized graph-derived terms plus mode intent; it does not send raw history rows, full graph state, explicit feedback, or scoring traces.
-3. Search access is impossible until the user configures an HTTPS endpoint and grants that exact origin.
-4. Returned non-YouTube URLs are ignored; YouTube URLs are normalized/deduplicated by video ID.
-5. Search snippets are replaced/augmented by canonical watch-page enrichment before candidate scoring when enrichment is available.
+3. Search requires no user API key, third-party endpoint, or optional host permission; it runs only against YouTube search pages under the existing YouTube host permission.
+4. YouTube search-page `ytInitialData` is parsed into bounded unique video IDs, and duplicate renderer variants are collapsed by video ID.
+5. Search-page metadata is replaced/augmented by canonical watch-page enrichment before candidate scoring when enrichment is available.
 6. Retrieval mechanism itself contributes no preference weight.
 7. Active Learning mode alone does not produce a Learning UI label.
 8. A Learning label is rendered only when the candidate classifier reports learning with the configured confidence threshold.
