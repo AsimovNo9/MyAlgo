@@ -210,7 +210,7 @@ scoring / ranking
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated through PR #195. PR #198 hardened graph consistency and was validated against real exported state. PR #199 implemented and browser-validated the local privacy/disclosure gate. The next active compliance task is #168; after that, the immediate product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#171/#160), followed by graph provenance/explanation UX (#170/#153).
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated. PR #198 hardened graph consistency, PR #199 implemented/browser-validated the local privacy gate, PR #203 locked the no-YouTube-Data-API launch boundary, and PR #204 completed/live-validated native-card enforcement plus stale/self-observation hardening. The next active product task is safe replacement slots (#160), followed by graph provenance/explanation UX (#170/#153).
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 
@@ -218,14 +218,15 @@ scoring / ranking
 
 The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
 
-1. **#152 + #171** — implementation in PR #204: native-card enforcement, degraded pass-through, hard-policy precedence, injected-DOM exclusion, and stale-render invalidation; live-browser validation remains before closure.
-2. **#160** — make replacement slots safe once #152/#171 browser validation is complete.
-3. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
-4. **#162** — establish replay/evaluation baselines before adding richer content understanding.
-5. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
-6. **#169** — close the remaining local-runtime umbrella criteria as downstream feed/offline boundaries are discharged.
-7. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
-8. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
+1. **#160** — implement safe native-feed replacement slots on top of the merged/live-validated #152/#171 enforcement boundary.
+2. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
+3. **#162** — establish replay/evaluation baselines before adding richer content understanding.
+4. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
+5. **#169** — close the remaining local-runtime umbrella criterion with explicit offline/signed-out validation.
+6. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
+7. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
+
+#152 and #171 are completed via PR #204. Live validation covered native order, degraded pass-through, stale render rejection, infinite-scroll DOM recycling, badge cleanup, mode consistency, pause/reactivation, graph rebuild invalidation, and explicit feedback reranking.
 
 #168 is now a completed launch-boundary audit: the current runtime has no YouTube Data API integration and CI guards against accidental introduction.
 
