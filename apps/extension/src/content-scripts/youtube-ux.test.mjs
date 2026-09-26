@@ -270,3 +270,22 @@ test('replacement text metadata always provides visible title and creator fallba
     { title: 'Recommended video', creator: 'Unknown creator', displayScore: 50, rawScore: null },
   );
 });
+
+
+test('replacement candidate rotation changes across generation seeds but is stable within one seed', () => {
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    external_id: `candidate-${index}`,
+    title: `Candidate ${index}`,
+    score: 80,
+    visible: true,
+    traceId: `trace-${index}`,
+    policyOutcome: 'eligible',
+  }));
+
+  const first = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
+  const firstReplay = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
+  const second = getReplacementCandidates(items, [], 3, 55, 'generation-2').map((item) => item.external_id);
+
+  assert.deepEqual(firstReplay, first);
+  assert.notDeepEqual(second, first);
+});
