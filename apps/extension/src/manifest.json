@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Local, user-controlled scoring and feed controls for YouTube with inspectable Personal Algorithm evidence.",
   "permissions": [
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "host_permissions": [
     "https://*.youtube.com/*"
