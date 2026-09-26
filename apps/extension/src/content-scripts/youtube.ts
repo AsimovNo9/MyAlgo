@@ -1055,18 +1055,18 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'metadata' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: 'navigation' | 'mutation' | 'metadata' | 'semantic' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation' && reason !== 'metadata') {
+  if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
     if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
       clearStableReplacements();
     }
     document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
   }
 
-  if (reason === 'metadata') {
+  if (reason === 'metadata' || reason === 'semantic') {
     // Force a new score pass because cached watch metadata changed, but keep
     // stable replacement assignments until the new scores actually render.
     lastCandidateSignature = '';
@@ -1078,7 +1078,7 @@ const triggerRank = (
     // otherwise a continuously mutating YouTube Home page can starve MyAlgo
     // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
     // changes still invalidate the active generation.
-    if (reason !== 'mutation' && reason !== 'metadata') {
+    if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
       rankGeneration += 1;
     }
     return;
@@ -1087,7 +1087,7 @@ const triggerRank = (
   const generation = ++rankGeneration;
   const delayMs = reason === 'mutation'
     ? 320
-    : reason === 'metadata'
+    : reason === 'metadata' || reason === 'semantic'
       ? 120
       : 60;
   scheduleRankGeneration(generation, delayMs);
