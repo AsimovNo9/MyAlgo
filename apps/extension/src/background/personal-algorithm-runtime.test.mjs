@@ -356,3 +356,26 @@ test('semantic mode similarity replaces the legacy heuristic mode boost instead 
     true,
   );
 });
+
+
+test('semantic graph matches are split into symbolic trace contributions without changing total graph weight', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-symbolic',
+    title: 'Distributed systems design',
+    semantic_graph_similarity: 0.75,
+    semantic_mode_similarity: 0,
+    semantic_model_version: 'fixture-model@v1',
+    semantic_graph_matches: [
+      { node_id: 'objective:systems', node_label: 'Distributed systems', similarity: 0.8 },
+      { node_id: 'topic:local-first', node_label: 'Local-first software', similarity: 0.4 },
+    ],
+  }], 'Work')[0];
+
+  const graphFeatures = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('semantic:graph:'));
+  assert.equal(graphFeatures.length, 2);
+  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Distributed systems'), true);
+  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Local-first software'), true);
+  const total = graphFeatures.reduce((sum, item) => sum + item.value, 0);
+  assert.ok(Math.abs(total - 13.5) <= 0.01);
+});
