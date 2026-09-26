@@ -8,8 +8,8 @@
 | Rendered feed candidates | Browser | Candidate/evidence | Local |
 | User interactions | Browser/user | Graph evidence | Local |
 | User-created graph | User | Personal model | Local |
-| YouTube API account facts | API | Display/account facts | Minimal, policy-controlled |
-| Raw API responses | YouTube API | Not a graph input | Avoid persistent storage |
+| YouTube API account facts | API | **Not currently integrated**; future display/account-fact use only after review | No launch store |
+| Raw API responses | YouTube API | **Not currently integrated**; never a graph/scoring input by default | No launch store; future use must define policy-compliant refresh/deletion |
 | Foundation-model output | Model | Content evidence | Only if enrichment is introduced |
 | Graph | Derived | Ranking/explanation | User-controlled |
 
@@ -85,7 +85,7 @@ Future cloud processing requires a separate data-flow review covering:
 
 ## Provider policy
 
-YouTube API requirements and Chrome Web Store requirements are separate compliance surfaces.
+YouTube API requirements and Chrome Web Store requirements are separate compliance surfaces. The #168 audit found no YouTube Data API endpoint/client/OAuth/cache path in the current launch runtime; CI now guards that absence.
 
 Do not assume satisfying one satisfies the other.
 
