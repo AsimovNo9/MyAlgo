@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -311,4 +311,24 @@ test('replacement rotation can vary candidates within the same 5-point score ban
     getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
     getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
   );
+});
+
+
+test('opportunistic replacement assignments bind the selected candidate to its native target', () => {
+  const assignments = selectOpportunisticReplacementAssignments(
+    [
+      { externalId: 'native-low', score: 60, nativeIndex: 4 },
+      { externalId: 'native-high', score: 75, nativeIndex: 8 },
+    ],
+    [
+      { external_id: 'replacement-a', title: 'A', score: 82, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+      { external_id: 'replacement-b', title: 'B', score: 69, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+    ],
+    2,
+    5,
+  );
+
+  assert.equal(assignments.length, 1);
+  assert.equal(assignments[0].target.externalId, 'native-low');
+  assert.equal(assignments[0].item.external_id, 'replacement-a');
 });
