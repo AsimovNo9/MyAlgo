@@ -136,7 +136,7 @@ test('semantic reranking derives graph and mode similarities and reuses cached e
   const relax = first.candidates.find((candidate) => candidate.external_id === 'relax-video');
   assert.ok(work.semantic_graph_similarity > relax.semantic_graph_similarity);
   assert.ok(work.semantic_mode_similarity > relax.semantic_mode_similarity);
-  assert.equal(work.semantic_model_version, 'fixture-v1');
+  assert.equal(work.semantic_model_version, 'fixture-semantic-model@fixture-v1');
   assert.equal(first.modeProfile.graph_revision, 12);
   assert.ok(first.modeProfile.semantic_terms.includes('Build reliable distributed systems'));
   assert.ok(first.diagnostics.graphEmbeddingsComputed > 0);
