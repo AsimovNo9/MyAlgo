@@ -136,6 +136,17 @@ test('never-show-channel feedback matches the creator node rather than only the 
   assert.equal(ranked.find((item) => item.external_id === 'video-a')?.score, -94);
 });
 
+test('subscription and discovery filters apply to source-tagged candidates', () => {
+  const ranked = scoreLocalCandidates(state, [
+    { external_id: 'video-a', title: 'Video A', source_kind: 'subscription' },
+    { external_id: 'video-b', title: 'Video B', source_kind: 'discovery' },
+    { external_id: 'video-c', title: 'Video C', source_kind: 'liked' },
+  ], 'Work', [], { subscribedOnly: true, includeDiscovery: false });
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.visible, true);
+  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.visible, false);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.visible, false);
+});
+
 test('source filters remain local visibility rules', () => {
   const ranked = scoreLocalCandidates(state, [
     { external_id: 'video-a', title: 'Video A', is_short: true },
