@@ -224,16 +224,16 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-Older P-labels describe historical phases; use this sequence for current work:
+PR #212 is merged. The next product risk is ranking quality rather than candidate acquisition.
 
-1. **PR #212 / #206 / #211** — finish live search-to-feed promotion and long-session responsiveness/retention validation.
-2. **#210** — finish deterministic candidate-quality and replacement-presentation hardening exposed by search promotion.
-3. **#170 + #153** — graph/provenance visualization and complete per-item trace explanation.
-4. **#162** — replay/evaluation baseline before semantic models.
-5. **#209** — rebuildable local text embeddings for semantic retrieval/scoring; multimodal remains deferred.
-6. **#154 + #155 + #178** — correction, Forget/provenance, and history-cluster controls.
-7. **#169 + #161 + #158 + #159** — remaining runtime validation, mode/editing, and counterfactual work.
-8. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and second connector.
+1. **#209 + #210** — local text embeddings and semantic reranking against the Personal Algorithm Graph and active semantic mode.
+2. **#170 + #153** — graph/provenance visualization and complete per-item explanation.
+3. **#162** — replay/evaluation baseline for semantic ranking changes.
+4. **#154 + #155 + #178** — direct correction/Forget/history-cluster controls.
+5. **#169 + #161 + #158 + #159** — remaining runtime, mode editing, graph editing, and counterfactual work.
+6. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and second connector.
+
+The first semantic model is text-only. Candidate title/description/keywords/category/creator are embedded locally and compared against graph objective/topic/concept embeddings. Each mode is represented as a semantic lens over weighted graph regions plus an intent seed. Similarity becomes an explicit scorer contribution; it does not rewrite graph truth or override explicit feedback/hard policy.
 
 
 #160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
