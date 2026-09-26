@@ -409,3 +409,10 @@ Opportunistic replacements bind the selected off-page candidate to the native sl
 ### Replacement stability across SPA churn
 
 A successfully rendered opportunistic replacement is held stable for 45 seconds across ordinary in-route YouTube DOM/page-data churn. The hold is keyed by the native source video ID and replacement candidate, is bounded by the replacement limit, and survives only while the target still exists and the candidate remains eligible and at least as relevant as the native card. Actual navigation, mode changes, graph/feedback invalidation, suppression, or expiry clear the hold. `yt-page-data-updated` is treated as an in-route mutation refresh because YouTube emits it during normal Home updates; hard route invalidation remains attached to `yt-navigate-start`.
+
+
+### First-paint overlay path
+
+Badges and replacement presentation must not wait on network metadata enrichment. The critical path is now: collect current DOM candidates → merge/persist lightweight observations → hydrate from already-cached metadata → score the bounded working set → return/render. Canonical watch-page enrichment runs asynchronously afterward in the extension service worker and requests a later metadata rerank only when new metadata was actually persisted.
+
+Ordinary YouTube mutation/page-data churn must not invalidate a rank already in flight. Mutation and metadata events are coalesced into one queued rerank while the current response is allowed to render. Only hard lifecycle/semantic changes such as navigation, mode changes, graph changes, and explicit feedback invalidate the active generation.
