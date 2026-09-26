@@ -11,6 +11,7 @@ The documentation must agree that:
 - Foundation models provide content evidence.
 - The current launch runtime has no YouTube Data API integration; any future API use defaults to display/account-facts-only unless a new review explicitly changes that boundary.
 - Browser observation supplies graph evidence.
+- Candidate acquisition (RSS/web search) expands what can be scored; retrieval is not preference evidence.
 - MVP is local-first.
 - Watch-history extraction was the first technical spike and is now completed.
 - Modes operate over one graph.
@@ -37,7 +38,9 @@ The current remaining dependency order is:
 ```text
 YouTube API boundary audit (#168) — implemented; no launch API integration found
       ↓
-feed enforcement / stale-loop hardening
+feed enforcement / stale-loop hardening — implemented
+      ↓
+source-neutral candidate acquisition (#202/#206): RSS first, web search next
       ↓
 Why / trace
       ↓
