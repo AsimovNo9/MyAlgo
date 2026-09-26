@@ -38,11 +38,15 @@ export type SemanticRerankingDiagnostics = {
 };
 
 export type SemanticRerankingResult<T extends RecommendationCandidate> = {
-  candidates: T[];
+  candidates: Array<T & {
+    semantic_similarity?: number | null;
+    semantic_graph_similarity?: number | null;
+    semantic_mode_similarity?: number | null;
+    semantic_model_version?: string | null;
+  }>;
   modeProfile: SemanticModeProfile;
   diagnostics: SemanticRerankingDiagnostics;
 };
-
 
 const hashToken = (value: string, seed: number): number => {
   let hash = seed >>> 0;
@@ -60,62 +64,21 @@ const embeddingTerms = (text: string): string[] => {
     .replace(/\s+/g, ' ')
     .trim();
   if (!normalized) return [];
+
   const words = normalized.split(' ').filter((token) => token.length >= 2);
-  const bigrams = words.slice(0, -1).map((token, index) => `${token}_${words[index + 1]}`);
+  const bigrams = words
+    .slice(0, -1)
+    .map((token, index) => \`\${token}_\${words[index + 1]}\`);
   const characterNgrams = words.flatMap((word) => {
     if (word.length < 4) return [];
-    const padded = `^${word}import type {
-  EmbeddingRecord,
-  PersonalAlgorithmState,
-  RecommendationCandidate,
-  SemanticModeProfile,
-} from '@repo/shared-types';
-
-import {
-  buildSemanticModeProfile,
-  cosineSimilarity,
-  semanticModeSeed,
-  weightedEmbeddingCentroid,
-} from './semantic-primitives';
-
-export interface LocalEmbeddingProvider {
-  readonly modelId: string;
-  readonly modelVersion: string;
-  readonly dimensions: number;
-  embed(texts: readonly string[]): Promise<number[][]>;
-}
-
-export interface EmbeddingCache {
-  get(key: string): Promise<EmbeddingRecord | null>;
-  set(key: string, record: EmbeddingRecord): Promise<void>;
-  flush?(): Promise<void>;
-}
-
-export type SemanticRerankingDiagnostics = {
-  modelId: string;
-  modelVersion: string;
-  graphNodesConsidered: number;
-  graphEmbeddingsComputed: number;
-  graphEmbeddingsFromCache: number;
-  candidateEmbeddingsComputed: number;
-  candidateEmbeddingsFromCache: number;
-  candidateCount: number;
-  modeNodeCount: number;
-};
-
-export type SemanticRerankingResult<T extends RecommendationCandidate> = {
-  candidates: T[];
-  modeProfile: SemanticModeProfile;
-  diagnostics: SemanticRerankingDiagnostics;
-};
-
-;
+    const padded = \`^\${word}$\`;
     const grams: string[] = [];
     for (let index = 0; index <= padded.length - 3; index += 1) {
       grams.push(padded.slice(index, index + 3));
     }
     return grams;
   });
+
   return [...words, ...bigrams, ...characterNgrams];
 };
 
@@ -133,7 +96,7 @@ export function createLocalHashEmbeddingProvider(
   const safeDimensions = Math.max(32, Math.min(1024, Math.floor(dimensions)));
   return {
     modelId: 'myalgo-local-hash-embedding',
-    modelVersion: `hash-v1-d${safeDimensions}`,
+    modelVersion: \`hash-v1-d\${safeDimensions}\`,
     dimensions: safeDimensions,
     async embed(texts) {
       return texts.map((text) => {
@@ -196,7 +159,7 @@ export function semanticInputHash(value: string): string {
     second ^= code + index;
     second = Math.imul(second, 0x85ebca6b);
   }
-  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
+  return \`\${(first >>> 0).toString(16).padStart(8, '0')}\${(second >>> 0).toString(16).padStart(8, '0')}\`;
 }
 
 export function embeddingCacheKey(
@@ -244,6 +207,7 @@ async function embedWithCache(
     const cached = await cache.get(key);
     if (
       cached
+      && cached.model_id === provider.modelId
       && cached.model_version === provider.modelVersion
       && cached.dimensions === provider.dimensions
       && cached.input_hash === inputHash
@@ -259,7 +223,7 @@ async function embedWithCache(
   if (misses.length > 0) {
     const vectors = await provider.embed(misses.map((miss) => miss.text));
     if (vectors.length !== misses.length) {
-      throw new Error(`Embedding provider returned ${vectors.length} vectors for ${misses.length} inputs.`);
+      throw new Error(\`Embedding provider returned \${vectors.length} vectors for \${misses.length} inputs.\`);
     }
 
     const generatedAt = new Date().toISOString();
@@ -267,7 +231,7 @@ async function embedWithCache(
       const miss = misses[missIndex];
       const vector = l2Normalize(vectors[missIndex] ?? []);
       if (vector.length !== provider.dimensions) {
-        throw new Error(`Embedding provider returned ${vector.length} dimensions; expected ${provider.dimensions}.`);
+        throw new Error(\`Embedding provider returned \${vector.length} dimensions; expected \${provider.dimensions}.\`);
       }
       const input = inputs[miss.index];
       const record: EmbeddingRecord = {
@@ -285,6 +249,7 @@ async function embedWithCache(
     }
   }
 
+  await cache.flush?.();
   return { records, computed: misses.length, fromCache };
 }
 
@@ -338,7 +303,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   const seedText = semanticModeSeed(mode);
   const modeSeed = await embedWithCache(provider, cache, [{
     ownerType: 'mode',
-    ownerId: `mode-seed:${mode.trim().toLowerCase() || 'default'}`,
+    ownerId: \`mode-seed:\${mode.trim().toLowerCase() || 'default'}\`,
     text: seedText,
   }]);
   const seedEmbedding = modeSeed.records[0]?.embedding ?? [];
@@ -353,7 +318,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     nodeSimilarities,
     { minimumSimilarity: options.minimumModeNodeSimilarity ?? 0.2 },
   );
-  const semanticModelVersion = `${provider.modelId}@${provider.modelVersion}`;
+  const semanticModelVersion = \`\${provider.modelId}@\${provider.modelVersion}\`;
   modeProfile.model_version = semanticModelVersion;
 
   const graphCentroid = weightedEmbeddingCentroid(
@@ -378,18 +343,17 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   }));
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
 
-  await cache.flush?.();
-
   const enriched = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
+    const graphSimilarity = positiveSimilarity(embedding, graphCentroid);
     return {
       ...candidate,
-      semantic_similarity: positiveSimilarity(embedding, graphCentroid),
-      semantic_graph_similarity: positiveSimilarity(embedding, graphCentroid),
+      semantic_similarity: graphSimilarity,
+      semantic_graph_similarity: graphSimilarity,
       semantic_mode_similarity: positiveSimilarity(embedding, modeCentroid),
       semantic_model_version: semanticModelVersion,
     };
-  }) as T[];
+  });
 
   return {
     candidates: enriched,
