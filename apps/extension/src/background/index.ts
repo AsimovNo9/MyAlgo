@@ -55,7 +55,7 @@ const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
-let historyReconciliationReady: Promise<void> = Promise.resolve();
+let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 
 void getStorage<unknown>(STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION, null)
@@ -75,7 +75,6 @@ async function persistNormalizedEvidence(
   evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
   id: string,
 ): Promise<void> {
-  await historyReconciliationReady;
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
@@ -186,13 +185,18 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
   return pool;
 }
 
-historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
-  console.warn('Stored History evidence reconciliation skipped', error);
-});
+const ensureHistoryReconciled = (): Promise<void> => {
+  if (historyReconciliationReady) return historyReconciliationReady;
+  historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
+    historyReconciliationReady = null;
+    console.warn('Stored History evidence reconciliation skipped', error);
+  });
+  return historyReconciliationReady;
+};
 
 chrome.runtime.onInstalled.addListener(() => {
   void (async () => {
-    await historyReconciliationReady;
+    await ensureHistoryReconciled();
     await personalAlgorithmStore.initialize();
     const current = await chrome.storage.local.get([
       STORAGE_KEYS.MODE,
@@ -308,6 +312,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
   };
 
+  if (type === 'PERSONAL_ALGORITHM_HEALTH') {
+    void Promise.all([
+      getStorage(STORAGE_KEYS.ENABLED, false),
+      getStorage(STORAGE_KEYS.MODE, 'Work'),
+    ]).then(([enabled, mode]) => sendResponse({
+      ok: true,
+      worker: 'ready',
+      enabled,
+      mode,
+    })).catch((error) => sendResponse({
+      ok: false,
+      worker: 'error',
+      error: error instanceof Error ? error.message : 'Unable to read worker state.',
+    }));
+    return true;
+  }
+
   if (type === 'ACCEPT_PRIVACY_DISCLOSURE') {
     void (async () => {
       await chrome.storage.local.set({
@@ -351,14 +372,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.reviewGraph())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.reviewGraph())
       .then((review) => sendResponse({ ok: true, review }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to review Personal Algorithm Graph.' }));
     return true;
   }
 
   if (type === 'PERSONAL_ALGORITHM_REBUILD') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
       .then(async (graph) => {
         await notifyPersonalAlgorithmChanged('rebuild');
         sendResponse({ ok: true, graph });
@@ -368,7 +389,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'PERSONAL_ALGORITHM_EXPORT') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.exportStateJson())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.exportStateJson())
       .then((json) => sendResponse({ ok: true, json }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to export Personal Algorithm Graph.' }));
     return true;
@@ -554,7 +575,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'PERSONAL_ALGORITHM_BACKFILL_HISTORY_METADATA') {
     void (async () => {
-      await historyReconciliationReady;
+      await ensureHistoryReconciled();
       const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
       const normalizedInputs = historyEvidence.map((item) => ({
         id: createHistoryEvidenceId(item.externalId),
@@ -616,7 +637,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         ...nonHistoryEvents,
         ...watchedEvents,
       ].slice(-MAX_SELECTION_EVENTS));
-      await historyReconciliationReady;
+      await ensureHistoryReconciled();
       await personalAlgorithmStore.reconcileHistoryEvidence(
         watchedEvents.map((event) => ({
           id: createHistoryEvidenceId(event.videoId),
