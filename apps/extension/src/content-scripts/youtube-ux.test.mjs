@@ -239,10 +239,18 @@ test('opportunistic replacements select only lower-scoring native cards', () => 
   );
 });
 
-test('opportunistic replacement never hides a native card without a strictly better candidate', () => {
+test('opportunistic replacement permits an equal-score distinct candidate but never a worse one', () => {
   assert.deepEqual(
     selectOpportunisticReplacementTargets(
       [{ externalId: 'native-a', score: 4, nativeIndex: 0 }],
+      [{ external_id: 'rss-a', title: 'RSS A', score: 4, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      6,
+    ),
+    [{ externalId: 'native-a', score: 4, nativeIndex: 0 }],
+  );
+  assert.deepEqual(
+    selectOpportunisticReplacementTargets(
+      [{ externalId: 'native-a', score: 5, nativeIndex: 0 }],
       [{ external_id: 'rss-a', title: 'RSS A', score: 4, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
       6,
     ),
