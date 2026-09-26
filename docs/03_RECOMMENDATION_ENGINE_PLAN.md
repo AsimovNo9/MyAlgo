@@ -133,6 +133,32 @@ Prefer a layered approach:
 
 No model is allowed to silently become the user's preference model.
 
+### Semantic mode reranking after PR #212
+
+PR #212 established that acquisition can populate the candidate reservoir, but live use showed that lexical classification and deterministic metadata features do not yet reshape the feed strongly enough.
+
+The next ranking architecture is:
+
+```text
+candidate enriched text ──→ local embedding
+                              │
+Personal Algorithm Graph ──→ graph node embeddings
+                              │
+active mode seed ──────────→ semantic mode lens over graph nodes
+                              │
+                              ▼
+                    explicit similarities
+                 graph match + mode alignment
+                              │
+                              ▼
+                 deterministic scorer / trace
+                              │
+                              ▼
+                     calibrated reranking
+```
+
+Modes remain one graph with different semantic emphasis. The initial Work/Learning/Relax seeds are defaults, not hard-coded classifiers. A mode profile selects/weights graph objective/topic/concept nodes according to embedding similarity and can later support graph-derived or user-created modes.
+
 ### Local embedding layer (#209)
 
 Embeddings are derived features around the Personal Algorithm Graph, not the graph itself. The intended uses are:
