@@ -61,7 +61,6 @@ const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
-  webSearchEnabled: false,
 };
 const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastRssSyncAt: null,
@@ -247,7 +246,7 @@ const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response
   }
 };
 
-async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics> {
+async function refreshRssCandidates(force = false): Promise<{ diagnostics: RetrievalDiagnostics; changed: boolean }> {
   const settings = await getStorage<RetrievalSettings>(
     STORAGE_KEYS.RETRIEVAL_SETTINGS,
     DEFAULT_RETRIEVAL_SETTINGS,
@@ -258,8 +257,10 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
   );
   const nowMs = Date.now();
 
-  if (!settings.rssEnabled) return previous;
-  if (!force && !isRetrievalAllowed(previous.nextRssAllowedAt, nowMs)) return previous;
+  if (!settings.rssEnabled) return { diagnostics: previous, changed: false };
+  if (!force && !isRetrievalAllowed(previous.nextRssAllowedAt, nowMs)) {
+    return { diagnostics: previous, changed: false };
+  }
 
   const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
   const channelIds = selectRssChannelIds(Object.values(store));
@@ -271,7 +272,7 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
       lastError: null,
     };
     await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return diagnostics;
+    return { diagnostics, changed: false };
   }
 
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
@@ -335,7 +336,7 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
     added: diagnostics.rssCandidatesAdded,
     deduplicated: diagnostics.rssCandidatesDeduplicated,
   });
-  return diagnostics;
+  return { diagnostics, changed: addedCount > 0 };
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
@@ -670,21 +671,28 @@ const handleRuntimeMessage = (
 
   if (type === 'SET_RETRIEVAL_SETTINGS') {
     void (async () => {
+      const previousSettings = await getStorage<RetrievalSettings>(
+        STORAGE_KEYS.RETRIEVAL_SETTINGS,
+        DEFAULT_RETRIEVAL_SETTINGS,
+      );
       const next: RetrievalSettings = {
         ...DEFAULT_RETRIEVAL_SETTINGS,
         ...(payload?.retrievalSettings ?? {}),
       };
       await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
-      const diagnostics = next.rssEnabled
-        ? await refreshRssCandidates(false)
-        : await getStorage<RetrievalDiagnostics>(
-          STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
-          EMPTY_RETRIEVAL_DIAGNOSTICS,
-        );
-      if (diagnostics.rssCandidatesAdded > 0) {
+      const refresh = next.rssEnabled
+        ? await refreshRssCandidates(!previousSettings.rssEnabled)
+        : {
+          diagnostics: await getStorage<RetrievalDiagnostics>(
+            STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+            EMPTY_RETRIEVAL_DIAGNOSTICS,
+          ),
+          changed: false,
+        };
+      if (refresh.changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, retrievalSettings: next, diagnostics });
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics: refresh.diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
@@ -694,11 +702,11 @@ const handleRuntimeMessage = (
 
   if (type === 'REFRESH_RETRIEVAL') {
     void (async () => {
-      const diagnostics = await refreshRssCandidates(false);
-      if (diagnostics.rssCandidatesAdded > 0) {
+      const refresh = await refreshRssCandidates(false);
+      if (refresh.changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
-      sendResponse({ ok: true, diagnostics });
+      sendResponse({ ok: true, diagnostics: refresh.diagnostics });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
