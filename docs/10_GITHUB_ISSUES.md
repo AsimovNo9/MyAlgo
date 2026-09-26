@@ -4,15 +4,16 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #168 — YouTube Data API display-only boundary audit.
-2. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
-3. #160 — safe replacement slots.
-4. #170 + #153 — graph provenance/visualization and per-item trace explanation.
-5. #162 — replay/evaluation baselines before richer enrichment.
-6. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
-7. #169 — discharge remaining local-runtime umbrella criteria.
-8. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
-9. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+1. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
+2. #160 — safe replacement slots.
+3. #170 + #153 — graph provenance/visualization and per-item trace explanation.
+4. #162 — replay/evaluation baselines before richer enrichment.
+5. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
+6. #169 — discharge remaining local-runtime umbrella criteria.
+7. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
+8. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+
+#168 is the completed compliance boundary immediately preceding this sequence.
 
 ## P0 — Validate the data boundary
 
