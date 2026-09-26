@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildYoutubeRssFeedUrl,
   isRetrievalAllowed,
+  mergeCandidateAcquisitionHistory,
   nextRssAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
@@ -68,4 +69,27 @@ test('RSS refresh policy applies success TTL and bounded exponential backoff', (
   assert.equal(isRetrievalAllowed(success, now), false);
   assert.equal(isRetrievalAllowed(success, Date.parse(success)), true);
   assert.equal(Date.parse(failure) - now, 10 * 60 * 1000);
+});
+
+
+test('mergeCandidateAcquisitionHistory preserves distinct observed and RSS acquisition paths', () => {
+  const observed = {
+    connector: 'youtube',
+    mechanism: 'observed_dom',
+    acquired_at: '2026-09-26T10:00:00.000Z',
+    graph_revision: null,
+    source_url: null,
+  };
+  const rss = {
+    connector: 'youtube',
+    mechanism: 'rss',
+    acquired_at: '2026-09-26T11:00:00.000Z',
+    graph_revision: 'graph-2-abc12345',
+    source_url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC1234567890123456789012',
+  };
+  const history = mergeCandidateAcquisitionHistory([observed], rss);
+
+  assert.equal(history.length, 2);
+  assert.deepEqual(history.map((item) => item.mechanism), ['rss', 'observed_dom']);
+  assert.equal(history[0].graph_revision, 'graph-2-abc12345');
 });
