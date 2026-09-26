@@ -395,3 +395,12 @@ EvidenceProvenance
 The evidence store, Personal Algorithm Graph, behavior correlation, scorer, and explanation layers must consume those normalized concepts rather than provider-specific IDs or event types.
 
 The full contract is defined in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTOR_CONTRACT.md`.
+
+
+## 9. Live-ranking performance boundary
+
+The persistent candidate/evidence stores are not the per-render scoring working set. PR #208/#211 now scores every current-page candidate plus a separately bounded off-page replacement subset, coalesces YouTube DOM mutation bursts, indexes graph lookups once per scoring batch, computes evidence/feedback revision hashes once per batch, and avoids rewriting unchanged candidate/trace state on every mutation.
+
+Watch-page metadata enrichment runs in the MV3 service worker with bounded concurrency rather than inside the YouTube renderer. A dedicated Web Worker remains optional future work only if profiling shows the bounded service-worker scorer is still CPU-bound after indexing, batching, caching, and working-set reduction.
+
+Opportunistic replacements bind the selected off-page candidate to the native slot when the slot is created. Rendering consumes that binding instead of independently selecting a second time; fallback selection is reserved for policy-created slots without a pre-bound candidate.
