@@ -2,7 +2,7 @@ import type {
   CandidateAcquisitionProvenance,
   RecommendationCandidate,
 } from '@repo/shared-types';
-import { extractYouTubeVideoId, extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
+import { extractYouTubeVideoId, extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom.ts';
 import type {
   ProviderAcquisitionConnector,
   ProviderEnrichmentInput,
