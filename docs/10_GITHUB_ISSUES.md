@@ -18,9 +18,11 @@ Multimodal inference remains deferred. Text embeddings are the next model layer 
 
 ### Current handoff state
 
-PR #212 is functionally implemented and CI-green. Live diagnostics already confirm YouTube search acquisition is working: 4/4 plans succeeded, 32 candidates were fetched in the observed run, 35 search-origin candidates were retained, and no retrieval error was reported. The remaining validation is downstream promotion and long-session responsiveness: verify `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `retrievedDiscoveryExplorationAssignments`, badge stability during search, and bounded local storage under sustained use.
+PR #212 is merged and #206 is closed as the acquisition foundation. Live diagnostics established that YouTube search acquisition works; the active product gap is semantic understanding and reranking.
 
-Do not start #209 multimodal work next. The next task after #212/#206/#211 validation is #210, then the trust/explanation path (#170/#153), then replay/evaluation (#162), then text embeddings (#209).
+PR #213 is now the active implementation branch for #209 + #210. It introduces a replaceable local embedding-provider contract, graph-derived semantic mode profiles, bounded embedding/similarity caches, explicit graph/mode semantic score contributions, and asynchronous semantic enrichment that does not block first-paint ranking. The dependency-free local hash/subword provider is the integration baseline; it is not the final neural encoder.
+
+Next validation should focus on whether the same candidate set changes rank meaningfully across Work/Learning/Relax, whether semantic traces remain exact, and whether first-rank/cached latency stays within the long-session performance envelope.
 
 
 #152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
@@ -273,7 +275,7 @@ Treat embeddings as replaceable derived enrichment around the canonical Personal
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS merged in PR #208; YouTube search-page discovery implemented in PR #212; final live promotion validation remains**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **completed: RSS in PR #208; zero-config YouTube search discovery in merged PR #212**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
