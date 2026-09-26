@@ -710,9 +710,18 @@ const handleRuntimeMessage = (
         // and removing badges/replacement eligibility from the live page.
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
         const currentPageFeed = ranked.filter((item) => currentPageIds.has(item.external_id));
+
+        // Replacement inventory must be independent of the global top-N cache.
+        // A large Home page can itself occupy the entire top 100, leaving the
+        // content script with no off-page RSS/search candidates after native IDs
+        // are blocked. Keep a separately bounded off-page reservoir in the live
+        // presentation response.
+        const replacementInventory = ranked
+          .filter((item) => !currentPageIds.has(item.external_id))
+          .slice(0, MAX_FEED_CACHE_SIZE);
         const presentationFeed = [
           ...currentPageFeed,
-          ...feedCache.filter((item) => !currentPageIds.has(item.external_id)),
+          ...replacementInventory,
         ];
 
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
@@ -723,6 +732,7 @@ const handleRuntimeMessage = (
           feed: presentationFeed,
           cachedFeedSize: feedCache.length,
           currentPageScored: currentPageFeed.length,
+          replacementInventorySize: replacementInventory.length,
           poolSize: candidatePool.length,
           enriched: enrichedCandidates.length,
         });
