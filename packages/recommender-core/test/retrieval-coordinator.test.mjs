@@ -167,3 +167,46 @@ test('mode changes retrieval intent without replacing the graph goal', () => {
   assert.equal(work.preferredFormats[0], 'guide');
   assert.equal(base.goal, 'Distributed systems');
 });
+
+
+test('semantic mode profile selects graph nodes from embedding similarities', () => {
+  const semanticState = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      nodes: [
+        { id: 'objective:ship', kind: 'objective', label: 'Ship reliable software', provenance: 'explicit', confidence: 1, attributes: {}, createdAt: 'x', updatedAt: 'x' },
+        { id: 'topic:systems', kind: 'topic', label: 'Distributed systems', provenance: 'explicit', confidence: 0.9, attributes: {}, createdAt: 'x', updatedAt: 'x' },
+        { id: 'concept:music', kind: 'concept', label: 'Ambient music', provenance: 'inferred', confidence: 0.8, attributes: {}, createdAt: 'x', updatedAt: 'x' },
+      ],
+      edges: [],
+      userEdits: [],
+      revisions: [],
+      currentRevision: 7,
+    },
+  };
+
+  const profile = buildSemanticModeProfile(semanticState, 'Work', {
+    'objective:ship': 0.92,
+    'topic:systems': 0.81,
+    'concept:music': 0.05,
+  });
+
+  assert.equal(profile.graph_revision, 7);
+  assert.equal(profile.semantic_terms.includes('Ship reliable software'), true);
+  assert.equal(profile.semantic_terms.includes('Distributed systems'), true);
+  assert.equal(profile.semantic_terms.includes('Ambient music'), false);
+  assert.equal(profile.node_weights['objective:ship'], 1);
+  assert.match(profile.seed_text, /practical implementation/);
+});
+
+test('embedding helpers normalize centroid and cosine similarity', () => {
+  const centroid = weightedEmbeddingCentroid([
+    { embedding: [1, 0], weight: 2 },
+    { embedding: [0, 1], weight: 1 },
+  ]);
+  assert.ok(Math.abs(Math.hypot(...centroid) - 1) < 1e-9);
+  assert.ok(cosineSimilarity(centroid, [1, 0]) > cosineSimilarity(centroid, [0, 1]));
+  assert.equal(cosineSimilarity([1, 0], [1, 0]), 1);
+  assert.match(semanticModeSeed('Learning'), /understand/);
+});
