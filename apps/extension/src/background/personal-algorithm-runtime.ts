@@ -35,6 +35,8 @@ export type LocalRuntimeRankedCandidate = LocalRuntimeCandidate & {
 export type LocalRuntimeFeedbackEvent = {
   contentItemId?: string;
   eventType?: string;
+  recordedAt?: string;
+  channelId?: string | null;
 };
 
 const contentNodeId = (source: string, externalId: string) =>
@@ -79,21 +81,55 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
 
 export function buildLocalFeedbackSignals(
   events: LocalRuntimeFeedbackEvent[],
+  state?: PersonalAlgorithmState,
 ): ScoreFeedbackSignal[] {
-  return events
-    .filter((event) => event.contentItemId && event.eventType)
-    .map((event, index) => ({
-      id: `local-feedback:${index}:${event.contentItemId}:${event.eventType}`,
-      contentId: event.contentItemId ?? null,
-      value: event.eventType === 'more_like_this'
+  const latestByContent = new Map<string, LocalRuntimeFeedbackEvent>();
+  events.forEach((event, index) => {
+    if (!event.contentItemId || !event.eventType) return;
+    const key = event.contentItemId;
+    const previous = latestByContent.get(key);
+    if (
+      !previous
+      || (event.recordedAt ?? '').localeCompare(previous.recordedAt ?? '') >= 0
+      || (!event.recordedAt && !previous.recordedAt && index >= 0)
+    ) {
+      latestByContent.set(key, event);
+    }
+  });
+
+  return [...latestByContent.values()]
+    .map((event) => {
+      const contentId = event.contentItemId ?? null;
+      const contentNode = state?.graph.nodes.find((node) => node.id === contentNodeId('youtube', contentId ?? ''));
+      const creatorEdge = contentNode
+        ? state?.graph.edges.find((edge) => (
+          edge.relation === 'created_by'
+          && edge.sourceNodeId === contentNode.id
+          && state.graph.nodes.some((node) => node.id === edge.targetNodeId && node.kind === 'creator')
+        ))
+        : undefined;
+      const nodeId = event.eventType === 'never_show_channel'
+        ? (
+          event.channelId
+            ? `creator:youtube:${encodeURIComponent(event.channelId)}`
+            : creatorEdge?.targetNodeId ?? null
+        )
+        : null;
+      const value = event.eventType === 'more_like_this'
         ? 10
         : event.eventType === 'not_interested'
           ? -10
           : event.eventType === 'never_show_channel'
             ? -100
-            : 0,
-      label: `explicit feedback: ${event.eventType}`,
-    }))
+            : 0;
+      return {
+        id: `local-feedback:${contentId}:${event.eventType}`,
+        contentId,
+        nodeId,
+        value,
+        label: `explicit feedback: ${event.eventType}`,
+      };
+    })
     .filter((signal) => signal.value !== 0);
 }
 
