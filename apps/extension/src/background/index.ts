@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createSearxngWebSearchProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createSearxngWebSearchProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, webSearchOriginPattern, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
@@ -486,6 +486,21 @@ async function refreshWebSearchCandidates(
       lastWebSearchAt: new Date(nowMs).toISOString(),
       nextWebSearchAllowedAt: null,
       lastError: 'Web search is enabled but no valid HTTPS SearXNG endpoint is configured.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const originPattern = webSearchOriginPattern(endpoint);
+  const hasPermission = originPattern
+    ? await chrome.permissions.contains({ origins: [originPattern] })
+    : false;
+  if (!hasPermission) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: null,
+      lastError: 'Grant MyAlgo access to the configured search endpoint before enabling web search.',
     };
     await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
     return { diagnostics, changed: false };
