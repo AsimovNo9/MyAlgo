@@ -434,10 +434,8 @@ const scheduleHomeRecommendationObservation = () => {
 
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
-  removeReplacementCards();
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
-  const replacementTargets: HTMLElement[] = [];
   const knownElements = getVideoElements();
 
   knownElements.forEach((element) => {
@@ -446,36 +444,33 @@ const applyRankedFeed = () => {
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const title = getVideoTitle(element);
     const item = feedById.get(getVideoId(element)) ?? feedByTitle.get(title);
-    if (shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters)) {
+    const decision = getNativeCardDecision(item, {
+      sourceFiltered: shouldHideForSourceFilters(getVideoSourceFlags(element), sourceFilters),
+      minimumVisibleScore: youtubeConnector.presentation.minimumVisibleScore,
+    });
+
+    if (decision.action === 'hide') {
       element.style.setProperty('display', 'none', 'important');
-      element.dataset.personalAlgorithmScore = 'source-filtered';
-      element.querySelector('[data-personal-algorithm-badge]')?.remove();
+      element.dataset.personalAlgorithmScore = decision.reason;
       return;
     }
+
     if (!item) {
-      element.style.setProperty('display', 'none', 'important');
+      // Degraded coverage is pass-through: MyAlgo must not erase a native card
+      // merely because the local candidate pool did not produce a score for it.
       element.dataset.personalAlgorithmScore = 'unmatched';
-      element.querySelector('[data-personal-algorithm-badge]')?.remove();
-      replacementTargets.push(element);
       return;
     }
 
     const score = item.score ?? 0;
-    const shouldHide = item.visible === false || score < youtubeConnector.presentation.minimumVisibleScore;
-    if (shouldHide) {
-      element.style.setProperty('display', 'none', 'important');
-      replacementTargets.push(element);
-    } else {
-      element.style.removeProperty('display');
-    }
+    element.dataset.personalAlgorithmScore = String(score);
+    element.dataset.personalAlgorithmRank = String(cachedFeed.indexOf(item));
     element.style.outline = score >= 68 ? '2px solid rgba(20, 184, 166, 0.7)' : '';
     element.style.outlineOffset = score >= 68 ? '3px' : '';
-    element.dataset.personalAlgorithmScore = String(score);
-    const rank = cachedFeed.indexOf(item);
-    element.dataset.personalAlgorithmRank = String(rank);
 
     let badge = element.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
     if (!badge) {
@@ -487,23 +482,7 @@ const applyRankedFeed = () => {
     }
     badge.textContent = `${activeMode} · ${score}`;
   });
-
-  const blockedIds = new Set(getVideoElements().map(getVideoId));
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-video-id]').forEach((element) => {
-    blockedIds.add(element.dataset.personalAlgorithmVideoId ?? '');
-  });
-  const replacements = getReplacementCandidates(
-    personalPicks,
-    blockedIds,
-    replacementTargets.length,
-    youtubeConnector.presentation.minimumVisibleScore,
-  );
-  replacementTargets.forEach((target, index) => {
-    const replacement = replacements[index];
-    if (replacement) target.parentElement?.insertBefore(createReplacementCard(replacement, target), target);
-  });
 };
-
 const scheduleRankGeneration = (generation: number) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
@@ -528,6 +507,8 @@ const rankCurrentPage = async (requestGeneration: number) => {
     rankQueued = true;
     return;
   }
+
+  const requestRouteKey = getRouteKey();
   const candidates = collectCandidates();
   if (candidates.length === 0) {
     showStatus(`Personal Algorithm: no cards on ${location.hostname}`, true);
@@ -541,57 +522,82 @@ const rankCurrentPage = async (requestGeneration: number) => {
     rankingInFlight = false;
     return;
   }
+
   activeMode = (result['personal-algorithm-mode'] as string) ?? activeMode;
-  if (isRenderGenerationStale(requestGeneration, rankGeneration)) {
+  const requestMode = activeMode;
+  const requestContext = { generation: requestGeneration, routeKey: requestRouteKey, mode: requestMode };
+  const currentContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
+  if (isRenderContextStale(requestContext, currentContext)) {
     rankingInFlight = false;
+    logStaleRender('before-request', requestGeneration);
     scheduleLatestRank();
     return;
   }
+
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
     rankingInFlight = false;
     if (rankQueued) scheduleLatestRank();
     return;
   }
-  const requestMode = activeMode;
+
   safeSendMessage({ type: 'RANK_PAGE', payload: { mode: requestMode, candidates } }, (response) => {
     rankingInFlight = false;
-    if (!isCurrentInstance() || isRenderGenerationStale(requestGeneration, rankGeneration)) {
+    const latestContext = { generation: rankGeneration, routeKey: getRouteKey(), mode: activeMode };
+    if (!isCurrentInstance() || isRenderContextStale(requestContext, latestContext)) {
+      if (isCurrentInstance()) logStaleRender('rank-response', requestGeneration);
       if (isCurrentInstance() && extensionEnabled) scheduleLatestRank();
       return;
     }
+
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
-      renderRecommendationShelf();
+
+      // A generation is rendered from a clean MyAlgo presentation surface.
+      // This restores native cards first, then applies only this generation's
+      // decisions without reordering YouTube-owned renderers.
+      clearExtensionPresentation(false);
       applyRankedFeed();
+      renderRecommendationShelf();
+
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
         item.visible !== false && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
-      showStatus(`${requestMode}: ${visibleCount} shown · ${response.feed.length - visibleCount} hidden`);
+      showStatus(`${requestMode}: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
     } else {
+      console.warn('[MyAlgo] native feed ranking failed', { phase: 'rank-response' });
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
     }
     if (rankQueued) scheduleLatestRank();
   });
 };
 
-const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'manual') => {
+const triggerRank = (
+  reason: 'navigation' | 'mutation' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
   const hasMeaningfulCards = currentCandidates.length >= 2;
-  if (reason !== 'manual' && hasMeaningfulCards && candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
-    renderRecommendationShelf();
+
+  // Only a native DOM mutation may reuse the current scored generation.
+  // Mode, feedback, graph, and navigation changes must request fresh scores.
+  if (
+    reason === 'mutation'
+    && hasMeaningfulCards
+    && candidateSignature === lastCandidateSignature
+    && activeMode === lastRankMode
+    && cachedFeed.length > 0
+  ) {
     applyRankedFeed();
+    renderRecommendationShelf();
     return;
   }
 
-  if (!hasMeaningfulCards && reason !== 'manual') {
-    return;
-  }
+  if (!hasMeaningfulCards && reason !== 'manual') return;
 
   const generation = ++rankGeneration;
   if (rankingInFlight) {
@@ -600,7 +606,6 @@ const triggerRank = (reason: 'navigation' | 'mutation' | 'mode' | 'manual' = 'ma
   }
   scheduleRankGeneration(generation);
 };
-
 const scheduleInitialRank = () => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
