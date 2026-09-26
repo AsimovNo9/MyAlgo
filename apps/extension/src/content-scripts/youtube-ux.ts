@@ -178,7 +178,7 @@ export function selectOpportunisticReplacementTargets(
   for (let index = 0; index < count; index += 1) {
     const candidateScore = candidates[index]?.score ?? 0;
     const target = targets[index];
-    if (!target || candidateScore <= target.score) break;
+    if (!target || candidateScore < target.score) break;
     selected.push(target);
   }
   return selected;
