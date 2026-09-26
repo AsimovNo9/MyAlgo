@@ -27,6 +27,8 @@ export type LocalRuntimeCandidate = {
   format?: string | null;
   is_short?: boolean;
   is_live?: boolean;
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
 };
@@ -36,6 +38,8 @@ export type LocalRuntimeRankedCandidate = LocalRuntimeCandidate & {
   rawScore: number;
   score: number;
   visible: boolean;
+  content_label: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence: number;
   trace: PersonalScoreTrace;
 };
 
@@ -199,6 +203,62 @@ export function extractLocalCandidateFeatures(
   };
 }
 
+export function classifyCandidateContent(
+  candidate: LocalRuntimeCandidate,
+): { label: 'learning' | 'work' | 'relax' | null; confidence: number } {
+  const category = normalizeFeatureText(candidate.content_type);
+  const format = inferredFormat(candidate);
+  const text = normalizeFeatureText([
+    candidate.title,
+    candidate.description ?? '',
+    ...(candidate.topics ?? []),
+  ].join(' '));
+
+  if (
+    category === 'education'
+    || format === 'tutorial'
+    || /\b(tutorial|course|lecture|lesson|explainer|explained|learn|study|masterclass|how to)\b/.test(text)
+  ) {
+    return {
+      label: 'learning',
+      confidence: category === 'education' || format === 'tutorial' ? 0.92 : 0.78,
+    };
+  }
+
+  if (
+    /\b(music|comedy|asmr|ambient|gameplay|trailer|highlights|funny|vlog)\b/.test(text)
+    || ['music', 'comedy', 'entertainment', 'gaming'].includes(category)
+  ) {
+    return {
+      label: 'relax',
+      confidence: ['music', 'comedy', 'entertainment', 'gaming'].includes(category) ? 0.86 : 0.74,
+    };
+  }
+
+  if (/\b(implementation|architecture|engineering|programming|coding|workflow|productivity|business|case study|debugging|developer)\b/.test(text)) {
+    return { label: 'work', confidence: 0.72 };
+  }
+
+  return { label: null, confidence: 0 };
+}
+
+const modeAlignmentFeature = (
+  mode: string,
+  classification: ReturnType<typeof classifyCandidateContent>,
+): ScoreFeatureSignal | null => {
+  const normalizedMode = mode.trim().toLowerCase();
+  if (!classification.label || classification.confidence < 0.7 || normalizedMode !== classification.label) {
+    return null;
+  }
+  const value = classification.label === 'learning' ? 8 : classification.label === 'work' ? 6 : 5;
+  return {
+    id: `mode-alignment:${classification.label}`,
+    label: `mode alignment: ${classification.label}`,
+    value: Number((value * classification.confidence).toFixed(2)),
+    sourceId: `mode:${classification.label}`,
+  };
+}
+
 export function calibrateLocalScore(rawScore: number): number {
   if (!Number.isFinite(rawScore)) return 0;
   return Math.max(0, Math.min(100, Math.round(50 + 50 * Math.tanh(rawScore / 30))));
@@ -208,10 +268,14 @@ const candidateContext = (
   state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex = buildLocalScoringIndex(state),
+  mode = 'default',
 ): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
   const extracted = extractLocalCandidateFeatures(state, candidate, index.featureNodes);
+  const classification = classifyCandidateContent(candidate);
+  const modeFeature = modeAlignmentFeature(mode, classification);
+  if (modeFeature) extracted.features.push(modeFeature);
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;
@@ -314,7 +378,8 @@ export function scoreLocalCandidates(
 
   return candidates
     .map((candidate) => {
-      const context = candidateContext(state, candidate, scoringIndex);
+      const classification = classifyCandidateContent(candidate);
+      const context = candidateContext(state, candidate, scoringIndex, mode);
       const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
@@ -333,6 +398,8 @@ export function scoreLocalCandidates(
         rawScore: result.score,
         score: calibrateLocalScore(result.score),
         visible,
+        content_label: candidate.content_label ?? classification.label,
+        content_label_confidence: candidate.content_label_confidence ?? classification.confidence,
         trace: result.trace,
       };
     })
@@ -346,7 +413,7 @@ export function traceForLocalCandidate(
   feedbackSignals: ScoreFeedbackSignal[] = [],
 ): PersonalScoreTrace {
   const policy = buildLocalScoringPolicy(state);
-  const result = scorePersonalAlgorithm(state, candidateContext(state, candidate), policy, mode, feedbackSignals);
+  const result = scorePersonalAlgorithm(state, candidateContext(state, candidate, buildLocalScoringIndex(state), mode), policy, mode, feedbackSignals);
   if (!isScoreTraceConsistent(result.trace)) {
     throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
   }
