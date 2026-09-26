@@ -1,6 +1,6 @@
 import React from 'react';
 import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
-import type { FeedItem, FeedSourceFilters } from '@repo/shared-types';
+import type { FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
 const defaultSourceFilters: FeedSourceFilters = {
@@ -9,6 +9,24 @@ const defaultSourceFilters: FeedSourceFilters = {
   includeShorts: true,
   includeLive: true,
   includePlayables: true,
+};
+
+const defaultRetrievalSettings: RetrievalSettings = {
+  rssEnabled: false,
+  webSearchEnabled: false,
+};
+
+const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
+  lastRssSyncAt: null,
+  nextRssAllowedAt: null,
+  rssChannelsConsidered: 0,
+  rssFeedsSucceeded: 0,
+  rssFeedsFailed: 0,
+  rssCandidatesFetched: 0,
+  rssCandidatesAdded: 0,
+  rssCandidatesDeduplicated: 0,
+  rssConsecutiveFailures: 0,
+  lastError: null,
 };
 
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [] };
@@ -20,10 +38,13 @@ export function Popup() {
   const [enabled, setEnabled] = React.useState(false);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [sourceFilters, setSourceFilters] = React.useState<FeedSourceFilters>(defaultSourceFilters);
+  const [retrievalSettings, setRetrievalSettings] = React.useState<RetrievalSettings>(defaultRetrievalSettings);
+  const [retrievalDiagnostics, setRetrievalDiagnostics] = React.useState<RetrievalDiagnostics>(emptyRetrievalDiagnostics);
+  const [retrievalBusy, setRetrievalBusy] = React.useState(false);
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
       setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
@@ -31,6 +52,8 @@ export function Popup() {
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
       setEnabled(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']) && result['personal-algorithm-enabled'] !== false);
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
+      setRetrievalSettings({ ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) });
+      setRetrievalDiagnostics({ ...emptyRetrievalDiagnostics, ...(result['personal-algorithm-retrieval-diagnostics'] as RetrievalDiagnostics | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
   }, []);
@@ -77,6 +100,43 @@ export function Popup() {
       setLastError(response?.error ?? 'Unable to update feed controls.');
     } else {
       setLastError(null);
+    }
+  };
+
+  const handleRetrievalChange = async (rssEnabled: boolean) => {
+    const nextSettings = { ...retrievalSettings, rssEnabled };
+    setRetrievalSettings(nextSettings);
+    setRetrievalBusy(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'SET_RETRIEVAL_SETTINGS',
+        payload: { retrievalSettings: nextSettings },
+      }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
+      if (!response?.ok) {
+        setLastError(response?.error ?? 'Unable to update retrieval settings.');
+        return;
+      }
+      if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
+      setLastError(null);
+    } finally {
+      setRetrievalBusy(false);
+    }
+  };
+
+  const handleRefreshRetrieval = async () => {
+    setRetrievalBusy(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'REFRESH_RETRIEVAL',
+      }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
+      if (!response?.ok) {
+        setLastError(response?.error ?? 'Unable to refresh retrieval.');
+        return;
+      }
+      if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
+      setLastError(null);
+    } finally {
+      setRetrievalBusy(false);
     }
   };
 
@@ -144,6 +204,30 @@ export function Popup() {
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
         <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
         <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide Playables</label>
+      </fieldset>
+      <fieldset>
+        <legend>Candidate discovery</legend>
+        <label>
+          <input
+            type="checkbox"
+            checked={retrievalSettings.rssEnabled}
+            disabled={retrievalBusy}
+            onChange={(event) => void handleRetrievalChange(event.target.checked)}
+          /> Enable RSS discovery
+        </label>
+        <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
+          Uses recently observed YouTube channel IDs to fetch bounded YouTube RSS updates. Retrieved items are candidates only; retrieval is not preference evidence.
+        </p>
+        <button
+          type="button"
+          disabled={!retrievalSettings.rssEnabled || retrievalBusy}
+          onClick={() => void handleRefreshRetrieval()}
+        >
+          {retrievalBusy ? 'Refreshing…' : 'Refresh RSS discovery'}
+        </button>
+        <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+          RSS: {retrievalDiagnostics.rssCandidatesAdded} added · {retrievalDiagnostics.rssCandidatesDeduplicated} deduplicated · {retrievalDiagnostics.rssFeedsSucceeded}/{retrievalDiagnostics.rssChannelsConsidered} feeds succeeded
+        </p>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
