@@ -239,6 +239,7 @@ export interface SemanticGraphMatch {
   node_id: string;
   node_label: string;
   similarity: number;
+  weight: number;
 }
 
 export interface CandidateSemanticFeatures {
