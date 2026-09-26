@@ -62,6 +62,7 @@ export interface FeedSourceFilters {
   includeDiscovery?: boolean;
   includeShorts?: boolean;
   includeLive?: boolean;
+  includePlayables?: boolean;
 }
 
 export interface AlgorithmPayload {

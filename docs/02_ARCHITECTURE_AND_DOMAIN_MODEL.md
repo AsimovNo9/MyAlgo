@@ -227,7 +227,13 @@ If MyAlgo has no ranked result for a native card, the card remains visible as a 
 
 Each successful render generation starts from a cleared MyAlgo presentation state. Stale responses are rejected against generation, route, and mode. MyAlgo-generated shelf/replacement/status/explanation/control DOM is excluded from candidate, evidence, and interaction extraction.
 
-Safe native replacement is a separate concern tracked in #160; the #152/#171 enforcement path does not manufacture replacement content.
+Safe replacement is now layered on top of that enforcement boundary in #160. A replacement may occupy only a native slot hidden by the current generation and only when the current local ranked feed contains a distinct eligible, non-suppressed candidate with a current trace. Replacement candidates are deduplicated against all native cards, the Personal Algorithm shelf, and other replacements.
+
+The legacy horizontal Personal picks shelf is no longer part of the YouTube runtime. The native YouTube feed is the single recommendation surface and MyAlgo starts applying persisted presentation controls from the first available Home batch rather than waiting on a fixed startup delay. Explicit source controls currently include Shorts, Live, and Playables; source-filter removals are terminal presentation hides and never become replacement slots. Once native-card enforcement and safe replacement slots are active, MyAlgo uses a single coherent feed surface: YouTube's native grid/list, annotated and selectively replaced in place. This avoids presenting a second horizontal feed that could be mistaken for the primary recommendation surface.
+
+Replacement presentation is generation-scoped and synthetic: it carries trace/score/mode/source-slot metadata, is excluded from candidate/evidence/interaction observation, and is removed on a new generation, route/mode/source/graph invalidation, pause, or reactivation. The YouTube connector currently requires a positive local score (`replacementMinimumScore = 1`) and caps a render at six replacements. If no qualified candidate exists, the native rejection remains unfilled rather than inventing content.
+
+The replacement UI preserves the target slot footprint and target media aspect ratio, links only to the canonical provider URL, and exposes a bounded trace entry point for the later #153 explanation surface. It does not mutate the Personal Algorithm Graph or create evidence merely because MyAlgo rendered the card.
 
 ## 5. Explanation
 

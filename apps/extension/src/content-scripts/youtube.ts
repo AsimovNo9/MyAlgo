@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -21,13 +21,11 @@ const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
 let cachedFeed: RankedFeedItem[] = [];
-let personalPicks: RankedFeedItem[] = [];
 let rankingInFlight = false;
 let activeMode = 'Work';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
 let rankQueued = false;
-let feedRequestGeneration = 0;
 let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
@@ -127,16 +125,27 @@ const clearExtensionPresentation = (showPaused = true) => {
     '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
   ).forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
+  ).forEach((container) => {
+    container.style.removeProperty('display');
+    delete container.dataset.personalAlgorithmSourceShelfHidden;
+    delete container.dataset.personalAlgorithmSourceRowHidden;
+    delete container.dataset.personalAlgorithmSourceSectionHidden;
+    delete container.dataset.personalAlgorithmSourceLayoutHidden;
+  });
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
+    element.style.removeProperty('position');
+    delete element.dataset.personalAlgorithmPositionPatched;
+  });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
-    if (element.dataset.personalAlgorithmPositionPatched === 'true') {
-      element.style.removeProperty('position');
-      delete element.dataset.personalAlgorithmPositionPatched;
-    }
+    delete element.dataset.personalAlgorithmSlotId;
+    delete element.dataset.personalAlgorithmSlotWidth;
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -145,7 +154,10 @@ const clearExtensionPresentation = (showPaused = true) => {
   }
 };
 
-const createThumbnail = (item: RankedFeedItem): HTMLElement => {
+const createThumbnail = (
+  item: RankedFeedItem,
+  aspectRatio = youtubeConnector.presentation.horizontalAspectRatio,
+): HTMLElement => {
   const media = item.thumbnail_url ? document.createElement('img') : document.createElement('div');
   if (media instanceof HTMLImageElement) {
     media.src = item.thumbnail_url ?? '';
@@ -154,105 +166,89 @@ const createThumbnail = (item: RankedFeedItem): HTMLElement => {
   } else {
     media.setAttribute('aria-hidden', 'true');
   }
-  media.style.cssText = `display:block;width:100%;aspect-ratio:${youtubeConnector.presentation.horizontalAspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
+  media.style.cssText = `display:block;width:100%;aspect-ratio:${aspectRatio};object-fit:cover;border-radius:10px;background:var(--yt-spec-10-percent-layer, #e5e5e5);`;
   return media;
 };
 
-const syncShelfCardWidth = (cards: HTMLElement) => {
-  const nativeCardWidth = getVideoElements()
-    .map((element) => element.getBoundingClientRect().width)
-    .find((width) => width >= 160);
-  const shelfCardWidth = nativeCardWidth
-    ? `${Math.round(nativeCardWidth)}px`
-    : 'min(320px, 80vw)';
-  cards.style.gridAutoColumns = shelfCardWidth;
+const createReplacementCard = (
+  item: RankedFeedItem,
+  target: HTMLElement,
+  slotId: string,
+  sourceVideoId: string,
+  generation: number,
+): HTMLElement => {
+  const card = document.createElement('article');
+  const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
+  const targetFlags = getVideoSourceFlags(target);
+  const aspectRatio = targetFlags.is_short
+    ? youtubeConnector.presentation.verticalAspectRatio
+    : youtubeConnector.presentation.horizontalAspectRatio;
+
+  const metadata = getReplacementPresentationMetadata(
+    { slot: { slotId, sourceVideoId }, item },
+    generation,
+    activeMode,
+  );
+  card.dataset.personalAlgorithmReplacement = 'true';
+  card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
+  card.dataset.personalAlgorithmTraceId = metadata.traceId;
+  card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
+  card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
+  card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
+  card.setAttribute('role', 'group');
+  card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
+  card.style.cssText = `display:block;width:100%;max-width:${targetWidth > 0 ? `${targetWidth}px` : '100%'};min-width:0;align-self:start;box-sizing:border-box;position:relative;color:var(--yt-spec-text-primary, #0f0f0f);font-family:Roboto,Arial,sans-serif;`;
+
+  const replacementBadge = document.createElement('span');
+  replacementBadge.dataset.personalAlgorithmBadge = 'true';
+  replacementBadge.textContent = `MyAlgo replacement · ${metadata.mode} · ${metadata.score}`;
+  replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+  card.appendChild(replacementBadge);
+
+  const link = document.createElement('a');
+  link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
+  link.dataset.personalAlgorithmVideoId = item.external_id ?? '';
+  link.setAttribute('aria-label', item.title ?? 'MyAlgo recommended video');
+  link.style.cssText = 'display:block;color:inherit;text-decoration:none;min-width:0;';
+  link.appendChild(createThumbnail(item, aspectRatio));
+
+  const title = document.createElement('div');
+  title.textContent = item.title ?? 'Recommended video';
+  title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+  link.appendChild(title);
+
+  const channel = document.createElement('div');
+  channel.textContent = item.channel_name ?? `${activeMode} replacement`;
+  channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
+  link.appendChild(channel);
+  card.appendChild(link);
+
+  const meta = document.createElement('div');
+  meta.textContent = `Generated by MyAlgo · ${activeMode} mode · score ${item.score ?? 0}`;
+  meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary, #aaa);font-size:12px;line-height:17px;font-weight:600;';
+  card.appendChild(meta);
+
+  const why = document.createElement('button');
+  why.type = 'button';
+  why.dataset.personalAlgorithmExplanation = 'true';
+  why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  why.textContent = 'Why this?';
+  why.setAttribute('aria-label', 'Why MyAlgo showed this replacement');
+  why.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;margin-top:7px;padding:6px 10px;border-radius:999px;border:1px solid #475569;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;';
+  why.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showStatus(`Personal Algorithm trace ${item.traceId ?? 'unavailable'} · score ${item.score ?? 0}`);
+  });
+  card.appendChild(why);
+
+  return card;
 };
 
-const renderRecommendationShelf = (attempt = 0) => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
-
-  const feedRenderer = document.querySelector<HTMLElement>(
-    'ytd-rich-grid-renderer, ytd-two-column-browse-results-renderer #primary',
-  );
-  const feedContents = feedRenderer?.querySelector<HTMLElement>('#contents');
-  const shelfHost = feedRenderer?.parentElement;
-  if (!feedRenderer || !feedContents || !shelfHost) {
-    if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
-    return;
-  }
-
-  const nativeIds = getVideoElements().map(getVideoId);
-  const picks = getShelfCandidates(
-    personalPicks,
-    youtubeConnector.presentation.shelfBatchSize,
-    nativeIds,
-    youtubeConnector.presentation.minimumVisibleScore,
-  );
-  if (picks.length === 0) {
-    document.querySelector('[data-personal-algorithm-shelf]')?.remove();
-    return;
-  }
-
-  let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
-  if (shelf && shelf.parentElement !== shelfHost) {
-    shelf.remove();
-    shelf = null;
-  }
-  if (!shelf) {
-    shelf = document.createElement('section');
-    shelf.dataset.personalAlgorithmShelf = 'true';
-    shelf.style.cssText = 'display:block;position:relative;clear:both;float:none;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden;contain:layout paint;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
-    shelfHost.insertBefore(shelf, feedRenderer);
-  }
-
-  shelf.replaceChildren();
-  const heading = document.createElement('h2');
-  heading.textContent = `Personal picks · ${activeMode}`;
-  heading.style.cssText = 'margin:0 16px 12px;font-size:20px;line-height:28px;color:var(--yt-spec-text-primary, #0f0f0f);';
-  shelf.appendChild(heading);
-
-  const cards = document.createElement('div');
-  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;scrollbar-width:none;padding:0 16px 8px;';
-  syncShelfCardWidth(cards);
-  for (const item of picks) {
-    const card = document.createElement('a');
-    card.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
-    card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
-    card.style.cssText = 'display:block;min-width:0;scroll-snap-align:start;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
-
-    card.appendChild(createThumbnail(item));
-
-    const title = document.createElement('div');
-    title.textContent = item.title ?? 'Recommended video';
-    title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-    card.appendChild(title);
-
-    const channel = document.createElement('div');
-    channel.textContent = item.channel_name ?? `${activeMode} pick`;
-    channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
-    card.appendChild(channel);
-    cards.appendChild(card);
-  }
-  shelf.appendChild(cards);
-  window.requestAnimationFrame(() => {
-    if (cards.isConnected) syncShelfCardWidth(cards);
-  });
-};
-
-const refreshRecommendationShelf = () => {
-  if (isYouTubeHistoryPage(location.pathname)) return;
-  const requestGeneration = ++feedRequestGeneration;
-  safeSendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
-    if (
-      !isCurrentInstance()
-      || !extensionEnabled
-      || requestGeneration !== feedRequestGeneration
-      || !response
-      || !Array.isArray(response.feed)
-    ) return;
-    personalPicks = response.feed as RankedFeedItem[];
-    renderRecommendationShelf();
-  });
+const clearLegacyRecommendationShelf = () => {
+  document.querySelector('[data-personal-algorithm-shelf]')?.remove();
 };
 
 const getVideoTitle = (element: HTMLElement) => {
@@ -448,18 +444,95 @@ const scheduleHomeRecommendationObservation = () => {
   }, 400);
 };
 
+const getFeedLayoutItem = (element: HTMLElement): HTMLElement | null => {
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 10; depth += 1) {
+    const parent: HTMLElement | null = current.parentElement;
+    if (!parent) return current;
+    if (parent.id === 'contents' && parent.closest('ytd-rich-grid-renderer')) {
+      return current;
+    }
+    current = parent;
+  }
+  return null;
+};
+
+const syncSourceFilteredContainers = () => {
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden]',
+  ).forEach((container) => {
+    container.style.removeProperty('display');
+    delete container.dataset.personalAlgorithmSourceShelfHidden;
+    delete container.dataset.personalAlgorithmSourceRowHidden;
+  });
+
+  const hideShelf = (shelf: HTMLElement, reason: 'shorts' | 'playables') => {
+    const structuralHost = shelf.closest<HTMLElement>(
+      'ytd-rich-section-renderer, ytd-item-section-renderer',
+    );
+    const layoutItem = getFeedLayoutItem(structuralHost ?? shelf);
+    if (layoutItem) {
+      layoutItem.dataset.personalAlgorithmSourceLayoutHidden = reason;
+      layoutItem.style.setProperty('display', 'none', 'important');
+    }
+    if (structuralHost) {
+      structuralHost.dataset.personalAlgorithmSourceSectionHidden = reason;
+      structuralHost.style.setProperty('display', 'none', 'important');
+      return;
+    }
+    shelf.dataset.personalAlgorithmSourceShelfHidden = reason;
+    shelf.style.setProperty('display', 'none', 'important');
+  };
+
+  document.querySelectorAll<HTMLElement>(
+    'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
+  ).forEach((shelf) => {
+    const reason = getSourceShelfHideReason({
+      heading: shelf.querySelector<HTMLElement>(
+        '#title, #title-container, h2, h3, yt-formatted-string',
+      )?.textContent ?? '',
+      hasShortsLink: Boolean(
+        shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
+      ),
+      hasPlayableLink: Boolean(
+        shelf.querySelector(
+          'a[href*="/playables"], a[href*="playables?"], a[href*="/game/"]',
+        ),
+      ),
+    }, sourceFilters);
+    if (reason) hideShelf(shelf, reason);
+  });
+
+  // YouTube can retain an otherwise-empty rich-grid row after every card in it
+  // has been source-filtered. Collapse only rows whose native card renderers are
+  // all currently hidden by MyAlgo, so ordinary native layout remains untouched.
+  document.querySelectorAll<HTMLElement>('ytd-rich-grid-row').forEach((row) => {
+    const cards = Array.from(row.querySelectorAll<HTMLElement>('ytd-rich-item-renderer'));
+    if (cards.length === 0) return;
+    const everyCardHidden = cards.every((card) => (
+      card.style.getPropertyValue('display') === 'none'
+      && card.dataset.personalAlgorithmScore === 'source_filter'
+    ));
+    if (!everyCardHidden) return;
+    row.dataset.personalAlgorithmSourceRowHidden = 'true';
+    row.style.setProperty('display', 'none', 'important');
+  });
+};
+
 const applyRankedFeed = () => {
   if (!isCurrentInstance()) return;
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
   const knownElements = getVideoElements();
 
-  knownElements.forEach((element) => {
+  knownElements.forEach((element, nativeIndex) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    delete element.dataset.personalAlgorithmSlotId;
+    delete element.dataset.personalAlgorithmSlotWidth;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const title = getVideoTitle(element);
@@ -470,6 +543,17 @@ const applyRankedFeed = () => {
     });
 
     if (decision.action === 'hide') {
+      const sourceVideoId = getVideoId(element);
+      const slotWidth = element.getBoundingClientRect().width;
+      if (
+        isReplacementEligibleNativeDecision(decision)
+        && !sourceVideoId.startsWith('title:')
+        && slotWidth >= 120
+        && element.parentElement
+      ) {
+        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(rankGeneration, getRouteKey(), nativeIndex, sourceVideoId);
+        element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      }
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = decision.reason;
       return;
@@ -492,16 +576,130 @@ const applyRankedFeed = () => {
     if (!badge) {
       badge = document.createElement('span');
       badge.dataset.personalAlgorithmBadge = 'true';
-      badge.style.cssText = 'position:absolute;z-index:20;top:8px;left:8px;padding:4px 7px;border-radius:999px;background:#0f172a;color:#fff;font:600 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);';
-      if (!element.style.position) {
-        element.style.position = 'relative';
-        element.dataset.personalAlgorithmPositionPatched = 'true';
+      badge.style.cssText = 'position:absolute;z-index:999;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+      const badgeHost = element.querySelector<HTMLElement>(
+        '#thumbnail, ytd-thumbnail, yt-thumbnail-view-model, a#thumbnail',
+      ) ?? element;
+      const computedPosition = getComputedStyle(badgeHost).position;
+      if (computedPosition === 'static') {
+        badgeHost.style.position = 'relative';
+        badgeHost.dataset.personalAlgorithmPositionPatched = 'true';
       }
-      element.appendChild(badge);
+      badgeHost.appendChild(badge);
     }
-    badge.textContent = `${activeMode} · ${score}`;
+    badge.textContent = `MyAlgo · ${activeMode} · ${score}`;
+  });
+
+  syncSourceFilteredContainers();
+
+  console.info('[MyAlgo] native presentation', {
+    generation: rankGeneration,
+    scoredCards: document.querySelectorAll('[data-personal-algorithm-score]').length,
+    nativeBadges: document.querySelectorAll(
+      '[data-personal-algorithm-score] [data-personal-algorithm-badge]',
+    ).length,
+    sourceFilteredCards: document.querySelectorAll(
+      '[data-personal-algorithm-score="source_filter"]',
+    ).length,
+    hiddenSourceSections: document.querySelectorAll(
+      '[data-personal-algorithm-source-section-hidden]',
+    ).length,
+    hiddenSourceRows: document.querySelectorAll(
+      '[data-personal-algorithm-source-row-hidden]',
+    ).length,
+    hiddenSourceLayoutItems: document.querySelectorAll(
+      '[data-personal-algorithm-source-layout-hidden]',
+    ).length,
   });
 };
+
+const renderReplacementSlots = (generation: number) => {
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
+
+  const nativeElements = getVideoElements();
+  const targets = nativeElements.filter((element) => (
+    Boolean(element.dataset.personalAlgorithmSlotId)
+    && element.style.getPropertyValue('display') === 'none'
+    && element.parentElement
+  ));
+  const slots = targets.map((element) => ({
+    slotId: element.dataset.personalAlgorithmSlotId ?? '',
+    sourceVideoId: getVideoId(element),
+  }));
+
+  const blockedIds = new Set<string>();
+  nativeElements.map(getVideoId).forEach((id) => {
+    if (id && !id.startsWith('title:')) blockedIds.add(id);
+  });
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id], [data-personal-algorithm-replacement] [data-personal-algorithm-video-id]',
+  ).forEach((element) => {
+    const id = element.dataset.personalAlgorithmVideoId;
+    if (id) blockedIds.add(id);
+  });
+
+  const replacementCandidateDiagnostics = {
+    feed: cachedFeed.length,
+    traced: cachedFeed.filter((item) => Boolean(item.traceId)).length,
+    visible: cachedFeed.filter((item) => item.visible !== false).length,
+    eligible: cachedFeed.filter((item) => (
+      item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    )).length,
+    positiveScore: cachedFeed.filter((item) => (
+      (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+    )).length,
+  };
+  const replacementQualifiedBeforeBlocking = cachedFeed.filter((item) => (
+    Boolean(item.external_id && item.title && item.traceId)
+    && item.visible !== false
+    && item.suppressed !== true
+    && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+    && (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+  )).length;
+  const assignments = planReplacementAssignments(
+    cachedFeed,
+    slots,
+    blockedIds,
+    youtubeConnector.presentation.replacementMinimumScore,
+  ).slice(0, youtubeConnector.presentation.replacementLimit);
+  const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
+  let filled = 0;
+
+  for (const assignment of assignments) {
+    const target = targetBySlot.get(assignment.slot.slotId);
+    if (
+      !target
+      || !target.isConnected
+      || target.style.getPropertyValue('display') !== 'none'
+      || target.dataset.personalAlgorithmSlotId !== assignment.slot.slotId
+      || !target.parentElement
+    ) {
+      continue;
+    }
+    const replacement = createReplacementCard(
+      assignment.item,
+      target,
+      assignment.slot.slotId,
+      assignment.slot.sourceVideoId,
+      generation,
+    );
+    target.parentElement.insertBefore(replacement, target);
+    filled += 1;
+  }
+
+  console.info('[MyAlgo] replacement slots', {
+    generation,
+    eligibleSlots: slots.length,
+    filled,
+    unfilled: Math.max(0, slots.length - filled),
+    qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
+    assignableAfterBlocking: assignments.length,
+    candidates: replacementCandidateDiagnostics,
+  });
+};
+
 const scheduleRankGeneration = (generation: number) => {
   if (rankTimer !== undefined) window.clearTimeout(rankTimer);
   rankTimer = window.setTimeout(() => {
@@ -579,7 +777,8 @@ const rankCurrentPage = async (requestGeneration: number) => {
       // decisions without reordering YouTube-owned renderers.
       clearExtensionPresentation(false);
       applyRankedFeed();
-      renderRecommendationShelf();
+      clearLegacyRecommendationShelf();
+      renderReplacementSlots(requestGeneration);
 
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
         item.visible !== false
@@ -601,6 +800,10 @@ const triggerRank = (
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
+  if (reason !== 'mutation') {
+    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  }
+
   const currentCandidates = collectCandidates();
   const candidateSignature = currentCandidates.map((candidate) => candidate.external_id).sort().join('|');
   const hasMeaningfulCards = currentCandidates.length >= 2;
@@ -615,7 +818,8 @@ const triggerRank = (
     && cachedFeed.length > 0
   ) {
     applyRankedFeed();
-    renderRecommendationShelf();
+    clearLegacyRecommendationShelf();
+    renderReplacementSlots(rankGeneration);
     return;
   }
 
@@ -628,23 +832,27 @@ const triggerRank = (
   }
   scheduleRankGeneration(generation);
 };
-const scheduleInitialRank = () => {
+const scheduleInitialRank = (attempt = 0) => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
     if (!extensionEnabled || !isCurrentInstance()) return;
     const currentCandidates = collectCandidates();
-    if (currentCandidates.length > 0) {
+    if (currentCandidates.length >= 2) {
       triggerRank('manual');
+      return;
     }
-  }, 1500);
+    if (attempt < 8) scheduleInitialRank(attempt + 1);
+  }, attempt === 0 ? 100 : 250);
 };
 
 safeStorageGet([
   STORAGE_KEYS.MODE,
   STORAGE_KEYS.ENABLED,
+  STORAGE_KEYS.SOURCE_FILTERS,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+  sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
   const disclosureAccepted = isPrivacyDisclosureAccepted(
     result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
   );
@@ -654,13 +862,13 @@ safeStorageGet([
     clearExtensionPresentation(false);
     return;
   }
-  showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-  refreshRecommendationShelf();
-  scheduleInitialRank();
-});
 
-safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
-  sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
+  // Apply persisted presentation controls before the initial rank request so
+  // Home starts in the user's chosen shape instead of flashing unfiltered UI.
+  applyRankedFeed();
+  showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+  clearLegacyRecommendationShelf();
+  scheduleInitialRank();
 });
 
 const parseIsoDuration = (value: string | null): number | null => {
@@ -713,6 +921,39 @@ const enrichYouTubeVideos = async (candidates: Array<{ external_id: string; titl
   return results;
 };
 
+const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) => (
+  left.subscribedOnly === right.subscribedOnly
+  && left.includeDiscovery === right.includeDiscovery
+  && left.includeShorts === right.includeShorts
+  && left.includeLive === right.includeLive
+  && left.includePlayables === right.includePlayables
+);
+
+const applySourceFilters = (nextFilters: FeedSourceFilters) => {
+  if (!isCurrentInstance() || sourceFiltersEqual(sourceFilters, nextFilters)) return;
+  sourceFilters = nextFilters;
+  rankGeneration += 1;
+
+  // Keep the last valid scored generation available for the optimistic local
+  // presentation pass. Source controls are presentation policy, so clearing
+  // cachedFeed here would remove mode/score badges until a later rank response
+  // wins the generation race.
+  clearExtensionPresentation(false);
+  applyRankedFeed();
+
+  // Force a fresh score/trace request after the immediate presentation update.
+  // The generation guard prevents older in-flight work from replacing it.
+  lastCandidateSignature = '';
+  lastRankMode = '';
+  triggerRank('mode');
+};
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !isCurrentInstance()) return;
+  const nextFilters = changes[STORAGE_KEYS.SOURCE_FILTERS]?.newValue as FeedSourceFilters | undefined;
+  if (nextFilters) applySourceFilters(nextFilters);
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
   if (message?.type === 'ENRICH_YOUTUBE_VIDEOS') {
@@ -740,22 +981,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (!isCurrentInstance() || !extensionEnabled) return;
         activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
         showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-        refreshRecommendationShelf();
+        clearLegacyRecommendationShelf();
         triggerRank('manual');
       });
     }
     return;
   }
   if (message?.type === 'SOURCE_FILTERS_CHANGED') {
-    rankGeneration += 1;
-    cachedFeed = [];
-    lastCandidateSignature = '';
-    lastRankMode = '';
-    clearExtensionPresentation(false);
+    const nextFilters = message.payload?.sourceFilters as FeedSourceFilters | undefined;
+    if (nextFilters) {
+      applySourceFilters(nextFilters);
+      clearLegacyRecommendationShelf();
+      return;
+    }
     void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
-      sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
-      refreshRecommendationShelf();
-      triggerRank('mode');
+      applySourceFilters(
+        result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {},
+      );
+      clearLegacyRecommendationShelf();
     });
     return;
   }
@@ -775,7 +1018,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   lastCandidateSignature = '';
   lastRankMode = '';
   clearExtensionPresentation(false);
-  refreshRecommendationShelf();
+  clearLegacyRecommendationShelf();
   triggerRank('mode');
 });
 
@@ -967,7 +1210,7 @@ registerFeedbackHandlers();
 
 window.addEventListener('load', () => {
   scheduleInitialRank();
-  refreshRecommendationShelf();
+  clearLegacyRecommendationShelf();
   scheduleHomeRecommendationObservation();
   attachTemporalWatchObserver();
 });
@@ -987,7 +1230,7 @@ window.addEventListener('yt-navigate-finish', () => {
   if (isYouTubeHistoryPage(location.pathname)) {
     scheduleHistoryObservation();
   } else {
-    refreshRecommendationShelf();
+    clearLegacyRecommendationShelf();
     triggerRank('navigation');
     scheduleHomeRecommendationObservation();
   }
@@ -1003,7 +1246,7 @@ window.addEventListener('resize', () => {
   if (resizeTimer !== undefined) window.clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(() => {
     resizeTimer = undefined;
-    renderRecommendationShelf();
+    clearLegacyRecommendationShelf();
   }, 120);
 });
 
@@ -1015,7 +1258,30 @@ const pageObserver = new MutationObserver((records) => {
       || Boolean(node.querySelector(`${videoSelectors.join(',')}, ${videoLinkSelector}`));
   }));
 
-  if (hasNativeVideoMutation) triggerRank('mutation');
+  if (hasNativeVideoMutation) {
+    if (
+      sourceFilters.includeShorts === false
+      || sourceFilters.includeLive === false
+    ) {
+      // Keep explicit source controls responsive while YouTube recycles or
+      // appends native cards; fresh scoring can follow asynchronously.
+      applyRankedFeed();
+    }
+    triggerRank('mutation');
+  }
+
+  const hasSourceShelfMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
+    if (!(node instanceof Element)) return false;
+    return node.matches('ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer')
+      || Boolean(node.querySelector('ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer'));
+  }));
+  if (hasSourceShelfMutation && (
+    sourceFilters.includeShorts === false
+    || sourceFilters.includePlayables === false
+  )) {
+    syncSourceFilteredContainers();
+  }
+
   if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
   if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
   attachTemporalWatchObserver();

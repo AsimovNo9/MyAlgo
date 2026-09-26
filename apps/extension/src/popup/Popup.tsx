@@ -8,6 +8,7 @@ const defaultSourceFilters: FeedSourceFilters = {
   includeDiscovery: true,
   includeShorts: true,
   includeLive: true,
+  includePlayables: true,
 };
 
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [] };
@@ -68,7 +69,29 @@ export function Popup() {
   const handleFilterChange = async (key: keyof FeedSourceFilters, value: boolean) => {
     const nextFilters = { ...sourceFilters, [key]: value };
     setSourceFilters(nextFilters);
-    await chrome.runtime.sendMessage({ type: 'SET_SOURCE_FILTERS', payload: { sourceFilters: nextFilters } });
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_SOURCE_FILTERS',
+      payload: { sourceFilters: nextFilters },
+    }) as { ok?: boolean; error?: string };
+    if (!response?.ok) {
+      setLastError(response?.error ?? 'Unable to update feed controls.');
+    } else {
+      setLastError(null);
+    }
+  };
+
+  const handleOpenOptions = async () => {
+    try {
+      await chrome.runtime.openOptionsPage();
+      setLastError(null);
+    } catch {
+      try {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+        setLastError(null);
+      } catch (error) {
+        setLastError(error instanceof Error ? error.message : 'Unable to open options.');
+      }
+    }
   };
 
   const modeOptions = ['Work', 'Learning', 'Relax'];
@@ -83,7 +106,7 @@ export function Popup() {
         <p>{PRIVACY_DISCLOSURE.storage}. {PRIVACY_DISCLOSURE.transfer}.</p>
         <p>{PRIVACY_DISCLOSURE.deletion}.</p>
         <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
-        <button type="button" onClick={() => void chrome.runtime.openOptionsPage()} style={{ marginLeft: 8 }}>Review settings</button>
+        <button type="button" onClick={() => void handleOpenOptions()} style={{ marginLeft: 8 }}>Review settings</button>
         {lastError ? <p style={{ color: '#b91c1c' }}>{lastError}</p> : null}
       </main>
     );
@@ -120,6 +143,7 @@ export function Popup() {
         <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
         <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
+        <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide Playables</label>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
@@ -130,7 +154,7 @@ export function Popup() {
           </button>
         ))}
       </div>
-      <button onClick={() => void chrome.runtime.openOptionsPage()} style={{ marginTop: 12 }}>
+      <button onClick={() => void handleOpenOptions()} style={{ marginTop: 12 }}>
         Open options
       </button>
     </main>

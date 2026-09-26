@@ -55,11 +55,27 @@ const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
-let historyReconciliationReady: Promise<void> = Promise.resolve();
+let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
+let privacyDisclosureReady: Promise<boolean> | null = null;
 
-void getStorage<unknown>(STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION, null)
-  .then((value) => { privacyDisclosureAccepted = isPrivacyDisclosureAccepted(value); });
+const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
+  if (privacyDisclosureReady) return privacyDisclosureReady;
+  privacyDisclosureReady = getStorage<unknown>(
+    STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+    null,
+  ).then((value) => {
+    privacyDisclosureAccepted = isPrivacyDisclosureAccepted(value);
+    return privacyDisclosureAccepted;
+  }).catch((error) => {
+    privacyDisclosureReady = null;
+    console.warn('[MyAlgo] privacy disclosure state load failed', error);
+    return false;
+  });
+  return privacyDisclosureReady;
+};
+
+void ensurePrivacyDisclosureLoaded();
 
 const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
@@ -75,7 +91,6 @@ async function persistNormalizedEvidence(
   evidence: Parameters<LocalPersonalAlgorithmStore['upsertEvidence']>[0]['evidence'],
   id: string,
 ): Promise<void> {
-  await historyReconciliationReady;
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
@@ -186,42 +201,60 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
   return pool;
 }
 
-historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
-  console.warn('Stored History evidence reconciliation skipped', error);
-});
+const ensureHistoryReconciled = (): Promise<void> => {
+  if (historyReconciliationReady) return historyReconciliationReady;
+  historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
+    historyReconciliationReady = null;
+    console.warn('Stored History evidence reconciliation skipped', error);
+  });
+  return historyReconciliationReady;
+};
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   void (async () => {
-    await historyReconciliationReady;
+    await ensureHistoryReconciled();
     await personalAlgorithmStore.initialize();
     const current = await chrome.storage.local.get([
       STORAGE_KEYS.MODE,
       STORAGE_KEYS.ENABLED,
+      STORAGE_KEYS.FEED_CACHE,
+      STORAGE_KEYS.FEED_CANDIDATE_POOL,
+      STORAGE_KEYS.VIDEO_STORE,
+      STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+      STORAGE_KEYS.HISTORY_METRICS,
+      STORAGE_KEYS.HOME_OBSERVATION_ENABLED,
+      STORAGE_KEYS.HOME_OBSERVATIONS,
+      STORAGE_KEYS.HOME_METRICS,
+      STORAGE_KEYS.SELECTION_EVENTS,
     ]);
     privacyDisclosureAccepted = isPrivacyDisclosureAccepted(
       current[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
     );
+    privacyDisclosureReady = Promise.resolve(privacyDisclosureAccepted);
+
+    const firstInstall = details.reason === 'install';
     await chrome.storage.local.set({
       [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Work',
       [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
-      [STORAGE_KEYS.FEED_CACHE]: [],
-      [STORAGE_KEYS.FEED_CANDIDATE_POOL]: [],
-      [STORAGE_KEYS.VIDEO_STORE]: {},
-      [STORAGE_KEYS.LAST_SYNC]: null,
+      [STORAGE_KEYS.FEED_CACHE]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CACHE] ?? [],
+      [STORAGE_KEYS.FEED_CANDIDATE_POOL]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CANDIDATE_POOL] ?? [],
+      [STORAGE_KEYS.VIDEO_STORE]: firstInstall ? {} : current[STORAGE_KEYS.VIDEO_STORE] ?? {},
+      [STORAGE_KEYS.LAST_SYNC]: firstInstall ? null : current[STORAGE_KEYS.LAST_SYNC] ?? null,
       [STORAGE_KEYS.SOURCE_FILTERS]: current[STORAGE_KEYS.SOURCE_FILTERS] ?? {
         subscribedOnly: false,
         includeDiscovery: true,
         includeShorts: true,
         includeLive: true,
+        includePlayables: true,
       },
-      // Preserve persisted History evidence across extension installs/updates.
-      [STORAGE_KEYS.HISTORY_METRICS]: null,
-      [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
-      [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
-      [STORAGE_KEYS.HOME_METRICS]: null,
-      [STORAGE_KEYS.SELECTION_EVENTS]: [],
+      // User-owned/local observational state must survive extension updates.
+      [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
+      [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
+      [STORAGE_KEYS.HOME_OBSERVATIONS]: current[STORAGE_KEYS.HOME_OBSERVATIONS] ?? [],
+      [STORAGE_KEYS.HOME_METRICS]: current[STORAGE_KEYS.HOME_METRICS] ?? null,
+      [STORAGE_KEYS.SELECTION_EVENTS]: current[STORAGE_KEYS.SELECTION_EVENTS] ?? [],
     });
     if (!privacyDisclosureAccepted) {
       await chrome.runtime.openOptionsPage();
@@ -291,7 +324,12 @@ async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): P
     : undefined));
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+const handleRuntimeMessage = (
+  message: unknown,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void,
+  privacyChecked = false,
+): boolean => {
   const { type, payload } = message as {
     type: string;
     payload?: {
@@ -308,6 +346,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
   };
 
+  if (type === 'PERSONAL_ALGORITHM_HEALTH') {
+    void Promise.all([
+      getStorage(STORAGE_KEYS.ENABLED, false),
+      getStorage(STORAGE_KEYS.MODE, 'Work'),
+    ]).then(([enabled, mode]) => sendResponse({
+      ok: true,
+      worker: 'ready',
+      enabled,
+      mode,
+    })).catch((error) => sendResponse({
+      ok: false,
+      worker: 'error',
+      error: error instanceof Error ? error.message : 'Unable to read worker state.',
+    }));
+    return true;
+  }
+
   if (type === 'ACCEPT_PRIVACY_DISCLOSURE') {
     void (async () => {
       await chrome.storage.local.set({
@@ -315,6 +370,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         [STORAGE_KEYS.ENABLED]: true,
       });
       privacyDisclosureAccepted = true;
+      privacyDisclosureReady = Promise.resolve(true);
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: true } }).catch(() => undefined)
@@ -327,6 +383,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (type === 'RESET_LOCAL_DATA') {
     void (async () => {
       privacyDisclosureAccepted = false;
+      privacyDisclosureReady = Promise.resolve(false);
       await chrome.storage.local.clear();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
@@ -345,20 +402,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyDisclosureAccepted) {
-    sendResponse({ ok: false, error: 'Accept the current privacy disclosure before MyAlgo observes or stores YouTube activity.' });
-    return false;
+  if (PRIVACY_GATED_MESSAGE_TYPES.has(type) && !privacyChecked) {
+    void ensurePrivacyDisclosureLoaded().then((accepted) => {
+      if (!accepted) {
+        sendResponse({ ok: false, error: 'Accept the current privacy disclosure before MyAlgo observes or stores YouTube activity.' });
+        return;
+      }
+      handleRuntimeMessage(message, _sender, sendResponse, true);
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to load privacy disclosure state.',
+    }));
+    return true;
   }
 
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.reviewGraph())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.reviewGraph())
       .then((review) => sendResponse({ ok: true, review }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to review Personal Algorithm Graph.' }));
     return true;
   }
 
   if (type === 'PERSONAL_ALGORITHM_REBUILD') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.rebuildGraphFromEvidence())
       .then(async (graph) => {
         await notifyPersonalAlgorithmChanged('rebuild');
         sendResponse({ ok: true, graph });
@@ -368,7 +434,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === 'PERSONAL_ALGORITHM_EXPORT') {
-    void historyReconciliationReady.then(() => personalAlgorithmStore.exportStateJson())
+    void ensureHistoryReconciled().then(() => personalAlgorithmStore.exportStateJson())
       .then((json) => sendResponse({ ok: true, json }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to export Personal Algorithm Graph.' }));
     return true;
@@ -463,7 +529,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await setStorage(STORAGE_KEYS.SOURCE_FILTERS, payload?.sourceFilters ?? {});
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
-        ? chrome.tabs.sendMessage(tab.id, { type: 'SOURCE_FILTERS_CHANGED' }).catch(() => undefined)
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'SOURCE_FILTERS_CHANGED',
+          payload: { sourceFilters: payload?.sourceFilters ?? {} },
+        }).catch(() => undefined)
         : undefined));
       sendResponse({ ok: true });
     })();
@@ -551,7 +620,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (type === 'PERSONAL_ALGORITHM_BACKFILL_HISTORY_METADATA') {
     void (async () => {
-      await historyReconciliationReady;
+      await ensureHistoryReconciled();
       const historyEvidence = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
       const normalizedInputs = historyEvidence.map((item) => ({
         id: createHistoryEvidenceId(item.externalId),
@@ -613,7 +682,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         ...nonHistoryEvents,
         ...watchedEvents,
       ].slice(-MAX_SELECTION_EVENTS));
-      await historyReconciliationReady;
+      await ensureHistoryReconciled();
       await personalAlgorithmStore.reconcileHistoryEvidence(
         watchedEvents.map((event) => ({
           id: createHistoryEvidenceId(event.videoId),
@@ -672,7 +741,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   sendResponse({ ok: false });
   return true;
-});
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => (
+  handleRuntimeMessage(message, sender, sendResponse)
+));
 
 chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) => {
   sendResponse({ ok: true });

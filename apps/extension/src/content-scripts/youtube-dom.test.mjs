@@ -235,11 +235,11 @@ test('deduplication keeps the first valid candidate per video ID', () => {
 
 test('personal shelf and replacement feed use bounded unique IDs only', () => {
   const items = [
-    { external_id: 'a', title: 'A', score: 90 },
-    { external_id: 'a', title: 'A duplicate', score: 88 },
-    { external_id: 'b', title: 'B', score: 70 },
-    { external_id: 'c', title: 'C', score: 60 },
-    { external_id: 'd', title: 'D', score: 30 },
+    { external_id: 'a', title: 'A', score: 90, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'a', title: 'A duplicate', score: 88, traceId: 'trace-a2', policyOutcome: 'eligible' },
+    { external_id: 'b', title: 'B', score: 70, traceId: 'trace-b', policyOutcome: 'eligible' },
+    { external_id: 'c', title: 'C', score: 60, traceId: 'trace-c', policyOutcome: 'eligible' },
+    { external_id: 'd', title: 'D', score: 30, traceId: 'trace-d', policyOutcome: 'eligible' },
   ];
 
   assert.deepEqual(getShelfCandidates(items, 6).map((item) => item.external_id), ['a', 'b', 'c']);
@@ -329,6 +329,8 @@ test('YouTube connector declares bounded presentation and normalized provider be
   assert.equal(youtubeConnector.pageUrlPatterns.includes('https://www.youtube.com/*'), true);
   assert.equal(youtubeConnector.presentation.shelfBatchSize <= youtubeConnector.presentation.shelfDomLimit, true);
   assert.equal(youtubeConnector.presentation.horizontalAspectRatio, '16 / 9');
+  assert.equal(youtubeConnector.presentation.replacementMinimumScore, 1);
+  assert.equal(youtubeConnector.presentation.replacementLimit, 6);
 });
 
 test('behavior correlation preserves surfaced, clicked, and watched as separate evidence', () => {

@@ -140,3 +140,20 @@ For #152/#171, validate the browser path as a state-transition problem rather th
 7. verify no synthetic replacement cards are inserted before #160.
 
 Diagnostics must remain privacy-safe: counts, phases, and generation numbers are acceptable; titles/video IDs should not be emitted merely to diagnose stale/self-observation handling.
+
+PR #204 completed this protocol in a live browser. Validation confirmed stable native order, zero synthetic replacements before #160, zero duplicate/orphan badges after DOM recycling, pause/reactivation recovery, mode-label consistency, stale-response rejection, graph-rebuild invalidation, and explicit-feedback reranking.
+
+## Safe replacement validation
+
+For #160, validate replacements as bounded presentation assignments rather than a second recommendation pipeline. Also validate that persisted source controls shape the first available Home batch promptly, including full-section removal for Shorts and Playables without creating replacement slots:
+
+1. every replacement occupies a slot hidden by the current generation and does not reorder unrelated native siblings;
+2. the replacement video ID is absent from currently present native cards, the Personal Algorithm shelf, and other replacements;
+3. every replacement carries a current local trace ID, score, mode, source video ID, and slot identity;
+4. no replacement is rendered for suppressed/ineligible candidates or when no qualified candidate exists;
+5. a fresh generation, route/mode/source/graph invalidation, pause, or reactivation removes stale replacements before new assignments;
+6. Home and Subscriptions infinite-scroll/DOM recycling do not duplicate replacements;
+7. injected replacements remain excluded from observation and interaction collectors;
+8. replacement cards preserve the target slot footprint, media aspect ratio, focusability, accessible label/title, and canonical YouTube destination.
+
+Record filled and unfilled slot counts only; diagnostics must not log video titles or IDs by default.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -16,10 +16,49 @@ test('MVP scores are eligible for shelf presentation', () => {
   );
 });
 
-test('MVP scores are eligible for replacement while negative feedback stays hidden', () => {
+test('replacement candidates require current trace and eligible policy outcome', () => {
+  const items = [
+    { external_id: 'video-a', title: 'A', score: 80, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'video-b', title: 'B', score: 90, visible: true },
+    { external_id: 'video-c', title: 'C', score: 90, visible: true, traceId: 'trace-c', suppressed: true, policyOutcome: 'suppressed' },
+    { external_id: 'video-d', title: 'D', score: 70, visible: true, traceId: 'trace-d', policyOutcome: 'eligible' },
+  ];
   assert.deepEqual(
-    getReplacementCandidates(lowScoreFeed, ['video-a'], 6, 0),
-    [lowScoreFeed[1]],
+    getReplacementCandidates(items, ['video-a'], 6, 52).map((item) => item.external_id),
+    ['video-d'],
+  );
+});
+
+test('replacement assignment never reuses native source IDs or duplicate slots', () => {
+  const items = [
+    { external_id: 'native-a', title: 'Already native', score: 99, visible: true, traceId: 'trace-native', policyOutcome: 'eligible' },
+    { external_id: 'candidate-a', title: 'Candidate A', score: 90, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'candidate-b', title: 'Candidate B', score: 80, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+  ];
+  const slots = [
+    { slotId: 'slot-1', sourceVideoId: 'native-a' },
+    { slotId: 'slot-1', sourceVideoId: 'native-a' },
+    { slotId: 'slot-2', sourceVideoId: 'native-b' },
+  ];
+
+  assert.deepEqual(
+    planReplacementAssignments(items, slots, ['candidate-b'], 52).map((assignment) => ({
+      slotId: assignment.slot.slotId,
+      externalId: assignment.item.external_id,
+    })),
+    [{ slotId: 'slot-1', externalId: 'candidate-a' }],
+  );
+});
+
+test('replacement assignment reports no work when there is no qualified candidate', () => {
+  assert.deepEqual(
+    planReplacementAssignments(
+      [{ external_id: 'candidate-a', title: 'A', score: 51, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' }],
+      [{ slotId: 'slot-1', sourceVideoId: 'native-a' }],
+      [],
+      52,
+    ),
+    [],
   );
 });
 
@@ -98,4 +137,83 @@ test('reactivation semantics require a fresh manual generation rather than stale
   const stale = { generation: 7, routeKey: '/', mode: 'Work' };
   const current = { generation: 8, routeKey: '/', mode: 'Work' };
   assert.equal(isRenderContextStale(stale, current), true);
+});
+
+
+test('replacement slot identity changes with generation, route, position, and source', () => {
+  const base = createReplacementSlotId(4, '/', 2, 'native-a');
+  assert.equal(base, '4|/|2|native-a');
+  assert.notEqual(createReplacementSlotId(5, '/', 2, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/results?q=x', 2, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/', 3, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/', 2, 'native-b'), base);
+});
+
+
+test('replacement presentation metadata is explicit and generation scoped', () => {
+  const assignment = {
+    slot: { slotId: '8|/|3|native-a', sourceVideoId: 'native-a' },
+    item: {
+      external_id: 'replacement-a',
+      title: 'Replacement A',
+      score: 6,
+      traceId: 'trace-a',
+      policyOutcome: 'eligible',
+    },
+  };
+  assert.deepEqual(
+    getReplacementPresentationMetadata(assignment, 8, 'Learning'),
+    {
+      generation: 8,
+      mode: 'Learning',
+      score: 6,
+      traceId: 'trace-a',
+      slotId: '8|/|3|native-a',
+      sourceVideoId: 'native-a',
+      replacementVideoId: 'replacement-a',
+    },
+  );
+});
+
+
+test('explicit source-filter hides are terminal and never become replacement slots', () => {
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'source_filter' }),
+    false,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'runtime_policy' }),
+    true,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'hide', reason: 'score' }),
+    true,
+  );
+  assert.equal(
+    isReplacementEligibleNativeDecision({ action: 'show', reason: 'ranked' }),
+    false,
+  );
+});
+
+
+test('source shelf policy removes Shorts and Playables only when disabled', () => {
+  assert.equal(
+    getSourceShelfHideReason({ hasShortsLink: true }, { includeShorts: false }),
+    'shorts',
+  );
+  assert.equal(
+    getSourceShelfHideReason({ heading: 'Playables' }, { includePlayables: false }),
+    'playables',
+  );
+  assert.equal(
+    getSourceShelfHideReason({ hasPlayableLink: true }, { includePlayables: false }),
+    'playables',
+  );
+  assert.equal(
+    getSourceShelfHideReason(
+      { heading: 'Playables', hasShortsLink: true, hasPlayableLink: true },
+      { includeShorts: true, includePlayables: true },
+    ),
+    null,
+  );
 });
