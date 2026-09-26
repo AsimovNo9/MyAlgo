@@ -71,6 +71,77 @@ export function normalizeWebSearchResultsToYoutubeCandidates(
   return candidates;
 }
 
+export function normalizeWebSearchEndpoint(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:') return null;
+    url.pathname = url.pathname.replace(/\/$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+export function webSearchOriginPattern(value: string | null | undefined): string | null {
+  const endpoint = normalizeWebSearchEndpoint(value);
+  if (!endpoint) return null;
+  const url = new URL(endpoint);
+  return `${url.origin}/*`;
+}
+
+export function createSearxngWebSearchProvider(
+  endpointValue: string,
+  fetcher: typeof fetch = fetch,
+): WebSearchProvider {
+  const endpoint = normalizeWebSearchEndpoint(endpointValue);
+  if (!endpoint) throw new Error('Web-search endpoint must be an HTTPS SearXNG base URL.');
+
+  return {
+    id: 'searxng',
+    async search(request) {
+      const url = new URL(`${endpoint}/search`);
+      url.searchParams.set('q', `${request.query} site:youtube.com/watch`);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('categories', 'general');
+      url.searchParams.set('language', 'auto');
+
+      const response = await fetcher(url.toString(), {
+        method: 'GET',
+        credentials: 'omit',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error(`Web search HTTP ${response.status}`);
+      const payload = await response.json() as {
+        results?: Array<{
+          url?: unknown;
+          title?: unknown;
+          content?: unknown;
+          publishedDate?: unknown;
+          thumbnail?: unknown;
+        }>;
+      };
+
+      return (payload.results ?? [])
+        .flatMap((item): WebSearchResult[] => {
+          if (typeof item.url !== 'string' || typeof item.title !== 'string') return [];
+          return [{
+            url: item.url,
+            title: item.title,
+            snippet: typeof item.content === 'string' ? item.content : null,
+            publishedAt: typeof item.publishedDate === 'string' ? item.publishedDate : null,
+            thumbnailUrl: typeof item.thumbnail === 'string' ? item.thumbnail : null,
+          }];
+        })
+        .slice(0, request.limit);
+    },
+  };
+}
+
 export interface WebSearchProvider {
   readonly id: string;
   search(request: WebSearchRequest): Promise<WebSearchResult[]>;
@@ -232,6 +303,22 @@ export function selectRssChannelIds(
     if (result.length >= Math.max(0, limit)) break;
   }
   return result;
+}
+
+export const WEB_SEARCH_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+
+export function nextWebSearchAllowedAt(
+  nowMs: number,
+  consecutiveFailures: number,
+): string {
+  if (consecutiveFailures <= 0) {
+    return new Date(nowMs + WEB_SEARCH_REFRESH_INTERVAL_MS).toISOString();
+  }
+  const backoff = Math.min(
+    60 * 60 * 1000,
+    2 * 60 * 1000 * (2 ** Math.min(4, consecutiveFailures - 1)),
+  );
+  return new Date(nowMs + backoff).toISOString();
 }
 
 export function nextRssAllowedAt(
