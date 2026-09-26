@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createDefaultWebSearchProvider, createSearxngWebSearchProvider, DEFAULT_WEB_SEARCH_ENDPOINT, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, webSearchOriginPattern, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createYoutubeSearchPageProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
@@ -80,8 +80,6 @@ const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
-  webSearchEndpoint: DEFAULT_WEB_SEARCH_ENDPOINT,
-  webSearchProvider: 'privau',
 };
 const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastRssSyncAt: null,
@@ -478,48 +476,6 @@ async function refreshWebSearchCandidates(
     return { diagnostics: previous, changed: false };
   }
 
-  const providerKind = settings.webSearchProvider ?? 'privau';
-  const endpoint = normalizeWebSearchEndpoint(
-    providerKind === 'privau' ? DEFAULT_WEB_SEARCH_ENDPOINT : settings.webSearchEndpoint,
-  );
-  if (!endpoint) {
-    const diagnostics = {
-      ...previous,
-      lastWebSearchAt: new Date(nowMs).toISOString(),
-      nextWebSearchAllowedAt: null,
-      lastError: 'Web search is enabled but no valid HTTPS search endpoint is configured.',
-    };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
-  }
-
-  const apiKey = await getStorage<string>(STORAGE_KEYS.WEB_SEARCH_API_KEY, '');
-  if (providerKind === 'privau' && !apiKey.trim()) {
-    const diagnostics = {
-      ...previous,
-      lastWebSearchAt: new Date(nowMs).toISOString(),
-      nextWebSearchAllowedAt: null,
-      lastError: 'PrivAU requires an API key. Add it in Advanced settings before enabling web discovery.',
-    };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
-  }
-
-  const originPattern = webSearchOriginPattern(endpoint);
-  const hasPermission = originPattern
-    ? await chrome.permissions.contains({ origins: [originPattern] })
-    : false;
-  if (!hasPermission) {
-    const diagnostics = {
-      ...previous,
-      lastWebSearchAt: new Date(nowMs).toISOString(),
-      nextWebSearchAllowedAt: null,
-      lastError: 'Grant MyAlgo access to the configured search endpoint before enabling web search.',
-    };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
-  }
-
   const state = await personalAlgorithmStore.exportState();
   const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Work');
   const baseProfile = buildGraphRetrievalProfile(state);
@@ -554,9 +510,7 @@ async function refreshWebSearchCandidates(
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
-  const provider = providerKind === 'privau'
-    ? createDefaultWebSearchProvider(apiKey)
-    : createSearxngWebSearchProvider(endpoint);
+  const provider = createYoutubeSearchPageProvider();
 
   let candidates: PageCandidate[] = [];
   let succeeded = 0;
@@ -598,6 +552,7 @@ async function refreshWebSearchCandidates(
   await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
 
   console.info('[MyAlgo] web-search refresh', {
+    provider: provider.id,
     mode: storedMode,
     plans: plans.length,
     fetched: unique.length,
