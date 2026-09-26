@@ -281,7 +281,7 @@ For development validation, the background service worker exposes three read/reb
 
 These operations are validation/debugging surfaces, not recommendation decisions.
 
-The store is evidence persistence, not preference inference. It does not assign recommendation weights, rank candidates, resolve cross-source identities, or consume YouTube Data API account/display data as observational evidence.
+The store is evidence persistence, not preference inference. It does not assign recommendation weights, rank candidates, resolve cross-source identities, or consume YouTube Data API Data as observational evidence. The current launch runtime has no YouTube Data API integration at all; future optional account/display use remains outside this contract unless a new review explicitly changes the boundary.
 
 ## Graph evidence semantics
 
