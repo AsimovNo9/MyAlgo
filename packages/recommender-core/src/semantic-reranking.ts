@@ -326,7 +326,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     .slice(0, maxGraphNodes);
 
   const graphInputs = eligibleGraphNodes.map((node) => ({
-    ownerType: 'concept' as const,
+    ownerType: 'graph_node' as const,
     ownerId: node.id,
     text: buildGraphNodeEmbeddingText(node),
   }));
