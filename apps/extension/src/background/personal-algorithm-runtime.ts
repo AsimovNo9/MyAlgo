@@ -309,7 +309,12 @@ const candidateContext = (
   const contentNode = index.contentNodes.get(contentId);
   const extracted = extractLocalCandidateFeatures(state, candidate, index.featureNodes);
   const classification = classifyCandidateContent(candidate);
-  const modeFeature = modeAlignmentFeature(mode, classification);
+  // Once semantic mode similarity exists, it becomes the mode-ranking signal.
+  // The deterministic classifier remains useful for UI labels/fallbacks, but
+  // must not double-count the same active-mode intent.
+  const modeFeature = candidate.semantic_mode_similarity == null
+    ? modeAlignmentFeature(mode, classification)
+    : null;
   if (modeFeature) extracted.features.push(modeFeature);
   extracted.features.push(...semanticAlignmentFeatures(candidate));
   const channelCreatorId = candidate.channel_id
