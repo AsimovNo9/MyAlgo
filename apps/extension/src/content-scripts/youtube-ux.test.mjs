@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
+import { createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -331,4 +331,20 @@ test('opportunistic replacement assignments bind the selected candidate to its n
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0].target.externalId, 'native-low');
   assert.equal(assignments[0].item.external_id, 'replacement-a');
+});
+
+
+test('content presentation labels come from candidate classification, not active mode', () => {
+  assert.equal(
+    getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.9 }),
+    'Learning',
+  );
+  assert.equal(
+    getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.6 }),
+    null,
+  );
+  assert.equal(
+    getContentPresentationLabel({ score: 80 }),
+    null,
+  );
 });
