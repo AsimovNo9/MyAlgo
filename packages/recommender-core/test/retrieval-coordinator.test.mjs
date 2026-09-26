@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildGraphRetrievalProfile, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan } from '../src/index.ts';
+import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan } from '../src/index.ts';
 
 test('buildRetrievalCoordinatorPlan allocates more budget to under-covered interests', () => {
   const plan = buildRetrievalCoordinatorPlan({
