@@ -1019,7 +1019,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
         && (item.policyOutcome == null || item.policyOutcome === 'eligible')
         && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
-      showStatus(`${requestMode}: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
+      showStatus(`MyAlgo: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
     } else {
       console.warn('[MyAlgo] native feed ranking failed', { phase: 'rank-response' });
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
@@ -1100,7 +1100,7 @@ safeStorageGet([
   // Apply persisted presentation controls before the initial rank request so
   // Home starts in the user's chosen shape instead of flashing unfiltered UI.
   applyRankedFeed();
-  showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
+  showStatus('Personal Algorithm: Active', false, false);
   clearLegacyRecommendationShelf();
   scheduleInitialRank();
 });
