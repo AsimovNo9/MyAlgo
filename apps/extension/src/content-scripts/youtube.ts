@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -148,6 +148,7 @@ const clearExtensionPresentation = (showPaused = true) => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmReplacementCandidateId;
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -675,7 +676,7 @@ const applyRankedFeed = () => {
       if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
       return [{ externalId: id, score, nativeIndex }];
     });
-    const selectedTargets = selectOpportunisticReplacementTargets(
+    const selectedAssignments = selectOpportunisticReplacementAssignments(
       nativeTargets,
       replacementCandidates,
       remainingReplacementCapacity,
@@ -684,15 +685,11 @@ const applyRankedFeed = () => {
 
     opportunisticReplacementCandidates = replacementCandidates.length;
     opportunisticNativeTargets = nativeTargets.length;
-    opportunisticSelectedTargets = selectedTargets.length;
-    const sortedCandidateScores = [...replacementCandidates]
-      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
-      .map((item) => item.score ?? 0);
-    opportunisticUpliftQualified = selectedTargets.filter(
-      (target, index) => (sortedCandidateScores[index] ?? 0) >= target.score + youtubeConnector.presentation.replacementMinimumUplift,
-    ).length;
+    opportunisticSelectedTargets = selectedAssignments.length;
+    opportunisticUpliftQualified = selectedAssignments.length;
 
-    for (const selected of selectedTargets) {
+    for (const assignment of selectedAssignments) {
+      const selected = assignment.target;
       const element = knownElements[selected.nativeIndex];
       if (!element?.parentElement || element.style.getPropertyValue('display') === 'none') continue;
       const slotWidth = element.getBoundingClientRect().width;
@@ -704,6 +701,7 @@ const applyRankedFeed = () => {
         selected.externalId,
       );
       element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      element.dataset.personalAlgorithmReplacementCandidateId = assignment.item.external_id ?? '';
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = 'replacement_slot';
     }
@@ -782,14 +780,35 @@ const renderReplacementSlots = (generation: number) => {
     && (item.policyOutcome == null || item.policyOutcome === 'eligible')
     && (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
   )).length;
-  const assignments = planReplacementAssignments(
+  const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
+  const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
+  const boundAssignments = slots.flatMap((slot) => {
+    const target = targetBySlot.get(slot.slotId);
+    const candidateId = target?.dataset.personalAlgorithmReplacementCandidateId?.trim();
+    const item = candidateId ? feedById.get(candidateId) : undefined;
+    if (
+      !item
+      || blockedIds.has(candidateId ?? '')
+      || item.visible === false
+      || item.suppressed === true
+      || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+      || (item.score ?? 0) < youtubeConnector.presentation.replacementMinimumScore
+    ) {
+      return [];
+    }
+    return [{ slot, item }];
+  });
+  const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
+  const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
+  const fallbackAssignments = planReplacementAssignments(
     cachedFeed,
-    slots,
-    blockedIds,
+    slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
+    [...blockedIds, ...boundCandidateIds],
     youtubeConnector.presentation.replacementMinimumScore,
     `${generation}|${getRouteKey()}`,
-  ).slice(0, youtubeConnector.presentation.replacementLimit);
-  const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
+  );
+  const assignments = [...boundAssignments, ...fallbackAssignments]
+    .slice(0, youtubeConnector.presentation.replacementLimit);
   let filled = 0;
 
   for (const assignment of assignments) {
@@ -823,6 +842,8 @@ const renderReplacementSlots = (generation: number) => {
     assignableAfterBlocking: assignments.length,
     blockedNativeIds: blockedIds.size,
     offPageCandidates: cachedFeed.filter((item) => item.external_id && !blockedIds.has(item.external_id)).length,
+    boundAssignments: boundAssignments.length,
+    fallbackAssignments: fallbackAssignments.length,
     candidates: replacementCandidateDiagnostics,
   });
 };
