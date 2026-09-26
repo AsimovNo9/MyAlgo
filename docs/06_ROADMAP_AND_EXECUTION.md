@@ -142,6 +142,28 @@ The live diagnostic passed against real extension state with 792 evidence record
 
 The scorer remains policy-driven: it does not infer preference from raw watched evidence, and it is not yet the extension feed-ranking path. Extension-local runtime integration remains #169.
 
+### Extension-local scoring runtime (#169 / PR #195)
+
+PR #195 completes the first runtime integration slice for #169. The extension background RANK_PAGE path now consumes the persisted local graph and the deterministic #151 scorer rather than the previous placeholder/index-based ranking behavior.
+
+Implemented and live-validated:
+
+- explicit versioned local scoring policy;
+- local candidate eligibility and source-filter handling;
+- persisted explicit feedback replay into scoring;
+- reconciliation of repeated feedback events to the latest state per content item;
+- creator-level never_show_channel matching through persisted creator relationships;
+- compact local score/trace persistence;
+- runtime tests covering graph scoring, feedback, creator suppression, source filters, and policy boundaries;
+- CI build/typecheck/lint/test validation;
+- real-browser validation of YouTube Home-feed Not interested → local event persistence → subsequent local score consumption.
+
+Live validation on 2026-09-26 used video kDqb9IzhxjE: the feedback event was persisted at 2026-09-26T02:39:35.727Z; after feed reranking, the local trace at 2026-09-26T02:40:48.729Z recorded score -9 for the same candidate. The result matches the scorer's expected +1 content contribution plus -10 not_interested feedback contribution.
+
+Remaining #169 scope is not implied to be complete by this slice: feed-candidate coverage, full feed enforcement/replacement behavior, feedback undo/reversal semantics, richer policy controls, and production hardening remain separate work where applicable.
+
+#169 should be considered implementation-complete for the #195 runtime-scoring slice, with the broader feed-enforcement and trust loop continuing downstream.
+
 ### Phase 1 graph progression
 
 The implementation boundary is deliberately staged:
