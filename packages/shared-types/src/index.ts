@@ -227,7 +227,6 @@ export type CandidateProvenance = CandidateAcquisitionProvenance;
 
 export interface RetrievalSettings {
   rssEnabled: boolean;
-  webSearchEnabled: boolean;
 }
 
 export interface RetrievalDiagnostics {
