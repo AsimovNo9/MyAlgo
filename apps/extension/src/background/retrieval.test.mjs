@@ -5,6 +5,7 @@ import {
   buildYoutubeRssFeedUrl,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
+  needsYoutubeMetadataRefresh,
   nextRssAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
@@ -92,4 +93,17 @@ test('mergeCandidateAcquisitionHistory preserves distinct observed and RSS acqui
   assert.equal(history.length, 2);
   assert.deepEqual(history.map((item) => item.mechanism), ['rss', 'observed_dom']);
   assert.equal(history[0].graph_revision, 'graph-2-abc12345');
+});
+
+
+test('needsYoutubeMetadataRefresh retries fresh records that are missing channel IDs', () => {
+  const now = Date.parse('2026-09-26T12:00:00.000Z');
+  assert.equal(
+    needsYoutubeMetadataRefresh({ channel_id: null, enrichedAt: '2026-09-26T11:59:00.000Z' }, now, 24 * 60 * 60 * 1000),
+    true,
+  );
+  assert.equal(
+    needsYoutubeMetadataRefresh({ channel_id: 'UC1234567890123456789012', enrichedAt: '2026-09-26T11:59:00.000Z' }, now, 24 * 60 * 60 * 1000),
+    false,
+  );
 });
