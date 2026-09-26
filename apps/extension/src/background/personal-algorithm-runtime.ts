@@ -36,7 +36,7 @@ export type LocalRuntimeFeedbackEvent = {
 };
 
 const contentNodeId = (source: string, externalId: string) =>
-  `content:\${encodeURIComponent(source)}:\${encodeURIComponent(externalId)}`;
+  `content:${encodeURIComponent(source)}:${encodeURIComponent(externalId)}`;
 
 const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntimeCandidate): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
@@ -51,7 +51,7 @@ const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntime
   const creatorNodeId = creatorEdge?.targetNodeId ?? null;
 
   return {
-    id: `youtube:\${candidate.external_id}`,
+    id: `youtube:${candidate.external_id}`,
     content: { source: 'youtube', externalId: candidate.external_id },
     nodeIds: contentNode ? [contentNode.id] : [],
     creatorNodeId,
@@ -81,7 +81,7 @@ export function buildLocalFeedbackSignals(
   return events
     .filter((event) => event.contentItemId && event.eventType)
     .map((event, index) => ({
-      id: `local-feedback:\${index}:\${event.contentItemId}:\${event.eventType}`,
+      id: `local-feedback:${index}:${event.contentItemId}:${event.eventType}`,
       contentId: event.contentItemId ?? null,
       value: event.eventType === 'more_like_this'
         ? 10
@@ -90,7 +90,7 @@ export function buildLocalFeedbackSignals(
           : event.eventType === 'never_show_channel'
             ? -100
             : 0,
-      label: `explicit feedback: \${event.eventType}`,
+      label: `explicit feedback: ${event.eventType}`,
     }))
     .filter((signal) => signal.value !== 0);
 }
@@ -117,7 +117,7 @@ export function scoreLocalCandidates(
       );
 
       if (!isScoreTraceConsistent(result.trace)) {
-        throw new Error(`Local score trace is inconsistent for \${candidate.external_id}`);
+        throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
       }
 
       return {
@@ -140,7 +140,7 @@ export function traceForLocalCandidate(
   const policy = buildLocalScoringPolicy(state);
   const result = scorePersonalAlgorithm(state, candidateContext(state, candidate), policy, mode, feedbackSignals);
   if (!isScoreTraceConsistent(result.trace)) {
-    throw new Error(`Local score trace is inconsistent for \${candidate.external_id}`);
+    throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
   }
   return result.trace;
 }
