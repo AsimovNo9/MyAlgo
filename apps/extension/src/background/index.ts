@@ -62,6 +62,7 @@ type SemanticFeatureRecord = {
     node_id: string;
     node_label: string;
     similarity: number;
+    weight: number;
   }>;
   generatedAt: string;
 };
