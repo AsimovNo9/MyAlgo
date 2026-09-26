@@ -123,13 +123,19 @@ const normalizeText = (value: string) => youtubeConnector.normalizeText(value).t
 
 const clearExtensionPresentation = (showPaused = true) => {
   document.querySelector('[data-personal-algorithm-shelf]')?.remove();
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
+  ).forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
     element.style.outline = '';
     element.style.outlineOffset = '';
     delete element.dataset.personalAlgorithmScore;
     delete element.dataset.personalAlgorithmRank;
+    if (element.dataset.personalAlgorithmPositionPatched === 'true') {
+      element.style.removeProperty('position');
+      delete element.dataset.personalAlgorithmPositionPatched;
+    }
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
   });
   if (showPaused) {
@@ -482,7 +488,10 @@ const applyRankedFeed = () => {
       badge = document.createElement('span');
       badge.dataset.personalAlgorithmBadge = 'true';
       badge.style.cssText = 'position:absolute;z-index:20;top:8px;left:8px;padding:4px 7px;border-radius:999px;background:#0f172a;color:#fff;font:600 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);';
-      element.style.position = 'relative';
+      if (!element.style.position) {
+        element.style.position = 'relative';
+        element.dataset.personalAlgorithmPositionPatched = 'true';
+      }
       element.appendChild(badge);
     }
     badge.textContent = `${activeMode} · ${score}`;
