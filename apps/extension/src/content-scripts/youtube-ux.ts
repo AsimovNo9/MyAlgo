@@ -13,6 +13,8 @@ export type RankedFeedItem = {
   thumbnail_url?: string | null;
   visible?: boolean;
   score?: number;
+  suppressed?: boolean;
+  policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
 };
 
 export const MYALGO_INJECTED_SELECTOR = [
@@ -37,7 +39,13 @@ export function getNativeCardDecision(
 ): NativeCardDecision {
   // Hard/runtime policy gates always win before score-based presentation.
   if (options.sourceFiltered) return { action: 'hide', reason: 'source_filter' };
-  if (item?.visible === false) return { action: 'hide', reason: 'runtime_policy' };
+  if (
+    item?.visible === false
+    || item?.suppressed === true
+    || (item?.policyOutcome != null && item.policyOutcome !== 'eligible')
+  ) {
+    return { action: 'hide', reason: 'runtime_policy' };
+  }
 
   // Missing coverage is a degraded/pass-through state, not a reason to erase
   // YouTube-owned cards that MyAlgo has not scored.
