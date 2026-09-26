@@ -296,7 +296,7 @@ native feed presentation
 
 Acquisition provenance and graph/evidence provenance are separate. A candidate retrieved through RSS or web search does **not** become preference evidence merely because it was retrieved. Only separately defined user/observation events may affect the graph.
 
-Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter must remain provider-neutral even if an initial implementation targets a Google-compatible search service.
+Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. The current graph state is authoritative: an explicit deterministic graph-to-retrieval-intent adapter should feed the query planner rather than reconstructing a separate legacy preference object. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter must remain provider-neutral even if an initial implementation targets a Google-compatible search service.
 
 The launch YouTube Data API boundary remains unchanged: #206 must not add YouTube Data API search.
 
