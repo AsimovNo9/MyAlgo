@@ -178,8 +178,10 @@ export interface ContentFacet {
 }
 
 /**
- * Legacy/future retrieval planning vocabulary. These labels do not imply a
- * YouTube Data API integration in the launch runtime. See #168/#202.
+ * Transitional retrieval provenance vocabulary. The planning architecture is
+ * active for #206, but provider/API-like labels remain compatibility debt to be
+ * replaced by source-neutral acquisition mechanisms in #202. No YouTube Data API
+ * integration is implied by these values. See #168/#202/#206.
  */
 export interface RetrievalProvenance {
   source: 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
@@ -210,7 +212,7 @@ export interface EmbeddingRecord {
   generated_at: string;
 }
 
-/** @deprecated Legacy retrieval-source naming; retained temporarily for compatibility. See #202. */
+/** @deprecated Provider/API-like retrieval naming; #202/#206 replace this with source-neutral acquisition provenance. */
 export type CandidateRetrievalSource = 'youtube_subscription' | 'youtube_search' | 'youtube_rss' | 'youtube_liked' | 'semantic_vector';
 
 export type CandidateQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
