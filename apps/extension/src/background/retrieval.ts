@@ -91,6 +91,16 @@ export function parseYoutubeRssFeed(
   return candidates;
 }
 
+export function needsYoutubeMetadataRefresh(
+  record: { channel_id?: string | null; enrichedAt?: string | null } | undefined,
+  nowMs: number,
+  refreshMs: number,
+): boolean {
+  if (!record?.channel_id?.trim()) return true;
+  const enrichedAt = new Date(record.enrichedAt ?? 0).getTime();
+  return !Number.isFinite(enrichedAt) || nowMs - enrichedAt > refreshMs;
+}
+
 export function selectRssChannelIds(
   records: Array<{ channel_id?: string | null; enrichedAt?: string | null }>,
   limit = MAX_RSS_CHANNELS_PER_REFRESH,
