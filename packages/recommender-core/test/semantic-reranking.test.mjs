@@ -142,6 +142,13 @@ test('semantic reranking derives graph and mode similarities and reuses cached e
   assert.ok(first.diagnostics.graphEmbeddingsComputed > 0);
   assert.equal(first.diagnostics.candidateEmbeddingsComputed, 2);
 
+  assert.ok(work.semantic_graph_matches.length > 0);
+  assert.ok(work.semantic_graph_matches.length <= 3);
+  assert.equal(
+    work.semantic_graph_matches.some((match) => match.node_id === 'objective:build'),
+    true,
+  );
+
   const callsAfterFirst = provider.calls;
   const second = await enrichCandidatesWithSemanticReranking(
     state,
