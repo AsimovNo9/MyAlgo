@@ -4,20 +4,20 @@ import assert from 'node:assert/strict';
 import {
   acquireWebSearchCandidates,
   buildWebSearchRequest,
-  buildYoutubeRssFeedUrl,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
-  needsYoutubeMetadataRefresh,
   nextRssAllowedAt,
   nextWebSearchAllowedAt,
-  parseYoutubeRssFeed,
-  selectRssChannelIds,
   shouldRefreshObservedCandidate,
 } from './retrieval.ts';
 import {
+  buildYoutubeRssFeedUrl,
   createYoutubeSearchPageProvider,
   enrichYoutubeCandidate,
+  needsYoutubeMetadataRefresh,
+  parseYoutubeRssFeed,
   parseYoutubeSearchResultsHtml,
+  selectYoutubeRssChannelIds,
 } from '../connectors/youtube-acquisition.ts';
 
 test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS provenance', () => {
@@ -61,7 +61,7 @@ test('parseYoutubeRssFeed normalizes bounded candidates with source-neutral RSS 
 
 test('selectRssChannelIds deduplicates and prefers recently enriched channels', () => {
   assert.deepEqual(
-    selectRssChannelIds([
+    selectYoutubeRssChannelIds([
       { channel_id: 'older', enrichedAt: '2026-09-24T00:00:00.000Z' },
       { channel_id: 'newer', enrichedAt: '2026-09-26T00:00:00.000Z' },
       { channel_id: 'older', enrichedAt: '2026-09-25T00:00:00.000Z' },
