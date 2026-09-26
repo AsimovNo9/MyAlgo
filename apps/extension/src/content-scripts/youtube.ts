@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import { extractYouTubeChannelIdFromWatchHtml } from './youtube-dom';
@@ -590,6 +590,59 @@ const applyRankedFeed = () => {
     }
     badge.textContent = `MyAlgo · ${activeMode} · ${score}`;
   });
+
+  // If policy/score filtering did not naturally create enough replacement
+  // slots, allow a bounded swap only when a distinct reservoir candidate scores
+  // higher than a currently visible native card. Never hide a card unless an
+  // actual replacement candidate is already available.
+  const existingReplacementSlots = knownElements.filter((element) => Boolean(
+    element.dataset.personalAlgorithmSlotId
+    && element.style.getPropertyValue('display') === 'none',
+  )).length;
+  const remainingReplacementCapacity = Math.max(
+    0,
+    youtubeConnector.presentation.replacementLimit - existingReplacementSlots,
+  );
+
+  if (remainingReplacementCapacity > 0) {
+    const nativeIds = new Set(
+      knownElements.map(getVideoId).filter((id) => id && !id.startsWith('title:')),
+    );
+    const replacementCandidates = getReplacementCandidates(
+      cachedFeed,
+      nativeIds,
+      remainingReplacementCapacity,
+      youtubeConnector.presentation.replacementMinimumScore,
+    );
+    const nativeTargets = knownElements.flatMap((element, nativeIndex) => {
+      if (element.style.getPropertyValue('display') === 'none') return [];
+      const id = getVideoId(element);
+      const score = Number(element.dataset.personalAlgorithmScore);
+      if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
+      return [{ externalId: id, score, nativeIndex }];
+    });
+    const selectedTargets = selectOpportunisticReplacementTargets(
+      nativeTargets,
+      replacementCandidates,
+      remainingReplacementCapacity,
+    );
+
+    for (const selected of selectedTargets) {
+      const element = knownElements[selected.nativeIndex];
+      if (!element?.parentElement || element.style.getPropertyValue('display') === 'none') continue;
+      const slotWidth = element.getBoundingClientRect().width;
+      if (slotWidth < 120) continue;
+      element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
+        rankGeneration,
+        getRouteKey(),
+        selected.nativeIndex,
+        selected.externalId,
+      );
+      element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      element.style.setProperty('display', 'none', 'important');
+      element.dataset.personalAlgorithmScore = 'replacement_slot';
+    }
+  }
 
   syncSourceFilteredContainers();
 
