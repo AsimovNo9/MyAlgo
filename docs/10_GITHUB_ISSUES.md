@@ -4,16 +4,17 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-This is the authoritative near-term order after PR #212. Historical P-labels in issue titles are retained for continuity.
+PR #212 is merged. The acquisition layer is no longer the main product bottleneck; semantic classification and reranking are.
 
-1. **Finish and live-validate PR #212 / #206 / #211** — confirm search-origin candidates survive search isolation, enrichment, scoring, and bounded exploration into the native feed; confirm badges/replacements remain responsive during search and long-session retention caps hold.
-2. **#210 — finish deterministic candidate quality and replacement presentation** — close remaining score-resolution/presentation gaps exposed by live search promotion, without giving acquisition provenance preference weight.
-3. **#170 + #153 — graph provenance visualization and complete per-item “Why this?”** — make exact graph paths, evidence provenance, and trace contributions inspectable/actionable.
-4. **#162 — replay/evaluation baseline** — establish reproducible quality/performance fixtures before adding semantic models.
-5. **#209 — local text embeddings** — add rebuildable semantic candidate↔goal/topic matching and bounded retrieval expansion; keep multimodal inference deferred until measured text-only ambiguity justifies it.
-6. **#154 + #155 + #178 — correction/Forget/history-cluster controls** — give users direct control over what evidence and graph regions influence ranking.
-7. **#169 + #161 + #158 + #159** — finish offline/signed-out runtime validation, mode semantics, explicit graph creation/editing, and counterfactual replay.
-8. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and a second connector.
+1. **#209 + #210 — semantic mode reranking**: add a compact local text-embedding encoder, candidate↔graph semantic similarity, candidate↔mode semantic similarity, and deterministic traceable reranking. Modes become semantic lenses over one Personal Algorithm Graph rather than fixed presentation labels.
+2. **#170 + #153 — graph provenance and full Why-this UX**: expose the semantic/symbolic path and exact contributions behind each decision.
+3. **#162 — replay/evaluation baseline**: establish reproducible ranking fixtures and metrics for semantic model/scorer changes.
+4. **#154 + #155 + #178 — correction, Forget/provenance, and history-cluster controls**.
+5. **#169 + #161 + #158 + #159 — remaining runtime validation, mode editing, graph editing, and counterfactual replay**.
+6. **#163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector**.
+
+Multimodal inference remains deferred. Text embeddings are the next model layer because the observed failure is insufficient semantic ranking resolution, not missing thumbnail/video understanding.
+
 
 ### Current handoff state
 
