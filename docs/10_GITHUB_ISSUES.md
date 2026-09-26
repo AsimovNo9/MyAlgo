@@ -142,9 +142,26 @@ Those remain downstream work. The next graph-layer work should build semantic en
 
 PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
 
-### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime — **next P1**
+### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime — **runtime scoring slice completed in PR #195**
 
-Primary implementation boundary after #148 and #151: construct an explicit policy from local graph/user controls and wire candidate observation, scoring, trace creation, and local/offline decisions into the extension runtime. Raw watched evidence must not be treated as an unconditional preference; the legacy/server-ranked path remains behind an explicit migration boundary.
+PR #195 completes the first runtime integration slice of #169 and has passed CI plus real-browser validation.
+
+Completed in the #195 slice:
+
+- persisted Personal Algorithm Graph wired into the extension background RANK_PAGE path;
+- explicit versioned local scoring policy;
+- deterministic additive scorer and trace consumed by the extension runtime;
+- local candidate eligibility/source filters;
+- explicit feedback replay from personal-algorithm-local-events;
+- repeated feedback reconciliation to the latest effective state per content item;
+- never_show_channel creator matching through persisted graph relationships;
+- compact local score/trace persistence;
+- focused runtime tests plus full CI validation;
+- live YouTube Home-feed validation of Not interested persistence and subsequent score consumption (kDqb9IzhxjE, trace score -9).
+
+Remaining work is tracked separately where needed: broader candidate coverage/feed enforcement, safe replacement behavior, trust UX, richer user policy controls, and any future feedback undo/reversal semantics. The #195 slice does not claim to control YouTube's underlying recommender.
+
+After PR #195 merges, re-review the current documentation and implementation together and create/adjust follow-up issues based on the actual remaining gaps.
 
 ### [#151](https://github.com/AsimovNo9/MyAlgo/issues/151): Implement deterministic additive scoring and reproducible trace — **completed in PR #193**
 

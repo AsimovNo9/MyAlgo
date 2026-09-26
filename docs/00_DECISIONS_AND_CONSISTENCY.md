@@ -116,6 +116,23 @@ Understanding candidates is not the same as generating candidates.
 
 The system must measure candidate coverage independently from classification quality.
 
+## 9a. Explicit feedback in the local runtime
+
+Explicit feedback is a first-class local scoring input, separate from inferred preference.
+
+For MVP YouTube feedback:
+
+- feedback events are persisted locally in the extension event store;
+- repeated feedback for the same content item is reconciled to the latest effective event before scoring;
+- more_like_this contributes +10;
+- not_interested contributes -10;
+- never_show_channel contributes -100 and resolves to the persisted creator node when the content-to-creator relationship is available;
+- feedback is applied as an additive scoring contribution, not as a claim about YouTube's internal recommendation system.
+
+PR #195 validated the end-to-end not_interested path in a real browser: a Home-feed action for kDqb9IzhxjE persisted as local feedback and was subsequently consumed by the local scorer, producing a trace score of -9 from a +1 candidate contribution plus -10 feedback.
+
+Undo/reversal semantics are intentionally outside the #195 MVP acceptance boundary and require an explicit event/state design before implementation.
+
 ## 10. Status language
 
 Use:

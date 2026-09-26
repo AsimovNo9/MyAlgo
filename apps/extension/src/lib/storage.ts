@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   HOME_METRICS: 'personal-algorithm-home-metrics',
   SELECTION_EVENTS: 'personal-algorithm-selection-events',
   PERSONAL_ALGORITHM_STATE: 'personal-algorithm-state',
+  PERSONAL_ALGORITHM_LOCAL_TRACES: 'personal-algorithm-local-traces',
 } as const;
 
 export async function getStorage<T>(key: string, fallback: T): Promise<T> {

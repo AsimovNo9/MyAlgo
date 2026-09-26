@@ -350,13 +350,23 @@ const getVideoElements = () => {
   return Array.from(new Set([...knownElements, ...linkElements]));
 };
 
+const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
+  const path = location.pathname.toLowerCase();
+  if (path === '/feed/subscriptions') return 'subscription';
+  if (path === '/playlist' && new URLSearchParams(location.search).get('list') === 'LL') return 'liked';
+  if (path === '/' || path === '/results' || path === '/watch' || path.startsWith('/shorts')) return 'discovery';
+  return null;
+};
+
 const collectCandidates = () => {
+  const sourceKind = getPageSourceKind();
   const cardCandidates = getVideoElements()
     .map((element) => ({
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
       thumbnail_url: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
+      source_kind: sourceKind,
       ...getVideoSourceFlags(element),
     }))
     .filter((candidate) => candidate.title)
@@ -372,6 +382,7 @@ const collectCandidates = () => {
         textContent: link.textContent,
       })),
       channel_name: '',
+      source_kind: sourceKind,
       ...youtubeConnector.getSourceFlags(link.href),
     }))
     .filter((candidate) => candidate.external_id && candidate.title);
@@ -835,24 +846,80 @@ const attachTemporalWatchObserver = () => {
   video.addEventListener('ended', onEnded);
 };
 
+const FEEDBACK_CONTEXT_MAX_AGE_MS = 5000;
+
+let pendingFeedbackContext: { contentItemId: string; openedAt: number } | null = null;
+
+const getFeedbackEventType = (element: Element) => {
+  const label = normalizeText(
+    element.textContent
+      ?? element.getAttribute('aria-label')
+      ?? element.getAttribute('title')
+      ?? '',
+  );
+  if (label.includes('more like this')) return 'more_like_this';
+  if (label.includes('never show')) return 'never_show_channel';
+  if (label.includes('not interested')) return 'not_interested';
+  return null;
+};
+
+const getMoreActionsTrigger = (target: Element) => {
+  const candidate = target.closest(
+    'button, yt-icon-button, tp-yt-paper-icon-button, ytd-menu-renderer, #button',
+  );
+  if (!candidate) return null;
+
+  const label = normalizeText(
+    candidate.getAttribute('aria-label')
+      ?? candidate.getAttribute('title')
+      ?? candidate.textContent
+      ?? '',
+  );
+
+  return label.includes('more actions') || label === 'more' || label.includes('options')
+    ? candidate
+    : null;
+};
+
 const registerFeedbackHandlers = () => {
-  const buttons = Array.from(document.querySelectorAll('button, ytd-menu-service-item-renderer')) as HTMLElement[];
+  if (!isCurrentInstance()) return;
 
-  buttons.forEach((button) => {
-    const label = button.textContent?.toLowerCase() ?? '';
-    if (!label.includes('not interested') && !label.includes('more like this') && !label.includes('never show')) return;
+  document.addEventListener('click', (event) => {
+    if (!isCurrentInstance() || !extensionEnabled) return;
 
-    button.addEventListener('click', () => {
-      const card = button.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer') as HTMLElement | null;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const trigger = getMoreActionsTrigger(target);
+    if (trigger) {
+      const card = trigger.closest(
+        'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer',
+      ) as HTMLElement | null;
       const contentItemId = card ? getVideoId(card) : '';
-      const eventType = label.includes('more like this') ? 'more_like_this' : label.includes('never show') ? 'never_show_channel' : 'not_interested';
+      if (contentItemId && !contentItemId.startsWith('title:')) {
+        pendingFeedbackContext = {
+          contentItemId,
+          openedAt: Date.now(),
+        };
+      }
+      return;
+    }
 
-      safeSendMessage({
-        type: 'FEEDBACK',
-        payload: { contentItemId, eventType },
-      });
-    }, { once: true });
-  });
+    const eventType = getFeedbackEventType(target);
+    if (!eventType) return;
+
+    const context = pendingFeedbackContext;
+    pendingFeedbackContext = null;
+    if (!context || Date.now() - context.openedAt > FEEDBACK_CONTEXT_MAX_AGE_MS) return;
+
+    safeSendMessage({
+      type: EXTENSION_MESSAGE_TYPES.FEEDBACK,
+      payload: {
+        contentItemId: context.contentItemId,
+        eventType,
+      },
+    });
+  }, true);
 };
 
 registerFeedbackHandlers();

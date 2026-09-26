@@ -8,12 +8,13 @@
     "build": "vite build",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/content-scripts/youtube-dom.test.mjs src/content-scripts/youtube-watch.test.mjs src/content-scripts/youtube-evidence-contract.test.mjs src/content-scripts/evidence-correlation.test.mjs src/manifest.test.mjs src/lib/storage.test.mjs src/lib/personal-algorithm-store.test.mjs src/lib/extension-helpers.test.mjs"
+    "test": "node --experimental-strip-types --test src/content-scripts/youtube-dom.test.mjs src/content-scripts/youtube-ux.test.mjs src/background/personal-algorithm-runtime.test.mjs src/content-scripts/youtube-watch.test.mjs src/content-scripts/youtube-evidence-contract.test.mjs src/content-scripts/evidence-correlation.test.mjs src/manifest.test.mjs src/lib/storage.test.mjs src/lib/personal-algorithm-store.test.mjs src/lib/extension-helpers.test.mjs"
   },
   "dependencies": {
     "@repo/shared-types": "workspace:*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@repo/recommender-core": "workspace:*"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",
