@@ -46,12 +46,20 @@ type CandidatePoolItem = PageCandidate & {
 
 type LocalFeedItem = CandidatePoolItem & {
   id: string;
+  rawScore: number;
   score: number;
   visible: boolean;
   suppressed: boolean;
   policyOutcome: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
   source_kind: 'subscription' | 'discovery' | 'liked' | null;
   traceId: string;
+  explanation?: {
+    rawScore: number;
+    displayScore: number;
+    graphRevision: number;
+    acquisitionMechanism: string | null;
+    contributions: Array<{ label: string; value: number; kind: string }>;
+  };
 };
 
 const MAX_CANDIDATE_POOL_SIZE = 5000;
@@ -467,13 +475,38 @@ async function rankLocalCandidates(
   }));
   await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, MAX_FEED_CACHE_SIZE));
 
-  return ranked.map(({ trace, ...item }) => ({
-    ...item,
-    suppressed: trace.suppressed,
-    policyOutcome: trace.policyOutcome,
-    source_kind: item.source_kind ?? null,
-    traceId: trace.id,
-  }));
+  return ranked.map(({ trace, ...item }) => {
+    const contributions = [
+      ...trace.featureContributions,
+      ...trace.nodeContributions,
+      ...trace.edgeContributions,
+      ...trace.feedbackContributions,
+      ...trace.modeContributions,
+    ]
+      .filter((contribution) => contribution.value !== 0)
+      .sort((left, right) => Math.abs(right.value) - Math.abs(left.value) || left.label.localeCompare(right.label))
+      .slice(0, 5)
+      .map((contribution) => ({
+        label: contribution.label,
+        value: contribution.value,
+        kind: contribution.kind,
+      }));
+
+    return {
+      ...item,
+      suppressed: trace.suppressed,
+      policyOutcome: trace.policyOutcome,
+      source_kind: item.source_kind ?? null,
+      traceId: trace.id,
+      explanation: {
+        rawScore: trace.finalScore,
+        displayScore: item.score,
+        graphRevision: trace.graphRevision,
+        acquisitionMechanism: item.provenance?.mechanism ?? null,
+        contributions,
+      },
+    };
+  });
 }
 
 async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', payload: unknown): Promise<void> {
