@@ -36,6 +36,32 @@ export function buildWebSearchRequest(
   };
 }
 
+export function mergeCandidateAcquisitionHistory(
+  existing: CandidateAcquisitionProvenance[] | undefined,
+  incoming: CandidateAcquisitionProvenance,
+  limit = 12,
+): CandidateAcquisitionProvenance[] {
+  const key = (item: CandidateAcquisitionProvenance) => JSON.stringify([
+    item.connector,
+    item.mechanism,
+    item.query ?? null,
+    item.query_lane ?? null,
+    item.graph_revision ?? null,
+    item.source_url ?? null,
+  ]);
+  const byKey = new Map<string, CandidateAcquisitionProvenance>();
+  for (const item of [...(existing ?? []), incoming]) {
+    const identity = key(item);
+    const previous = byKey.get(identity);
+    if (!previous || previous.acquired_at.localeCompare(item.acquired_at) < 0) {
+      byKey.set(identity, item);
+    }
+  }
+  return [...byKey.values()]
+    .sort((left, right) => right.acquired_at.localeCompare(left.acquired_at))
+    .slice(0, Math.max(1, limit));
+}
+
 export function shouldRefreshObservedCandidate(
   lastSeenAt: string | null | undefined,
   nowMs: number,
