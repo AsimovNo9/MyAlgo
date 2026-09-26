@@ -42,7 +42,7 @@ export const youtubeConnector: PageProviderConnector = {
   videoLinkSelector,
   presentation: {
     candidateLimit: 1000,
-    minimumVisibleScore: 52,
+    minimumVisibleScore: 0,
     shelfBatchSize: 6,
     shelfDomLimit: 18,
     horizontalAspectRatio: '16 / 9',
