@@ -41,6 +41,7 @@ test('extractYouTubeWatchMetadataFromHtml reads embedded player metadata like a 
     keywords: ['systems', 'distributed'],
     category: 'Education',
     isLive: false,
+    viewCount: null,
   });
 });
 
