@@ -353,7 +353,8 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     nodeSimilarities,
     { minimumSimilarity: options.minimumModeNodeSimilarity ?? 0.2 },
   );
-  modeProfile.model_version = provider.modelVersion;
+  const semanticModelVersion = `${provider.modelId}@${provider.modelVersion}`;
+  modeProfile.model_version = semanticModelVersion;
 
   const graphCentroid = weightedEmbeddingCentroid(
     eligibleGraphNodes.map((node) => ({
@@ -386,7 +387,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       semantic_similarity: positiveSimilarity(embedding, graphCentroid),
       semantic_graph_similarity: positiveSimilarity(embedding, graphCentroid),
       semantic_mode_similarity: positiveSimilarity(embedding, modeCentroid),
-      semantic_model_version: provider.modelVersion,
+      semantic_model_version: semanticModelVersion,
     };
   }) as T[];
 
