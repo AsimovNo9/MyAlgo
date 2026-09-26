@@ -921,6 +921,33 @@ export function buildAlgorithmIntentProfile(algorithm?: Algorithm | null, catalo
   };
 }
 
+function stableRetrievalHash(value: unknown): string {
+  const source = JSON.stringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function buildGraphRetrievalRevision(state: PersonalAlgorithmState): string {
+  const nodes = state.graph.nodes
+    .filter((node) => ['topic', 'concept', 'objective', 'creator'].includes(node.kind))
+    .map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      label: node.label,
+      provenance: node.provenance,
+      confidence: node.confidence,
+      format: typeof node.attributes?.format === 'string' ? node.attributes.format : null,
+      language: typeof node.attributes?.language === 'string' ? node.attributes.language : null,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  return `graph-${state.schemaVersion}-${stableRetrievalHash(nodes)}`;
+}
+
 export function buildGraphRetrievalProfile(
   state: PersonalAlgorithmState,
   options: {
