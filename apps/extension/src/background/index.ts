@@ -11,9 +11,9 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createSearxngWebSearchProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
@@ -79,6 +79,8 @@ const MAX_RANK_WORKING_SET = 320;
 const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
+  webSearchEnabled: false,
+  webSearchEndpoint: null,
 };
 const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastRssSyncAt: null,
@@ -90,6 +92,14 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   rssCandidatesAdded: 0,
   rssCandidatesDeduplicated: 0,
   rssConsecutiveFailures: 0,
+  lastWebSearchAt: null,
+  nextWebSearchAllowedAt: null,
+  webSearchPlansAttempted: 0,
+  webSearchPlansSucceeded: 0,
+  webSearchCandidatesFetched: 0,
+  webSearchCandidatesAdded: 0,
+  webSearchCandidatesDeduplicated: 0,
+  webSearchConsecutiveFailures: 0,
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
@@ -446,6 +456,123 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     added: diagnostics.rssCandidatesAdded,
     deduplicated: diagnostics.rssCandidatesDeduplicated,
   });
+  return { diagnostics, changed: addedCount > 0 };
+}
+
+
+async function refreshWebSearchCandidates(
+  force = false,
+  modeOverride?: string,
+): Promise<{ diagnostics: RetrievalDiagnostics; changed: boolean }> {
+  const settings = await getStorage<RetrievalSettings>(
+    STORAGE_KEYS.RETRIEVAL_SETTINGS,
+    DEFAULT_RETRIEVAL_SETTINGS,
+  );
+  const previous = await getStorage<RetrievalDiagnostics>(
+    STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+    EMPTY_RETRIEVAL_DIAGNOSTICS,
+  );
+  const nowMs = Date.now();
+
+  if (!settings.webSearchEnabled) return { diagnostics: previous, changed: false };
+  if (!force && !isRetrievalAllowed(previous.nextWebSearchAllowedAt, nowMs)) {
+    return { diagnostics: previous, changed: false };
+  }
+
+  const endpoint = normalizeWebSearchEndpoint(settings.webSearchEndpoint);
+  if (!endpoint) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: null,
+      lastError: 'Web search is enabled but no valid HTTPS SearXNG endpoint is configured.',
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const state = await personalAlgorithmStore.exportState();
+  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Work');
+  const baseProfile = buildGraphRetrievalProfile(state);
+  const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
+  const retrievalRevision = buildGraphRetrievalRevision(state);
+  const plans = buildRecommendationQueryPlans(
+    profile,
+    8,
+    `${retrievalRevision}:mode-${storedMode.toLowerCase()}`,
+    [],
+    [],
+    true,
+  ).slice(0, 4);
+
+  if (plans.length === 0) {
+    const diagnostics = {
+      ...previous,
+      lastWebSearchAt: new Date(nowMs).toISOString(),
+      nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, 0),
+      webSearchPlansAttempted: 0,
+      webSearchPlansSucceeded: 0,
+      webSearchCandidatesFetched: 0,
+      webSearchCandidatesAdded: 0,
+      webSearchCandidatesDeduplicated: 0,
+      webSearchConsecutiveFailures: 0,
+      lastError: null,
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return { diagnostics, changed: false };
+  }
+
+  const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+  const existingIds = new Set(existingPool.map((item) => item.external_id));
+  const acquiredAt = new Date(nowMs).toISOString();
+  const provider = createSearxngWebSearchProvider(endpoint);
+
+  let candidates: PageCandidate[] = [];
+  let succeeded = 0;
+  let failureMessage: string | null = null;
+  try {
+    candidates = await acquireWebSearchCandidates(provider, plans, acquiredAt, plans.length, 8);
+    succeeded = plans.length;
+  } catch (error) {
+    failureMessage = error instanceof Error ? error.message : 'Web search failed.';
+  }
+
+  const unique = [...new Map(candidates.map((item) => [item.external_id, item])).values()];
+  const addedCount = unique.filter((item) => !existingIds.has(item.external_id)).length;
+  if (unique.length > 0) {
+    await mergeCandidatePool(unique);
+    // Search snippets are discovery-only metadata. Canonical YouTube watch-page
+    // enrichment supplies the richer metadata used by classification/scoring.
+    await enrichVideos(unique.slice(0, 18));
+  }
+
+  const failed = Math.max(0, plans.length - succeeded);
+  const consecutiveFailures = plans.length > 0 && succeeded === 0
+    ? (previous.webSearchConsecutiveFailures ?? 0) + 1
+    : 0;
+  const diagnostics: RetrievalDiagnostics = {
+    ...previous,
+    lastWebSearchAt: acquiredAt,
+    nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, consecutiveFailures),
+    webSearchPlansAttempted: plans.length,
+    webSearchPlansSucceeded: succeeded,
+    webSearchCandidatesFetched: unique.length,
+    webSearchCandidatesAdded: addedCount,
+    webSearchCandidatesDeduplicated: Math.max(0, candidates.length - unique.length)
+      + unique.filter((item) => existingIds.has(item.external_id)).length,
+    webSearchConsecutiveFailures: consecutiveFailures,
+    lastError: failureMessage,
+  };
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+
+  console.info('[MyAlgo] web-search refresh', {
+    mode: storedMode,
+    plans: plans.length,
+    fetched: unique.length,
+    added: addedCount,
+    failed,
+  });
+
   return { diagnostics, changed: addedCount > 0 };
 }
 
