@@ -35,11 +35,8 @@ export function getContentPresentationLabel(
   minimumConfidence = 0.75,
 ): string | null {
   const confidence = Number(item.content_label_confidence ?? 0);
-  if (!item.content_label || confidence < minimumConfidence) return null;
-  if (item.content_label === 'learning') return 'Learning';
-  if (item.content_label === 'work') return 'Work';
-  if (item.content_label === 'relax') return 'Relax';
-  return null;
+  if (item.content_label !== 'learning' || confidence < minimumConfidence) return null;
+  return 'Learning';
 }
 
 export const MYALGO_INJECTED_SELECTOR = [
