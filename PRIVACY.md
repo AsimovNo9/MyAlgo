@@ -15,7 +15,7 @@ When the current in-product privacy disclosure has been accepted and MyAlgo is e
 - playback-derived watch evidence, including bounded playback metrics used to determine a watched observation;
 - selections and explicit feedback such as Not interested / More like this;
 - derived local Personal Algorithm Graph nodes and relationships;
-- local scoring results, compact trace metadata, settings, and feed-control state;
+- local scoring results, compact trace metadata, rebuildable semantic embeddings/similarity features, settings, and feed-control state;
 - when the user enables RSS discovery, recently observed YouTube channel IDs and the resulting bounded YouTube RSS candidate metadata/provenance;
 - when the user enables web discovery, bounded query terms derived from graph goals/topics and the active mode, plus resulting YouTube video IDs/titles/snippets parsed from YouTube search pages.
 
@@ -29,13 +29,13 @@ A YouTube item being surfaced is contextual evidence; it is not automatically tr
 
 ## Storage and retention
 
-The MVP stores its Personal Algorithm state in `chrome.storage.local`, which is extension-specific browser storage. Some operational compatibility stores are bounded (for example candidate, metadata, event, and trace caches). Evidence and graph state may persist locally until the user deletes it, resets MyAlgo, or a future version applies an explicitly documented retention rule.
+The MVP stores its Personal Algorithm state in `chrome.storage.local`, which is extension-specific browser storage. Operational stores are bounded, including candidate/metadata/event/trace caches and derived semantic embedding/similarity caches. Embeddings are recomputable derived data keyed by model/version/input identity; they are not canonical graph/evidence truth. Evidence and graph state may persist locally until the user deletes it, resets MyAlgo, or a future version applies an explicitly documented retention rule.
 
 Because Chrome extension storage can persist independently of ordinary browser cache/history clearing, users should use MyAlgo's **Delete all local MyAlgo data** control when they want the extension's retained state removed.
 
 ## Data sharing and transfer
 
-The local-only MVP does **not** send observed YouTube activity, evidence records, Personal Algorithm Graph state, feedback records, or scoring traces to a MyAlgo-operated backend or to advertising/data-broker services.
+The local-only MVP does **not** send observed YouTube activity, evidence records, Personal Algorithm Graph state, derived embedding vectors/similarity features, feedback records, or scoring traces to a MyAlgo-operated backend or to advertising/data-broker services.
 
 The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. When the user explicitly enables RSS discovery, MyAlgo also requests bounded YouTube channel RSS feeds using channel IDs already observed from YouTube metadata. RSS requests do not contain the Personal Algorithm Graph, raw watch-history rows, feedback records, or scoring traces.
 
