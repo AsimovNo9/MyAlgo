@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  acquireWebSearchCandidates,
   buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
   isRetrievalAllowed,
@@ -149,4 +150,30 @@ test('web-search results become YouTube candidates that can be watch-page enrich
   assert.equal(candidates[0].provenance?.query, plan.text);
   assert.equal(candidates[0].provenance?.graph_revision, plan.algorithmRevision);
   assert.equal(candidates[0].description, 'Search snippet');
+});
+
+
+test('web-search acquisition is bounded, deduplicated, and returns enrichable YouTube IDs', async () => {
+  const calls = [];
+  const provider = {
+    id: 'fixture-search',
+    async search(request) {
+      calls.push(request);
+      return [
+        { url: 'https://www.youtube.com/watch?v=shared-video', title: 'Shared' },
+        { url: `https://www.youtube.com/watch?v=${request.lane}-video`, title: 'Lane result' },
+      ];
+    },
+  };
+  const plans = [
+    { text: 'goal q', lane: 'goal', topics: [], algorithmRevision: 'graph-x' },
+    { text: 'topic q', lane: 'topic', topics: ['x'], algorithmRevision: 'graph-x' },
+    { text: 'creator q', lane: 'creator', topics: [], algorithmRevision: 'graph-x' },
+  ];
+  const candidates = await acquireWebSearchCandidates(provider, plans, '2026-09-26T18:10:00.000Z', 2, 5);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls.every((call) => call.limit === 5), true);
+  assert.deepEqual(candidates.map((item) => item.external_id).sort(), ['goal-video', 'shared-video', 'topic-video']);
+  assert.equal(candidates.every((item) => item.provenance?.mechanism === 'web_search'), true);
 });
