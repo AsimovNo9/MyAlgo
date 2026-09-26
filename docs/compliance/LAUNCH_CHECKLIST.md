@@ -2,18 +2,18 @@
 
 ## P0 — Data-boundary validation
 
-- [ ] Watch-history DOM spike completed
-- [ ] Sufficient bootstrap evidence demonstrated
-- [ ] Live-feed observation validated
-- [ ] MyAlgo-injected cards excluded from observation
-- [ ] Local graph storage validated
-- [ ] Reset/delete behavior validated in a clean browser profile
+- [x] Watch-history DOM spike completed (#156)
+- [x] Sufficient bootstrap evidence demonstrated
+- [x] Live-feed observation validated (#150/#174/#183)
+- [x] MyAlgo-injected cards excluded from behavioral observation paths
+- [x] Local graph storage and deterministic rebuild validated (#148/#198)
+- [x] Reset/delete behavior validated in a clean browser profile (#167/#199)
 - [ ] YouTube API confirmed display/account-facts-only in code review
 
 ## P1 — Product
 
 - [ ] Graph visualization works
-- [ ] Additive scorer has reproducible traces
+- [x] Additive scorer has reproducible traces (#151/#193)
 - [ ] Native feed enforcement works
 - [ ] “Why am I seeing this?” works
 - [ ] Reduce/mute/prefer actions work
@@ -27,11 +27,12 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Clean-profile browser test proves no observation before acceptance and deletion disables observation
+- [x] Clean-profile browser test proves no observation before acceptance and deletion disables observation
 - [ ] YouTube API policy review completed (#168)
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
-- [ ] CI built-artifact secret scan passes and final package receives manual endpoint/credential review
+- [x] CI built-artifact secret scan passes
+- [ ] Final release package receives manual endpoint/credential review
 
 ## P3 — Quality
 
