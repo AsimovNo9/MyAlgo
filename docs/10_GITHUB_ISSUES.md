@@ -4,7 +4,7 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #206 + #202 — source-neutral RSS/web-search candidate acquisition and retrieval provenance cleanup.
+1. #206 + #202 + #210 — source-neutral acquisition plus richer deterministic candidate scoring/calibration and replacement presentation hardening.
 2. #170 + #153 — graph provenance/visualization and per-item trace explanation.
 3. #162 — replay/evaluation baselines before richer enrichment.
 4. #209 — rebuildable local semantic embeddings for graph/retrieval/scoring/explanations.
@@ -263,7 +263,7 @@ Treat embeddings as replaceable derived enrichment around the canonical Personal
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **next active task**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS implemented in PR #208; web search remains planned**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
