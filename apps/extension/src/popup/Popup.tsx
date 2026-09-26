@@ -2,7 +2,6 @@ import React from 'react';
 import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
 import type { FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { STORAGE_KEYS } from '../lib/storage';
 
 const defaultSourceFilters: FeedSourceFilters = {
   subscribedOnly: false,
@@ -15,8 +14,6 @@ const defaultSourceFilters: FeedSourceFilters = {
 const defaultRetrievalSettings: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
-  webSearchEndpoint: 'https://priv.au',
-  webSearchProvider: 'privau',
 };
 
 const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
@@ -142,47 +139,10 @@ export function Popup() {
   };
 
   const handleWebSearchChange = async (webSearchEnabled: boolean) => {
-    const provider = retrievalSettings.webSearchProvider ?? 'privau';
-    const endpointValue = provider === 'privau'
-      ? 'https://priv.au'
-      : retrievalSettings.webSearchEndpoint ?? '';
-
-    let endpoint: URL;
-    try {
-      endpoint = new URL(endpointValue);
-      if (endpoint.protocol !== 'https:') throw new Error('HTTPS required');
-    } catch {
-      setLastError('Configure a valid HTTPS search endpoint in Advanced settings.');
-      return;
-    }
-
-    if (webSearchEnabled && provider === 'privau') {
-      const keyResult = await chrome.storage.local.get([STORAGE_KEYS.WEB_SEARCH_API_KEY]);
-      const apiKey = String(keyResult[STORAGE_KEYS.WEB_SEARCH_API_KEY] ?? '').trim();
-      if (!apiKey) {
-        setLastError('PrivAU requires an API key. Add it in Advanced settings first.');
-        return;
-      }
-    }
-
-    const originPattern = `${endpoint.origin}/*`;
-    if (webSearchEnabled) {
-      const granted = await chrome.permissions.request({ origins: [originPattern] });
-      if (!granted) {
-        setLastError('Search-provider access was not granted.');
-        return;
-      }
-    }
-
-    const updated = await updateRetrievalSettings({
+    await updateRetrievalSettings({
       ...retrievalSettings,
       webSearchEnabled,
-      webSearchEndpoint: endpoint.origin + endpoint.pathname.replace(/\/$/, ''),
-      webSearchProvider: provider,
     });
-    if (updated && !webSearchEnabled) {
-      await chrome.permissions.remove({ origins: [originPattern] });
-    }
   };
 
   const handleRefreshRetrieval = async () => {
@@ -305,14 +265,11 @@ export function Popup() {
             /> Enable web discovery
           </label>
           <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
-            Uses PrivAU by default. MyAlgo automatically searches from your graph goal/topics plus the active mode; there is no search box. Returned YouTube URLs are enriched from YouTube before local scoring.
+            MyAlgo automatically searches YouTube from your graph goal/topics plus the active mode; there is no search box. Returned video IDs are passed through the normal YouTube enrichment layer before local scoring.
           </p>
           <p style={{ margin: '6px 0 0', fontSize: 12 }}>
             Search: {retrievalDiagnostics.webSearchCandidatesAdded ?? 0} added · {retrievalDiagnostics.webSearchCandidatesDeduplicated ?? 0} deduplicated · {retrievalDiagnostics.webSearchPlansSucceeded ?? 0}/{retrievalDiagnostics.webSearchPlansAttempted ?? 0} plans succeeded
           </p>
-          <button type="button" onClick={() => void handleOpenOptions()} style={{ marginTop: 8 }}>
-            Advanced search settings
-          </button>
         </div>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
