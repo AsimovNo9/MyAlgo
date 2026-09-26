@@ -21,6 +21,56 @@ export type WebSearchResult = {
   thumbnailUrl?: string | null;
 };
 
+function youtubeVideoIdFromUrl(urlValue: string): string | null {
+  try {
+    const url = new URL(urlValue, 'https://www.youtube.com');
+    const host = url.hostname.toLowerCase();
+    const isYouTube = host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+    if (!isYouTube) return null;
+    const queryId = url.searchParams.get('v');
+    if (queryId && url.pathname === '/watch') return queryId;
+    if (host === 'youtu.be') return url.pathname.slice(1).split('/')[0] || null;
+    return url.pathname.match(/\/(?:shorts|live|embed)\/([^/?]+)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeWebSearchResultsToYoutubeCandidates(
+  results: WebSearchResult[],
+  plan: RecommendationQueryPlan,
+  acquiredAt: string,
+): RecommendationCandidate[] {
+  const seen = new Set<string>();
+  const candidates: RecommendationCandidate[] = [];
+
+  for (const result of results) {
+    const externalId = youtubeVideoIdFromUrl(result.url);
+    if (!externalId || seen.has(externalId)) continue;
+    seen.add(externalId);
+    candidates.push({
+      external_id: externalId,
+      title: result.title?.trim() || 'YouTube video',
+      description: result.snippet?.trim() || null,
+      thumbnail_url: result.thumbnailUrl?.trim() || null,
+      published_at: result.publishedAt?.trim() || null,
+      source_kind: 'discovery',
+      provenance: {
+        connector: 'youtube',
+        mechanism: 'web_search',
+        query: plan.text,
+        query_lane: plan.lane,
+        query_topics: [...plan.topics],
+        acquired_at: acquiredAt,
+        graph_revision: plan.algorithmRevision,
+        source_url: result.url,
+      },
+    });
+  }
+
+  return candidates;
+}
+
 export interface WebSearchProvider {
   readonly id: string;
   search(request: WebSearchRequest): Promise<WebSearchResult[]>;
