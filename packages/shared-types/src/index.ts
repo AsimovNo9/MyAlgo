@@ -260,6 +260,7 @@ export interface RecommendationCandidate {
   language?: string | null;
   format?: string | null;
   provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
   is_short?: boolean;
   is_live?: boolean;
   subscription_affinity?: number;
