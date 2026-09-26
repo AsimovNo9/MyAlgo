@@ -228,8 +228,6 @@ export type CandidateProvenance = CandidateAcquisitionProvenance;
 export interface RetrievalSettings {
   rssEnabled: boolean;
   webSearchEnabled?: boolean;
-  webSearchEndpoint?: string | null;
-  webSearchProvider?: 'privau' | 'custom_searxng';
 }
 
 export interface RetrievalDiagnostics {
