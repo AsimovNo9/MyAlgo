@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -126,6 +126,7 @@ const clearExtensionPresentation = (showPaused = true) => {
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
   ).forEach((element) => element.remove());
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
     element.style.outline = '';
@@ -136,7 +137,6 @@ const clearExtensionPresentation = (showPaused = true) => {
       element.style.removeProperty('position');
       delete element.dataset.personalAlgorithmPositionPatched;
     }
-    element.querySelector('[data-personal-algorithm-badge]')?.remove();
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -334,8 +334,13 @@ const getVideoElements = (diagnoseInjected = false) => {
     .map(getCardForVideoLink)
     .filter((element): element is HTMLElement => Boolean(element));
   const uniqueElements = Array.from(new Set([...knownElements, ...linkElements]));
-  const nativeElements = uniqueElements.filter((element) => !isMyAlgoInjectedElement(element));
-  const skippedInjected = uniqueElements.length - nativeElements.length;
+  const nativeElements = keepOutermostElements(
+    uniqueElements.filter((element) => !isMyAlgoInjectedElement(element)),
+    (parent, child) => parent.contains(child),
+  );
+  const skippedInjected = uniqueElements.length - uniqueElements.filter(
+    (element) => !isMyAlgoInjectedElement(element),
+  ).length;
   if (diagnoseInjected && skippedInjected > 0) {
     console.info('[MyAlgo] skipped injected candidate elements', { count: skippedInjected });
   }
