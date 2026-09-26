@@ -63,6 +63,7 @@ The first product validates five things:
 - [Consistency Audit](11_TWO_PASS_CONSISTENCY_AUDIT.md)
 - [YouTube API Compliance](compliance/YOUTUBE_API.md)
 - [Chrome Web Store / Privacy](compliance/CHROME_WEB_STORE.md)
+- [Privacy Policy](../PRIVACY.md)
 - [Data Flow](compliance/DATA_FLOW.md)
 - [Launch Checklist](compliance/LAUNCH_CHECKLIST.md)
 
