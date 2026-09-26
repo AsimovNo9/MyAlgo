@@ -1122,6 +1122,20 @@ const handleRuntimeMessage = (
         });
 
         const senderTabId = _sender.tab?.id;
+        const activeRankMode = payload?.mode ?? 'default';
+        void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
+          if (semanticRefresh.changed <= 0 || !senderTabId) return;
+          await chrome.tabs.sendMessage(senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: semanticRefresh.changed,
+              modelVersion: semanticEmbeddingProvider.modelVersion,
+            },
+          }).catch(() => undefined);
+        }).catch((error) => {
+          console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
+        });
+
         void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
           if (enrichedCandidates.length === 0) return;
           await mergeCandidatePool(enrichedCandidates);
