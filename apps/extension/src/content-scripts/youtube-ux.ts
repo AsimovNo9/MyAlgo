@@ -179,18 +179,17 @@ export function getReplacementCandidates(
     .slice(0, limit);
 }
 
-export type OpportunisticReplacementTarget = {
-  externalId: string;
-  score: number;
-  nativeIndex: number;
+export type OpportunisticReplacementAssignment = {
+  target: OpportunisticReplacementTarget;
+  item: RankedFeedItem;
 };
 
-export function selectOpportunisticReplacementTargets(
+export function selectOpportunisticReplacementAssignments(
   nativeTargets: OpportunisticReplacementTarget[],
   replacementCandidates: RankedFeedItem[],
   limit = 6,
   minimumUplift = 5,
-): OpportunisticReplacementTarget[] {
+): OpportunisticReplacementAssignment[] {
   const candidates = replacementCandidates
     .filter((item) => (
       Boolean(item.external_id && item.title && item.traceId)
@@ -204,15 +203,36 @@ export function selectOpportunisticReplacementTargets(
     .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
     .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
 
-  const selected: OpportunisticReplacementTarget[] = [];
+  const selected: OpportunisticReplacementAssignment[] = [];
   const count = Math.min(Math.max(0, limit), candidates.length, targets.length);
   for (let index = 0; index < count; index += 1) {
-    const candidateScore = candidates[index]?.score ?? 0;
+    const candidate = candidates[index];
     const target = targets[index];
-    if (!target || candidateScore < target.score + Math.max(0, minimumUplift)) break;
-    selected.push(target);
+    const candidateScore = candidate?.score ?? 0;
+    if (!candidate || !target || candidateScore < target.score + Math.max(0, minimumUplift)) break;
+    selected.push({ target, item: candidate });
   }
   return selected;
+}
+
+export type OpportunisticReplacementTarget = {
+  externalId: string;
+  score: number;
+  nativeIndex: number;
+};
+
+export function selectOpportunisticReplacementTargets(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit = 6,
+  minimumUplift = 5,
+): OpportunisticReplacementTarget[] {
+  return selectOpportunisticReplacementAssignments(
+    nativeTargets,
+    replacementCandidates,
+    limit,
+    minimumUplift,
+  ).map((assignment) => assignment.target);
 }
 
 export type ReplacementSlot = {
