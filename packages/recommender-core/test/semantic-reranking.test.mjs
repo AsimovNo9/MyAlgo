@@ -202,7 +202,7 @@ test('local hash embedding baseline is deterministic and separates unrelated mod
 });
 
 
-test('local baseline produces different candidate ordering across Work and Relax semantic modes', async () => {
+test('local hash baseline provides mode-seed separation without claiming graph semantic quality', async () => {
   const local = createLocalHashEmbeddingProvider(192);
   const cache = createMemoryEmbeddingCache();
   const candidates = [
@@ -218,8 +218,15 @@ test('local baseline produces different candidate ordering across Work and Relax
     },
   ];
 
-  const work = await enrichCandidatesWithSemanticReranking(state, candidates, 'Work', local, cache);
-  const relax = await enrichCandidatesWithSemanticReranking(state, candidates, 'Relax', local, cache);
+  const seedOnlyState = {
+    ...state,
+    graph: {
+      ...state.graph,
+      nodes: [],
+    },
+  };
+  const work = await enrichCandidatesWithSemanticReranking(seedOnlyState, candidates, 'Work', local, cache);
+  const relax = await enrichCandidatesWithSemanticReranking(seedOnlyState, candidates, 'Relax', local, cache);
 
   const workById = Object.fromEntries(work.candidates.map((candidate) => [candidate.external_id, candidate]));
   const relaxById = Object.fromEntries(relax.candidates.map((candidate) => [candidate.external_id, candidate]));
