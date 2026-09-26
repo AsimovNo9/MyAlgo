@@ -1332,9 +1332,12 @@ const handleRuntimeMessage = (
   return true;
 };
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => (
-  handleRuntimeMessage(message, sender, sendResponse)
-));
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if ((message as { target?: string } | null)?.target === 'youtube-search-offscreen') {
+    return false;
+  }
+  return handleRuntimeMessage(message, sender, sendResponse);
+});
 
 chrome.runtime.onMessageExternal.addListener((_message, _sender, sendResponse) => {
   sendResponse({ ok: true });
