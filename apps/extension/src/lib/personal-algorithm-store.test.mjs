@@ -118,6 +118,7 @@ test('replacing evidence reconciles stale creator relationship support', async (
   assert.equal(creatorEdges[0].targetNodeId, 'creator:youtube:New%20Creator');
   assert.deepEqual(creatorEdges[0].evidenceIds, ['replace-creator']);
   assert.equal(graph.edges.some((edge) => edge.targetNodeId === 'creator:youtube:Old%20Creator'), false);
+  assert.equal(graph.nodes.some((node) => node.id === 'creator:youtube:Old%20Creator'), false);
 });
 
 test('incremental creator relationships remain evidence-backed after metadata arrives later', async () => {
