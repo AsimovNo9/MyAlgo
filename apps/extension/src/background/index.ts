@@ -14,6 +14,7 @@ import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algo
 import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
+import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
   external_id: string;
@@ -160,8 +161,8 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   });
 }
 
-async function enrichVideosInTab(tabId: number | undefined, candidates: PageCandidate[]): Promise<VideoRecord[]> {
-  if (!tabId || candidates.length === 0) return [];
+async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]> {
+  if (candidates.length === 0) return [];
   const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
   const now = Date.now();
   const missing = candidates
@@ -172,23 +173,39 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
 
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: 'ENRICH_YOUTUBE_VIDEOS',
-      payload: { candidates: missing },
-    });
-    const enriched = Array.isArray(response?.videos) ? response.videos as VideoRecord[] : [];
-    if (enriched.length === 0) return [];
-    for (const record of enriched) existing[record.external_id] = record;
-    const entries = Object.entries(existing)
-      .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
-      .slice(0, MAX_VIDEO_STORE_SIZE);
-    await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
-    return enriched;
-  } catch (error) {
-    console.warn('YouTube metadata enrichment skipped', error);
-    return [];
-  }
+  const enriched = (await Promise.all(missing.map(async (candidate) => {
+    try {
+      const response = await fetchWithTimeout(youtubeConnector.getCanonicalUrl(candidate.external_id), 7000);
+      if (!response.ok) return null;
+      const html = await response.text();
+      const rich = extractYouTubeWatchMetadataFromHtml(html);
+      return {
+        ...candidate,
+        title: rich.title ?? candidate.title,
+        channel_name: rich.channelName ?? candidate.channel_name ?? null,
+        channel_id: rich.channelId ?? candidate.channel_id ?? null,
+        thumbnail_url: rich.thumbnailUrl ?? candidate.thumbnail_url ?? null,
+        description: rich.description?.slice(0, 1600) ?? null,
+        duration_seconds: rich.durationSeconds,
+        published_at: rich.publishedAt ?? candidate.published_at ?? null,
+        topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
+        content_type: rich.category ?? null,
+        is_live: candidate.is_live === true || rich.isLive,
+        view_count: rich.viewCount,
+        enrichedAt: new Date().toISOString(),
+      } satisfies VideoRecord;
+    } catch {
+      return null;
+    }
+  }))).filter((record): record is VideoRecord => record != null);
+
+  if (enriched.length === 0) return [];
+  for (const record of enriched) existing[record.external_id] = record;
+  const entries = Object.entries(existing)
+    .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
+    .slice(0, MAX_VIDEO_STORE_SIZE);
+  await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
+  return enriched;
 }
 
 async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<CandidatePoolItem[]> {
@@ -296,7 +313,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
     const tabId = tabs.find((tab) => tab.id != null)?.id;
     if (tabId && candidatePool.length > 0) {
-      await enrichVideosInTab(tabId, candidatePool);
+      await enrichVideos(candidatePool);
       store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
       channelIds = selectRssChannelIds(Object.values(store));
     }
@@ -350,11 +367,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     // YouTube tab. This gives the local scorer/title UI substantially richer
     // metadata without introducing a native yt-dlp binary, backend, API key, or
     // YouTube Data API dependency.
-    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
-    const tabId = tabs.find((tab) => tab.id != null)?.id;
-    if (tabId) {
-      await enrichVideosInTab(tabId, uniqueFetched.slice(0, 18));
-    }
+    await enrichVideos(uniqueFetched.slice(0, 18));
   }
 
   const succeeded = results.filter((result) => result.ok).length;
@@ -692,10 +705,7 @@ const handleRuntimeMessage = (
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
-        const enrichedCandidates = await enrichVideosInTab(
-          _sender.tab?.id,
-          incomingCandidates,
-        );
+        const enrichedCandidates = await enrichVideos(incomingCandidates);
         const enrichmentById = new Map(enrichedCandidates.map((item) => [item.external_id, item]));
         const candidatesWithMetadata = incomingCandidates.map((candidate) => ({
           ...candidate,
