@@ -212,6 +212,20 @@ export type ReplacementAssignment = {
   item: RankedFeedItem;
 };
 
+export function getReplacementTextMetadata(item: RankedFeedItem): {
+  title: string;
+  creator: string;
+  displayScore: number;
+  rawScore: number | null;
+} {
+  return {
+    title: item.title?.trim() || 'Recommended video',
+    creator: item.channel_name?.trim() || 'Unknown creator',
+    displayScore: Number.isFinite(item.score) ? Number(item.score) : 0,
+    rawScore: Number.isFinite(item.rawScore) ? Number(item.rawScore) : null,
+  };
+}
+
 export type ReplacementPresentationMetadata = {
   generation: number;
   mode: string;
