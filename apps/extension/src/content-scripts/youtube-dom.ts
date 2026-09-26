@@ -23,6 +23,21 @@ export function extractYouTubeVideoId(href: string): string | undefined {
   }
 }
 
+export function extractYouTubeChannelIdFromWatchHtml(html: string): string | null {
+  const patterns = [
+    /"channelId"\s*:\s*"([^"]+)"/,
+    /"externalChannelId"\s*:\s*"([^"]+)"/,
+    /"browseId"\s*:\s*"(UC[A-Za-z0-9_-]+)"/,
+    /itemprop=["']channelId["'][^>]*content=["']([^"']+)["']/i,
+  ];
+
+  for (const pattern of patterns) {
+    const value = html.match(pattern)?.[1]?.trim();
+    if (value && /^UC[A-Za-z0-9_-]{20,}$/.test(value)) return value;
+  }
+  return null;
+}
+
 export function extractYouTubeCreator(element: Element): string | null {
   const channelLabel = element
     .querySelector<HTMLElement>('[aria-label^="Go to channel "]')
