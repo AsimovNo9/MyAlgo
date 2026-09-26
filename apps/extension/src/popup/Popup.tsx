@@ -13,7 +13,6 @@ const defaultSourceFilters: FeedSourceFilters = {
 
 const defaultRetrievalSettings: RetrievalSettings = {
   rssEnabled: false,
-  webSearchEnabled: false,
 };
 
 const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
