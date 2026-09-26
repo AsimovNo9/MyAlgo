@@ -28,7 +28,7 @@ The launch extension handles web activity / website content and user interaction
 | Personal Algorithm state | evidence, graph nodes/edges, revisions | user model | local |
 | Recommendation state | candidate cache, scores, compact traces | feed control/debugging | local |
 | Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
-| Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned public YouTube URLs/snippets | expand candidate reservoir | sent only to the user-configured HTTPS SearXNG-compatible endpoint; results stored locally and enriched from YouTube before scoring |
+| Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned public YouTube URLs/snippets; user-supplied PrivAU API key when PrivAU is selected | expand candidate reservoir | PrivAU (`https://priv.au`) is the default provider; queries and the API authentication header go only to PrivAU, or to an explicitly selected custom HTTPS SearXNG endpoint; results are stored locally and enriched from YouTube before scoring |
 
 The local-first MVP does not send observed activity, raw evidence, full graph state, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web search sends only bounded normalized graph-derived goal/topic queries plus active mode intent to the HTTPS search endpoint explicitly configured by the user.
 
