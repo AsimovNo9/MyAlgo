@@ -142,11 +142,15 @@ Those remain downstream work. The next graph-layer work should build semantic en
 
 PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
 
-### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime
+### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime — **next P1**
 
-### [#151](https://github.com/AsimovNo9/MyAlgo/issues/151): Implement deterministic additive scoring and reproducible trace — **implementation in progress (PR #193)**
+Primary implementation boundary after #148 and #151: construct an explicit policy from local graph/user controls and wire candidate observation, scoring, trace creation, and local/offline decisions into the extension runtime. Raw watched evidence must not be treated as an unconditional preference; the legacy/server-ranked path remains behind an explicit migration boundary.
 
-### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization
+### [#151](https://github.com/AsimovNo9/MyAlgo/issues/151): Implement deterministic additive scoring and reproducible trace — **completed in PR #193**
+
+PR #193 was merged after CI and live browser/runtime validation. The live diagnostic exercised the actual persisted Personal Algorithm state (792 evidence records, 516 nodes, 269 edges) and confirmed score 10.5, exact contribution accounting, trace consistency, and replay stability. Live validation also exposed an edge-scoping bug; the scorer was corrected so only edges whose endpoints are both part of the candidate path contribute.
+
+### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization — **next P1 candidate**
 
 ## P2 — Feed enforcement
 
