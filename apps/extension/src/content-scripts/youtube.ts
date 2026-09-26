@@ -832,15 +832,17 @@ const triggerRank = (
   }
   scheduleRankGeneration(generation);
 };
-const scheduleInitialRank = () => {
+const scheduleInitialRank = (attempt = 0) => {
   if (!extensionEnabled || !isCurrentInstance() || isYouTubeHistoryPage(location.pathname)) return;
   window.setTimeout(() => {
     if (!extensionEnabled || !isCurrentInstance()) return;
     const currentCandidates = collectCandidates();
-    if (currentCandidates.length > 0) {
+    if (currentCandidates.length >= 2) {
       triggerRank('manual');
+      return;
     }
-  }, 1500);
+    if (attempt < 8) scheduleInitialRank(attempt + 1);
+  }, attempt === 0 ? 100 : 250);
 };
 
 safeStorageGet([
@@ -1256,7 +1258,17 @@ const pageObserver = new MutationObserver((records) => {
       || Boolean(node.querySelector(`${videoSelectors.join(',')}, ${videoLinkSelector}`));
   }));
 
-  if (hasNativeVideoMutation) triggerRank('mutation');
+  if (hasNativeVideoMutation) {
+    if (
+      sourceFilters.includeShorts === false
+      || sourceFilters.includeLive === false
+    ) {
+      // Keep explicit source controls responsive while YouTube recycles or
+      // appends native cards; fresh scoring can follow asynchronously.
+      applyRankedFeed();
+    }
+    triggerRank('mutation');
+  }
 
   const hasSourceShelfMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
