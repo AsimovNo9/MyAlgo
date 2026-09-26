@@ -815,6 +815,8 @@ const renderReplacementSlots = (generation: number) => {
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
+    blockedNativeIds: blockedIds.size,
+    offPageCandidates: cachedFeed.filter((item) => item.external_id && !blockedIds.has(item.external_id)).length,
     candidates: replacementCandidateDiagnostics,
   });
 };
