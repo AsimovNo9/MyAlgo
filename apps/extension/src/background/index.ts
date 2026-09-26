@@ -737,7 +737,7 @@ const handleRuntimeMessage = (
 
   if (type === 'REFRESH_RETRIEVAL') {
     void (async () => {
-      const refresh = await refreshRssCandidates(false);
+      const refresh = await refreshRssCandidates(true);
       if (refresh.changed) {
         await notifyPersonalAlgorithmChanged('retrieval');
       }
