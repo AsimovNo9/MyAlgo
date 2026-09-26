@@ -165,7 +165,7 @@ test('Home extraction records surfaced context without inferring preference', ()
 
   assert.deepEqual(observation.observations, [{
     externalId: 'home-1',
-    exposureId: 'home-1|home|Recommended|0',
+    exposureId: 'home-1|home|Recommended|0|2026-09-24T12:00:00.000Z',
     title: 'Woodworking guide',
     creator: 'Maker',
     position: 0,
@@ -176,7 +176,7 @@ test('Home extraction records surfaced context without inferring preference', ()
     outcome: 'unobserved',
   }, {
     externalId: 'home-1',
-    exposureId: 'home-1|home||1',
+    exposureId: 'home-1|home||1|2026-09-24T12:00:00.000Z',
     title: 'Duplicate card',
     creator: null,
     position: 1,
@@ -190,6 +190,18 @@ test('Home extraction records surfaced context without inferring preference', ()
   assert.equal(observation.metrics.duplicateCandidates, 0);
   assert.equal(observation.metrics.injectedCandidates, 1);
   assert.equal(observation.metrics.missingTitle, 1);
+});
+
+test('repeated Home appearances in the same slot keep distinct exposure IDs', () => {
+  const first = collectRecommendationObservations([
+    { href: '/watch?v=home-repeat', title: 'Repeated video', section: 'Recommended' },
+  ], '2026-09-24T12:00:00.000Z').observations[0];
+  const second = collectRecommendationObservations([
+    { href: '/watch?v=home-repeat', title: 'Repeated video', section: 'Recommended' },
+  ], '2026-09-24T13:00:00.000Z').observations[0];
+
+  assert.notEqual(first.exposureId, second.exposureId);
+  assert.equal(first.externalId, second.externalId);
 });
 
 test('Home observations become contextual outcomes only after user interaction', () => {
