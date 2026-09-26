@@ -225,7 +225,7 @@ async function rankLocalCandidates(
     score: item.score,
     recordedAt: new Date().toISOString(),
   }));
-  await setStorage('personal-algorithm-local-traces', traces.slice(0, MAX_FEED_CACHE_SIZE));
+  await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, MAX_FEED_CACHE_SIZE));
 
   return ranked.map(({ trace, ...item }) => ({
     ...item,
