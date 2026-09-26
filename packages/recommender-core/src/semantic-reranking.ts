@@ -68,10 +68,10 @@ const embeddingTerms = (text: string): string[] => {
   const words = normalized.split(' ').filter((token) => token.length >= 2);
   const bigrams = words
     .slice(0, -1)
-    .map((token, index) => \`\${token}_\${words[index + 1]}\`);
+    .map((token, index) => `${token}_${words[index + 1]}`);
   const characterNgrams = words.flatMap((word) => {
     if (word.length < 4) return [];
-    const padded = \`^\${word}$\`;
+    const padded = `^${word}$`;
     const grams: string[] = [];
     for (let index = 0; index <= padded.length - 3; index += 1) {
       grams.push(padded.slice(index, index + 3));
@@ -96,7 +96,7 @@ export function createLocalHashEmbeddingProvider(
   const safeDimensions = Math.max(32, Math.min(1024, Math.floor(dimensions)));
   return {
     modelId: 'myalgo-local-hash-embedding',
-    modelVersion: \`hash-v1-d\${safeDimensions}\`,
+    modelVersion: `hash-v1-d${safeDimensions}`,
     dimensions: safeDimensions,
     async embed(texts) {
       return texts.map((text) => {
@@ -159,7 +159,7 @@ export function semanticInputHash(value: string): string {
     second ^= code + index;
     second = Math.imul(second, 0x85ebca6b);
   }
-  return \`\${(first >>> 0).toString(16).padStart(8, '0')}\${(second >>> 0).toString(16).padStart(8, '0')}\`;
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 export function embeddingCacheKey(
@@ -223,7 +223,7 @@ async function embedWithCache(
   if (misses.length > 0) {
     const vectors = await provider.embed(misses.map((miss) => miss.text));
     if (vectors.length !== misses.length) {
-      throw new Error(\`Embedding provider returned \${vectors.length} vectors for \${misses.length} inputs.\`);
+      throw new Error(`Embedding provider returned ${vectors.length} vectors for ${misses.length} inputs.`);
     }
 
     const generatedAt = new Date().toISOString();
@@ -231,7 +231,7 @@ async function embedWithCache(
       const miss = misses[missIndex];
       const vector = l2Normalize(vectors[missIndex] ?? []);
       if (vector.length !== provider.dimensions) {
-        throw new Error(\`Embedding provider returned \${vector.length} dimensions; expected \${provider.dimensions}.\`);
+        throw new Error(`Embedding provider returned ${vector.length} dimensions; expected ${provider.dimensions}.`);
       }
       const input = inputs[miss.index];
       const record: EmbeddingRecord = {
@@ -303,7 +303,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   const seedText = semanticModeSeed(mode);
   const modeSeed = await embedWithCache(provider, cache, [{
     ownerType: 'mode',
-    ownerId: \`mode-seed:\${mode.trim().toLowerCase() || 'default'}\`,
+    ownerId: `mode-seed:${mode.trim().toLowerCase() || 'default'}`,
     text: seedText,
   }]);
   const seedEmbedding = modeSeed.records[0]?.embedding ?? [];
@@ -318,7 +318,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     nodeSimilarities,
     { minimumSimilarity: options.minimumModeNodeSimilarity ?? 0.2 },
   );
-  const semanticModelVersion = \`\${provider.modelId}@\${provider.modelVersion}\`;
+  const semanticModelVersion = `${provider.modelId}@${provider.modelVersion}`;
   modeProfile.model_version = semanticModelVersion;
 
   const graphCentroid = weightedEmbeddingCentroid(
