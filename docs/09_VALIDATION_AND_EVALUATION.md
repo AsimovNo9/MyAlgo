@@ -145,7 +145,7 @@ PR #204 completed this protocol in a live browser. Validation confirmed stable n
 
 ## Safe replacement validation
 
-For #160, validate replacements as bounded presentation assignments rather than a second recommendation pipeline:
+For #160, validate replacements as bounded presentation assignments rather than a second recommendation pipeline. Also validate that persisted source controls shape the first available Home batch promptly, including full-section removal for Shorts and Playables without creating replacement slots:
 
 1. every replacement occupies a slot hidden by the current generation and does not reorder unrelated native siblings;
 2. the replacement video ID is absent from currently present native cards, the Personal Algorithm shelf, and other replacements;
