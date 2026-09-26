@@ -58,6 +58,12 @@ const candidateContext = (state: PersonalAlgorithmState, candidate: LocalRuntime
         node.kind === 'creator'
         && node.id === `creator:youtube:${encodeURIComponent(candidate.channel_id ?? '')}`
       ))?.id ?? null
+      : null)
+    ?? (candidate.channel_name
+      ? state.graph.nodes.find((node) => (
+        node.kind === 'creator'
+        && node.label.trim().toLowerCase() === candidate.channel_name?.trim().toLowerCase()
+      ))?.id ?? null
       : null);
 
   return {
