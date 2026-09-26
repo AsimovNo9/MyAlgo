@@ -119,7 +119,7 @@ A MyAlgo replacement must read like a real video card, not a debugging surface. 
 
 ### Search status
 
-Graph-derived query planning is implemented. RSS acquisition is implemented. A network web-search provider is **not yet implemented**. Search remains planned behind a source-neutral adapter, explicit user enablement/configuration, bounded execution, provenance, and privacy review in #206.
+Graph-derived query planning, RSS acquisition, and zero-config YouTube search-page discovery are implemented in #206/#212. Web discovery remains explicitly user-enabled, bounded, provenance-tagged, and separate from preference evidence. Search-page metadata is discovery-only; canonical watch-page enrichment supplies richer candidate metadata before scoring.
 
 ## Content understanding and semantic enrichment
 
@@ -288,6 +288,6 @@ The active mode must not be rendered as a label on every video. A visible `Learn
 
 ### Web search adapter
 
-The first concrete provider is PrivAU at `https://priv.au`, using its documented SearXNG-compatible JSON API. PrivAU requires an API key for JSON search, so the key is user-supplied in Advanced settings, stored only in extension-local storage, and sent only as a PrivAU authentication header. The provider remains behind the source-neutral `WebSearchProvider` interface; advanced users may select a custom SearXNG endpoint. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
+The first concrete provider is YouTube search-page discovery. The `WebSearchProvider` abstraction remains source-neutral, but the launch implementation issues bounded generated queries only to `https://www.youtube.com/results`, parses stable YouTube video IDs from `ytInitialData`, deduplicates them, and then runs those IDs through the canonical watch-page enrichment layer before scoring. No search box, API key, third-party search host, or optional host permission is required. Search receives only bounded graph-derived goal/topic queries plus mode intent. Results are restricted to YouTube URLs, normalized to stable video IDs, deduplicated, and passed through canonical YouTube watch-page enrichment before scoring.
 
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
