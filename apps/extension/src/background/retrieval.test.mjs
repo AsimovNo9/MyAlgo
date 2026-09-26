@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildWebSearchRequest,
   buildYoutubeRssFeedUrl,
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
@@ -105,5 +106,24 @@ test('needsYoutubeMetadataRefresh retries fresh records that are missing channel
   assert.equal(
     needsYoutubeMetadataRefresh({ channel_id: 'UC1234567890123456789012', enrichedAt: '2026-09-26T11:59:00.000Z' }, now, 24 * 60 * 60 * 1000),
     false,
+  );
+});
+
+
+test('planned web-search requests stay bounded and preserve graph query provenance', () => {
+  assert.deepEqual(
+    buildWebSearchRequest({
+      text: 'distributed systems tutorial',
+      lane: 'topic',
+      topics: ['distributed systems'],
+      algorithmRevision: 'graph-2-abc12345',
+    }, 100),
+    {
+      query: 'distributed systems tutorial',
+      lane: 'topic',
+      topics: ['distributed systems'],
+      graphRevision: 'graph-2-abc12345',
+      limit: 20,
+    },
   );
 });
