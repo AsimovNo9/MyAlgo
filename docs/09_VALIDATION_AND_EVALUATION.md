@@ -217,3 +217,14 @@ For long-session validation:
 3. scrolling/searching for an extended session keeps candidate, metadata, History, Home exposure, selection, and evidence stores at their documented caps;
 4. Home exposure evidence count follows the retained Home observation window instead of monotonically increasing;
 5. evidence compaction preserves indefinite evidence and graph nodes referenced by retained evidence, edges, or user edits.
+
+
+### Search-to-feed promotion diagnostics
+
+Live rank diagnostics expose:
+- `searchCandidatesScored`;
+- `searchCandidatesQualified`;
+- `searchCandidatesInReplacementInventory`;
+- `maxSearchCandidateScore`.
+
+A healthy search run can fetch candidates without producing replacements when none clear the score/native-quality gates. Validation should distinguish acquisition failure from ranking/presentation rejection. Retrieved-discovery exploration may fill at most two replacement opportunities and must never replace a higher-scoring native target.
