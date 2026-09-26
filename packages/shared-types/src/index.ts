@@ -239,6 +239,7 @@ export interface RetrievalDiagnostics {
   rssCandidatesFetched: number;
   rssCandidatesAdded: number;
   rssCandidatesDeduplicated: number;
+  rssConsecutiveFailures: number;
   lastError: string | null;
 }
 
