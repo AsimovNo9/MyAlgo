@@ -128,11 +128,22 @@ export function getShelfCandidates(
   }).slice(0, limit);
 }
 
+function seededCandidateOrder(seed: string, id: string): number {
+  const value = `${seed}|${id}`;
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 export function getReplacementCandidates(
   items: RankedFeedItem[],
   blockedIds: Iterable<string | undefined>,
   limit = 6,
   minimumScore = 52,
+  selectionSeed = '',
 ): RankedFeedItem[] {
   const blocked = new Set(Array.from(blockedIds).filter((id): id is string => Boolean(id && id.trim())));
   const seen = new Set<string>();
@@ -154,7 +165,13 @@ export function getReplacementCandidates(
     }
     seen.add(id);
     return true;
-  }).slice(0, limit);
+  })
+    .sort((left, right) => {
+      if (!selectionSeed) return (right.score ?? 0) - (left.score ?? 0);
+      return seededCandidateOrder(selectionSeed, left.external_id ?? '')
+        - seededCandidateOrder(selectionSeed, right.external_id ?? '');
+    })
+    .slice(0, limit);
 }
 
 export type OpportunisticReplacementTarget = {
@@ -257,6 +274,7 @@ export function planReplacementAssignments(
   slots: ReplacementSlot[],
   blockedIds: Iterable<string | undefined>,
   minimumScore = 52,
+  selectionSeed = '',
 ): ReplacementAssignment[] {
   const stableSlots = slots.filter((slot, index) => (
     Boolean(slot.slotId && slot.sourceVideoId && !slot.sourceVideoId.startsWith('title:'))
@@ -271,6 +289,7 @@ export function planReplacementAssignments(
     blocked,
     stableSlots.length,
     minimumScore,
+    selectionSeed,
   );
   return stableSlots.slice(0, candidates.length).map((slot, index) => ({
     slot,
