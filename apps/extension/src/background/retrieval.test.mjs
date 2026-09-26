@@ -7,6 +7,7 @@ import {
   isRetrievalAllowed,
   mergeCandidateAcquisitionHistory,
   needsYoutubeMetadataRefresh,
+  normalizeWebSearchResultsToYoutubeCandidates,
   nextRssAllowedAt,
   parseYoutubeRssFeed,
   selectRssChannelIds,
@@ -126,4 +127,26 @@ test('planned web-search requests stay bounded and preserve graph query provenan
       limit: 20,
     },
   );
+});
+
+
+test('web-search results become YouTube candidates that can be watch-page enriched', () => {
+  const plan = {
+    text: 'local first software tutorial',
+    lane: 'topic',
+    topics: ['local first software'],
+    algorithmRevision: 'graph-2-search123',
+  };
+  const candidates = normalizeWebSearchResultsToYoutubeCandidates([
+    { url: 'https://www.youtube.com/watch?v=video-a', title: 'Thin search title', snippet: 'Search snippet' },
+    { url: 'https://youtu.be/video-b?t=30', title: 'Second result' },
+    { url: 'https://example.com/not-youtube', title: 'Ignore me' },
+    { url: 'https://www.youtube.com/watch?v=video-a', title: 'Duplicate' },
+  ], plan, '2026-09-26T18:00:00.000Z');
+
+  assert.deepEqual(candidates.map((item) => item.external_id), ['video-a', 'video-b']);
+  assert.equal(candidates[0].provenance?.mechanism, 'web_search');
+  assert.equal(candidates[0].provenance?.query, plan.text);
+  assert.equal(candidates[0].provenance?.graph_revision, plan.algorithmRevision);
+  assert.equal(candidates[0].description, 'Search snippet');
 });
