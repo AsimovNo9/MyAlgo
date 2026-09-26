@@ -709,6 +709,7 @@ const handleRuntimeMessage = (
 
   if (type === 'RANK_PAGE') {
     void (async () => {
+      const rankStartedAt = performance.now();
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
@@ -770,6 +771,7 @@ const handleRuntimeMessage = (
           poolSize: candidatePool.length,
           rankingWorkingSetSize: workingPool.length,
           enriched: enrichedCandidates.length,
+          elapsedMs: Math.round(performance.now() - rankStartedAt),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
