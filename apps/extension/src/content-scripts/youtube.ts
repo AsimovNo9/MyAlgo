@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -21,13 +21,11 @@ const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
 let cachedFeed: RankedFeedItem[] = [];
-let personalPicks: RankedFeedItem[] = [];
 let rankingInFlight = false;
 let activeMode = 'Work';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
 let rankQueued = false;
-let feedRequestGeneration = 0;
 let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
@@ -249,101 +247,8 @@ const createReplacementCard = (
   return card;
 };
 
-const syncShelfCardWidth = (cards: HTMLElement) => {
-  const nativeCardWidth = getVideoElements()
-    .map((element) => element.getBoundingClientRect().width)
-    .find((width) => width >= 160);
-  const shelfCardWidth = nativeCardWidth
-    ? `${Math.round(nativeCardWidth)}px`
-    : 'min(320px, 80vw)';
-  cards.style.gridAutoColumns = shelfCardWidth;
-};
-
-const renderRecommendationShelf = (attempt = 0) => {
-  if (!isCurrentInstance() || !extensionEnabled) return;
-
-  const feedRenderer = document.querySelector<HTMLElement>(
-    'ytd-rich-grid-renderer, ytd-two-column-browse-results-renderer #primary',
-  );
-  const feedContents = feedRenderer?.querySelector<HTMLElement>('#contents');
-  const shelfHost = feedRenderer?.parentElement;
-  if (!feedRenderer || !feedContents || !shelfHost) {
-    if (attempt < 10) window.setTimeout(() => renderRecommendationShelf(attempt + 1), 500);
-    return;
-  }
-
-  const nativeIds = getVideoElements().map(getVideoId);
-  const picks = getShelfCandidates(
-    personalPicks,
-    youtubeConnector.presentation.shelfBatchSize,
-    nativeIds,
-    youtubeConnector.presentation.minimumVisibleScore,
-  );
-  if (picks.length === 0) {
-    document.querySelector('[data-personal-algorithm-shelf]')?.remove();
-    return;
-  }
-
-  let shelf = document.querySelector<HTMLElement>('[data-personal-algorithm-shelf]');
-  if (shelf && shelf.parentElement !== shelfHost) {
-    shelf.remove();
-    shelf = null;
-  }
-  if (!shelf) {
-    shelf = document.createElement('section');
-    shelf.dataset.personalAlgorithmShelf = 'true';
-    shelf.style.cssText = 'display:block;position:relative;clear:both;float:none;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden;contain:layout paint;margin:16px 0 24px;padding:16px 0;border-top:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);border-bottom:1px solid var(--yt-spec-10-percent-layer, #e5e5e5);font-family:Roboto,Arial,sans-serif;';
-    shelfHost.insertBefore(shelf, feedRenderer);
-  }
-
-  shelf.replaceChildren();
-  const heading = document.createElement('h2');
-  heading.textContent = `Personal picks · ${activeMode}`;
-  heading.style.cssText = 'margin:0 16px 12px;font-size:20px;line-height:28px;color:var(--yt-spec-text-primary, #0f0f0f);';
-  shelf.appendChild(heading);
-
-  const cards = document.createElement('div');
-  cards.style.cssText = 'display:grid;grid-auto-flow:column;gap:16px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scroll-snap-type:inline mandatory;scrollbar-width:none;padding:0 16px 8px;';
-  syncShelfCardWidth(cards);
-  for (const item of picks) {
-    const card = document.createElement('a');
-    card.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
-    card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
-    card.style.cssText = 'display:block;min-width:0;scroll-snap-align:start;color:var(--yt-spec-text-primary, #0f0f0f);text-decoration:none;';
-
-    card.appendChild(createThumbnail(item));
-
-    const title = document.createElement('div');
-    title.textContent = item.title ?? 'Recommended video';
-    title.style.cssText = 'margin-top:8px;font-size:14px;font-weight:600;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
-    card.appendChild(title);
-
-    const channel = document.createElement('div');
-    channel.textContent = item.channel_name ?? `${activeMode} pick`;
-    channel.style.cssText = 'margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary, #606060);font-size:12px;line-height:18px;';
-    card.appendChild(channel);
-    cards.appendChild(card);
-  }
-  shelf.appendChild(cards);
-  window.requestAnimationFrame(() => {
-    if (cards.isConnected) syncShelfCardWidth(cards);
-  });
-};
-
-const refreshRecommendationShelf = () => {
-  if (isYouTubeHistoryPage(location.pathname)) return;
-  const requestGeneration = ++feedRequestGeneration;
-  safeSendMessage({ type: EXTENSION_MESSAGE_TYPES.GET_FEED }, (response) => {
-    if (
-      !isCurrentInstance()
-      || !extensionEnabled
-      || requestGeneration !== feedRequestGeneration
-      || !response
-      || !Array.isArray(response.feed)
-    ) return;
-    personalPicks = response.feed as RankedFeedItem[];
-    renderRecommendationShelf();
-  });
+const clearLegacyRecommendationShelf = () => {
+  document.querySelector('[data-personal-algorithm-shelf]')?.remove();
 };
 
 const getVideoTitle = (element: HTMLElement) => {
@@ -855,7 +760,6 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
     if (response?.ok && Array.isArray(response.feed)) {
       cachedFeed = response.feed;
-      personalPicks = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
 
@@ -864,7 +768,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
       // decisions without reordering YouTube-owned renderers.
       clearExtensionPresentation(false);
       applyRankedFeed();
-      renderRecommendationShelf();
+      clearLegacyRecommendationShelf();
       renderReplacementSlots(requestGeneration);
 
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
@@ -905,7 +809,7 @@ const triggerRank = (
     && cachedFeed.length > 0
   ) {
     applyRankedFeed();
-    renderRecommendationShelf();
+    clearLegacyRecommendationShelf();
     renderReplacementSlots(rankGeneration);
     return;
   }
@@ -946,7 +850,7 @@ safeStorageGet([
     return;
   }
   showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-  refreshRecommendationShelf();
+  clearLegacyRecommendationShelf();
   scheduleInitialRank();
 });
 
@@ -1060,7 +964,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (!isCurrentInstance() || !extensionEnabled) return;
         activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
         showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
-        refreshRecommendationShelf();
+        clearLegacyRecommendationShelf();
         triggerRank('manual');
       });
     }
@@ -1070,14 +974,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const nextFilters = message.payload?.sourceFilters as FeedSourceFilters | undefined;
     if (nextFilters) {
       applySourceFilters(nextFilters);
-      refreshRecommendationShelf();
+      clearLegacyRecommendationShelf();
       return;
     }
     void safeStorageGet([STORAGE_KEYS.SOURCE_FILTERS]).then((result) => {
       applySourceFilters(
         result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {},
       );
-      refreshRecommendationShelf();
+      clearLegacyRecommendationShelf();
     });
     return;
   }
@@ -1097,7 +1001,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   lastCandidateSignature = '';
   lastRankMode = '';
   clearExtensionPresentation(false);
-  refreshRecommendationShelf();
+  clearLegacyRecommendationShelf();
   triggerRank('mode');
 });
 
@@ -1289,7 +1193,7 @@ registerFeedbackHandlers();
 
 window.addEventListener('load', () => {
   scheduleInitialRank();
-  refreshRecommendationShelf();
+  clearLegacyRecommendationShelf();
   scheduleHomeRecommendationObservation();
   attachTemporalWatchObserver();
 });
@@ -1309,7 +1213,7 @@ window.addEventListener('yt-navigate-finish', () => {
   if (isYouTubeHistoryPage(location.pathname)) {
     scheduleHistoryObservation();
   } else {
-    refreshRecommendationShelf();
+    clearLegacyRecommendationShelf();
     triggerRank('navigation');
     scheduleHomeRecommendationObservation();
   }
@@ -1325,7 +1229,7 @@ window.addEventListener('resize', () => {
   if (resizeTimer !== undefined) window.clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(() => {
     resizeTimer = undefined;
-    renderRecommendationShelf();
+    clearLegacyRecommendationShelf();
   }, 120);
 });
 
