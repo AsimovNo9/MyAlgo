@@ -27,7 +27,7 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [x] Clean-profile browser test proves no observation before acceptance and deletion disables observation
+- [ ] Revalidate clean-profile disclosure v2: no observation or RSS retrieval before acceptance; deletion disables observation/retrieval
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
@@ -36,6 +36,7 @@
 
 ## P3 — Quality
 
+- [ ] RSS acquisition live-validated with bounded channel requests and no evidence creation
 - [ ] Candidate coverage measured
 - [ ] Empty-feed rate measured
 - [ ] Replacement success measured
