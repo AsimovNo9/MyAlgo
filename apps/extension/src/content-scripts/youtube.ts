@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -177,14 +177,19 @@ const createReplacementCard = (
     ? youtubeConnector.presentation.verticalAspectRatio
     : youtubeConnector.presentation.horizontalAspectRatio;
 
+  const metadata = getReplacementPresentationMetadata(
+    { slot: { slotId, sourceVideoId }, item },
+    generation,
+    activeMode,
+  );
   card.dataset.personalAlgorithmReplacement = 'true';
-  card.dataset.personalAlgorithmVideoId = item.external_id ?? '';
-  card.dataset.personalAlgorithmTraceId = item.traceId ?? '';
-  card.dataset.personalAlgorithmReplacementSlot = slotId;
-  card.dataset.personalAlgorithmReplacementSourceVideoId = sourceVideoId;
-  card.dataset.personalAlgorithmReplacementGeneration = String(generation);
-  card.dataset.personalAlgorithmReplacementMode = activeMode;
-  card.dataset.personalAlgorithmReplacementScore = String(item.score ?? 0);
+  card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
+  card.dataset.personalAlgorithmTraceId = metadata.traceId;
+  card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
+  card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
+  card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
   card.setAttribute('role', 'group');
   card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
   card.style.cssText = `display:block;width:100%;max-width:${targetWidth > 0 ? `${targetWidth}px` : '100%'};min-width:0;align-self:start;box-sizing:border-box;position:relative;color:var(--yt-spec-text-primary, #0f0f0f);font-family:Roboto,Arial,sans-serif;`;
