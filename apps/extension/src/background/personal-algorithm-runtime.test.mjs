@@ -111,6 +111,31 @@ test('explicit not-interested feedback lowers the matching candidate score', () 
   assert.equal(ranked[1].trace.feedbackContributions[0].value, -10);
 });
 
+test('duplicate feedback is reconciled to the latest event for a content item', () => {
+  const signals = buildLocalFeedbackSignals([
+    { contentItemId: 'video-b', eventType: 'not_interested', recordedAt: '2026-09-26T01:00:00.000Z' },
+    { contentItemId: 'video-b', eventType: 'not_interested', recordedAt: '2026-09-26T01:01:00.000Z' },
+  ]);
+  assert.equal(signals.length, 1);
+  const ranked = scoreLocalCandidates(state, [
+    { external_id: 'video-a', title: 'Video A' },
+    { external_id: 'video-b', title: 'Video B' },
+  ], 'Work', signals);
+  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.score, -9);
+});
+
+test('never-show-channel feedback matches the creator node rather than only the source video', () => {
+  const signals = buildLocalFeedbackSignals([
+    { contentItemId: 'video-a', eventType: 'never_show_channel', recordedAt: '2026-09-26T01:00:00.000Z' },
+  ], state);
+  const ranked = scoreLocalCandidates(state, [
+    { external_id: 'video-a', title: 'Video A' },
+    { external_id: 'video-b', title: 'Video B' },
+  ], 'Work', signals);
+  assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.score, -94);
+});
+
 test('source filters remain local visibility rules', () => {
   const ranked = scoreLocalCandidates(state, [
     { external_id: 'video-a', title: 'Video A', is_short: true },
