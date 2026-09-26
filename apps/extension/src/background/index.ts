@@ -11,6 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { buildGraphRetrievalProfile, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { buildYoutubeRssFeedUrl, isRetrievalAllowed, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
 
@@ -101,6 +102,7 @@ const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
   'SET_RETRIEVAL_SETTINGS',
   'REFRESH_RETRIEVAL',
+  'GET_RETRIEVAL_PLAN',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -261,6 +263,17 @@ async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics
 
   const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
   const channelIds = selectRssChannelIds(Object.values(store));
+  if (channelIds.length === 0) {
+    const diagnostics: RetrievalDiagnostics = {
+      ...EMPTY_RETRIEVAL_DIAGNOSTICS,
+      lastRssSyncAt: new Date(nowMs).toISOString(),
+      nextRssAllowedAt: null,
+      lastError: null,
+    };
+    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    return diagnostics;
+  }
+
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
@@ -689,6 +702,31 @@ const handleRuntimeMessage = (
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_PLAN') {
+    void personalAlgorithmStore.exportState().then((state) => {
+      const profile = buildGraphRetrievalProfile(state);
+      const plans = buildRecommendationQueryPlans(
+        profile,
+        8,
+        String(state.graph.currentRevision),
+        [],
+        [],
+        true,
+      );
+      sendResponse({
+        ok: true,
+        graphRevision: state.graph.currentRevision,
+        topicCount: profile.explicitTopics.length,
+        creatorCount: profile.creatorTerms.length,
+        plans,
+      });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to build retrieval plan.',
     }));
     return true;
   }
