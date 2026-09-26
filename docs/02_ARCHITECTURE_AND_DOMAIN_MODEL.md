@@ -429,3 +429,8 @@ Keep these three concepts separate:
 The current deterministic classifier uses enriched textual metadata (title, description, keywords/category, format, creator) and returns a label plus confidence. It is intentionally conservative.
 
 Text embeddings are the next model layer to evaluate because they can improve semantic matching without requiring image/video inference. Multimodal thumbnail/video classification is deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
+
+
+### YouTube search-page acquisition
+
+The launch web-discovery provider uses YouTube's ordinary search-result pages under the extension's existing YouTube host permission. Generated queries come from the graph retrieval profile plus active mode intent. The provider parses embedded `ytInitialData` for stable video IDs and lightweight result metadata, then hands those IDs to the same canonical watch-page enrichment path used by RSS candidates. Search-page acquisition is candidate discovery only and never becomes preference evidence by itself. The provider-neutral `WebSearchProvider` interface remains so acquisition can be replaced later without coupling search transport to ranking.
