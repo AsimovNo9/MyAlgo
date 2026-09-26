@@ -342,6 +342,17 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
   if (uniqueFetched.length > 0) {
     await mergeCandidatePool(uniqueFetched);
+
+    // RSS is intentionally lightweight. Before the new candidates are ranked,
+    // enrich a bounded batch from their canonical watch pages through an open
+    // YouTube tab. This gives the local scorer/title UI substantially richer
+    // metadata without introducing a native yt-dlp binary, backend, API key, or
+    // YouTube Data API dependency.
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    const tabId = tabs.find((tab) => tab.id != null)?.id;
+    if (tabId) {
+      await enrichVideosInTab(tabId, uniqueFetched.slice(0, 18));
+    }
   }
 
   const succeeded = results.filter((result) => result.ok).length;
