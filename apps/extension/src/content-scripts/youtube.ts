@@ -45,6 +45,7 @@ let watchSessionSequence = 0;
 const REPLACEMENT_STABILITY_MS = 45_000;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
+  item: RankedFeedItem;
   routeKey: string;
   expiresAt: number;
 }>();
@@ -686,7 +687,7 @@ const applyRankedFeed = () => {
         stableReplacementBySourceId.delete(id);
         continue;
       }
-      const item = feedById.get(sticky.candidateId);
+      const item = feedById.get(sticky.candidateId) ?? sticky.item;
       const nativeScore = Number(element.dataset.personalAlgorithmScore);
       const candidateScore = item?.score ?? -Infinity;
       const valid = Boolean(
@@ -897,6 +898,7 @@ const renderReplacementSlots = (generation: number) => {
     target.parentElement.insertBefore(replacement, target);
     stableReplacementBySourceId.set(assignment.slot.sourceVideoId, {
       candidateId: assignment.item.external_id ?? '',
+      item: assignment.item,
       routeKey: getRouteKey(),
       expiresAt: Date.now() + REPLACEMENT_STABILITY_MS,
     });
@@ -1409,7 +1411,10 @@ window.addEventListener('yt-navigate-finish', () => {
   }
 });
 window.addEventListener('yt-page-data-updated', () => {
-  triggerRank('navigation');
+  // YouTube emits this during ordinary in-route Home refreshes as well as
+  // navigation-adjacent updates. The actual navigation lifecycle already
+  // clears state on yt-navigate-start, so treat this as mutation churn here.
+  triggerRank('mutation');
 });
 window.addEventListener('popstate', () => {
   if (!isYouTubeHistoryPage(location.pathname)) triggerRank('navigation');
