@@ -102,7 +102,7 @@ normalized correlation boundary
           ↓
 #148 evidence store / Personal Algorithm Graph
           ↓
-#151 deterministic scorer / trace
+#151 deterministic scorer / trace — completed
 ```
 
 The reusable correlation boundary is now source-neutral: `correlateEvidence` consumes normalized `ExposureEvidence` / `InteractionEvidence`, while YouTube-specific adaptation remains outside the core primitive. #148 can therefore consume the same evidence/correlation model without pretending future connectors are YouTube.
@@ -132,6 +132,16 @@ Connector observations continue to be retained in the existing raw event stores 
 
 The store remains intentionally local and source-neutral. It does not infer preferences, score candidates, resolve identities across sources, or make API-derived graph decisions. The evidence-backed edge model is a prerequisite for those downstream layers because any future inferred preference relationship must be able to explain which observations support it.
 
+### Deterministic scorer and trace (#151)
+
+PR #193 is merged and the scorer is validated at both unit and live-browser/runtime levels.
+
+The scorer provides deterministic hard-exclusion and eligibility evaluation, additive base/node/edge/feedback/mode contributions, explicit suppression contributions, graph/evidence-backed matched paths, deterministic evidence revisions, stable trace IDs, replay with stable score and trace identity, and contribution-total/trace-consistency invariants.
+
+The live diagnostic passed against real extension state with 792 evidence records, 516 graph nodes, 269 graph edges, score 10.5, contribution total 10.5, consistent trace accounting, and stable replay score/trace identity. It also caught an edge-scoping bug that was corrected before merge.
+
+The scorer remains policy-driven: it does not infer preference from raw watched evidence, and it is not yet the extension feed-ranking path. Extension-local runtime integration remains #169.
+
 ### Phase 1 graph progression
 
 The implementation boundary is deliberately staged:
@@ -154,14 +164,16 @@ scoring / ranking
 
 ## Phase 1 — Local graph
 
-1. Evidence store
-2. Evidence-backed semantic graph materialization
-3. Graph review/export surface
-4. Graph visualization
-5. Deterministic additive scorer
-6. Scoring trace
+1. Evidence store — completed (#148 / PR #191)
+2. Evidence-backed semantic graph materialization — completed (#148 / PR #191)
+3. Graph review/export surface — implemented in #148; user-facing visualization remains #170
+4. Graph visualization — next P1 candidate (#170)
+5. Deterministic additive scorer — completed (#151 / PR #193)
+6. Scoring trace — completed (#151 / PR #193)
 
-**Exit:** an item can be traced through the graph and score contributions exactly reproduced.
+**Current state:** the local evidence → graph → deterministic score/trace foundation is implemented and live-validated. The next boundary is wiring those primitives into the extension's actual local recommendation path (#169), while completing the remaining privacy/API boundary gates (#167/#168).
+
+**Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 
 ## Phase 1 scope discipline
 
