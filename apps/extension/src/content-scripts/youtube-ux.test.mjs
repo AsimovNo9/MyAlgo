@@ -300,10 +300,15 @@ test('replacement rotation can vary candidates within the same 5-point score ban
     { external_id: 'e', title: 'E', score: 70, visible: true, traceId: 'te', policyOutcome: 'eligible' },
   ];
 
-  const first = getReplacementCandidates(items, [], 3, 55, 'seed-one').map((item) => item.external_id);
-  const second = getReplacementCandidates(items, [], 3, 55, 'seed-two').map((item) => item.external_id);
+  const orders = Array.from({ length: 12 }, (_, index) =>
+    getReplacementCandidates(items, [], 3, 55, `seed-${index}`).map((item) => item.external_id),
+  );
+  const uniqueOrders = new Set(orders.map((order) => order.join('|')));
 
-  assert.notDeepEqual(first, second);
-  assert.equal(first.includes('e'), false);
-  assert.equal(second.includes('e'), false);
+  assert.ok(uniqueOrders.size > 1);
+  assert.equal(orders.every((order) => !order.includes('e')), true);
+  assert.deepEqual(
+    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
+    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
+  );
 });
