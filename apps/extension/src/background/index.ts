@@ -99,6 +99,8 @@ void ensurePrivacyDisclosureLoaded();
 
 const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'RANK_PAGE',
+  'SET_RETRIEVAL_SETTINGS',
+  'REFRESH_RETRIEVAL',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -337,6 +339,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       STORAGE_KEYS.VIDEO_STORE,
       STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
+      STORAGE_KEYS.RETRIEVAL_SETTINGS,
+      STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
       STORAGE_KEYS.HISTORY_METRICS,
       STORAGE_KEYS.HOME_OBSERVATION_ENABLED,
@@ -364,6 +368,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         includeLive: true,
         includePlayables: true,
       },
+      [STORAGE_KEYS.RETRIEVAL_SETTINGS]: current[STORAGE_KEYS.RETRIEVAL_SETTINGS] ?? DEFAULT_RETRIEVAL_SETTINGS,
+      [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: current[STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS] ?? EMPTY_RETRIEVAL_DIAGNOSTICS,
       // User-owned/local observational state must survive extension updates.
       [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
       [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
@@ -429,7 +435,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -455,6 +461,7 @@ const handleRuntimeMessage = (
       externalId?: string;
       eventType?: string;
       sourceFilters?: FeedSourceFilters;
+      retrievalSettings?: RetrievalSettings;
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
@@ -636,6 +643,57 @@ const handleRuntimeMessage = (
         : undefined));
     })();
     sendResponse({ ok: true, enabled });
+    return true;
+  }
+
+  if (type === 'SET_RETRIEVAL_SETTINGS') {
+    void (async () => {
+      const next: RetrievalSettings = {
+        ...DEFAULT_RETRIEVAL_SETTINGS,
+        ...(payload?.retrievalSettings ?? {}),
+      };
+      await setStorage(STORAGE_KEYS.RETRIEVAL_SETTINGS, next);
+      const diagnostics = next.rssEnabled
+        ? await refreshRssCandidates(false)
+        : await getStorage<RetrievalDiagnostics>(
+          STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+          EMPTY_RETRIEVAL_DIAGNOSTICS,
+        );
+      if (diagnostics.rssCandidatesAdded > 0) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, retrievalSettings: next, diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update retrieval settings.',
+    }));
+    return true;
+  }
+
+  if (type === 'REFRESH_RETRIEVAL') {
+    void (async () => {
+      const diagnostics = await refreshRssCandidates(false);
+      if (diagnostics.rssCandidatesAdded > 0) {
+        await notifyPersonalAlgorithmChanged('retrieval');
+      }
+      sendResponse({ ok: true, diagnostics });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to refresh retrieval.',
+    }));
+    return true;
+  }
+
+  if (type === 'GET_RETRIEVAL_DIAGNOSTICS') {
+    void Promise.all([
+      getStorage<RetrievalSettings>(STORAGE_KEYS.RETRIEVAL_SETTINGS, DEFAULT_RETRIEVAL_SETTINGS),
+      getStorage<RetrievalDiagnostics>(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, EMPTY_RETRIEVAL_DIAGNOSTICS),
+    ]).then(([retrievalSettings, diagnostics]) => {
+      sendResponse({ ok: true, retrievalSettings, diagnostics });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to read retrieval diagnostics.',
+    }));
     return true;
   }
 
