@@ -40,8 +40,5 @@
         "https://*.youtube.com/*"
       ]
     }
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
   ]
 }
