@@ -404,3 +404,8 @@ The persistent candidate/evidence stores are not the per-render scoring working 
 Watch-page metadata enrichment runs in the MV3 service worker with bounded concurrency rather than inside the YouTube renderer. A dedicated Web Worker remains optional future work only if profiling shows the bounded service-worker scorer is still CPU-bound after indexing, batching, caching, and working-set reduction.
 
 Opportunistic replacements bind the selected off-page candidate to the native slot when the slot is created. Rendering consumes that binding instead of independently selecting a second time; fallback selection is reserved for policy-created slots without a pre-bound candidate.
+
+
+### Replacement stability across SPA churn
+
+A successfully rendered opportunistic replacement is held stable for 45 seconds across ordinary in-route YouTube DOM/page-data churn. The hold is keyed by the native source video ID and replacement candidate, is bounded by the replacement limit, and survives only while the target still exists and the candidate remains eligible and at least as relevant as the native card. Actual navigation, mode changes, graph/feedback invalidation, suppression, or expiry clear the hold. `yt-page-data-updated` is treated as an in-route mutation refresh because YouTube emits it during normal Home updates; hard route invalidation remains attached to `yt-navigate-start`.
