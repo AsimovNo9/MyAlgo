@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
   RETRIEVAL_SETTINGS: 'personal-algorithm-retrieval-settings',
   RETRIEVAL_DIAGNOSTICS: 'personal-algorithm-retrieval-diagnostics',
+  WEB_SEARCH_API_KEY: 'personal-algorithm-web-search-api-key',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
   HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
   HISTORY_METRICS: 'personal-algorithm-history-metrics',
