@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
@@ -74,6 +74,7 @@ const MAX_VIDEO_STORE_SIZE = 800;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 6;
 const MAX_SELECTION_EVENTS = 2000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
 const MAX_REPLACEMENT_WORKING_SET = 180;
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
@@ -95,6 +96,7 @@ const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocal
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
+let lastPersistedTraceSignature = '';
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -233,10 +235,27 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     [],
   );
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
   const byId = new Map<string, CandidatePoolItem>(
     existing.map((candidate) => [candidate.external_id, candidate]),
   );
+  let changed = false;
+
+  const materialSignature = (candidate: PageCandidate | CandidatePoolItem) => JSON.stringify({
+    title: candidate.title,
+    channel_name: candidate.channel_name ?? null,
+    channel_id: candidate.channel_id ?? null,
+    thumbnail_url: candidate.thumbnail_url ?? null,
+    description: candidate.description ?? null,
+    duration_seconds: candidate.duration_seconds ?? null,
+    published_at: candidate.published_at ?? null,
+    topics: candidate.topics ?? [],
+    content_type: candidate.content_type ?? null,
+    source_kind: candidate.source_kind ?? null,
+    is_short: candidate.is_short ?? false,
+    is_live: candidate.is_live ?? false,
+  });
 
   for (const candidate of candidates) {
     if (!candidate.external_id || !candidate.title) continue;
@@ -249,25 +268,37 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
       graph_revision: null,
       source_url: null,
     };
-    const acquisitionHistory = mergeCandidateAcquisitionHistory(
-      previous?.acquisition_history
-        ?? (previous?.provenance ? [previous.provenance] : undefined),
-      incomingProvenance,
-    );
     const observedNow = incomingProvenance.mechanism === 'observed_dom';
+    const materialChanged = !previous || materialSignature(previous) !== materialSignature(candidate);
+    const refreshObservation = observedNow
+      ? shouldRefreshObservedCandidate(previous?.lastSeenAt, nowMs, OBSERVED_CANDIDATE_REFRESH_MS)
+      : true;
+
+    if (previous && observedNow && !materialChanged && !refreshObservation) {
+      continue;
+    }
+
+    const acquisitionHistory = observedNow && previous
+      ? previous.acquisition_history
+        ?? (previous.provenance ? [previous.provenance] : undefined)
+      : mergeCandidateAcquisitionHistory(
+          previous?.acquisition_history
+            ?? (previous?.provenance ? [previous.provenance] : undefined),
+          incomingProvenance,
+        );
+
     byId.set(candidate.external_id, {
       ...previous,
       ...candidate,
-      // Keep the first acquisition path stable; retain subsequent paths in
-      // acquisition_history so merge order cannot rewrite provenance.
       provenance: previous?.provenance ?? incomingProvenance,
       acquisition_history: acquisitionHistory,
       external_id: candidate.external_id,
       title: candidate.title,
       firstSeenAt: previous?.firstSeenAt ?? now,
-      lastSeenAt: observedNow ? now : previous?.lastSeenAt ?? now,
-      lastAcquiredAt: incomingProvenance.acquired_at,
+      lastSeenAt: observedNow ? (refreshObservation ? now : previous?.lastSeenAt ?? now) : previous?.lastSeenAt ?? now,
+      lastAcquiredAt: observedNow ? previous?.lastAcquiredAt ?? incomingProvenance.acquired_at : incomingProvenance.acquired_at,
     });
+    changed = true;
   }
 
   const pool = [...byId.values()]
@@ -277,7 +308,10 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     )
     .slice(0, MAX_CANDIDATE_POOL_SIZE);
 
-  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  if (pool.length !== existing.length) changed = true;
+  if (changed) {
+    await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  }
   return pool;
 }
 
@@ -500,13 +534,17 @@ async function rankLocalCandidates(
     sourceFilters,
   );
 
-  const traces = ranked.map((item) => ({
+  const traces = ranked.slice(0, 60).map((item) => ({
     traceId: item.trace.id,
     candidateId: item.id,
     score: item.score,
     recordedAt: new Date().toISOString(),
   }));
-  await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces.slice(0, 60));
+  const traceSignature = traces.map((item) => `${item.traceId}:${item.score}`).join('|');
+  if (traceSignature !== lastPersistedTraceSignature) {
+    lastPersistedTraceSignature = traceSignature;
+    await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces);
+  }
 
   return ranked.map(({ trace, ...item }) => {
     const contributions = [
