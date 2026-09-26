@@ -13,7 +13,8 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, parseYoutubeRssFeed, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
+import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 
 type PageCandidate = {
   external_id: string;
@@ -350,7 +351,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   }
 
   let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
-  let channelIds = selectRssChannelIds(Object.values(store));
+  let channelIds = selectYoutubeRssChannelIds(Object.values(store));
 
   // Older cached metadata can be fresh but lack channel IDs. Seed channel IDs
   // directly in the extension worker from the bounded candidate reservoir.
@@ -359,7 +360,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     if (candidatePool.length > 0) {
       await enrichVideos(candidatePool);
       store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
-      channelIds = selectRssChannelIds(Object.values(store));
+      channelIds = selectYoutubeRssChannelIds(Object.values(store));
     }
   }
 
