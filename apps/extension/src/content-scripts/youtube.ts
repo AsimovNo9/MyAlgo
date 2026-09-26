@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getShelfCandidates, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
@@ -550,7 +550,12 @@ const applyRankedFeed = () => {
     if (decision.action === 'hide') {
       const sourceVideoId = getVideoId(element);
       const slotWidth = element.getBoundingClientRect().width;
-      if (!sourceVideoId.startsWith('title:') && slotWidth >= 120 && element.parentElement) {
+      if (
+        isReplacementEligibleNativeDecision(decision)
+        && !sourceVideoId.startsWith('title:')
+        && slotWidth >= 120
+        && element.parentElement
+      ) {
         element.dataset.personalAlgorithmSlotId = createReplacementSlotId(rankGeneration, getRouteKey(), nativeIndex, sourceVideoId);
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
       }
