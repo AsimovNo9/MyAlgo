@@ -203,6 +203,6 @@ test('newly acquired videos can score through an already known creator node', ()
 
   assert.equal(acquired[0].score, 2);
   assert.equal(acquired[0].trace.nodeContributions.length, 1);
-  assert.equal(acquired[0].trace.nodeContributions[0].nodeId, 'creator:youtube:Creator%20A');
+  assert.equal(acquired[0].trace.nodeContributions[0].sourceId, 'creator:youtube:Creator%20A');
   assert.equal(acquired[0].trace.edgeContributions.length, 0);
 });
