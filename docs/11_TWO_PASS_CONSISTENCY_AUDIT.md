@@ -12,24 +12,32 @@ The documentation must agree that:
 - The YouTube API is display/account-facts-only at launch.
 - Browser observation supplies graph evidence.
 - MVP is local-first.
-- Watch-history extraction is the first technical spike.
+- Watch-history extraction was the first technical spike and is now completed.
 - Modes operate over one graph.
 - Counterfactuals replay stored candidates.
 
 ## Pass 2 — Execution ordering
 
-The dependency order is:
+The completed foundation is:
 
 ```text
-history extraction
+browser observation
       ↓
-live-feed observation
+source-neutral evidence
       ↓
-local evidence/graph
+local graph + deterministic reconciliation
       ↓
-scoring
+deterministic scoring + local runtime
       ↓
-feed enforcement
+privacy/disclosure gate
+```
+
+The current remaining dependency order is:
+
+```text
+YouTube API boundary audit (#168)
+      ↓
+feed enforcement / stale-loop hardening
       ↓
 Why / trace
       ↓
@@ -44,7 +52,7 @@ sync/cloud/productization
 additional connectors
 ```
 
-Any document that places cloud AI, multi-platform support, or API-derived graph bootstrap before the history/graph validation phase is stale.
+Any document that presents the historical server-ranked/API-derived recommender as the current MVP architecture, or places cloud AI, multi-platform support, or API-derived graph bootstrap ahead of the local feed/trust loop, is stale.
 
 ## Known legacy concepts to remove
 
