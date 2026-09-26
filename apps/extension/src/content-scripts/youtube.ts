@@ -350,13 +350,23 @@ const getVideoElements = () => {
   return Array.from(new Set([...knownElements, ...linkElements]));
 };
 
+const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
+  const path = location.pathname.toLowerCase();
+  if (path === '/feed/subscriptions') return 'subscription';
+  if (path === '/playlist' && new URLSearchParams(location.search).get('list') === 'LL') return 'liked';
+  if (path === '/' || path === '/results' || path === '/watch' || path.startsWith('/shorts')) return 'discovery';
+  return null;
+};
+
 const collectCandidates = () => {
+  const sourceKind = getPageSourceKind();
   const cardCandidates = getVideoElements()
     .map((element) => ({
       external_id: getVideoId(element),
       title: getVideoTitle(element),
       channel_name: getChannelName(element),
       thumbnail_url: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
+      source_kind: sourceKind,
       ...getVideoSourceFlags(element),
     }))
     .filter((candidate) => candidate.title)
@@ -372,6 +382,7 @@ const collectCandidates = () => {
         textContent: link.textContent,
       })),
       channel_name: '',
+      source_kind: sourceKind,
       ...youtubeConnector.getSourceFlags(link.href),
     }))
     .filter((candidate) => candidate.external_id && candidate.title);
