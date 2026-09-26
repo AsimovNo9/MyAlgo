@@ -11,9 +11,9 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { buildGraphRetrievalProfile, buildRecommendationQueryPlans } from '@repo/recommender-core';
+import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildYoutubeRssFeedUrl, isRetrievalAllowed, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
 
 type PageCandidate = {
   external_id: string;
@@ -24,6 +24,7 @@ type PageCandidate = {
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   published_at?: string | null;
   provenance?: CandidateAcquisitionProvenance;
+  acquisition_history?: CandidateAcquisitionProvenance[];
   is_short?: boolean;
   is_live?: boolean;
 };
@@ -40,6 +41,7 @@ type VideoRecord = PageCandidate & {
 type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
+  lastAcquiredAt?: string;
 };
 
 type LocalFeedItem = CandidatePoolItem & {
@@ -155,7 +157,9 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
   const missing = candidates
     .filter((candidate) => {
       const record = existing[candidate.external_id];
-      return !record || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
+      return !record
+        || !record.channel_id
+        || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
@@ -203,20 +207,31 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     if (!candidate.external_id || !candidate.title) continue;
 
     const previous = byId.get(candidate.external_id);
+    const incomingProvenance = candidate.provenance ?? {
+      connector: 'youtube',
+      mechanism: 'observed_dom' as const,
+      acquired_at: now,
+      graph_revision: null,
+      source_url: null,
+    };
+    const acquisitionHistory = mergeCandidateAcquisitionHistory(
+      previous?.acquisition_history
+        ?? (previous?.provenance ? [previous.provenance] : undefined),
+      incomingProvenance,
+    );
+    const observedNow = incomingProvenance.mechanism === 'observed_dom';
     byId.set(candidate.external_id, {
       ...previous,
       ...candidate,
-      provenance: candidate.provenance ?? previous?.provenance ?? {
-        connector: 'youtube',
-        mechanism: 'observed_dom',
-        acquired_at: now,
-        graph_revision: null,
-        source_url: null,
-      },
+      // Keep the first acquisition path stable; retain subsequent paths in
+      // acquisition_history so merge order cannot rewrite provenance.
+      provenance: previous?.provenance ?? incomingProvenance,
+      acquisition_history: acquisitionHistory,
       external_id: candidate.external_id,
       title: candidate.title,
       firstSeenAt: previous?.firstSeenAt ?? now,
-      lastSeenAt: now,
+      lastSeenAt: observedNow ? now : previous?.lastSeenAt ?? now,
+      lastAcquiredAt: incomingProvenance.acquired_at,
     });
   }
 
@@ -262,14 +277,29 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     return { diagnostics: previous, changed: false };
   }
 
-  const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
-  const channelIds = selectRssChannelIds(Object.values(store));
+  let store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  let channelIds = selectRssChannelIds(Object.values(store));
+
+  // Older cached metadata can be fresh but lack channel IDs, which makes RSS
+  // discovery appear enabled while attempting zero feeds. Seed channel IDs
+  // immediately from the current candidate reservoir using an open YouTube tab.
+  if (channelIds.length === 0) {
+    const candidatePool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    const tabId = tabs.find((tab) => tab.id != null)?.id;
+    if (tabId && candidatePool.length > 0) {
+      await enrichVideosInTab(tabId, candidatePool);
+      store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+      channelIds = selectRssChannelIds(Object.values(store));
+    }
+  }
+
   if (channelIds.length === 0) {
     const diagnostics: RetrievalDiagnostics = {
       ...EMPTY_RETRIEVAL_DIAGNOSTICS,
       lastRssSyncAt: new Date(nowMs).toISOString(),
       nextRssAllowedAt: null,
-      lastError: null,
+      lastError: 'No YouTube channel IDs are available yet. Keep a YouTube tab open and refresh discovery after MyAlgo has observed a few videos.',
     };
     await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
     return { diagnostics, changed: false };
@@ -279,7 +309,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
   const existingIds = new Set(existingPool.map((item) => item.external_id));
   const acquiredAt = new Date(nowMs).toISOString();
   const state = await personalAlgorithmStore.exportState();
-  const graphRevision = String(state.graph.currentRevision);
+  const graphRevision = buildGraphRetrievalRevision(state);
 
   const results = await Promise.all(channelIds.map(async (channelId) => {
     const sourceUrl = buildYoutubeRssFeedUrl(channelId);
@@ -527,7 +557,12 @@ const handleRuntimeMessage = (
     void (async () => {
       privacyDisclosureAccepted = false;
       privacyDisclosureReady = Promise.resolve(false);
+      historyReconciliationReady = null;
       await chrome.storage.local.clear();
+      // The store caches state in the service worker. Reset it after clearing
+      // storage so deleted graph/evidence cannot survive in memory or be
+      // persisted again by a later mutation in the same worker lifetime.
+      await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
         [STORAGE_KEYS.ENABLED]: false,
@@ -717,10 +752,11 @@ const handleRuntimeMessage = (
   if (type === 'GET_RETRIEVAL_PLAN') {
     void personalAlgorithmStore.exportState().then((state) => {
       const profile = buildGraphRetrievalProfile(state);
+      const retrievalRevision = buildGraphRetrievalRevision(state);
       const plans = buildRecommendationQueryPlans(
         profile,
         8,
-        String(state.graph.currentRevision),
+        retrievalRevision,
         [],
         [],
         true,
@@ -728,6 +764,7 @@ const handleRuntimeMessage = (
       sendResponse({
         ok: true,
         graphRevision: state.graph.currentRevision,
+        retrievalRevision,
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
