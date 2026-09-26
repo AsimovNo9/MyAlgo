@@ -4,14 +4,15 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-1. #152 + #171 — native-card enforcement plus self-observation/stale-render hardening.
-2. #160 — safe replacement slots.
-3. #170 + #153 — graph provenance/visualization and per-item trace explanation.
-4. #162 — replay/evaluation baselines before richer enrichment.
-5. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
-6. #169 — discharge remaining local-runtime umbrella criteria.
-7. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
-8. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+1. #160 — safe replacement slots.
+2. #170 + #153 — graph provenance/visualization and per-item trace explanation.
+3. #162 — replay/evaluation baselines before richer enrichment.
+4. #154 + #155 + #178 — correction controls, Forget/provenance, and shared-history selection.
+5. #169 — finish explicit offline/signed-out local-runtime validation.
+6. #161 + #158 + #159 — modes, explicit graph creation/editing, and counterfactual replay.
+7. #163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector.
+
+#152 and #171 are completed in merged PR #204 after CI and live-browser validation.
 
 #168 is the completed compliance boundary immediately preceding this sequence.
 
@@ -201,15 +202,17 @@ PR #193 was merged after CI and live browser/runtime validation. The live diagno
 
 ## P2 — Feed enforcement
 
-### [#152](https://github.com/AsimovNo9/MyAlgo/issues/152): Enforce graph decisions on native YouTube cards — **implementation in PR #204**
+### [#152](https://github.com/AsimovNo9/MyAlgo/issues/152): Enforce graph decisions on native YouTube cards — **completed in PR #204**
 
-PR #204 applies local decisions directly to native cards without reordering native renderers, evaluates hard/runtime policy before score thresholds, and treats missing local coverage as pass-through rather than hiding unmatched cards. It removes eager replacement insertion from this path so #160 remains the dedicated safe-replacement issue. CI/unit validation is required plus live browser validation across navigation/infinite-scroll surfaces before closure.
+Merged and live-browser validated. Native cards are enforced in place without reordering; hard/runtime policy precedes numeric score visibility; unmatched cards pass through; presentation cleanup survives DOM recycling.
 
-### [#160](https://github.com/AsimovNo9/MyAlgo/issues/160): Implement safe native-feed replacement slots
+### [#160](https://github.com/AsimovNo9/MyAlgo/issues/160): Implement safe native-feed replacement slots — **next active task**
 
-### [#171](https://github.com/AsimovNo9/MyAlgo/issues/171): Prevent self-observation and stale reranking loops — **implementation in PR #204**
+Reintroduce replacement behavior only through stable native slots, current-generation locally scored candidates, strict native/shelf/replacement deduplication, injected-DOM exclusion, trace metadata, and explicit unfilled-slot behavior.
 
-PR #204 centralizes MyAlgo injected-DOM exclusion across candidate/evidence/interaction paths, rejects stale renders by generation + route + mode, clears previous presentation before a fresh generation, and invalidates open-tab renders after feedback/manual graph rebuilds. Diagnostics report counts/reasons without content details. Live browser validation remains before closure.
+### [#171](https://github.com/AsimovNo9/MyAlgo/issues/171): Prevent self-observation and stale reranking loops — **completed in PR #204**
+
+Merged and live-browser validated. Injected DOM is excluded from evidence/candidate/interaction paths; stale generations are rejected by generation + route + mode; pause/reactivation, feedback, rebuild invalidation, and infinite-scroll recycling were validated.
 
 ## P3 — Trust UX
 
