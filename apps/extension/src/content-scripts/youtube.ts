@@ -984,6 +984,15 @@ const rankCurrentPage = async (requestGeneration: number) => {
     }
 
     if (response?.ok && Array.isArray(response.feed)) {
+      console.info('[MyAlgo] rank response', {
+        generation: requestGeneration,
+        pageCandidates: candidates.length,
+        feed: response.feed.length,
+        backgroundElapsedMs: response.elapsedMs ?? null,
+        rankingWorkingSetSize: response.rankingWorkingSetSize ?? null,
+        replacementInventorySize: response.replacementInventorySize ?? null,
+        enrichmentPending: response.enrichmentPending === true,
+      });
       cachedFeed = response.feed;
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
@@ -1029,12 +1038,19 @@ const triggerRank = (
     lastCandidateSignature = '';
   }
 
-  const generation = ++rankGeneration;
   if (rankingInFlight) {
     rankQueued = true;
+    // Ordinary feed churn must not invalidate the response already in flight;
+    // otherwise a continuously mutating YouTube Home page can starve MyAlgo
+    // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
+    // changes still invalidate the active generation.
+    if (reason !== 'mutation' && reason !== 'metadata') {
+      rankGeneration += 1;
+    }
     return;
   }
 
+  const generation = ++rankGeneration;
   const delayMs = reason === 'mutation'
     ? 320
     : reason === 'metadata'
