@@ -1165,6 +1165,19 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'GET_SEMANTIC_DIAGNOSTICS') {
+    void getStorage<Record<string, unknown> | null>(
+      STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
+      null,
+    ).then((diagnostics) => {
+      sendResponse({ ok: true, diagnostics });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to read semantic diagnostics.',
+    }));
+    return true;
+  }
+
   if (type === 'GET_RETRIEVAL_DIAGNOSTICS') {
     void Promise.all([
       getStorage<RetrievalSettings>(STORAGE_KEYS.RETRIEVAL_SETTINGS, DEFAULT_RETRIEVAL_SETTINGS),
