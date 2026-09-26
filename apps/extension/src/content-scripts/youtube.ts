@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -218,7 +218,10 @@ const createReplacementCard = (
 
   const replacementBadge = document.createElement('span');
   replacementBadge.dataset.personalAlgorithmBadge = 'true';
-  replacementBadge.textContent = `MyAlgo replacement · ${metadata.mode} · ${metadata.score}`;
+  const contentLabel = getContentPresentationLabel(item);
+  replacementBadge.textContent = contentLabel
+    ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
+    : `MyAlgo replacement · ${metadata.score}`;
   replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
   card.appendChild(replacementBadge);
 
@@ -248,7 +251,9 @@ const createReplacementCard = (
   card.appendChild(link);
 
   const meta = document.createElement('div');
-  meta.textContent = `MyAlgo · ${activeMode} · ${item.score ?? 0}/100`;
+  meta.textContent = contentLabel
+    ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
+    : `MyAlgo · ${item.score ?? 0}/100`;
   meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary,#aaa);font-size:12px;line-height:17px;font-weight:600;';
   card.appendChild(meta);
 
@@ -645,7 +650,10 @@ const applyRankedFeed = () => {
       }
       badgeHost.appendChild(badge);
     }
-    badge.textContent = `MyAlgo · ${activeMode} · ${score}`;
+    const contentLabel = getContentPresentationLabel(item);
+    badge.textContent = contentLabel
+      ? `${contentLabel} · ${score}`
+      : `MyAlgo · ${score}`;
   });
 
   // If policy/score filtering did not naturally create enough replacement
