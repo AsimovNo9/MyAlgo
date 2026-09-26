@@ -76,6 +76,26 @@ export interface WebSearchProvider {
   search(request: WebSearchRequest): Promise<WebSearchResult[]>;
 }
 
+export async function acquireWebSearchCandidates(
+  provider: WebSearchProvider,
+  plans: RecommendationQueryPlan[],
+  acquiredAt: string,
+  maxPlans = 4,
+  perPlanLimit = 8,
+): Promise<RecommendationCandidate[]> {
+  const selectedPlans = plans.slice(0, Math.max(0, maxPlans));
+  const batches = await Promise.all(selectedPlans.map(async (plan) => {
+    const results = await provider.search(buildWebSearchRequest(plan, perPlanLimit));
+    return normalizeWebSearchResultsToYoutubeCandidates(results, plan, acquiredAt);
+  }));
+
+  const byId = new Map<string, RecommendationCandidate>();
+  for (const candidate of batches.flat()) {
+    if (!byId.has(candidate.external_id)) byId.set(candidate.external_id, candidate);
+  }
+  return [...byId.values()];
+}
+
 export function buildWebSearchRequest(
   plan: RecommendationQueryPlan,
   limit = 8,
