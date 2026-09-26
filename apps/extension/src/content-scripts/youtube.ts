@@ -604,6 +604,11 @@ const applyRankedFeed = () => {
     youtubeConnector.presentation.replacementLimit - existingReplacementSlots,
   );
 
+  let opportunisticReplacementCandidates = 0;
+  let opportunisticNativeTargets = 0;
+  let opportunisticSelectedTargets = 0;
+  let opportunisticEqualScoreSelections = 0;
+
   if (remainingReplacementCapacity > 0) {
     const nativeIds = new Set(
       knownElements.map(getVideoId).filter((id) => id && !id.startsWith('title:')),
@@ -626,6 +631,16 @@ const applyRankedFeed = () => {
       replacementCandidates,
       remainingReplacementCapacity,
     );
+
+    opportunisticReplacementCandidates = replacementCandidates.length;
+    opportunisticNativeTargets = nativeTargets.length;
+    opportunisticSelectedTargets = selectedTargets.length;
+    const sortedCandidateScores = [...replacementCandidates]
+      .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+      .map((item) => item.score ?? 0);
+    opportunisticEqualScoreSelections = selectedTargets.filter(
+      (target, index) => sortedCandidateScores[index] === target.score,
+    ).length;
 
     for (const selected of selectedTargets) {
       const element = knownElements[selected.nativeIndex];
@@ -664,6 +679,10 @@ const applyRankedFeed = () => {
     hiddenSourceLayoutItems: document.querySelectorAll(
       '[data-personal-algorithm-source-layout-hidden]',
     ).length,
+    opportunisticReplacementCandidates,
+    opportunisticNativeTargets,
+    opportunisticSelectedTargets,
+    opportunisticEqualScoreSelections,
   });
 };
 
