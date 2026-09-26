@@ -93,3 +93,21 @@ Do not introduce another worker/thread merely to move an oversized workload. A d
 The UI overlay path is network-independent. Initial/native overlay rendering should begin after local candidate collection and deterministic scoring, not after RSS/search/watch-page enrichment. Metadata enrichment is background work and may refine a later generation.
 
 Avoid rank starvation on mutation-heavy pages: a rank already in flight is allowed to complete through ordinary DOM churn, with at most one queued refresh afterward. This is preferred to repeatedly invalidating in-flight work until the page becomes quiet.
+
+
+### Local retention budgets
+
+The extension deliberately retains bounded local working history rather than treating the user's browser as an unlimited event warehouse.
+
+Current safety budgets:
+- candidate reservoir: 800;
+- enriched video metadata cache: 500;
+- History evidence: 2,000 unique videos;
+- one History observation processes at most 500 rendered items;
+- Home recommendation observations: 300 retained exposures;
+- selection/watch event buffer: 750;
+- default Personal Algorithm evidence: 3,000 records;
+- feed cache: 80;
+- live ranking working set: 320, including at most 180 off-page replacement candidates.
+
+Home exposure evidence is reconciled to the retained 300-observation window rather than accumulating every historical feed impression indefinitely. Evidence compaction removes the oldest default-retention records, expired records, unsupported inferred edges/creator nodes, and unreferenced auto-created content nodes while preserving indefinite/user-supported graph data.
