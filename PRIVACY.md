@@ -61,7 +61,7 @@ After a full local-data deletion, observation remains disabled until the current
 
 ## Security and permissions
 
-The extension requests `storage` and required YouTube HTTPS host access. YouTube search-page discovery uses that existing YouTube host boundary and does not add another host permission. It does not request `<all_urls>`, Chrome `history`, `tabs`, `cookies`, `webRequest`, or `scripting` permissions.
+The extension requests `storage`, the MV3 `offscreen` permission used only to host a bundled dedicated Worker for YouTube search-page processing, and required YouTube HTTPS host access. YouTube search-page discovery uses the existing YouTube host boundary and does not add another host permission. It does not request `<all_urls>`, Chrome `history`, `tabs`, `cookies`, `webRequest`, or `scripting` permissions.
 
 The project audits the built extension package for common secret/token patterns. Secrets and private API credentials must not be bundled in the extension.
 
