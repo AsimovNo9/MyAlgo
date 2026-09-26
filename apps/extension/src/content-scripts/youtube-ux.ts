@@ -4,6 +4,8 @@ export type VideoCandidate = {
   channel_name?: string | null;
   is_short?: boolean;
   is_live?: boolean;
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
 };
 
 export type RankedFeedItem = {
@@ -27,6 +29,18 @@ export type RankedFeedItem = {
   is_short?: boolean;
   is_live?: boolean;
 };
+
+export function getContentPresentationLabel(
+  item: RankedFeedItem,
+  minimumConfidence = 0.75,
+): string | null {
+  const confidence = Number(item.content_label_confidence ?? 0);
+  if (!item.content_label || confidence < minimumConfidence) return null;
+  if (item.content_label === 'learning') return 'Learning';
+  if (item.content_label === 'work') return 'Work';
+  if (item.content_label === 'relax') return 'Relax';
+  return null;
+}
 
 export const MYALGO_INJECTED_SELECTOR = [
   '[data-personal-algorithm-shelf]',
