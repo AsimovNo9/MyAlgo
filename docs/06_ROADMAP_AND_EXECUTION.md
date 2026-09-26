@@ -11,7 +11,7 @@
 5. Confirm data can remain local for MVP. **Completed and browser-validated (#167 / PR #199).**
 6. Document observed-data retention/deletion. **Completed for the local-only MVP (#167 / PR #199).**
 7. Verify Chrome permission scope. **Completed in source/tests (#167 / PR #199).**
-8. Verify YouTube API remains display-only. **Next active gate (#168).**
+8. Verify YouTube API boundary. **Audit implemented in #168: current launch runtime contains no YouTube Data API integration; CI guardrails enforce that absence.**
 
 **Exit:** enough browser-observed evidence exists to construct a useful initial graph.
 
