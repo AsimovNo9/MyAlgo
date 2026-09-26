@@ -932,13 +932,6 @@ const registerFeedbackHandlers = () => {
         contentItemId: context.contentItemId,
         eventType,
       },
-    }, (response) => {
-      if (!response?.ok || !isCurrentInstance() || !extensionEnabled) return;
-      cachedFeed = [];
-      lastCandidateSignature = '';
-      lastRankMode = '';
-      clearExtensionPresentation(false);
-      triggerRank('feedback');
     });
   }, true);
 };
