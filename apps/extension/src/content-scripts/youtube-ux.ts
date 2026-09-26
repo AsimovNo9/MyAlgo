@@ -161,6 +161,32 @@ export type ReplacementAssignment = {
   item: RankedFeedItem;
 };
 
+export type ReplacementPresentationMetadata = {
+  generation: number;
+  mode: string;
+  score: number;
+  traceId: string;
+  slotId: string;
+  sourceVideoId: string;
+  replacementVideoId: string;
+};
+
+export function getReplacementPresentationMetadata(
+  assignment: ReplacementAssignment,
+  generation: number,
+  mode: string,
+): ReplacementPresentationMetadata {
+  return {
+    generation,
+    mode,
+    score: assignment.item.score ?? 0,
+    traceId: assignment.item.traceId ?? '',
+    slotId: assignment.slot.slotId,
+    sourceVideoId: assignment.slot.sourceVideoId,
+    replacementVideoId: assignment.item.external_id ?? '',
+  };
+}
+
 export function planReplacementAssignments(
   items: RankedFeedItem[],
   slots: ReplacementSlot[],
