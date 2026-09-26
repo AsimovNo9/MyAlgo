@@ -33,6 +33,117 @@ const exposure = {
   metadata: { title: 'Test video' },
 };
 
+
+
+test('incremental evidence ingestion materializes creator nodes and created_by edges', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorId: 'creator-1', creatorName: 'Creator One' },
+    },
+  }, 'creator-evidence-1');
+
+  const graph = await store.getGraph();
+  const creator = graph.nodes.find((node) => node.kind === 'creator');
+  const edge = graph.edges.find((item) => item.relation === 'created_by');
+
+  assert.equal(creator?.id, 'creator:youtube:creator-1');
+  assert.equal(edge?.sourceNodeId, 'content:youtube:yt-1');
+  assert.equal(edge?.targetNodeId, 'creator:youtube:creator-1');
+  assert.deepEqual(edge?.evidenceIds, ['creator-evidence-1']);
+});
+
+test('incremental evidence ingestion merges supporting evidence without duplicating creator edges', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorName: 'Creator One' },
+    },
+  }, 'creator-evidence-1');
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'yt-1|home||1',
+      metadata: { title: 'Creator video', creatorName: 'Creator One' },
+    },
+  }, 'creator-evidence-2');
+
+  const graph = await store.getGraph();
+  const edges = graph.edges.filter((item) => item.relation === 'created_by');
+  assert.equal(edges.length, 1);
+  assert.deepEqual(edges[0].evidenceIds, ['creator-evidence-1', 'creator-evidence-2']);
+});
+
+test('incremental evidence ingestion does not invent creator relationships without creator metadata', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({ evidence: exposure }, 'no-creator-evidence');
+
+  const graph = await store.getGraph();
+  assert.equal(graph.nodes.filter((node) => node.kind === 'creator').length, 0);
+  assert.equal(graph.edges.filter((edge) => edge.relation === 'created_by').length, 0);
+});
+
+
+
+test('replacing evidence reconciles stale creator relationship support', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorName: 'Old Creator' },
+    },
+  }, 'replace-creator');
+  assert.equal((await store.getGraph()).edges.length, 1);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: { title: 'Creator video', creatorName: 'New Creator' },
+    },
+  }, 'replace-creator');
+
+  const graph = await store.getGraph();
+  const creatorEdges = graph.edges.filter((edge) => edge.relation === 'created_by');
+  assert.equal(creatorEdges.length, 1);
+  assert.equal(creatorEdges[0].targetNodeId, 'creator:youtube:New%20Creator');
+  assert.deepEqual(creatorEdges[0].evidenceIds, ['replace-creator']);
+  assert.equal(graph.edges.some((edge) => edge.targetNodeId === 'creator:youtube:Old%20Creator'), false);
+  assert.equal(graph.nodes.some((node) => node.id === 'creator:youtube:Old%20Creator'), false);
+});
+
+test('incremental creator relationships remain evidence-backed after metadata arrives later', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: { ...exposure, metadata: { title: 'Initially bare' } },
+  }, 'late-creator-1');
+  assert.equal((await store.getGraph()).edges.length, 0);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      exposureId: 'yt-1|home||1',
+      metadata: { title: 'Hydrated', creatorId: 'creator-late', creatorName: 'Late Creator' },
+    },
+  }, 'late-creator-2');
+
+  const graph = await store.getGraph();
+  const edge = graph.edges.find((item) => item.relation === 'created_by');
+  assert.equal(edge?.targetNodeId, 'creator:youtube:creator-late');
+  assert.deepEqual(edge?.evidenceIds, ['late-creator-2']);
+});
+
 test('local store persists normalized evidence and graph content nodes across restart', async () => {
   backing.clear();
   setCalls = 0;
@@ -87,7 +198,8 @@ test('history reconciliation replaces legacy history evidence in one storage wri
       'interaction:watched:legacy-2:history',
     ],
   );
-  assert.equal((await store.getGraph()).nodes.length, 2);
+  assert.equal((await store.getGraph()).nodes.length, 3);
+  assert.equal((await store.getGraph()).nodes.filter((node) => node.kind === 'creator').length, 1);
 });
 
 
@@ -335,9 +447,9 @@ test('content nodes preserve and hydrate normalized metadata without creating se
   }, 'metadata-2');
 
   const graph = await store.getGraph();
-  assert.equal(graph.nodes.length, 1);
-  assert.equal(graph.nodes[0].kind, 'content');
-  assert.equal(graph.nodes[0].label, 'Metadata title');
+  assert.equal(graph.nodes.filter((node) => node.kind === 'content').length, 1);
+  assert.equal(graph.nodes.filter((node) => node.kind === 'topic').length, 0);
+  assert.equal(graph.nodes.find((node) => node.kind === 'content')?.label, 'Metadata title');
   assert.equal(graph.nodes[0].attributes.metadata.creatorId, 'creator-1');
   assert.equal(graph.nodes[0].attributes.metadata.description, 'Description');
   assert.equal(graph.nodes[0].attributes.metadata.publishedAt, '2026-09-25T09:00:00.000Z');

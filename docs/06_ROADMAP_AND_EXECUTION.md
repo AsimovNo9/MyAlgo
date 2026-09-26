@@ -193,7 +193,7 @@ scoring / ranking
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime-scoring foundation is implemented and live-validated through PR #195. The next product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#160/#171), alongside the remaining privacy/API boundary gates (#167/#168).
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime-scoring foundation is implemented and live-validated through PR #195. The next product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#160/#171), alongside the remaining privacy/API boundary gates (#167/#168). The graph-maintenance follow-up now keeps creator relationships consistent during evidence ingestion; full rebuild remains a deterministic reconciliation path.
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 

@@ -216,9 +216,14 @@ export class LocalPersonalAlgorithmStore {
         },
       };
       const index = state.evidence.findIndex((item) => item.id === id);
-      if (index >= 0) state.evidence[index] = record;
-      else state.evidence.push(record);
+      if (index >= 0) {
+        state.evidence[index] = record;
+        this.removeCreatorRelationshipSupport(state, record.id);
+      } else {
+        state.evidence.push(record);
+      }
       this.ensureContentNode(state, record.evidence);
+      this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
       return structuredClone(record);
     });
   }
@@ -261,6 +266,7 @@ export class LocalPersonalAlgorithmStore {
         if (existingIndex >= 0) state.evidence[existingIndex] = record;
         else state.evidence.push(record);
         this.ensureContentNode(state, record.evidence);
+        this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
       }
 
       return { removed: historyIds.size, upserted: inputs.length };
@@ -457,50 +463,7 @@ export class LocalPersonalAlgorithmStore {
 
       for (const record of records) {
         this.ensureContentNode(state, record.evidence);
-        const metadata = record.evidence.metadata;
-        if (!metadata) continue;
-        const creatorKey = metadata?.creatorId ?? metadata?.creatorName;
-        if (!creatorKey) continue;
-
-        const contentId = contentNodeId(record.evidence.content.source, record.evidence.content.externalId);
-        const creatorNodeId = `creator:${encodeURIComponent(record.evidence.content.source)}:${encodeURIComponent(creatorKey)}`;
-        const creatorLabel = metadata?.creatorName ?? creatorKey;
-        const creatorNode = state.graph.nodes.find((node) => node.id === creatorNodeId);
-
-        if (!creatorNode) {
-          const timestamp = nowIso();
-          state.graph.nodes.push({
-            id: creatorNodeId,
-            kind: 'creator',
-            label: creatorLabel,
-            provenance: 'inferred',
-            confidence: record.confidence,
-            attributes: { source: record.evidence.content.source },
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          });
-        }
-
-        const edgeId = `edge:created_by:${contentId}:${creatorNodeId}`;
-        const existingEdge = state.graph.edges.find((edge) => edge.id === edgeId);
-        if (existingEdge) {
-          existingEdge.evidenceIds = [...new Set([...existingEdge.evidenceIds, record.id])];
-          existingEdge.updatedAt = nowIso();
-        } else {
-          const timestamp = nowIso();
-          state.graph.edges.push({
-            id: edgeId,
-            sourceNodeId: contentId,
-            targetNodeId: creatorNodeId,
-            relation: 'created_by',
-            provenance: 'inferred',
-            confidence: record.confidence,
-            evidenceIds: [record.id],
-            attributes: {},
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          });
-        }
+        this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
       }
 
       return structuredClone(state.graph);
@@ -538,6 +501,73 @@ export class LocalPersonalAlgorithmStore {
       provenance: 'explicit',
       confidence: null,
       attributes: metadata ? { metadata } : {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+
+  private removeCreatorRelationshipSupport(state: PersonalAlgorithmState, evidenceId: string): void {
+    state.graph.edges = state.graph.edges
+      .map((edge) => edge.relation === 'created_by' && edge.provenance === 'inferred'
+        ? { ...edge, evidenceIds: edge.evidenceIds.filter((id) => id !== evidenceId) }
+        : edge)
+      .filter((edge) => edge.relation !== 'created_by' || edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+    const referencedNodeIds = new Set(state.graph.edges.map((edge) => edge.targetNodeId));
+    state.graph.nodes = state.graph.nodes.filter(
+      (node) => node.provenance !== 'inferred'
+        || node.kind !== 'creator'
+        || referencedNodeIds.has(node.id),
+    );
+  }
+
+  private ensureCreatorRelationship(
+    state: PersonalAlgorithmState,
+    evidence: NormalizedEvidence,
+    evidenceId: string,
+    confidence: number,
+  ): void {
+    const metadata = evidence.metadata;
+    const creatorKey = metadata?.creatorId ?? metadata?.creatorName;
+    if (!creatorKey) return;
+
+    const contentId = contentNodeId(evidence.content.source, evidence.content.externalId);
+    const creatorNodeId = `creator:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(creatorKey)}`;
+    const creatorLabel = metadata?.creatorName ?? creatorKey;
+    const creatorNode = state.graph.nodes.find((node) => node.id === creatorNodeId);
+
+    if (!creatorNode) {
+      const timestamp = nowIso();
+      state.graph.nodes.push({
+        id: creatorNodeId,
+        kind: 'creator',
+        label: creatorLabel,
+        provenance: 'inferred',
+        confidence,
+        attributes: { source: evidence.content.source },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    }
+
+    const edgeId = `edge:created_by:${contentId}:${creatorNodeId}`;
+    const existingEdge = state.graph.edges.find((edge) => edge.id === edgeId);
+    if (existingEdge) {
+      existingEdge.evidenceIds = [...new Set([...existingEdge.evidenceIds, evidenceId])];
+      existingEdge.updatedAt = nowIso();
+      return;
+    }
+
+    const timestamp = nowIso();
+    state.graph.edges.push({
+      id: edgeId,
+      sourceNodeId: contentId,
+      targetNodeId: creatorNodeId,
+      relation: 'created_by',
+      provenance: 'inferred',
+      confidence,
+      evidenceIds: [evidenceId],
+      attributes: {},
       createdAt: timestamp,
       updatedAt: timestamp,
     });
