@@ -3,7 +3,7 @@ import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
-import { extractYouTubeChannelIdFromWatchHtml } from './youtube-dom';
+import { extractYouTubeChannelIdFromWatchHtml, extractYouTubeWatchMetadataFromHtml } from './youtube-dom';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
@@ -1003,24 +1003,22 @@ const enrichYouTubeVideo = async (candidate: { external_id: string; title: strin
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const meta = (selector: string) => doc.querySelector<HTMLMetaElement>(selector)?.content?.trim() || null;
-    const title = meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title;
-    const description = meta('meta[name="description"]') ?? meta('meta[property="og:description"]');
-    const thumbnail = meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null;
-    const duration = parseIsoDuration(meta('meta[itemprop="duration"]'));
-    const publishedAt = meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]');
+    const rich = extractYouTubeWatchMetadataFromHtml(html);
     const viewCountRaw = meta('meta[itemprop="interactionCount"]');
     const viewCount = viewCountRaw && /^\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
-    const channelId = meta('meta[itemprop="channelId"]') ?? extractYouTubeChannelIdFromWatchHtml(html);
-    const channelName = meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null;
+    const fallbackDuration = parseIsoDuration(meta('meta[itemprop="duration"]'));
     return {
       ...fallback,
-      title,
-      channel_name: channelName,
-      channel_id: channelId,
-      thumbnail_url: thumbnail,
-      description: description?.slice(0, 600) ?? null,
-      duration_seconds: duration,
-      published_at: publishedAt,
+      title: rich.title ?? meta('meta[property="og:title"]') ?? meta('meta[itemprop="name"]') ?? candidate.title,
+      channel_name: rich.channelName ?? meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null,
+      channel_id: rich.channelId ?? meta('meta[itemprop="channelId"]') ?? extractYouTubeChannelIdFromWatchHtml(html),
+      thumbnail_url: rich.thumbnailUrl ?? meta('meta[property="og:image"]') ?? candidate.thumbnail_url ?? null,
+      description: (rich.description ?? meta('meta[name="description"]') ?? meta('meta[property="og:description"]'))?.slice(0, 1600) ?? null,
+      duration_seconds: rich.durationSeconds ?? fallbackDuration,
+      published_at: rich.publishedAt ?? meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]'),
+      topics: [...new Set([...(rich.keywords ?? []), ...(rich.category ? [rich.category] : [])])].slice(0, 24),
+      content_type: rich.category ?? null,
+      is_live: candidate.is_live === true || rich.isLive,
       view_count: viewCount,
     };
   } catch {
