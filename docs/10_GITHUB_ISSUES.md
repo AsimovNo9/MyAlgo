@@ -201,11 +201,15 @@ PR #193 was merged after CI and live browser/runtime validation. The live diagno
 
 ## P2 — Feed enforcement
 
-### [#152](https://github.com/AsimovNo9/MyAlgo/issues/152): Enforce graph decisions on native YouTube cards
+### [#152](https://github.com/AsimovNo9/MyAlgo/issues/152): Enforce graph decisions on native YouTube cards — **implementation in PR #204**
+
+PR #204 applies local decisions directly to native cards without reordering native renderers, evaluates hard/runtime policy before score thresholds, and treats missing local coverage as pass-through rather than hiding unmatched cards. It removes eager replacement insertion from this path so #160 remains the dedicated safe-replacement issue. CI/unit validation is required plus live browser validation across navigation/infinite-scroll surfaces before closure.
 
 ### [#160](https://github.com/AsimovNo9/MyAlgo/issues/160): Implement safe native-feed replacement slots
 
-### [#171](https://github.com/AsimovNo9/MyAlgo/issues/171): Prevent self-observation and stale reranking loops
+### [#171](https://github.com/AsimovNo9/MyAlgo/issues/171): Prevent self-observation and stale reranking loops — **implementation in PR #204**
+
+PR #204 centralizes MyAlgo injected-DOM exclusion across candidate/evidence/interaction paths, rejects stale renders by generation + route + mode, clears previous presentation before a fresh generation, and invalidates open-tab renders after feedback/manual graph rebuilds. Diagnostics report counts/reasons without content details. Live browser validation remains before closure.
 
 ## P3 — Trust UX
 
