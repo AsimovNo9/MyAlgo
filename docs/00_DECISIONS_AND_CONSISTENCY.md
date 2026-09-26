@@ -24,7 +24,7 @@ final score = base score + Σ contribution
 
 Every displayed contribution must correspond to an actual term in MyAlgo's scoring function.
 
-Do not present post-hoc explainability such as SHAP values as though they were the native score decomposition.
+Do not present post-hoc explainability such as SHAP values as though they were the native score decomposition. The #151 trace is the native additive decomposition: base + node + edge + feedback + mode + suppression terms.
 
 ## 4. Evidence versus model
 

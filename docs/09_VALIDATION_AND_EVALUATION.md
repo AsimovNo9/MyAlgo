@@ -69,7 +69,7 @@ For every explanation:
 displayed contributions == scorer contributions
 ```
 
-The trace must be reproducible from the graph version and evidence version.
+The trace must be reproducible from the graph revision, deterministic evidence revision, candidate identity, scorer revision, and policy revision. Replaying the same inputs must reproduce the score and trace identity.
 
 ## Counterfactual evaluation
 

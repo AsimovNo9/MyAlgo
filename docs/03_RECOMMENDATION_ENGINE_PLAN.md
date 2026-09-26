@@ -96,6 +96,38 @@ final                          1.47
 
 These contributions are native model terms.
 
+## Deterministic scorer (#151)
+
+The Personal Algorithm scorer is a source-neutral pure computation over a versioned Personal Algorithm state, a candidate, and an explicit scoring policy. It does not infer preference from raw `watched` evidence.
+
+Scoring order is fixed:
+
+```text
+hard exclusions
+    ↓
+eligibility
+    ↓
+base score
+    ↓
+node contributions
+    ↓
+edge contributions
+    ↓
+feedback contributions
+    ↓
+mode adjustments
+    ↓
+suppression policy
+    ↓
+final score + trace
+```
+
+The trace records the scorer/policy revisions, graph revision, deterministic evidence revision, matched graph paths, exact contribution terms, evidence support IDs, and policy outcome. Trace IDs are derived from those inputs rather than wall-clock time, so replaying the same graph/evidence/candidate/policy produces the same score and trace identity. `traceContributionTotal()` and `isScoreTraceConsistent()` enforce the invariant that the displayed decomposition equals the native scorer output.
+
+Hard exclusions and eligibility short-circuit before any additive contribution is evaluated. Suppression is represented as a final trace contribution so the displayed decomposition still reconciles exactly to the final score.
+
+The scorer accepts explicit node/relation weights, bounded feedback signals, and mode-specific weight/policy adjustments. Those are policy inputs; they are not learned implicitly by the scorer. Extension runtime wiring belongs to #169, while preference inference remains a separate upstream concern.
+
 ## Feedback
 
 Feedback should update graph evidence or bounded preference state.

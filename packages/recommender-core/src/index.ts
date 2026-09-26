@@ -1101,3 +1101,6 @@ export function buildStoredOrDerivedAlgorithmIntentProfile(
     topic_weights: algorithm.topic_weights ?? [],
   });
 }
+
+
+export * from './personal-algorithm-scorer.ts';

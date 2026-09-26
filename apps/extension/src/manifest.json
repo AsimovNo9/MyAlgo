@@ -17,7 +17,7 @@
     "open_in_tab": true
   },
   "background": {
-    "service_worker": "src/background/index.ts"
+    "service_worker": "src/background/diagnostic-service-worker.ts"
   },
   "content_scripts": [
     {
