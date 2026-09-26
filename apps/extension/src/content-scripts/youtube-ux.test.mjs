@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getShelfCandidates, isRenderContextStale, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -137,4 +137,14 @@ test('reactivation semantics require a fresh manual generation rather than stale
   const stale = { generation: 7, routeKey: '/', mode: 'Work' };
   const current = { generation: 8, routeKey: '/', mode: 'Work' };
   assert.equal(isRenderContextStale(stale, current), true);
+});
+
+
+test('replacement slot identity changes with generation, route, position, and source', () => {
+  const base = createReplacementSlotId(4, '/', 2, 'native-a');
+  assert.equal(base, '4|/|2|native-a');
+  assert.notEqual(createReplacementSlotId(5, '/', 2, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/results?q=x', 2, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/', 3, 'native-a'), base);
+  assert.notEqual(createReplacementSlotId(4, '/', 2, 'native-b'), base);
 });
