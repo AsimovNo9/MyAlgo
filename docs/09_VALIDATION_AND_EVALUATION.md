@@ -219,6 +219,22 @@ For long-session validation:
 5. evidence compaction preserves indefinite evidence and graph nodes referenced by retained evidence, edges, or user edits.
 
 
+### Current search validation checkpoint
+
+Observed live retrieval diagnostics:
+
+```text
+plansAttempted: 4
+plansSucceeded: 4
+fetched: 32
+added: 3
+deduplicated: 29
+searchCandidatesInPool: 35
+error: null
+```
+
+Interpretation: acquisition is working; the active validation target is downstream scoring/presentation. The next live run must capture the promotion diagnostics below and confirm at least one qualified search-origin candidate can reach a replacement without destabilizing the overlay.
+
 ### Search-to-feed promotion diagnostics
 
 Live rank diagnostics expose:
