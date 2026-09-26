@@ -17,6 +17,8 @@ export const STORAGE_KEYS = {
   SELECTION_EVENTS: 'personal-algorithm-selection-events',
   PERSONAL_ALGORITHM_STATE: 'personal-algorithm-state',
   PERSONAL_ALGORITHM_LOCAL_TRACES: 'personal-algorithm-local-traces',
+  SEMANTIC_EMBEDDING_CACHE: 'personal-algorithm-semantic-embedding-cache',
+  SEMANTIC_DIAGNOSTICS: 'personal-algorithm-semantic-diagnostics',
   PRIVACY_DISCLOSURE_ACCEPTED_VERSION: 'personal-algorithm-privacy-disclosure-accepted-version',
 } as const;
 
