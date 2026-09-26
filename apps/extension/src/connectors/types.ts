@@ -5,7 +5,47 @@ import type {
   ExposureEvidence,
   InteractionEvidence,
   InteractionKind,
+  RecommendationCandidate,
+  RecommendationQueryPlan,
 } from '@repo/shared-types';
+
+export type WebSearchRequest = {
+  query: string;
+  lane: RecommendationQueryPlan['lane'];
+  topics: string[];
+  graphRevision: string;
+  acquiredAt: string;
+  limit: number;
+};
+
+export interface WebSearchProvider {
+  readonly id: string;
+  search(request: WebSearchRequest): Promise<RecommendationCandidate[]>;
+}
+
+export type ProviderEnrichmentInput = {
+  external_id: string;
+  title: string;
+  channel_name?: string | null;
+  channel_id?: string | null;
+  thumbnail_url?: string | null;
+  description?: string | null;
+  duration_seconds?: number | null;
+  published_at?: string | null;
+  topics?: string[];
+  content_type?: string | null;
+  is_short?: boolean;
+  is_live?: boolean;
+};
+
+export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
+  view_count?: number | null;
+};
+
+export type ProviderAcquisitionConnector = {
+  readonly search?: WebSearchProvider;
+  enrich(candidate: ProviderEnrichmentInput): Promise<ProviderEnrichmentResult | null>;
+};
 
 export type ProviderCapabilities = {
   search: boolean;
@@ -42,6 +82,7 @@ export interface PageProviderConnector extends EvidenceConnector {
   readonly titleSelectors: readonly string[];
   readonly videoLinkSelector: string;
   readonly presentation: ProviderPresentationContract;
+  readonly acquisition?: ProviderAcquisitionConnector;
   canHandleUrl(href: string): boolean;
   getExternalId(href: string): string | undefined;
   getCanonicalUrl(externalId: string): string;
