@@ -106,9 +106,14 @@ export function createLocalHashEmbeddingProvider(
           const primary = hashToken(term, 0x811c9dc5);
           const secondary = hashToken(term, 0x9e3779b9);
           const index = primary % safeDimensions;
-          const sign = (secondary & 1) === 0 ? 1 : -1;
+          const secondaryIndex = secondary % safeDimensions;
           const weight = term.includes('_') ? 1.25 : term.length === 3 ? 0.35 : 1;
-          vector[index] += sign * weight;
+          // Keep the lexical baseline non-negative so exact/shared terms and
+          // subwords increase similarity predictably. A second low-weight bin
+          // reduces single-hash collision sensitivity without pretending this
+          // baseline has learned neural semantics.
+          vector[index] += weight;
+          if (secondaryIndex !== index) vector[secondaryIndex] += weight * 0.2;
         }
         return vector;
       });
