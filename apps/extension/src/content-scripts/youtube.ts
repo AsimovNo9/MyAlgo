@@ -26,6 +26,7 @@ let rankingInFlight = false;
 let activeMode = 'Work';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
+let mutationRankTimer: number | undefined;
 let rankQueued = false;
 let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
@@ -831,7 +832,7 @@ const scheduleRankGeneration = (generation: number) => {
       return;
     }
     void rankCurrentPage(generation);
-  }, 180);
+  }, 320);
 };
 
 const scheduleLatestRank = () => {
@@ -1334,6 +1335,10 @@ window.addEventListener('load', () => {
   attachTemporalWatchObserver();
 });
 window.addEventListener('yt-navigate-start', () => {
+  if (mutationRankTimer !== undefined) {
+    window.clearTimeout(mutationRankTimer);
+    mutationRankTimer = undefined;
+  }
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
@@ -1386,7 +1391,15 @@ const pageObserver = new MutationObserver((records) => {
       // appends native cards; fresh scoring can follow asynchronously.
       applyRankedFeed();
     }
-    triggerRank('mutation');
+
+    // YouTube can emit dozens of subtree mutations for one visual feed update.
+    // Coalesce them before collecting/scoring the DOM rather than invoking
+    // collectCandidates() for every observer callback.
+    if (mutationRankTimer !== undefined) window.clearTimeout(mutationRankTimer);
+    mutationRankTimer = window.setTimeout(() => {
+      mutationRankTimer = undefined;
+      if (isCurrentInstance() && extensionEnabled) triggerRank('mutation');
+    }, 450);
   }
 
   const hasSourceShelfMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
@@ -1409,7 +1422,7 @@ pageObserver.observe(document.documentElement, { childList: true, subtree: true 
 
 window.setInterval(() => {
   if (isWatchPage()) attachTemporalWatchObserver();
-}, 1000);
+}, 2500);
 
 const recordSelection = (event: MouseEvent | KeyboardEvent, kind: 'click' | 'auxclick' | 'keyboard') => {
   if (!isCurrentInstance() || !extensionEnabled) return;
