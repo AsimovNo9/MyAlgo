@@ -577,7 +577,10 @@ const rankCurrentPage = async (requestGeneration: number) => {
       renderRecommendationShelf();
 
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
-        item.visible !== false && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
+        item.visible !== false
+        && item.suppressed !== true
+        && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+        && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
       showStatus(`${requestMode}: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
     } else {
