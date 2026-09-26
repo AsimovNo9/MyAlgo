@@ -214,11 +214,19 @@ scoring / ranking
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
 
+## PR #208 live-validation follow-up
+
+Live validation exposed that candidate acquisition can outgrow the resolution of the first local scorer. #210 now tracks richer deterministic feature extraction and score calibration. PR #208 may implement the first slice so RSS candidates can be compared meaningfully before web-search volume is added.
+
+Replacement-card presentation must also preserve normal video title/creator hierarchy; a MyAlgo score badge and trace control are annotations, not substitutes for ordinary video metadata.
+
+Web search remains planned rather than implemented: query planning exists, but no network search provider is currently wired.
+
 ## Current execution order
 
 The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
 
-1. **#206 + #202** — implement source-neutral candidate acquisition through RSS and graph-derived web search, while replacing misleading provider/API-like retrieval provenance.
+1. **#206 + #202 + #210** — finish source-neutral candidate acquisition (RSS now, graph-derived web search next), while improving deterministic candidate feature extraction, calibrated scoring, replacement uplift, and replacement-card metadata.
 2. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
 3. **#162** — establish replay/evaluation baselines before adding richer content understanding.
 4. **#209** — add rebuildable local semantic embeddings for graph neighbourhoods, retrieval expansion, traceable semantic scoring, clustering, and explanation support once the baseline shows the need.
