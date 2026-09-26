@@ -25,6 +25,7 @@ The working product model is:
 - `packages/recommender-core` — source-independent graph, preference, trace, and evaluation contracts
 - `packages/shared-types` — extension-facing shared contracts
 - `docs` — active product, compliance, and execution documents
+- [`PRIVACY.md`](PRIVACY.md) — current local-only extension privacy policy
 
 ## Working plan
 1. Build the Personal Algorithm Graph and its local storage.
