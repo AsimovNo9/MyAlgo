@@ -1021,8 +1021,7 @@ const handleRuntimeMessage = (
       }
       if (next.webSearchEnabled) {
         const searchRefresh = await refreshWebSearchCandidates(
-          !previousSettings.webSearchEnabled
-            || previousSettings.webSearchEndpoint !== next.webSearchEndpoint,
+          !previousSettings.webSearchEnabled,
         );
         diagnostics = searchRefresh.diagnostics;
         changed = changed || searchRefresh.changed;
