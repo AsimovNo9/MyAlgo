@@ -3,6 +3,7 @@ import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
+import { extractYouTubeChannelIdFromWatchHtml } from './youtube-dom';
 import type { FeedSourceFilters } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
@@ -894,7 +895,7 @@ const enrichYouTubeVideo = async (candidate: { external_id: string; title: strin
     const publishedAt = meta('meta[itemprop="datePublished"]') ?? meta('meta[itemprop="uploadDate"]');
     const viewCountRaw = meta('meta[itemprop="interactionCount"]');
     const viewCount = viewCountRaw && /^\d+$/.test(viewCountRaw) ? Number(viewCountRaw) : null;
-    const channelId = meta('meta[itemprop="channelId"]');
+    const channelId = meta('meta[itemprop="channelId"]') ?? extractYouTubeChannelIdFromWatchHtml(html);
     const channelName = meta('meta[itemprop="author"]') ?? meta('meta[itemprop="channelName"]') ?? candidate.channel_name ?? null;
     return {
       ...fallback,
