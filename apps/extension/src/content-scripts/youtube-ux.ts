@@ -28,6 +28,8 @@ export type RankedFeedItem = {
   traceId?: string;
   is_short?: boolean;
   is_live?: boolean;
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
 };
 
 export function getContentPresentationLabel(
