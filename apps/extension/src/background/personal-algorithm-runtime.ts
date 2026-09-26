@@ -11,6 +11,8 @@ import {
 export type LocalRuntimeCandidate = {
   external_id: string;
   title: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
   channel_name?: string | null;
   channel_id?: string | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
