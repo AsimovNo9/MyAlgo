@@ -8,10 +8,10 @@
 2. Validate live-feed candidate extraction and user selection capture. **Completed (#150, PR #180).**
 3. Validate deterministic behavioral correlation. **Completed (#174, implementation merged).**
 4. Validate temporal player playback evidence. **Completed (#183, PR #184).**
-5. Confirm data can remain local for MVP.
-6. Document observed-data retention/deletion.
-7. Verify Chrome permission scope.
-8. Verify YouTube API remains display-only.
+5. Confirm data can remain local for MVP. **Completed and browser-validated (#167 / PR #199).**
+6. Document observed-data retention/deletion. **Completed for the local-only MVP (#167 / PR #199).**
+7. Verify Chrome permission scope. **Completed in source/tests (#167 / PR #199).**
+8. Verify YouTube API remains display-only. **Next active gate (#168).**
 
 **Exit:** enough browser-observed evidence exists to construct a useful initial graph.
 
@@ -164,6 +164,23 @@ Remaining #169 scope is not implied to be complete by this slice: feed-candidate
 
 #169 should be considered implementation-complete for the #195 runtime-scoring slice, with the broader feed-enforcement and trust loop continuing downstream.
 
+### Graph consistency hardening (#198)
+
+PR #198 is merged. It closed the stale-graph gap found during real exported-state review by making ordinary evidence ingestion maintain inferred creator nodes and `created_by` edges immediately, while preserving `rebuildGraphFromEvidence()` as deterministic reconciliation/recovery.
+
+Browser validation used a stale export, rebuilt it to zero missing creator relationships, then continued real browsing without another rebuild. The later export remained consistent: every expected content → creator relationship and supporting evidence reference was present, with no duplicate or dangling relationships. Treat this as the baseline invariant for future graph evaluation.
+
+### Privacy/disclosure gate (#167 / PR #199)
+
+PR #199 is merged and the clean-profile browser flow has been validated:
+
+- before disclosure acceptance, observation/ranking remains disabled;
+- accepting the current disclosure enables the local runtime;
+- deleting all local MyAlgo data clears retained extension state and acceptance;
+- observation remains disabled after deletion until the disclosure is accepted again.
+
+Store-dashboard publication fields and the separate #168 YouTube Data API audit remain release gates.
+
 ### Phase 1 graph progression
 
 The implementation boundary is deliberately staged:
@@ -189,13 +206,27 @@ scoring / ranking
 1. Evidence store — completed (#148 / PR #191)
 2. Evidence-backed semantic graph materialization — completed (#148 / PR #191)
 3. Graph review/export surface — implemented in #148; user-facing visualization remains #170
-4. Graph visualization — next P1 candidate (#170)
+4. Graph visualization — planned after the immediate #168 and native-feed hardening sequence (#170)
 5. Deterministic additive scorer — completed (#151 / PR #193)
 6. Scoring trace — completed (#151 / PR #193)
 
-**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime-scoring foundation is implemented and live-validated through PR #195. The next product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#160/#171), alongside the remaining privacy/API boundary gates (#167/#168). The graph-maintenance follow-up now keeps creator relationships consistent during evidence ingestion; full rebuild remains a deterministic reconciliation path.
+**Current state:** the local evidence → graph → deterministic score/trace → extension-local runtime foundation is implemented and live-validated through PR #195. PR #198 hardened graph consistency and was validated against real exported state. PR #199 implemented and browser-validated the local privacy/disclosure gate. The next active compliance task is #168; after that, the immediate product boundary is native-feed enforcement/replacement and stale-loop hardening (#152/#171/#160), followed by graph provenance/explanation UX (#170/#153).
 
 **Phase 1 exit:** an item can be traced through the graph and score contributions exactly reproduced. This foundation is now met; feed enforcement and trust UX remain downstream phases.
+
+## Current execution order
+
+The numbered issue priorities in older issue titles describe the phase in which they were created; use this sequence for current execution:
+
+1. **#168** — prove the YouTube Data API display-only boundary.
+2. **#152 + #171** — make native-card decisions reliable while preventing self-observation and stale reranking.
+3. **#160** — make replacement slots safe once native enforcement is stable.
+4. **#170 + #153** — expose graph/evidence provenance and exact per-item trace explanations.
+5. **#162** — establish replay/evaluation baselines before adding richer content understanding.
+6. **#154 + #155 + #178** — add explicit correction, Forget/provenance, and shared-history controls.
+7. **#169** — close the remaining local-runtime umbrella criteria as downstream feed/offline boundaries are discharged.
+8. **#161 + #158 + #159** — modes, explicit graph creation/editing, and counterfactual replay.
+9. **#163/#164/#165/#166** — portability, optional sync, monetization validation, and a second connector only after the local loop proves value.
 
 ## Phase 1 scope discipline
 
