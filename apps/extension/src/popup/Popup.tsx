@@ -2,6 +2,7 @@ import React from 'react';
 import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
 import type { FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { STORAGE_KEYS } from '../lib/storage';
 
 const defaultSourceFilters: FeedSourceFilters = {
   subscribedOnly: false,
@@ -14,7 +15,8 @@ const defaultSourceFilters: FeedSourceFilters = {
 const defaultRetrievalSettings: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
-  webSearchEndpoint: null,
+  webSearchEndpoint: 'https://priv.au',
+  webSearchProvider: 'privau',
 };
 
 const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
@@ -50,7 +52,6 @@ export function Popup() {
   const [retrievalSettings, setRetrievalSettings] = React.useState<RetrievalSettings>(defaultRetrievalSettings);
   const [retrievalDiagnostics, setRetrievalDiagnostics] = React.useState<RetrievalDiagnostics>(emptyRetrievalDiagnostics);
   const [retrievalBusy, setRetrievalBusy] = React.useState(false);
-  const [webSearchEndpoint, setWebSearchEndpoint] = React.useState('');
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
@@ -64,7 +65,6 @@ export function Popup() {
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
       const nextRetrievalSettings = { ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) };
       setRetrievalSettings(nextRetrievalSettings);
-      setWebSearchEndpoint(nextRetrievalSettings.webSearchEndpoint ?? '');
       setRetrievalDiagnostics({ ...emptyRetrievalDiagnostics, ...(result['personal-algorithm-retrieval-diagnostics'] as RetrievalDiagnostics | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
@@ -142,20 +142,32 @@ export function Popup() {
   };
 
   const handleWebSearchChange = async (webSearchEnabled: boolean) => {
+    const provider = retrievalSettings.webSearchProvider ?? 'privau';
+    const endpointValue = provider === 'privau'
+      ? 'https://priv.au'
+      : retrievalSettings.webSearchEndpoint ?? '';
+
     let endpoint: URL;
     try {
-      endpoint = new URL(webSearchEndpoint.trim());
+      endpoint = new URL(endpointValue);
       if (endpoint.protocol !== 'https:') throw new Error('HTTPS required');
     } catch {
-      setLastError('Enter a valid HTTPS SearXNG endpoint before enabling web search.');
+      setLastError('Configure a valid HTTPS search endpoint in Advanced settings.');
       return;
+    }
+
+    if (webSearchEnabled && provider === 'privau') {
+      const keyResult = await chrome.storage.local.get([STORAGE_KEYS.WEB_SEARCH_API_KEY]);
+      const apiKey = String(keyResult[STORAGE_KEYS.WEB_SEARCH_API_KEY] ?? '').trim();
+      if (!apiKey) {
+        setLastError('PrivAU requires an API key. Add it in Advanced settings first.');
+        return;
+      }
     }
 
     const originPattern = `${endpoint.origin}/*`;
     if (webSearchEnabled) {
-      const granted = await chrome.permissions.request({
-        origins: [originPattern],
-      });
+      const granted = await chrome.permissions.request({ origins: [originPattern] });
       if (!granted) {
         setLastError('Search-provider access was not granted.');
         return;
@@ -166,44 +178,10 @@ export function Popup() {
       ...retrievalSettings,
       webSearchEnabled,
       webSearchEndpoint: endpoint.origin + endpoint.pathname.replace(/\/$/, ''),
+      webSearchProvider: provider,
     });
     if (updated && !webSearchEnabled) {
       await chrome.permissions.remove({ origins: [originPattern] });
-    }
-  };
-
-  const handleSaveWebSearchEndpoint = async () => {
-    let endpoint: URL;
-    try {
-      endpoint = new URL(webSearchEndpoint.trim());
-      if (endpoint.protocol !== 'https:') throw new Error('HTTPS required');
-    } catch {
-      setLastError('Enter a valid HTTPS SearXNG endpoint.');
-      return;
-    }
-    const granted = await chrome.permissions.request({
-      origins: [`${endpoint.origin}/*`],
-    });
-    if (!granted) {
-      setLastError('Search-provider access was not granted.');
-      return;
-    }
-    const normalized = endpoint.origin + endpoint.pathname.replace(/\/$/, '');
-    const previousEndpoint = retrievalSettings.webSearchEndpoint;
-    setWebSearchEndpoint(normalized);
-    const updated = await updateRetrievalSettings({
-      ...retrievalSettings,
-      webSearchEndpoint: normalized,
-    });
-    if (updated && previousEndpoint && previousEndpoint !== normalized) {
-      try {
-        const previousOrigin = new URL(previousEndpoint).origin;
-        if (previousOrigin !== endpoint.origin) {
-          await chrome.permissions.remove({ origins: [`${previousOrigin}/*`] });
-        }
-      } catch {
-        // Invalid legacy endpoint has no permission pattern to remove.
-      }
     }
   };
 
@@ -318,38 +296,23 @@ export function Popup() {
           </p>
         ) : null}
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e7eb' }}>
-          <label htmlFor="web-search-endpoint" style={{ display: 'block', fontWeight: 600 }}>SearXNG search endpoint</label>
-          <input
-            id="web-search-endpoint"
-            type="url"
-            placeholder="https://search.example.org"
-            value={webSearchEndpoint}
-            disabled={retrievalBusy}
-            onChange={(event) => setWebSearchEndpoint(event.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: 6 }}
-          />
-          <button
-            type="button"
-            disabled={retrievalBusy || !webSearchEndpoint.trim()}
-            onClick={() => void handleSaveWebSearchEndpoint()}
-            style={{ marginTop: 6 }}
-          >
-            Save search endpoint
-          </button>
-          <label style={{ display: 'block', marginTop: 8 }}>
+          <label style={{ display: 'block', marginTop: 4 }}>
             <input
               type="checkbox"
               checked={retrievalSettings.webSearchEnabled === true}
               disabled={retrievalBusy}
               onChange={(event) => void handleWebSearchChange(event.target.checked)}
-            /> Enable graph + mode web search
+            /> Enable web discovery
           </label>
           <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
-            Sends only bounded graph-derived goal/topic queries plus the active mode intent to the configured SearXNG endpoint. Search results are discovery candidates, then YouTube metadata is enriched locally before scoring.
+            Uses PrivAU by default. MyAlgo automatically searches from your graph goal/topics plus the active mode; there is no search box. Returned YouTube URLs are enriched from YouTube before local scoring.
           </p>
           <p style={{ margin: '6px 0 0', fontSize: 12 }}>
             Search: {retrievalDiagnostics.webSearchCandidatesAdded ?? 0} added · {retrievalDiagnostics.webSearchCandidatesDeduplicated ?? 0} deduplicated · {retrievalDiagnostics.webSearchPlansSucceeded ?? 0}/{retrievalDiagnostics.webSearchPlansAttempted ?? 0} plans succeeded
           </p>
+          <button type="button" onClick={() => void handleOpenOptions()} style={{ marginTop: 8 }}>
+            Advanced search settings
+          </button>
         </div>
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
