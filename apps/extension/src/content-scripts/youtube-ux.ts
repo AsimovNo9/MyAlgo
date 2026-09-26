@@ -38,6 +38,14 @@ export type RankedFeedItem = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  provenance?: {
+    mechanism?: string | null;
+    acquired_at?: string | null;
+  };
+  acquisition_history?: Array<{
+    mechanism?: string | null;
+    acquired_at?: string | null;
+  }>;
 };
 
 export function getContentPresentationLabel(
