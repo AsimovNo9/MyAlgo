@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -192,5 +192,28 @@ test('explicit source-filter hides are terminal and never become replacement slo
   assert.equal(
     isReplacementEligibleNativeDecision({ action: 'show', reason: 'ranked' }),
     false,
+  );
+});
+
+
+test('source shelf policy removes Shorts and Playables only when disabled', () => {
+  assert.equal(
+    getSourceShelfHideReason({ hasShortsLink: true }, { includeShorts: false }),
+    'shorts',
+  );
+  assert.equal(
+    getSourceShelfHideReason({ heading: 'Playables' }, { includePlayables: false }),
+    'playables',
+  );
+  assert.equal(
+    getSourceShelfHideReason({ hasPlayableLink: true }, { includePlayables: false }),
+    'playables',
+  );
+  assert.equal(
+    getSourceShelfHideReason(
+      { heading: 'Playables', hasShortsLink: true, hasPlayableLink: true },
+      { includeShorts: true, includePlayables: true },
+    ),
+    null,
   );
 });
