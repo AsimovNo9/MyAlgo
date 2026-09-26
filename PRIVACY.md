@@ -15,13 +15,14 @@ When the current in-product privacy disclosure has been accepted and MyAlgo is e
 - playback-derived watch evidence, including bounded playback metrics used to determine a watched observation;
 - selections and explicit feedback such as Not interested / More like this;
 - derived local Personal Algorithm Graph nodes and relationships;
-- local scoring results, compact trace metadata, settings, and feed-control state.
+- local scoring results, compact trace metadata, settings, and feed-control state;
+- when the user enables RSS discovery, recently observed YouTube channel IDs and the resulting bounded YouTube RSS candidate metadata/provenance.
 
 MyAlgo does not request Chrome's `history` permission. Its launch evidence comes from the YouTube pages on which its content script runs.
 
 ## Purpose
 
-The extension uses this information only to provide and improve its disclosed user-facing purpose: building an inspectable local Personal Algorithm, scoring observed YouTube candidates, explaining MyAlgo decisions, and applying the user's feed controls.
+The extension uses this information only to provide and improve its disclosed user-facing purpose: building an inspectable local Personal Algorithm, optionally acquiring candidate updates from YouTube RSS, scoring candidates, explaining MyAlgo decisions, and applying the user's feed controls.
 
 A YouTube item being surfaced is contextual evidence; it is not automatically treated as a user preference.
 
@@ -35,13 +36,13 @@ Because Chrome extension storage can persist independently of ordinary browser c
 
 The local-only MVP does **not** send observed YouTube activity, evidence records, Personal Algorithm Graph state, feedback records, or scoring traces to a MyAlgo-operated backend or to advertising/data-broker services.
 
-The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. Those requests are not transfers of the Personal Algorithm Graph to MyAlgo infrastructure.
+The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. When the user explicitly enables RSS discovery, MyAlgo also requests bounded YouTube channel RSS feeds using channel IDs already observed from YouTube metadata. RSS requests do not contain the Personal Algorithm Graph, raw watch-history rows, feedback records, or scoring traces.
 
 The launch extension does not use observed data for personalized advertising, credit/lending decisions, or sale to data brokers.
 
 ## YouTube Data API boundary
 
-The current launch runtime does not integrate the YouTube Data API. Browser-observed YouTube pages provide the launch evidence used by the local graph/scorer. If YouTube Data API use is introduced later, API Data must remain separate from graph derivation, scoring, traces, and explanations unless a future version goes through a separate product, provider-policy, privacy, and disclosure review.
+The current launch runtime does not integrate the YouTube Data API. Browser-observed YouTube pages provide the launch evidence used by the local graph/scorer. Optional YouTube RSS discovery is a separate public-feed acquisition mechanism and does not use YouTube Data API endpoints, OAuth, API keys, or developer credentials. If YouTube Data API use is introduced later, API Data must remain separate from graph derivation, scoring, traces, and explanations unless a future version goes through a separate product, provider-policy, privacy, and disclosure review.
 
 ## User controls
 
@@ -49,6 +50,7 @@ Users can:
 
 - pause MyAlgo, which stops new observation/enforcement while paused;
 - separately enable or disable experimental History and Home-context collection where those controls apply;
+- separately enable or disable RSS candidate discovery;
 - use **Delete all local MyAlgo data** in Settings to clear local evidence, graph state, caches, traces, feedback, settings, and disclosure acceptance.
 
 After a full local-data deletion, observation remains disabled until the current privacy disclosure is affirmatively accepted again.
