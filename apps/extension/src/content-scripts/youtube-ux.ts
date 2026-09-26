@@ -15,6 +15,9 @@ export type RankedFeedItem = {
   score?: number;
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
+  traceId?: string;
+  is_short?: boolean;
+  is_live?: boolean;
 };
 
 export const MYALGO_INJECTED_SELECTOR = [
@@ -121,12 +124,58 @@ export function getReplacementCandidates(
 
   return items.filter((item) => {
     const id = item.external_id?.trim();
-    if (!id || !item.title || blocked.has(id) || seen.has(id) || item.visible === false || (item.score ?? 0) < minimumScore) {
+    if (
+      !id
+      || !item.title
+      || !item.traceId
+      || blocked.has(id)
+      || seen.has(id)
+      || item.visible === false
+      || item.suppressed === true
+      || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+      || (item.score ?? 0) < minimumScore
+    ) {
       return false;
     }
     seen.add(id);
     return true;
   }).slice(0, limit);
+}
+
+export type ReplacementSlot = {
+  slotId: string;
+  sourceVideoId: string;
+};
+
+export type ReplacementAssignment = {
+  slot: ReplacementSlot;
+  item: RankedFeedItem;
+};
+
+export function planReplacementAssignments(
+  items: RankedFeedItem[],
+  slots: ReplacementSlot[],
+  blockedIds: Iterable<string | undefined>,
+  minimumScore = 52,
+): ReplacementAssignment[] {
+  const stableSlots = slots.filter((slot, index) => (
+    Boolean(slot.slotId && slot.sourceVideoId && !slot.sourceVideoId.startsWith('title:'))
+    && slots.findIndex((candidate) => candidate.slotId === slot.slotId) === index
+  ));
+  const blocked = [
+    ...Array.from(blockedIds),
+    ...stableSlots.map((slot) => slot.sourceVideoId),
+  ];
+  const candidates = getReplacementCandidates(
+    items,
+    blocked,
+    stableSlots.length,
+    minimumScore,
+  );
+  return stableSlots.slice(0, candidates.length).map((slot, index) => ({
+    slot,
+    item: candidates[index],
+  }));
 }
 
 export function isRenderGenerationStale(requestGeneration: number, latestGeneration: number): boolean {
