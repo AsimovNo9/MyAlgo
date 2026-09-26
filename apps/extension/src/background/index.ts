@@ -514,6 +514,8 @@ const handleRuntimeMessage = (
         [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
         [STORAGE_KEYS.HOME_OBSERVATIONS]: [],
         [STORAGE_KEYS.SELECTION_EVENTS]: [],
+        [STORAGE_KEYS.RETRIEVAL_SETTINGS]: DEFAULT_RETRIEVAL_SETTINGS,
+        [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: EMPTY_RETRIEVAL_DIAGNOSTICS,
       });
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
