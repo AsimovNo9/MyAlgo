@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
 
 type PageCandidate = {
   external_id: string;
@@ -157,9 +157,7 @@ async function enrichVideosInTab(tabId: number | undefined, candidates: PageCand
   const missing = candidates
     .filter((candidate) => {
       const record = existing[candidate.external_id];
-      return !record
-        || !record.channel_id
-        || now - new Date(record.enrichedAt).getTime() > METADATA_REFRESH_MS;
+      return needsYoutubeMetadataRefresh(record, now, METADATA_REFRESH_MS);
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
