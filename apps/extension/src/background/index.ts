@@ -11,10 +11,11 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, createLocalHashEmbeddingProvider, enrichCandidatesWithSemanticReranking } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
+import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 
 type PageCandidate = {
   external_id: string;
@@ -113,6 +114,8 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
+const semanticEmbeddingProvider = createLocalHashEmbeddingProvider(192);
+const semanticEmbeddingCache = createChromeEmbeddingCache(600);
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
@@ -656,9 +659,41 @@ async function rankLocalCandidates(
       })),
     state,
   );
-  const ranked = scoreLocalCandidates(
+  const semanticStartedAt = performance.now();
+  const semantic = await enrichCandidatesWithSemanticReranking(
     state,
     candidates,
+    mode,
+    semanticEmbeddingProvider,
+    semanticEmbeddingCache,
+    {
+      maxGraphNodes: 64,
+      minimumModeNodeSimilarity: 0.15,
+    },
+  );
+  const semanticElapsedMs = Math.round(performance.now() - semanticStartedAt);
+  await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
+    ...semantic.diagnostics,
+    mode,
+    graphRevision: state.graph.currentRevision,
+    elapsedMs: semanticElapsedMs,
+    cacheSize: await semanticEmbeddingCache.size(),
+    generatedAt: new Date().toISOString(),
+  });
+  console.info('[MyAlgo] semantic reranking', {
+    model: semantic.diagnostics.modelVersion,
+    mode,
+    candidates: semantic.diagnostics.candidateCount,
+    graphNodes: semantic.diagnostics.graphNodesConsidered,
+    modeNodes: semantic.diagnostics.modeNodeCount,
+    candidateComputed: semantic.diagnostics.candidateEmbeddingsComputed,
+    candidateCached: semantic.diagnostics.candidateEmbeddingsFromCache,
+    elapsedMs: semanticElapsedMs,
+  });
+
+  const ranked = scoreLocalCandidates(
+    state,
+    semantic.candidates,
     mode,
     feedbackSignals,
     sourceFilters,
