@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementTargets, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import { extractYouTubeChannelIdFromWatchHtml } from './youtube-dom';
@@ -193,6 +193,7 @@ const createReplacementCard = (
     generation,
     activeMode,
   );
+  const displayMetadata = getReplacementTextMetadata(item);
   card.dataset.personalAlgorithmReplacement = 'true';
   card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
   card.dataset.personalAlgorithmTraceId = metadata.traceId;
@@ -224,13 +225,13 @@ const createReplacementCard = (
 
   const title = document.createElement('div');
   title.dataset.personalAlgorithmTitle = 'true';
-  title.textContent = item.title?.trim() || 'Recommended video';
+  title.textContent = displayMetadata.title;
   title.style.cssText = 'display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:var(--yt-spec-text-primary,#f1f1f1);font-size:16px;font-weight:600;line-height:22px;white-space:normal;';
   videoMeta.appendChild(title);
 
   const channel = document.createElement('div');
   channel.dataset.personalAlgorithmCreator = 'true';
-  channel.textContent = item.channel_name?.trim() || 'Unknown creator';
+  channel.textContent = displayMetadata.creator;
   channel.style.cssText = 'display:block;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--yt-spec-text-secondary,#aaa);font-size:14px;line-height:20px;';
   videoMeta.appendChild(channel);
   link.appendChild(videoMeta);
