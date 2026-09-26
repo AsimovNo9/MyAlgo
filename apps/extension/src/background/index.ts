@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -12,13 +12,17 @@ import { toNormalizedExposure } from '../content-scripts/youtube-recommendations
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { buildYoutubeRssFeedUrl, isRetrievalAllowed, nextRssAllowedAt, parseYoutubeRssFeed, selectRssChannelIds } from './retrieval';
 
 type PageCandidate = {
   external_id: string;
   title: string;
   channel_name?: string | null;
+  channel_id?: string | null;
   thumbnail_url?: string | null;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
+  published_at?: string | null;
+  provenance?: CandidateAcquisitionProvenance;
   is_short?: boolean;
   is_live?: boolean;
 };
@@ -54,6 +58,22 @@ const MAX_VIDEO_STORE_SIZE = 2000;
 const MAX_METADATA_ENRICHMENTS_PER_SCAN = 12;
 const MAX_SELECTION_EVENTS = 5000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
+  rssEnabled: false,
+  webSearchEnabled: false,
+};
+const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
+  lastRssSyncAt: null,
+  nextRssAllowedAt: null,
+  rssChannelsConsidered: 0,
+  rssFeedsSucceeded: 0,
+  rssFeedsFailed: 0,
+  rssCandidatesFetched: 0,
+  rssCandidatesAdded: 0,
+  rssCandidatesDeduplicated: 0,
+  rssConsecutiveFailures: 0,
+  lastError: null,
+};
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -183,6 +203,13 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     byId.set(candidate.external_id, {
       ...previous,
       ...candidate,
+      provenance: candidate.provenance ?? previous?.provenance ?? {
+        connector: 'youtube',
+        mechanism: 'observed_dom',
+        acquired_at: now,
+        graph_revision: null,
+        source_url: null,
+      },
       external_id: candidate.external_id,
       title: candidate.title,
       firstSeenAt: previous?.firstSeenAt ?? now,
@@ -199,6 +226,94 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
 
   await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
   return pool;
+}
+
+const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+async function refreshRssCandidates(force = false): Promise<RetrievalDiagnostics> {
+  const settings = await getStorage<RetrievalSettings>(
+    STORAGE_KEYS.RETRIEVAL_SETTINGS,
+    DEFAULT_RETRIEVAL_SETTINGS,
+  );
+  const previous = await getStorage<RetrievalDiagnostics>(
+    STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+    EMPTY_RETRIEVAL_DIAGNOSTICS,
+  );
+  const nowMs = Date.now();
+
+  if (!settings.rssEnabled) return previous;
+  if (!force && !isRetrievalAllowed(previous.nextRssAllowedAt, nowMs)) return previous;
+
+  const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const channelIds = selectRssChannelIds(Object.values(store));
+  const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
+  const existingIds = new Set(existingPool.map((item) => item.external_id));
+  const acquiredAt = new Date(nowMs).toISOString();
+
+  const results = await Promise.all(channelIds.map(async (channelId) => {
+    const sourceUrl = buildYoutubeRssFeedUrl(channelId);
+    try {
+      const response = await fetchWithTimeout(sourceUrl);
+      if (!response.ok) throw new Error(`RSS HTTP ${response.status}`);
+      const xml = await response.text();
+      return {
+        ok: true as const,
+        candidates: parseYoutubeRssFeed(xml, acquiredAt, sourceUrl),
+      };
+    } catch {
+      return { ok: false as const, candidates: [] };
+    }
+  }));
+
+  const fetched = results.flatMap((result) => result.candidates);
+  const uniqueFetched = [...new Map(fetched.map((item) => [item.external_id, item])).values()];
+  const addedCount = uniqueFetched.filter((item) => !existingIds.has(item.external_id)).length;
+  if (uniqueFetched.length > 0) {
+    await mergeCandidatePool(uniqueFetched);
+  }
+
+  const succeeded = results.filter((result) => result.ok).length;
+  const failed = results.length - succeeded;
+  const consecutiveFailures = results.length > 0 && succeeded === 0
+    ? (previous.rssConsecutiveFailures ?? 0) + 1
+    : 0;
+  const diagnostics: RetrievalDiagnostics = {
+    lastRssSyncAt: acquiredAt,
+    nextRssAllowedAt: nextRssAllowedAt(nowMs, consecutiveFailures),
+    rssChannelsConsidered: channelIds.length,
+    rssFeedsSucceeded: succeeded,
+    rssFeedsFailed: failed,
+    rssCandidatesFetched: uniqueFetched.length,
+    rssCandidatesAdded: addedCount,
+    rssCandidatesDeduplicated: Math.max(0, fetched.length - uniqueFetched.length)
+      + uniqueFetched.filter((item) => existingIds.has(item.external_id)).length,
+    rssConsecutiveFailures: consecutiveFailures,
+    lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
+  };
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  console.info('[MyAlgo] retrieval refresh', {
+    mechanism: 'rss',
+    channels: diagnostics.rssChannelsConsidered,
+    succeeded: diagnostics.rssFeedsSucceeded,
+    failed: diagnostics.rssFeedsFailed,
+    fetched: diagnostics.rssCandidatesFetched,
+    added: diagnostics.rssCandidatesAdded,
+    deduplicated: diagnostics.rssCandidatesDeduplicated,
+  });
+  return diagnostics;
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
