@@ -4,6 +4,7 @@ import { dedupeCandidatesById, getReplacementCandidates, getShelfCandidates, isR
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 import type { FeedSourceFilters } from '@repo/shared-types';
+import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
 import { createSelectionObservation, getSelectionFromTarget, getYouTubeSurface } from './youtube-interactions';
@@ -31,7 +32,7 @@ let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
-let extensionEnabled = true;
+let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
@@ -628,10 +629,17 @@ const scheduleInitialRank = () => {
   }, 1500);
 };
 
-safeStorageGet([STORAGE_KEYS.ENABLED]).then((result) => {
-  extensionEnabled = result[STORAGE_KEYS.ENABLED] !== false;
+safeStorageGet([
+  STORAGE_KEYS.ENABLED,
+  STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
+]).then((result) => {
+  const disclosureAccepted = isPrivacyDisclosureAccepted(
+    result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
+  );
+  extensionEnabled = disclosureAccepted
+    && result[STORAGE_KEYS.ENABLED] !== false;
   if (!extensionEnabled) {
-    clearExtensionPresentation();
+    clearExtensionPresentation(false);
     return;
   }
   showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
