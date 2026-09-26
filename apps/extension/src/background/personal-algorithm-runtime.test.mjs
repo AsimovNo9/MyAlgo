@@ -300,3 +300,39 @@ test('matching mode adds a traceable alignment feature without relabeling unrela
     false,
   );
 });
+
+
+test('semantic graph and mode similarities become explicit trace contributions', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-video',
+    title: 'A semantically relevant candidate',
+    semantic_graph_similarity: 0.75,
+    semantic_mode_similarity: 0.6,
+    semantic_model_version: 'mxbai-xsmall:test',
+  }], 'Learning')[0];
+
+  const graphFeature = ranked.trace.featureContributions
+    .find((item) => item.label === 'semantic match: personal graph');
+  const modeFeature = ranked.trace.featureContributions
+    .find((item) => item.label === 'semantic match: active mode');
+
+  assert.equal(graphFeature?.value, 13.5);
+  assert.equal(modeFeature?.value, 8.4);
+  assert.equal(graphFeature?.sourceId, 'embedding:mxbai-xsmall:test');
+  assert.equal(modeFeature?.sourceId, 'embedding:mxbai-xsmall:test');
+});
+
+test('semantic similarities below threshold do not affect ranking', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'weak-semantic-video',
+    title: 'Weak semantic candidate',
+    semantic_graph_similarity: 0.19,
+    semantic_mode_similarity: 0.1,
+    semantic_model_version: 'mxbai-xsmall:test',
+  }], 'Work')[0];
+
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.id.startsWith('semantic:')),
+    false,
+  );
+});
