@@ -78,6 +78,8 @@ The repository already contains deterministic planning primitives:
 - `buildRecommendationProfile()` for goal/topic/format/creator intent;
 - `buildRecommendationQueries()` and `buildRecommendationQueryPlans()` for inspectable goal/topic/alias/format/intent/creator/freshness queries.
 
+Those helpers still lean on the legacy `Algorithm` contract. #206 must bridge the current `PersonalAlgorithmState`/graph into a retrieval-intent profile deterministically; it must not revive the legacy algorithm object as a second preference model.
+
 The first implemented acquisition mechanisms should be:
 
 1. **RSS** — bounded source/channel update discovery;
