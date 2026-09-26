@@ -10,6 +10,7 @@ import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behav
 import { toNormalizedInteraction } from '../content-scripts/youtube-interactions';
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
+import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 
 type PageCandidate = {
   external_id: string;
@@ -38,7 +39,8 @@ type LocalFeedItem = CandidatePoolItem & {
   id: string;
   score: number;
   visible: boolean;
-  source_kind: null;
+  source_kind: 'subscription' | 'discovery' | 'liked' | null;
+  traceId: string;
 };
 
 const MAX_CANDIDATE_POOL_SIZE = 5000;
@@ -194,16 +196,41 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-function rankLocalCandidates(candidates: CandidatePoolItem[], sourceFilters: FeedSourceFilters): LocalFeedItem[] {
-  return candidates.map((candidate, index) => ({
-    ...candidate,
-    id: candidate.external_id,
-    score: Math.max(52, 100 - index),
-    visible: !(
-      (candidate.is_short && sourceFilters.includeShorts === false)
-      || (candidate.is_live && sourceFilters.includeLive === false)
-    ),
-    source_kind: null,
+async function rankLocalCandidates(
+  candidates: CandidatePoolItem[],
+  sourceFilters: FeedSourceFilters,
+  mode: string,
+): Promise<LocalFeedItem[]> {
+  const state = await personalAlgorithmStore.exportState();
+  const feedbackEvents = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
+    'personal-algorithm-local-events',
+    [],
+  );
+  const feedbackSignals = buildLocalFeedbackSignals(
+    feedbackEvents
+      .filter((event) => event.kind === 'feedback')
+      .map((event) => event.payload as { contentItemId?: string; eventType?: string }),
+  );
+  const ranked = scoreLocalCandidates(
+    state,
+    candidates,
+    mode,
+    feedbackSignals,
+    sourceFilters,
+  );
+
+  const traces = ranked.map((item) => ({
+    traceId: item.trace.id,
+    candidateId: item.id,
+    score: item.score,
+    recordedAt: new Date().toISOString(),
+  }));
+  await setStorage('personal-algorithm-local-traces', traces.slice(0, MAX_FEED_CACHE_SIZE));
+
+  return ranked.map(({ trace, ...item }) => ({
+    ...item,
+    source_kind: item.source_kind ?? null,
+    traceId: trace.id,
   }));
 }
 
@@ -291,7 +318,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           ...(enrichmentById.get(candidate.external_id) ?? {}),
         }));
         const candidatePool = await hydrateCandidatePool(await mergeCandidatePool(candidatesWithMetadata));
-        const ranked = rankLocalCandidates(candidatePool, sourceFilters);
+        const ranked = await rankLocalCandidates(candidatePool, sourceFilters, payload?.mode ?? 'default');
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
