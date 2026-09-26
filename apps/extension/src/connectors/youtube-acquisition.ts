@@ -251,34 +251,99 @@ const toCandidate = (
   };
 };
 
+const OFFSCREEN_SEARCH_URL = 'offscreen-search.html';
+let offscreenCreatePromise: Promise<void> | null = null;
+
+async function ensureSearchOffscreenDocument(): Promise<boolean> {
+  if (
+    typeof chrome === 'undefined'
+    || !chrome.offscreen
+    || !chrome.runtime?.getContexts
+  ) {
+    return false;
+  }
+
+  const documentUrl = chrome.runtime.getURL(OFFSCREEN_SEARCH_URL);
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [documentUrl],
+  });
+  if (contexts.length > 0) return true;
+
+  if (!offscreenCreatePromise) {
+    offscreenCreatePromise = chrome.offscreen.createDocument({
+      url: OFFSCREEN_SEARCH_URL,
+      reasons: ['WORKERS'],
+      justification: 'Run YouTube search-page parsing in a dedicated worker so ranking UI remains responsive.',
+    }).finally(() => {
+      offscreenCreatePromise = null;
+    });
+  }
+  await offscreenCreatePromise;
+  return true;
+}
+
+async function searchYoutubePageOffThread(
+  request: WebSearchRequest,
+): Promise<ParsedSearchResult[] | null> {
+  try {
+    const ready = await ensureSearchOffscreenDocument();
+    if (!ready) return null;
+    const response = await chrome.runtime.sendMessage({
+      target: 'youtube-search-offscreen',
+      type: 'SEARCH_YOUTUBE_PAGE',
+      query: request.query,
+      limit: request.limit,
+    }) as { ok?: boolean; results?: ParsedSearchResult[]; error?: string };
+    if (!response?.ok) throw new Error(response?.error ?? 'YouTube search worker failed.');
+    return Array.isArray(response.results) ? response.results : [];
+  } catch (error) {
+    console.warn('[MyAlgo] offscreen YouTube search unavailable; falling back to service worker', error);
+    return null;
+  }
+}
+
 export function createYoutubeSearchPageProvider(
-  fetcher: typeof fetch = fetch,
+  fetcher?: typeof fetch,
 ): WebSearchProvider {
   return {
     id: 'youtube_search_page',
     async search(request) {
-      const url = new URL('https://www.youtube.com/results');
-      url.searchParams.set('search_query', request.query);
+      let parsed: ParsedSearchResult[] | null = null;
 
-      const response = await fetcher(url.toString(), {
-        method: 'GET',
-        credentials: 'omit',
-        cache: 'no-store',
-        headers: {
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      });
-      if (!response.ok) throw new Error(`YouTube search HTTP ${response.status}`);
+      // Production uses an offscreen document + dedicated Worker so large
+      // YouTube result pages never block the extension service worker that
+      // handles ranking/UI messages. Tests and unsupported browsers use the
+      // injected/direct fetch fallback.
+      if (!fetcher) {
+        parsed = await searchYoutubePageOffThread(request);
+      }
+
+      if (parsed == null) {
+        const directFetch = fetcher ?? fetch;
+        const url = new URL('https://www.youtube.com/results');
+        url.searchParams.set('search_query', request.query);
+
+        const response = await directFetch(url.toString(), {
+          method: 'GET',
+          credentials: 'omit',
+          cache: 'no-store',
+          headers: {
+            Accept: 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        });
+        if (!response.ok) throw new Error(`YouTube search HTTP ${response.status}`);
+        parsed = parseYoutubeSearchResultsHtml(await response.text(), request.limit);
+      }
 
       const seen = new Set<string>();
-      return parseYoutubeSearchResultsHtml(await response.text(), request.limit)
-        .flatMap((result): RecommendationCandidate[] => {
-          const candidate = toCandidate(result, request);
-          if (!candidate || seen.has(candidate.external_id)) return [];
-          seen.add(candidate.external_id);
-          return [candidate];
-        });
+      return parsed.flatMap((result): RecommendationCandidate[] => {
+        const candidate = toCandidate(result, request);
+        if (!candidate || seen.has(candidate.external_id)) return [];
+        seen.add(candidate.external_id);
+        return [candidate];
+      });
     },
   };
 }
