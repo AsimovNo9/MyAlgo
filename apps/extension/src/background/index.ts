@@ -97,6 +97,7 @@ let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
 let lastPersistedTraceSignature = '';
+const metadataEnrichmentInFlight = new Set<string>();
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -174,10 +175,12 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
   const missing = candidates
     .filter((candidate) => {
       const record = existing[candidate.external_id];
-      return needsYoutubeMetadataRefresh(record, now, METADATA_REFRESH_MS);
+      return needsYoutubeMetadataRefresh(record, now, METADATA_REFRESH_MS)
+        && !metadataEnrichmentInFlight.has(candidate.external_id);
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
+  missing.forEach((candidate) => metadataEnrichmentInFlight.add(candidate.external_id));
 
   const enrichOne = async (candidate: PageCandidate): Promise<VideoRecord | null> => {
     try {
@@ -205,19 +208,23 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     }
   };
 
-  const enrichedResults: Array<VideoRecord | null> = [];
-  for (let index = 0; index < missing.length; index += 2) {
-    enrichedResults.push(...await Promise.all(missing.slice(index, index + 2).map(enrichOne)));
-  }
-  const enriched = enrichedResults.filter((record): record is VideoRecord => record !== null);
+  try {
+    const enrichedResults: Array<VideoRecord | null> = [];
+    for (let index = 0; index < missing.length; index += 2) {
+      enrichedResults.push(...await Promise.all(missing.slice(index, index + 2).map(enrichOne)));
+    }
+    const enriched = enrichedResults.filter((record): record is VideoRecord => record !== null);
 
-  if (enriched.length === 0) return [];
-  for (const record of enriched) existing[record.external_id] = record;
-  const entries = Object.entries(existing)
-    .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
-    .slice(0, MAX_VIDEO_STORE_SIZE);
-  await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
-  return enriched;
+    if (enriched.length === 0) return [];
+    for (const record of enriched) existing[record.external_id] = record;
+    const entries = Object.entries(existing)
+      .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
+      .slice(0, MAX_VIDEO_STORE_SIZE);
+    await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
+    return enriched;
+  } finally {
+    missing.forEach((candidate) => metadataEnrichmentInFlight.delete(candidate.external_id));
+  }
 }
 
 async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<CandidatePoolItem[]> {
@@ -751,13 +758,12 @@ const handleRuntimeMessage = (
       try {
         const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
-        const enrichedCandidates = await enrichVideos(incomingCandidates);
-        const enrichmentById = new Map(enrichedCandidates.map((item) => [item.external_id, item]));
-        const candidatesWithMetadata = incomingCandidates.map((candidate) => ({
-          ...candidate,
-          ...(enrichmentById.get(candidate.external_id) ?? {}),
-        }));
-        const candidatePool = await mergeCandidatePool(candidatesWithMetadata);
+
+        // First paint must never wait on network enrichment. Merge the live DOM
+        // candidates immediately and hydrate only from metadata already cached
+        // in local storage. Rich watch-page enrichment runs after the rank
+        // response and requests a follow-up rerank only when it produced data.
+        const candidatePool = await mergeCandidatePool(incomingCandidates);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
 
         // Do not rescore the entire persistent reservoir on every YouTube DOM
@@ -808,8 +814,25 @@ const handleRuntimeMessage = (
           replacementInventorySize: replacementInventory.length,
           poolSize: candidatePool.length,
           rankingWorkingSetSize: workingPool.length,
-          enriched: enrichedCandidates.length,
+          enriched: 0,
+          enrichmentPending: true,
           elapsedMs: Math.round(performance.now() - rankStartedAt),
+        });
+
+        const senderTabId = _sender.tab?.id;
+        void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
+          if (enrichedCandidates.length === 0) return;
+          await mergeCandidatePool(enrichedCandidates);
+          if (senderTabId) {
+            await chrome.tabs.sendMessage(senderTabId, {
+              type: 'YOUTUBE_METADATA_ENRICHED',
+              payload: {
+                count: enrichedCandidates.length,
+              },
+            }).catch(() => undefined);
+          }
+        }).catch((error) => {
+          console.warn('[MyAlgo] asynchronous metadata enrichment failed', error);
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
