@@ -373,9 +373,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.FEEDBACK) {
-    void recordLocalEvent('feedback', payload);
-    void setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
-    sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
+    void (async () => {
+      await recordLocalEvent('feedback', payload);
+      await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+      sendResponse({ ok: true, contentItemId: payload?.contentItemId, eventType: payload?.eventType });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to store feedback.',
+    }));
     return true;
   }
 
