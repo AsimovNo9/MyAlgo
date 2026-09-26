@@ -127,9 +127,16 @@ const clearExtensionPresentation = (showPaused = true) => {
     '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
   ).forEach((element) => element.remove());
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-source-shelf-hidden]').forEach((shelf) => {
-    shelf.style.removeProperty('display');
-    delete shelf.dataset.personalAlgorithmSourceShelfHidden;
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden]',
+  ).forEach((container) => {
+    container.style.removeProperty('display');
+    delete container.dataset.personalAlgorithmSourceShelfHidden;
+    delete container.dataset.personalAlgorithmSourceRowHidden;
+  });
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
+    element.style.removeProperty('position');
+    delete element.dataset.personalAlgorithmPositionPatched;
   });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-score]').forEach((element) => {
     element.style.removeProperty('display');
@@ -139,10 +146,6 @@ const clearExtensionPresentation = (showPaused = true) => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
-    if (element.dataset.personalAlgorithmPositionPatched === 'true') {
-      element.style.removeProperty('position');
-      delete element.dataset.personalAlgorithmPositionPatched;
-    }
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -534,23 +537,41 @@ const scheduleHomeRecommendationObservation = () => {
   }, 400);
 };
 
-const syncSourceFilteredShelves = () => {
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-source-shelf-hidden]').forEach((shelf) => {
-    shelf.style.removeProperty('display');
-    delete shelf.dataset.personalAlgorithmSourceShelfHidden;
+const syncSourceFilteredContainers = () => {
+  document.querySelectorAll<HTMLElement>(
+    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden]',
+  ).forEach((container) => {
+    container.style.removeProperty('display');
+    delete container.dataset.personalAlgorithmSourceShelfHidden;
+    delete container.dataset.personalAlgorithmSourceRowHidden;
   });
 
-  if (sourceFilters.includeShorts !== false) return;
+  if (sourceFilters.includeShorts === false) {
+    document.querySelectorAll<HTMLElement>(
+      'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
+    ).forEach((shelf) => {
+      const hasShorts = Boolean(
+        shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
+      );
+      if (!hasShorts) return;
+      shelf.dataset.personalAlgorithmSourceShelfHidden = 'shorts';
+      shelf.style.setProperty('display', 'none', 'important');
+    });
+  }
 
-  document.querySelectorAll<HTMLElement>(
-    'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer',
-  ).forEach((shelf) => {
-    const hasShorts = Boolean(
-      shelf.querySelector('a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'),
-    );
-    if (!hasShorts) return;
-    shelf.dataset.personalAlgorithmSourceShelfHidden = 'shorts';
-    shelf.style.setProperty('display', 'none', 'important');
+  // YouTube can retain an otherwise-empty rich-grid row after every card in it
+  // has been source-filtered. Collapse only rows whose native card renderers are
+  // all currently hidden by MyAlgo, so ordinary native layout remains untouched.
+  document.querySelectorAll<HTMLElement>('ytd-rich-grid-row').forEach((row) => {
+    const cards = Array.from(row.querySelectorAll<HTMLElement>('ytd-rich-item-renderer'));
+    if (cards.length === 0) return;
+    const everyCardHidden = cards.every((card) => (
+      card.style.getPropertyValue('display') === 'none'
+      && card.dataset.personalAlgorithmScore === 'source_filter'
+    ));
+    if (!everyCardHidden) return;
+    row.dataset.personalAlgorithmSourceRowHidden = 'true';
+    row.style.setProperty('display', 'none', 'important');
   });
 };
 
@@ -611,17 +632,21 @@ const applyRankedFeed = () => {
     if (!badge) {
       badge = document.createElement('span');
       badge.dataset.personalAlgorithmBadge = 'true';
-      badge.style.cssText = 'position:absolute;z-index:20;top:8px;left:8px;padding:4px 7px;border-radius:999px;background:#0f172a;color:#fff;font:600 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);';
-      if (!element.style.position) {
-        element.style.position = 'relative';
-        element.dataset.personalAlgorithmPositionPatched = 'true';
+      badge.style.cssText = 'position:absolute;z-index:999;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+      const badgeHost = element.querySelector<HTMLElement>(
+        '#thumbnail, ytd-thumbnail, yt-thumbnail-view-model, a#thumbnail',
+      ) ?? element;
+      const computedPosition = getComputedStyle(badgeHost).position;
+      if (computedPosition === 'static') {
+        badgeHost.style.position = 'relative';
+        badgeHost.dataset.personalAlgorithmPositionPatched = 'true';
       }
-      element.appendChild(badge);
+      badgeHost.appendChild(badge);
     }
-    badge.textContent = `${activeMode} · ${score}`;
+    badge.textContent = `MyAlgo · ${activeMode} · ${score}`;
   });
 
-  syncSourceFilteredShelves();
+  syncSourceFilteredContainers();
 };
 
 const renderReplacementSlots = (generation: number) => {
