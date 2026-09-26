@@ -3,82 +3,109 @@
 ## Launch architecture
 
 ```text
-                  ┌────────────────────┐
-                  │   YouTube browser  │
-                  └─────────┬──────────┘
-                            │
-                 rendered page observation
-                            │
-                            ▼
-                    Local evidence
-                            │
-                            ▼
-               Personal Algorithm Graph
-                            │
-                    ┌───────┴───────┐
-                    ▼               ▼
-                 Scoring        Explanation
-                    │               │
-                    └───────┬───────┘
-                            ▼
-                     Feed enforcement
+install / material disclosure
+          ↓
+versioned affirmative acceptance
+          ↓
+YouTube browser pages
+          ↓
+rendered page + player + interaction observation
+          ↓
+normalized local evidence
+          ↓
+Personal Algorithm Graph
+          ↓
+scoring / trace
+          ↓
+feed enforcement
 ```
+
+Until the current disclosure version is accepted, the content script remains paused and the background rejects observation/ranking messages.
+
+## Launch storage boundary
+
+```text
+YouTube page
+   │
+   ├── visible DOM / player state / user interaction
+   │          ↓
+   │     chrome.storage.local
+   │          ├── evidence
+   │          ├── graph
+   │          ├── candidate/metadata caches
+   │          ├── feedback/events
+   │          └── compact traces/settings
+   │
+   └── YouTube-owned HTTPS requests used by page operation/metadata enrichment
+
+MyAlgo backend / analytics / ad network
+   X  no launch transfer of observed activity, graph, feedback, or traces
+```
+
+Local storage is extension-specific and may persist independently of normal browser cache/history clearing. The Settings deletion control is therefore the authoritative in-product way to clear MyAlgo's retained local state.
 
 ## API boundary
 
 ```text
 YouTube Data API
        │
-       └── account facts/display
+       └── account facts/display only
                X
                │
                └── NOT graph derivation
 ```
 
+#168 owns the separate audit proving this boundary for release.
+
 ## Data categories
 
 ### Browser-observed
 
-- video IDs
-- titles/metadata visible in the page
-- history observations
-- feed candidates
-- user interactions
+- video IDs and visible/fetched YouTube metadata;
+- feed candidates and exposure context;
+- optional rendered History context;
+- playback-derived watch evidence;
+- selections and explicit feedback.
 
-Purpose: graph inference and feed control.
+Purpose: local evidence, graph construction, scoring, explanation, and feed control.
 
-### User-created
+### User-created / user-controlled
 
-- nodes
-- preferences
-- edges
-- rules
-- modes
+- settings and modes;
+- explicit feedback;
+- future explicit graph edits.
 
-Purpose: explicit personal control.
+Purpose: direct personal control.
+
+### Derived local state
+
+- Personal Algorithm Graph;
+- graph revisions;
+- candidate/feed caches;
+- score/trace metadata.
+
+Purpose: ranking, explanation, replay/debugging, and enforcement.
 
 ### API account facts
 
-Used only where required to display/confirm account facts.
+Used only where required for approved display/account-fact purposes. They are not graph-learning evidence.
 
-## Future enrichment
+## Retention and deletion
 
-If enrichment is introduced:
+Some operational stores have explicit size caps. Evidence and graph state can persist locally until deletion/reset unless an explicit retention/expiry rule applies.
 
-```text
-content
-  ↓
-foundation model
-  ↓
-content evidence
-  ↓
-graph matching
-```
+- Pause: stop new observation/enforcement; retained data remains.
+- Feature toggles: stop the associated optional observation path; retained data remains.
+- Delete all local MyAlgo data: clear extension-local state and disclosure acceptance; observation remains off until acceptance is renewed.
 
-The model output must carry provenance and version information.
+## Future enrichment or cloud processing
 
-## No hidden transfer
+Cloud sync, telemetry, hosted inference, enrichment, or a new connector changes this diagram. Before enabling such a flow:
 
-The MVP should not silently transmit browsing history or graph state to a third party.
+1. define the data contract and processor/destination;
+2. update the privacy policy and Store disclosures;
+3. increment the in-product disclosure version;
+4. obtain renewed affirmative acceptance before changed collection begins;
+5. define security, retention, deletion, and failure behavior.
 
-Any future transfer requires an explicit product/data-flow review.
+No future transfer is authorized merely because it appears on the roadmap.
