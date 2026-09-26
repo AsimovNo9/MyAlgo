@@ -216,8 +216,12 @@ export class LocalPersonalAlgorithmStore {
         },
       };
       const index = state.evidence.findIndex((item) => item.id === id);
-      if (index >= 0) state.evidence[index] = record;
-      else state.evidence.push(record);
+      if (index >= 0) {
+        state.evidence[index] = record;
+        this.removeCreatorRelationshipSupport(state, record.id);
+      } else {
+        state.evidence.push(record);
+      }
       this.ensureContentNode(state, record.evidence);
       this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
       return structuredClone(record);
@@ -500,6 +504,14 @@ export class LocalPersonalAlgorithmStore {
       createdAt: timestamp,
       updatedAt: timestamp,
     });
+  }
+
+  private removeCreatorRelationshipSupport(state: PersonalAlgorithmState, evidenceId: string): void {
+    state.graph.edges = state.graph.edges
+      .map((edge) => edge.relation === 'created_by' && edge.provenance === 'inferred'
+        ? { ...edge, evidenceIds: edge.evidenceIds.filter((id) => id !== evidenceId) }
+        : edge)
+      .filter((edge) => edge.relation !== 'created_by' || edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
   }
 
   private ensureCreatorRelationship(
