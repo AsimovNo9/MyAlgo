@@ -1,5 +1,6 @@
 import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
 import {
+  buildPersonalScoringRevisionContext,
   isScoreTraceConsistent,
   scorePersonalAlgorithm,
   type PersonalScoringPolicy,
@@ -282,11 +283,12 @@ export function scoreLocalCandidates(
   sourceFilters: FeedSourceFilters = {},
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
+  const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
 
   return candidates
     .map((candidate) => {
       const context = candidateContext(state, candidate);
-      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals);
+      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
         || (candidate.is_live && sourceFilters.includeLive === false)
