@@ -157,3 +157,14 @@ For #160, validate replacements as bounded presentation assignments rather than 
 8. replacement cards preserve the target slot footprint, media aspect ratio, focusability, accessible label/title, and canonical YouTube destination.
 
 Record filled and unfilled slot counts only; diagnostics must not log video titles or IDs by default.
+
+For #210/#208 scoring validation, also verify:
+
+1. candidate feature extraction produces deterministic objective/topic/concept/creator/format/freshness contributions from the same graph + metadata input;
+2. raw additive trace totals still reconcile exactly;
+3. calibrated display scores are deterministic, monotonic, and bounded to 0-100;
+4. a replacement is not made unless the replacement candidate clears the configured display-score uplift;
+5. replacement cards visibly retain title and creator/channel even when thumbnail metadata is null;
+6. the compact `Why this?` view reports the same contribution values as the trace;
+7. RSS/web-search acquisition mechanism does not itself add preference weight;
+8. web-search execution is not claimed as validated until a real provider adapter exists and is live-tested.
