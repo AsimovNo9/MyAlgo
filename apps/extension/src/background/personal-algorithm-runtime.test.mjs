@@ -94,6 +94,23 @@ test('explicit local feedback changes the score without treating watch evidence 
   assert.equal(ranked[1].score, 6);
 });
 
+test('explicit not-interested feedback lowers the matching candidate score', () => {
+  const signals = buildLocalFeedbackSignals([
+    { contentItemId: 'video-b', eventType: 'not_interested' },
+  ]);
+  const ranked = scoreLocalCandidates(state, [
+    { external_id: 'video-a', title: 'Video A' },
+    { external_id: 'video-b', title: 'Video B' },
+  ], 'Work', signals);
+
+  assert.equal(ranked[0].external_id, 'video-a');
+  assert.equal(ranked[0].score, 6);
+  assert.equal(ranked[1].external_id, 'video-b');
+  assert.equal(ranked[1].score, -9);
+  assert.equal(ranked[1].trace.feedbackContributions.length, 1);
+  assert.equal(ranked[1].trace.feedbackContributions[0].value, -10);
+});
+
 test('source filters remain local visibility rules', () => {
   const ranked = scoreLocalCandidates(state, [
     { external_id: 'video-a', title: 'Video A', is_short: true },
