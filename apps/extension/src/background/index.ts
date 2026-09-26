@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createSearxngWebSearchProvider, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, webSearchOriginPattern, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, buildYoutubeRssFeedUrl, createDefaultWebSearchProvider, createSearxngWebSearchProvider, DEFAULT_WEB_SEARCH_ENDPOINT, isRetrievalAllowed, mergeCandidateAcquisitionHistory, needsYoutubeMetadataRefresh, nextRssAllowedAt, nextWebSearchAllowedAt, normalizeWebSearchEndpoint, parseYoutubeRssFeed, webSearchOriginPattern, selectRssChannelIds, shouldRefreshObservedCandidate } from './retrieval';
 import { extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom';
 
 type PageCandidate = {
