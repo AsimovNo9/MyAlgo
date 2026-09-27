@@ -224,18 +224,22 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #212 is merged. The next product risk is ranking quality rather than candidate acquisition.
+PR #213 is merged. Candidate acquisition and the local semantic execution boundary are now implemented; the immediate product risk is **semantic calibration plus feed stability** rather than another inference feature.
 
-1. **#209 + #210** — local text embeddings and semantic reranking against the Personal Algorithm Graph and active semantic mode.
-2. **#170 + #153** — graph/provenance visualization and complete per-item explanation.
-3. **#162** — replay/evaluation baseline for semantic ranking changes.
+1. **#214** — replace the fixed semantic taxonomy with graph-derived categories/modes, add an explicit ambiguous/unknown gate, and make Home replacements stable across ordinary mutation/metadata/semantic reranks.
+2. **#162** — build a fixed replay/evaluation baseline for category accuracy, mode separation, neural/hash comparison, and replacement determinism.
+3. **#170 + #153** — graph/provenance visualization and complete per-item explanation.
 4. **#154 + #155 + #178** — direct correction/Forget/history-cluster controls.
-5. **#169 + #161 + #158 + #159** — remaining runtime, mode editing, graph editing, and counterfactual work.
+5. **#169 + #161 + #158 + #159** — remaining runtime validation, editable modes, graph editing, and counterfactual work.
 6. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and second connector.
 
-The first semantic model is text-only. Candidate title/description/keywords/category/creator are embedded locally and compared against graph objective/topic/concept embeddings. Each mode is represented as a semantic lens over weighted graph regions plus an intent seed. Similarity becomes an explicit scorer contribution; it does not rewrite graph truth or override explicit feedback/hard policy.
+PR #213 established the text-only semantic layer: candidate text and graph objective/topic/concept nodes are embedded locally, similarities enter the deterministic scorer as exact trace contributions, and packaged neural inference runs asynchronously outside first paint with local fallbacks.
 
-PR #213 now also compares candidate vectors with five stable category anchors (Work, Learning, Relax, Gaming, French), retains their local similarity features, displays candidate-owned category badges and a feed category summary, and exposes these five modes in the popup and Settings. A Home feed slider targets 0–100% trace-backed replacements from the local candidate reservoir; it leaves an eligible native card when no qualifying replacement exists. These changes await live validation before #209/#210 or the broader #161/#169 acceptance criteria can be closed.
+Post-merge browser review showed that the five bootstrap anchors (Work, Learning, Relax, Gaming, French) should not remain the authoritative content taxonomy. #214 instead treats graph topic/concept labels as the candidate category vocabulary. A category is emitted only when the strongest candidate-to-graph match clears both an absolute similarity floor and a winner margin; ambiguous content stays unlabeled. The mode surface is then populated from categories actually inferred in local state, with a neutral All/Default mode. This keeps modes as lenses over one Personal Algorithm Graph rather than a hardcoded parallel ontology.
+
+The Home feed-mix slider remains presentation policy. #214 removes generation-based candidate rotation and the short replacement TTL so a valid source-card → replacement assignment survives ordinary DOM churn and asynchronous reranking. Replacement identity may change only after a meaningful invalidation such as route, mode, graph/feedback/policy, feed-mix change, source-card removal, or candidate ineligibility.
+
+Do not fine-tune the embedding encoder merely to compensate for a weak classification rule. Build the replay-labelled evaluation set first; only consider training after taxonomy, metadata fusion, thresholds, and model choice have been measured.
 
 
 #160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
