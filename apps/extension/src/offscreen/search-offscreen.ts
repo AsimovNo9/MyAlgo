@@ -175,7 +175,11 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
     const onMessage = (event: MessageEvent<{
       source?: string;
       id?: string | null;
-      type?: 'ready' | 'progress';
+      type?: 'ready' | 'progress' | 'backend-fallback';
+      backend?: string;
+      from?: string;
+      to?: string;
+      reason?: string;
       progress?: {
         status?: string;
         progress?: number;
@@ -204,6 +208,15 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
       }
       if (event.data.id !== id) return;
 
+      if (event.data.type === 'backend-fallback') {
+        persistSemanticStatus('neural', {
+          status: 'loading',
+          progress: null,
+          backend: event.data.to ?? 'wasm-sandbox',
+        });
+        return;
+      }
+
       if (event.data.type === 'progress') {
         const progress = event.data.progress ?? {};
         persistSemanticStatus('neural', {
@@ -212,7 +225,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
           loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
           total: typeof progress.total === 'number' ? progress.total : null,
           file: progress.file ?? null,
-          backend: 'webgpu-sandbox',
+          backend: event.data.backend ?? 'webgpu-sandbox',
         });
         return;
       }
