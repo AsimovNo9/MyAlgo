@@ -636,7 +636,7 @@ export class LocalPersonalAlgorithmStore {
             ...node,
             confidence: node.confidence == null ? null : clampConfidence(node.confidence),
             createdAt: previous?.createdAt ?? timestamp,
-            updatedAt: unchanged ? previous.updatedAt : timestamp,
+            updatedAt: unchanged && previous ? previous.updatedAt : timestamp,
           };
         }),
         ...preservedReferencedNodes,
