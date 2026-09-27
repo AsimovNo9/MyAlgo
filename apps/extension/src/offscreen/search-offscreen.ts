@@ -52,8 +52,16 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
   const id = `semantic-embedding-${++sequence}`;
   return new Promise((resolve, reject) => {
     const onMessage = (event: MessageEvent<{
-      id: string;
-      ok: boolean;
+      id: string | null;
+      type?: 'progress';
+      progress?: {
+        status?: string;
+        progress?: number;
+        loaded?: number;
+        total?: number;
+        file?: string;
+      };
+      ok?: boolean;
       embeddings?: number[][];
       modelId?: string;
       modelVersion?: string;
@@ -61,11 +69,41 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
       error?: string;
     }>) => {
       if (event.data.id !== id) return;
+      if (event.data.type === 'progress') {
+        const progress = event.data.progress ?? {};
+        void chrome.storage.local.set({
+          'personal-algorithm-semantic-model-status': {
+            mode: 'neural',
+            modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
+            backend: 'webgpu',
+            status: progress.status ?? 'loading',
+            progress: typeof progress.progress === 'number' ? progress.progress : null,
+            loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
+            total: typeof progress.total === 'number' ? progress.total : null,
+            file: progress.file ?? null,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+        return;
+      }
       semanticWorker.removeEventListener('message', onMessage);
       if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
         reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
         return;
       }
+      void chrome.storage.local.set({
+        'personal-algorithm-semantic-model-status': {
+          mode: provider,
+          modelId: event.data.modelId,
+          backend: provider === 'neural' ? 'webgpu' : 'hash',
+          status: 'ready',
+          progress: 100,
+          loaded: null,
+          total: null,
+          file: null,
+          updatedAt: new Date().toISOString(),
+        },
+      });
       resolve({
         embeddings: event.data.embeddings,
         modelId: event.data.modelId,
