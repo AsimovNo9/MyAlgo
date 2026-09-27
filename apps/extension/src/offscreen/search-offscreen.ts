@@ -128,7 +128,7 @@ const persistConceptStatus = (data: Record<string, unknown>) => {
   void chrome.runtime.sendMessage({
     type: 'CONCEPT_MODEL_STATUS',
     payload: {
-      modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
+      modelId: 'Xenova/nli-deberta-v3-xsmall',
       ...data,
       updatedAt: new Date().toISOString(),
     },
