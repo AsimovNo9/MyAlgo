@@ -344,3 +344,80 @@ To prevent qualified retrieved candidates from being permanently crowded out of 
 - score at least as high as the native target it would replace.
 
 All remaining opportunistic replacements retain the stricter normal uplift requirement. This changes presentation opportunity, not candidate score.
+
+
+## Durable semantic mode architecture (#214 / PR #215)
+
+PR #215 must keep four semantic layers separate.
+
+### 1. Canonical graph concepts
+
+The Personal Algorithm Graph remains authoritative. Topic/concept nodes should not be promoted directly to UI modes without normalization. Introduce a deterministic canonicalization/alias step for near-duplicate labels and semantically equivalent variants while preserving provenance to every source node/evidence record.
+
+Canonicalization must be replayable. It may propose that multiple labels belong to one concept identity, but similarity alone must not delete user-authored distinctions or silently rewrite explicit edits.
+
+### 2. Semantic neighbourhoods and mode clusters
+
+A user-facing mode is a **durable cluster over canonical graph nodes**, not a one-node label and not a transient list extracted from the current feed cache.
+
+A mode cluster should contain:
+- stable local ID;
+- display label;
+- member canonical graph node IDs;
+- member weights;
+- creation/promotion provenance;
+- version/revision;
+- last-supported timestamp;
+- optional pinned/user-edited state.
+
+Derived clusters can be recomputed, but once exposed as a control they need stable identity. A promoted/pinned mode must not disappear because the current feed lacks matching candidates.
+
+### 3. Multi-label candidate affinity
+
+Candidates may qualify for multiple graph regions/modes simultaneously. Preserve a bounded list/map of qualified affinities rather than collapsing all semantic state to one winning label.
+
+The UI may still show one conservative primary badge when the leading label clears the badge confidence/margin rule. That badge is presentation only. Scoring, retrieval and evaluation consume the multi-label affinity set.
+
+### 4. Graph-grounded mode scoring
+
+Do not implement mode behavior as an opaque parallel `mode_adjustment` detached from graph structure.
+
+For an active mode:
+- resolve the mode to its member graph nodes;
+- compute candidate↔member affinities;
+- convert qualified affinities into bounded contributions whose trace entries identify the exact graph node/mode membership responsible;
+- aggregate those exact contributions into the final score;
+- expose the mode ID/revision and contributing graph node IDs in trace/debug provenance.
+
+The user-facing explanation should be able to say:
+
+`Mode: Local AI work → graph node: local LLM tooling → candidate match +X`
+
+rather than only:
+
+`mode similarity +X`.
+
+### Mode-aware retrieval and supply shortfall
+
+Mode selection changes both **reranking and retrieval planning**.
+
+The retrieval planner should consume the active mode's bounded member-node labels/semantic terms and use the existing acquisition mechanisms. It must not create a separate ungoverned "mode pool."
+
+The Home replacement slider continues to define requested presentation replacement percentage. For an active non-All mode:
+
+```text
+requestedModeSlots = replacementQuota(sliderPercent, eligibleNativeSlots)
+nativeModeSupply   = eligible current-Home candidates matching active mode
+poolModeSupply     = eligible acquired reservoir candidates matching active mode
+```
+
+If `nativeModeSupply < requestedModeSlots`, MyAlgo may surface a local banner/status such as "Not enough native <mode> supply — filling from MyAlgo's candidate pool." The trigger must use the same mode-membership and eligibility checks as scoring, so the status cannot disagree with actual feed behavior.
+
+Pool-sourced candidates still pass through:
+`hard exclusion → eligibility → additive score → ordering → trace → stable replacement presentation`.
+
+Record shortfall count, requested slots, native matching supply, acquired matching supply, and fulfilled slots as bounded local diagnostics for #162.
+
+### Evaluation-first rule
+
+Threshold changes, clustering heuristics, model replacement, and any future fine-tuning must be evaluated on fixed labelled replay fixtures first. Live feed review remains a validation surface, not the sole quality metric.
