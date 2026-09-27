@@ -1,8 +1,8 @@
 import { semanticInputHash } from './semantic-reranking.ts';
 
-export const CONCEPT_EXTRACTION_MODEL_ID = 'Xenova/flan-t5-small';
-export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q8-v1';
-export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'prompt-parser-v1';
+export const CONCEPT_EXTRACTION_MODEL_ID = 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
+export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q4f16-v1';
+export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'prompt-parser-v2';
 
 export type ConceptExtractionCandidate = {
   external_id: string;
@@ -28,20 +28,32 @@ export function buildConceptExtractionPrompt(
   const category = normalize(candidate.content_type ?? '').slice(0, 80);
 
   return [
-    'Extract 1 to 4 concise reusable semantic topics from this YouTube video metadata.',
-    'Prefer named subjects, fields, activities, genres, or durable interests.',
-    'Avoid title fragments, generic words, creator names, and phrases like video, guide, review, full gameplay, episode, reaction.',
-    'Return only a comma-separated list of topic phrases with no explanation.',
+    'Task: label this video with 1 to 4 reusable interest concepts.',
+    'Output exactly one comma-separated line. No explanation, no sentence, no heading.',
+    'Use concise nouns or noun phrases. Prefer the underlying subject, activity, genre, field, franchise, or durable interest.',
+    'Do not output generic production words such as video, review, guide, gameplay, episode, reaction, metadata, channel, or creator.',
+    'Do not repeat a long title phrase when a shorter concept captures it.',
+    'Examples:',
+    'Title: Silent Hill Townfall Full Gameplay Ending',
+    'Keywords: Silent Hill Townfall, gameplay, ending',
+    'Output: Silent Hill, survival horror',
+    'Title: 3 Hours Chill Lofi Hip Hop Mix for Studying',
+    'Keywords: chill lofi beats, study lofi, lofi hip hop mix',
+    'Output: lo-fi music, hip hop, study music',
+    'Now label this item:',
     `Title: ${title}`,
     description ? `Description: ${description}` : '',
     rawTopics ? `Keywords: ${rawTopics}` : '',
     category ? `Category: ${category}` : '',
+    'Output:',
   ].filter(Boolean).join('\n');
 }
 
 const GENERIC = new Set([
-  'content', 'entertainment', 'episode', 'full gameplay', 'gameplay video',
-  'guide', 'music video', 'reaction', 'review', 'shorts', 'tutorial', 'video',
+  'a.k.a.', 'content', 'creator', 'entertainment', 'episode', 'filming',
+  'full gameplay', 'gameplay video', 'guide', 'metadata', 'music video',
+  'reaction', 'review', 'seconds', 'shorts', 'tutorial', 'video', 'video video',
+  'youtube', 'youtube video', 'youtube video metadata',
 ]);
 
 const cleanConcept = (value: string): string => normalize(
@@ -70,8 +82,11 @@ export function parseConceptExtractionOutput(
     if (words.length === 0 || words.length > 6) continue;
     const key = concept.toLocaleLowerCase('en-US');
     if (GENERIC.has(key)) continue;
-    if (/^(title|description|keywords?|category)\b/i.test(concept)) continue;
+    if (/^(title|description|keywords?|category|output|topics?|concepts?)\b/i.test(concept)) continue;
+    if (/^(list|describe|identify|extract|return|write|give|provide|name)\b/i.test(concept)) continue;
+    if (/\b(?:youtube|wikipedia|metadata)\b/i.test(concept)) continue;
     if (/^https?:\/\//i.test(concept)) continue;
+    if (!/[\p{L}\p{N}]/u.test(concept)) continue;
     if (seen.has(key)) continue;
     seen.add(key);
     concepts.push(concept);
