@@ -1,7 +1,7 @@
 import { semanticInputHash } from './semantic-reranking.ts';
 
 export const CONCEPT_EXTRACTION_MODEL_ID = 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
-export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q4f16-v1';
+export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q8-v1';
 export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'prompt-parser-v2';
 
 export type ConceptExtractionCandidate = {
