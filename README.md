@@ -43,15 +43,32 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. refine the merged semantic-ranking slice in #214: infer categories/modes from the Personal Algorithm Graph, leave ambiguous candidates uncategorized, and keep valid Home replacements stable across ordinary reranks;
-2. establish replay/evaluation baselines for category quality, semantic model/scorer comparisons, and replacement stability (#162);
-3. build graph provenance visualization and complete per-item explanation paths (#170, #153);
-4. add correction/Forget/history-selection controls (#154, #155, #178);
-5. continue broader mode editing, graph editing, counterfactuals, portability, sync, and additional connectors after the semantic/trust loop is stable.
+1. **P0 — #162 inside draft PR #215:** build a labelled replay/evaluation set before further threshold or model tuning.
+2. **P0 — #214 inside PR #215:** canonicalize near-duplicate graph concepts, cluster canonical nodes into durable user-facing modes, preserve multi-label candidate affinities, and make every mode-driven score contribution resolve to exact graph structure.
+3. **P0 — mode supply + feed stability:** mode selection must affect retrieval as well as reranking; when current-Home mode supply cannot satisfy the user's replacement slider, MyAlgo should explicitly report the shortfall and fill from the existing RSS/search candidate reservoir through the same scorer/policy/trace path. Stable replacements must not churn during ordinary reranks.
+4. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over the exact mode/node/edge contributions.
+5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
+6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #213 is merged. It established local neural/hash semantic enrichment, graph/mode similarities, asynchronous reranking, packaged WebGPU/WASM inference, and traceable semantic score contributions. Live review after merge exposed two refinement needs now tracked in #214: the five fixed semantic anchors were too coarse as a content taxonomy, and generation/time-based replacement rotation could make an otherwise unchanged Home feed feel unstable.
+PR #213 is merged. Draft PR #215 is no longer just a replacement-stability/threshold patch: it is the active semantic-mode architecture branch.
 
-The current direction is **not to fine-tune the embedding model first**. Candidate categories are derived from candidate-to-graph topic/concept similarities with an explicit score floor and winner-margin gate, and the mode controls are populated from the categories actually inferred in local state. Model training is deferred until a labelled replay set shows systematic errors that remain after taxonomy, metadata, threshold, and model-choice evaluation.
+The intended hierarchy is:
+
+```text
+evidence → Personal Algorithm Graph
+         → canonical concepts
+         → semantic neighbourhoods / durable mode clusters
+         → multi-label candidate affinities
+         → graph-grounded scorer contributions
+         → mode-aware retrieval + existing candidate reservoir
+         → stable Home presentation + exact Why-this trace
+```
+
+A visible video badge remains conservative and may show one label or none. Internal semantic classification is multi-label. User-facing modes are stable clusters over multiple canonical graph nodes rather than transient one-node labels derived from the current feed cache.
+
+The Home replacement slider controls how much of the page MyAlgo attempts to replace. For an active mode, the same quota defines how much mode-matching supply is required. If eligible current-Home supply cannot meet that demand, MyAlgo should state the shortfall and use the existing acquired reservoir; acquired items never bypass hard policy, deterministic scoring, or traceability.
+
+Do not fine-tune the embedding model yet. The P0 replay/evaluation fixture must first determine whether measured errors come from graph fragmentation, clustering, multi-label classification, metadata, thresholds, or the encoder itself.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
