@@ -99,7 +99,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p5');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p6');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
@@ -783,6 +783,53 @@ test('single generic words do not partially match multi-token semantic labels', 
   }], 'Default')[0];
   assert.equal(
     exact.trace.featureContributions.some((item) => item.label.includes('GRM Daily')),
+    true,
+  );
+});
+
+
+test('lexical grounding stays within trusted fields and does not use description token soup', () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push({
+    id: 'topic:homeless-couple',
+    kind: 'topic',
+    label: 'Homeless Couple',
+    provenance: 'inferred',
+    confidence: 0.92,
+    attributes: { sourceKinds: ['model_topic'] },
+    createdAt: '2026-09-27T00:00:00.000Z',
+    updatedAt: '2026-09-27T00:00:00.000Z',
+  });
+
+  const scattered = scoreLocalCandidates(fixture, [{
+    external_id: 'scattered-field-regression',
+    title: 'Cooking meals for the homeless',
+    description: 'A couple of volunteers helped prepare everything over several days.',
+    topics: ['community cooking'],
+  }], 'Default')[0];
+  assert.equal(
+    scattered.trace.featureContributions.some((item) => item.label.includes('Homeless Couple')),
+    false,
+  );
+
+  const descriptionOnly = scoreLocalCandidates(fixture, [{
+    external_id: 'description-only-regression',
+    title: 'Community meal preparation',
+    description: 'A Homeless Couple appears briefly in the background.',
+    topics: ['community cooking'],
+  }], 'Default')[0];
+  assert.equal(
+    descriptionOnly.trace.featureContributions.some((item) => item.label.includes('Homeless Couple')),
+    false,
+  );
+
+  const topicPhrase = scoreLocalCandidates(fixture, [{
+    external_id: 'trusted-field-control',
+    title: 'Community meal preparation',
+    topics: ['Homeless Couple'],
+  }], 'Default')[0];
+  assert.equal(
+    topicPhrase.trace.featureContributions.some((item) => item.label.includes('Homeless Couple')),
     true,
   );
 });
