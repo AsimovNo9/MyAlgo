@@ -754,3 +754,206 @@ export function summarizeInferenceRuns(
       ])),
   };
 }
+
+
+export type ModeClusterAssignment = {
+  conceptId: string;
+  expectedModeId: string;
+  predictedModeId: string | null;
+};
+
+export type ModeClusterMetrics = {
+  assignmentCount: number;
+  assignedCount: number;
+  assignmentAccuracy: number;
+  averageClusterPurity: number;
+  averageExpectedModeFragmentation: number;
+  unassignedConceptIds: string[];
+};
+
+export function evaluateModeClusterAssignments(
+  assignments: readonly ModeClusterAssignment[],
+): ModeClusterMetrics {
+  const assigned = assignments.filter((item) => item.predictedModeId != null);
+  const correct = assigned.filter((item) => item.predictedModeId === item.expectedModeId).length;
+  const predictedGroups = new Map<string, ModeClusterAssignment[]>();
+  const expectedGroups = new Map<string, Set<string>>();
+
+  for (const item of assigned) {
+    const predictedId = item.predictedModeId as string;
+    const predicted = predictedGroups.get(predictedId) ?? [];
+    predicted.push(item);
+    predictedGroups.set(predictedId, predicted);
+
+    const expectedPredictions = expectedGroups.get(item.expectedModeId) ?? new Set<string>();
+    expectedPredictions.add(predictedId);
+    expectedGroups.set(item.expectedModeId, expectedPredictions);
+  }
+
+  const purities = [...predictedGroups.values()].map((group) => {
+    const counts = new Map<string, number>();
+    for (const item of group) counts.set(item.expectedModeId, (counts.get(item.expectedModeId) ?? 0) + 1);
+    const dominant = Math.max(0, ...counts.values());
+    return safeDivide(dominant, group.length);
+  });
+  const fragmentations = [...expectedGroups.values()].map((predictedIds) => predictedIds.size);
+
+  return {
+    assignmentCount: assignments.length,
+    assignedCount: assigned.length,
+    assignmentAccuracy: safeDivide(correct, assignments.length),
+    averageClusterPurity: safeDivide(purities.reduce((sum, value) => sum + value, 0), purities.length),
+    averageExpectedModeFragmentation: safeDivide(
+      fragmentations.reduce((sum, value) => sum + value, 0),
+      fragmentations.length,
+    ),
+    unassignedConceptIds: assignments
+      .filter((item) => item.predictedModeId == null)
+      .map((item) => item.conceptId)
+      .sort(),
+  };
+}
+
+export type DurableModeSnapshot = Record<string, {
+  label: string;
+  memberNodeIds: string[];
+  revision?: number | null;
+}>;
+
+export type ModeStabilityMetrics = {
+  beforeCount: number;
+  afterCount: number;
+  commonModeCount: number;
+  removedModeIds: string[];
+  addedModeIds: string[];
+  changedLabelIds: string[];
+  averageMemberJaccard: number;
+};
+
+export function evaluateModeStability(
+  before: DurableModeSnapshot,
+  after: DurableModeSnapshot,
+): ModeStabilityMetrics {
+  const beforeIds = Object.keys(before).sort();
+  const afterIds = Object.keys(after).sort();
+  const common = beforeIds.filter((id) => after[id] != null);
+  const removedModeIds = beforeIds.filter((id) => after[id] == null);
+  const addedModeIds = afterIds.filter((id) => before[id] == null);
+  const changedLabelIds = common.filter((id) => before[id].label !== after[id].label);
+  const jaccards = common.map((id) => {
+    const left = new Set(before[id].memberNodeIds);
+    const right = new Set(after[id].memberNodeIds);
+    const union = new Set([...left, ...right]);
+    const intersection = [...left].filter((nodeId) => right.has(nodeId)).length;
+    return union.size > 0 ? intersection / union.size : 1;
+  });
+
+  return {
+    beforeCount: beforeIds.length,
+    afterCount: afterIds.length,
+    commonModeCount: common.length,
+    removedModeIds,
+    addedModeIds,
+    changedLabelIds,
+    averageMemberJaccard: safeDivide(jaccards.reduce((sum, value) => sum + value, 0), jaccards.length),
+  };
+}
+
+export type ModeTraceGroundingSample = {
+  traceId: string;
+  modeContribution: number;
+  modeId?: string | null;
+  modeRevision?: number | null;
+  contributingNodeIds?: string[];
+  memberContributions: number[];
+};
+
+export type ModeTraceGroundingMetrics = {
+  sampleCount: number;
+  groundedCount: number;
+  reconciledCount: number;
+  groundingRate: number;
+  reconciliationRate: number;
+  errors: Array<{ traceId: string; reason: string }>;
+};
+
+export function evaluateModeTraceGrounding(
+  samples: readonly ModeTraceGroundingSample[],
+  tolerance = 0.0001,
+): ModeTraceGroundingMetrics {
+  let groundedCount = 0;
+  let reconciledCount = 0;
+  const errors: Array<{ traceId: string; reason: string }> = [];
+
+  for (const sample of samples) {
+    const hasContribution = Math.abs(sample.modeContribution) > tolerance;
+    const grounded = !hasContribution || (
+      Boolean(sample.modeId)
+      && Number.isInteger(sample.modeRevision)
+      && (sample.contributingNodeIds?.length ?? 0) > 0
+    );
+    if (grounded) groundedCount += 1;
+    else errors.push({ traceId: sample.traceId, reason: 'missing mode/node grounding' });
+
+    const memberTotal = sample.memberContributions.reduce((sum, value) => sum + Number(value || 0), 0);
+    const reconciled = Math.abs(memberTotal - sample.modeContribution) <= tolerance;
+    if (reconciled) reconciledCount += 1;
+    else errors.push({ traceId: sample.traceId, reason: 'member contributions do not reconcile' });
+  }
+
+  return {
+    sampleCount: samples.length,
+    groundedCount,
+    reconciledCount,
+    groundingRate: safeDivide(groundedCount, samples.length),
+    reconciliationRate: safeDivide(reconciledCount, samples.length),
+    errors,
+  };
+}
+
+export type RetrievalModeChangeSample = {
+  id: string;
+  baselineQueries: string[];
+  modeQueries: string[];
+  expectedChange: boolean;
+};
+
+export type RetrievalModeChangeMetrics = {
+  sampleCount: number;
+  expectedChangeCount: number;
+  observedChangeCount: number;
+  correctCount: number;
+  accuracy: number;
+  mismatches: string[];
+};
+
+const normalizedQuerySet = (queries: readonly string[]): string[] =>
+  [...new Set(queries.map((query) => query.trim().toLowerCase()).filter(Boolean))].sort();
+
+export function evaluateRetrievalModeChanges(
+  samples: readonly RetrievalModeChangeSample[],
+): RetrievalModeChangeMetrics {
+  let expectedChangeCount = 0;
+  let observedChangeCount = 0;
+  let correctCount = 0;
+  const mismatches: string[] = [];
+
+  for (const sample of samples) {
+    const expected = sample.expectedChange;
+    const observed = stableStringify(normalizedQuerySet(sample.baselineQueries))
+      !== stableStringify(normalizedQuerySet(sample.modeQueries));
+    if (expected) expectedChangeCount += 1;
+    if (observed) observedChangeCount += 1;
+    if (expected === observed) correctCount += 1;
+    else mismatches.push(sample.id);
+  }
+
+  return {
+    sampleCount: samples.length,
+    expectedChangeCount,
+    observedChangeCount,
+    correctCount,
+    accuracy: safeDivide(correctCount, samples.length),
+    mismatches: mismatches.sort(),
+  };
+}
