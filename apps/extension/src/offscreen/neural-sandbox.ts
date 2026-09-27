@@ -3,7 +3,7 @@ import { env, pipeline } from '@huggingface/transformers';
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
-const CONCEPT_MODEL_ID = 'Xenova/flan-t5-small';
+const CONCEPT_MODEL_ID = 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
 const CONCEPT_MODEL_VERSION = 'transformersjs-local-q8-v1';
 
 type FeatureExtractionPipeline = {
@@ -15,12 +15,17 @@ type FeatureExtractionPipeline = {
   }): Promise<{ tolist(): unknown }>;
 };
 
-type Text2TextPipeline = {
-  (text: string, options: {
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+type TextGenerationPipeline = {
+  (messages: ChatMessage[], options: {
     max_new_tokens: number;
     do_sample: false;
-    num_beams: number;
-  }): Promise<Array<{ generated_text?: string }>>;
+    repetition_penalty: number;
+  }): Promise<Array<{ generated_text?: string | ChatMessage[] }>>;
 };
 
 type NeuralSandboxRequest = {
@@ -35,7 +40,7 @@ type NeuralSandboxRequest = {
 type LocalBackend = 'webgpu-sandbox' | 'wasm-sandbox';
 
 let extractorPromise: Promise<{ extractor: FeatureExtractionPipeline; backend: LocalBackend }> | null = null;
-let conceptGeneratorPromise: Promise<{ generator: Text2TextPipeline; backend: LocalBackend }> | null = null;
+let conceptGeneratorPromise: Promise<{ generator: TextGenerationPipeline; backend: LocalBackend }> | null = null;
 let activeRequestId: string | null = null;
 const queuedRequestIds = new Set<string>();
 let requestQueue: Promise<void> = Promise.resolve();
@@ -87,15 +92,15 @@ const buildExtractor = async (
 
 const buildConceptGenerator = async (
   device: 'webgpu' | 'wasm',
-): Promise<Text2TextPipeline> => pipeline(
-  'text2text-generation',
-  'flan-t5-small',
+): Promise<TextGenerationPipeline> => pipeline(
+  'text-generation',
+  'smollm2-135m-instruct',
   {
     device,
     dtype: 'q8',
     progress_callback: progressCallback(device, 'concept'),
   },
-) as Promise<Text2TextPipeline>;
+) as Promise<TextGenerationPipeline>;
 
 async function hasUsableWebGpuAdapter(): Promise<boolean> {
   const gpu = (navigator as Navigator & {
@@ -157,7 +162,7 @@ async function getExtractor(): Promise<{
 }
 
 async function getConceptGenerator(): Promise<{
-  generator: Text2TextPipeline;
+  generator: TextGenerationPipeline;
   backend: LocalBackend;
 }> {
   if (!conceptGeneratorPromise) {
@@ -292,12 +297,22 @@ async function runConceptRequest(id: string, request: NeuralSandboxRequest) {
       inputCount: prompts.length,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
-    const generated = await generator(prompts[index], {
-      max_new_tokens: 40,
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: 'Extract compact reusable interest concepts. Follow the requested output format exactly and do not explain.',
+      },
+      { role: 'user', content: prompts[index] },
+    ];
+    const generated = await generator(messages, {
+      max_new_tokens: 48,
       do_sample: false,
-      num_beams: 1,
+      repetition_penalty: 1.05,
     });
-    const text = generated?.[0]?.generated_text;
+    const generatedText = generated?.[0]?.generated_text;
+    const text = Array.isArray(generatedText)
+      ? generatedText.at(-1)?.content
+      : generatedText;
     if (typeof text !== 'string') {
       throw new Error('Concept extraction model returned an unexpected output.');
     }
