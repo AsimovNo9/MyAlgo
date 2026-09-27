@@ -514,6 +514,8 @@ A model load/inference failure must persist `conceptModelStatus.status: "error"`
 
 Graph revision changes during a long concept-generation request must **not** invalidate that request. Concept proposals are keyed by candidate input + model/pipeline identity, not graph revision. Only privacy/local-data reset or semantic-model boundary changes cancel in-flight concept generation. Validation should allow ordinary graph updates while SmolLM2 is running and still observe the completed batch in the concept cache.
 
+After generation completes, the materializer must re-read current evidence and the current candidate pool before graph reconciliation. A concept result whose candidate input changed while generation was running is rejected by its input hash; unchanged generated concepts remain reusable. This prevents preserving model work at the cost of reconciling an obsolete graph snapshot.
+
 ### Live validation
 
 Enable local neural semantics and trigger normal semantic enrichment. Then inspect:
