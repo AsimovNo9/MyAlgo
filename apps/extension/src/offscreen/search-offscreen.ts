@@ -51,6 +51,23 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
 }> => {
   const id = `semantic-embedding-${++sequence}`;
   return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      semanticWorker.removeEventListener('message', onMessage);
+      semanticWorker.removeEventListener('error', onError);
+      reject(new Error('Semantic embedding worker timed out.'));
+    }, provider === 'neural' ? 120_000 : 15_000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      semanticWorker.removeEventListener('message', onMessage);
+      semanticWorker.removeEventListener('error', onError);
+    };
+
+    const onError = (event: ErrorEvent) => {
+      cleanup();
+      reject(new Error(event.message || 'Semantic embedding worker crashed.'));
+    };
+
     const onMessage = (event: MessageEvent<{
       id: string | null;
       type?: 'progress';
@@ -86,7 +103,7 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
         });
         return;
       }
-      semanticWorker.removeEventListener('message', onMessage);
+      cleanup();
       if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
         reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
         return;
@@ -112,6 +129,7 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
       });
     };
     semanticWorker.addEventListener('message', onMessage);
+    semanticWorker.addEventListener('error', onError);
     semanticWorker.postMessage({ id, texts, provider });
   });
 };
