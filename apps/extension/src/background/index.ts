@@ -859,7 +859,7 @@ async function hydrateSemanticScoreFeatures(
       semantic_category: record.category,
       semantic_category_confidence: record.categoryConfidence,
       semantic_category_scores: record.categoryScores,
-      semantic_mode_affinities: record.modeAffinities,
+      semantic_mode_affinities: record.modeAffinities ?? [],
     };
   });
 }
