@@ -944,16 +944,30 @@ async function refreshSemanticConceptGraph(
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [state, candidatePool, semanticModelMode] = await Promise.all([
+  const [initialState, initialCandidatePool, semanticModelMode] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
     getSemanticModelMode(),
   ]);
-  const extraction = await refreshConceptExtractionCache(
-    state,
-    candidatePool,
-    allowModelExtraction && semanticModelMode === 'neural',
+  const generationEnabled = allowModelExtraction && semanticModelMode === 'neural';
+  const generation = await refreshConceptExtractionCache(
+    initialState,
+    initialCandidatePool,
+    generationEnabled,
   );
+
+  // Generation may take long enough for evidence/candidate state to advance.
+  // Concept cache entries remain valid by input hash/model identity, but graph
+  // reconciliation must always use a fresh post-generation snapshot.
+  const [state, candidatePool] = generationEnabled
+    ? await Promise.all([
+        personalAlgorithmStore.exportState(),
+        getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
+      ])
+    : [initialState, initialCandidatePool];
+  const extraction = generationEnabled
+    ? await refreshConceptExtractionCache(state, candidatePool, false)
+    : generation;
 
   const projection = buildSemanticConceptMaterialization(
     state,
@@ -994,8 +1008,8 @@ async function refreshSemanticConceptGraph(
     materializedNodeCount: reconciled.nodeCount,
     materializedEdgeCount: reconciled.edgeCount,
     preservedReferencedNodeCount: reconciled.preservedReferencedNodeCount,
-    modelExtractionStatus: extraction.diagnostics.status,
-    modelExtractedCandidateCount: extraction.diagnostics.extracted,
+    modelExtractionStatus: generation.diagnostics.status,
+    modelExtractedCandidateCount: generation.diagnostics.extracted,
     modelCachedCandidateCount: extraction.diagnostics.cachedConceptCandidateCount,
     modelPendingCandidateCount: extraction.diagnostics.pending,
     generatedAt: new Date().toISOString(),
