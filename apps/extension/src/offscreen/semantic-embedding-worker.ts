@@ -1,5 +1,4 @@
 import { createLocalHashEmbeddingProvider } from '@repo/recommender-core';
-import { env, pipeline } from '@huggingface/transformers';
 
 type SemanticWorkerRequest = {
   id: string;
@@ -15,38 +14,48 @@ const NEURAL_DIMENSIONS = 384;
 type FeatureExtractionPipeline = {
   (texts: string[], options: { pooling: 'mean'; normalize: true }): Promise<{ tolist(): unknown }>;
 };
+
 let neuralPipeline: Promise<FeatureExtractionPipeline> | null = null;
 let activeLoadRequestId: string | null = null;
-
-env.allowRemoteModels = true;
-env.allowLocalModels = false;
-env.useBrowserCache = true;
-env.cacheKey = 'myalgo-transformers-cache-v1';
 
 async function getNeuralPipeline(): Promise<FeatureExtractionPipeline> {
   if (!('gpu' in navigator)) {
     throw new Error('WebGPU is unavailable in this browser.');
   }
+
   if (!neuralPipeline) {
-    neuralPipeline = pipeline(
-      'feature-extraction',
-      NEURAL_MODEL_ID,
-      {
-        device: 'webgpu',
-        dtype: 'q8',
-        progress_callback: (progress: unknown) => {
-          self.postMessage({
-            id: activeLoadRequestId,
-            type: 'progress',
-            progress,
-          });
+    neuralPipeline = (async () => {
+      // Keep the deterministic hash baseline independent of the neural runtime:
+      // Transformers.js is loaded only after the user explicitly selects neural
+      // semantics and a neural embedding request actually arrives.
+      const { env, pipeline } = await import('@huggingface/transformers');
+      env.allowRemoteModels = true;
+      env.allowLocalModels = false;
+      env.useBrowserCache = true;
+      env.cacheKey = 'myalgo-transformers-cache-v1';
+
+      return pipeline(
+        'feature-extraction',
+        NEURAL_MODEL_ID,
+        {
+          device: 'webgpu',
+          dtype: 'q8',
+          progress_callback: (progress: unknown) => {
+            self.postMessage({
+              id: activeLoadRequestId,
+              type: 'progress',
+              progress,
+            });
+          },
         },
-      },
-    ) as Promise<FeatureExtractionPipeline>;
+      ) as Promise<FeatureExtractionPipeline>;
+    })();
+
     neuralPipeline.catch(() => {
       neuralPipeline = null;
     });
   }
+
   return neuralPipeline;
 }
 
