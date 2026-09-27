@@ -173,3 +173,49 @@ test('canonical IDs are deterministic across graph insertion order and unrelated
     assert.equal(second.assignmentByNodeId[nodeId], first.assignmentByNodeId[nodeId]);
   }
 });
+
+
+test('high-similarity inferred concepts with shared graph support form one semantic neighbourhood', () => {
+  const state = structuredClone(baseState);
+  for (const [id, label] of [
+    ['topic:arms', 'Arms'],
+    ['topic:back', 'Back'],
+    ['topic:chest', 'Chest'],
+    ['topic:bodybuilding', 'Bodybuilding'],
+  ]) {
+    state.graph.nodes.push(graphNode({ id, label, confidence: 0.8 }));
+    state.graph.edges.push({
+      ...edgeFor(id, 'bodybuilding-shared'),
+      id: `edge:bodybuilding:${id}`,
+      targetNodeId: 'content:youtube:bodybuilding-shared',
+      evidenceIds: ['evidence:bodybuilding-shared'],
+    });
+  }
+
+  const embeddings = new Map([
+    ['topic:arms', [1, 0, 0]],
+    ['topic:back', [0.999, 0.01, 0]],
+    ['topic:chest', [0.998, 0.02, 0]],
+    ['topic:bodybuilding', [0.997, 0.03, 0]],
+  ]);
+  const result = buildCanonicalSemanticConcepts(state, {
+    embeddingsByNodeId: embeddings,
+    embeddingModelVersion: 'fixture@mxbai',
+    embeddingSimilarityThreshold: 0.94,
+  });
+
+  const ids = [
+    'topic:arms',
+    'topic:back',
+    'topic:chest',
+    'topic:bodybuilding',
+  ].map((nodeId) => result.assignmentByNodeId[nodeId]);
+  assert.equal(new Set(ids).size, 1);
+  const concept = result.concepts.find((item) => item.id === ids[0]);
+  assert.deepEqual(concept?.sourceNodeIds, [
+    'topic:arms',
+    'topic:back',
+    'topic:bodybuilding',
+    'topic:chest',
+  ]);
+});
