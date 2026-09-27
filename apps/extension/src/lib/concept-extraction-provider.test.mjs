@@ -22,9 +22,9 @@ globalThis.chrome = {
       if (forceFailure) return { ok: false, error: 'fixture concept failure' };
       return {
         ok: true,
-        modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
-        modelVersion: 'transformersjs-local-q8-v1',
-        backend: 'webgpu-sandbox',
+        modelId: 'Xenova/nli-deberta-v3-xsmall',
+        modelVersion: 'transformersjs-local-q8-wasm-v1',
+        backend: 'wasm-sandbox',
         concepts: message.conceptItems.map((_item, index) => (
           index === 0
             ? ['Silent Hill', 'survival horror']
@@ -51,8 +51,8 @@ test('local concept provider sends bounded zero-shot verification items', async 
     { text: 'Local LLM WebGPU tooling', labels: ['local LLMs', 'WebGPU inference'] },
   ]);
 
-  assert.equal(provider.modelId, 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary');
-  assert.equal(provider.modelVersion, 'transformersjs-local-q8-v1');
+  assert.equal(provider.modelId, 'Xenova/nli-deberta-v3-xsmall');
+  assert.equal(provider.modelVersion, 'transformersjs-local-q8-wasm-v1');
   assert.equal(provider.execution, 'offscreen_sandbox_zero_shot_classification');
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'VERIFY_CONCEPTS');
@@ -61,7 +61,7 @@ test('local concept provider sends bounded zero-shot verification items', async 
     ['Silent Hill', 'survival horror'],
     ['local LLMs', 'WebGPU inference'],
   ]);
-  assert.equal(result.backend, 'webgpu-sandbox');
+  assert.equal(result.backend, 'wasm-sandbox');
 });
 
 test('local concept provider throws instead of fabricating verifier output on failure', async () => {
