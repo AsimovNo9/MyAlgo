@@ -5,7 +5,12 @@ const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
 
 type FeatureExtractionPipeline = {
-  (texts: string[], options: { pooling: 'mean'; normalize: true }): Promise<{ tolist(): unknown }>;
+  (texts: string[], options: {
+    pooling: 'mean';
+    normalize: true;
+    truncation: true;
+    max_length: number;
+  }): Promise<{ tolist(): unknown }>;
 };
 
 type NeuralSandboxRequest = {
@@ -141,6 +146,8 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
       const output = await extractor(batch, {
         pooling: 'mean',
         normalize: true,
+        truncation: true,
+        max_length: 128,
       });
       const batchEmbeddings = output.tolist() as number[][];
       if (!Array.isArray(batchEmbeddings) || batchEmbeddings.length !== batch.length) {
