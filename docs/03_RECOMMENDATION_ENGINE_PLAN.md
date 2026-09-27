@@ -434,7 +434,23 @@ The neural sandbox is cooperative rather than concurrently multi-model: embeddin
 
 The purpose of this stage is **precision filtering and abstention**, not alias merging. Related verified labels such as `lofi`, `lofi music`, and `lofi hip hop` may still coexist until #214 embedding-assisted canonicalization reconciles them.
 
-## Durable semantic mode architecture (#214 / post-#219)
+### Post-#220 scoring finding
+
+Live replacement traces after PR #220 exposed the next correctness problem. The local scorer currently matches every topic/concept node lexically against candidate title/description/channel/topics and adds each match independently. With topic weight 14 and common inferred confidence 0.66, one exact inferred-topic match contributes `+9.24`; several aliases/subtopics can therefore stack tens of points even when they represent one underlying interest.
+
+Broad concepts such as `Music`, `Education`, `Commentary`, `review`, or `gameplay` can also accumulate alongside specific labels. Because presentation scoring uses a saturating calibration over the raw additive score, duplicated semantic evidence compresses many materially different raw scores into 97–100/100.
+
+Do not solve this by merely retuning the display calibration. The immediate #214 slice should:
+- create replayable canonical concept/neighbourhood IDs over related source graph nodes;
+- preserve source-node/evidence provenance rather than deleting the original nodes;
+- compute candidate affinity to the canonical neighbourhood;
+- allow at most one bounded semantic score contribution per neighbourhood;
+- downweight or separate broad content-type taxonomy from specific preference concepts;
+- keep every score-affecting term exact in the trace.
+
+Only after semantic overcount is removed should #210 revisit the display-score mapping.
+
+## Durable semantic mode architecture (#214 / post-#220)
 
 The post-#217 mode architecture must keep four semantic layers separate.
 
