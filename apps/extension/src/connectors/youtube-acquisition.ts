@@ -331,6 +331,7 @@ const fetchWithTimeout = async (
       method: 'GET',
       credentials: 'omit',
       cache: 'no-store',
+      redirect: 'manual',
       signal: controller.signal,
     });
   } finally {
