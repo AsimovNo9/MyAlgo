@@ -262,6 +262,7 @@ Required invariants:
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
-12. upgrading from disclosure v3 requires affirmative acceptance of disclosure v4 before observation/ranking resumes.
+12. upgrading from disclosure v3 requires affirmative acceptance of disclosure v4 before observation/ranking resumes;
+13. semantic embedding requests execute through the offscreen semantic Worker in production, with deterministic fallback only when the offscreen path is unavailable.
 
 Compare the baseline local hash provider against the selected compact neural encoder using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
