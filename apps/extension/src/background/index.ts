@@ -154,10 +154,13 @@ const getSemanticModelMode = async (): Promise<SemanticModelMode> => {
 
 const getSemanticProviderContext = async () => {
   const semanticModelMode = await getSemanticModelMode();
-  const provider = createOffscreenEmbeddingProvider(semanticModelMode);
+  const storedBatchSize = await getStorage<number>(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, 1);
+  const neuralBatchSize = Math.max(1, Math.min(16, Math.floor(Number(storedBatchSize) || 1)));
+  const provider = createOffscreenEmbeddingProvider(semanticModelMode, { neuralBatchSize });
   const identity = semanticProviderIdentity(semanticModelMode);
   return {
     semanticModelMode,
+    neuralBatchSize,
     provider,
     semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
   };
@@ -893,6 +896,7 @@ async function refreshSemanticScoreFeatures(
         mode,
         graphRevision: state.graph.currentRevision,
         requestedSemanticModelMode: requestedContext.semanticModelMode,
+        neuralBatchSize: requestedContext.neuralBatchSize,
         semanticModelMode: effectiveContext.semanticModelMode,
         modelVersion: effectiveContext.semanticModelIdentity,
         candidateCount: semanticCandidates.length,
@@ -1251,6 +1255,25 @@ const handleRuntimeMessage = (
         ok: false,
         error: error instanceof Error ? error.message : 'Unable to persist semantic model status.',
       }));
+    return true;
+  }
+
+  if (type === 'SET_SEMANTIC_NEURAL_BATCH_SIZE') {
+    void (async () => {
+      const requested = Number(payload?.batchSize ?? 1);
+      const batchSize = Math.max(1, Math.min(16, Math.floor(Number.isFinite(requested) ? requested : 1)));
+      await setStorage(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, batchSize);
+      await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_STATUS, {
+        mode: await getSemanticModelMode(),
+        status: 'configured',
+        batchSize,
+        updatedAt: new Date().toISOString(),
+      });
+      sendResponse({ ok: true, batchSize });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update neural batch size.',
+    }));
     return true;
   }
 
