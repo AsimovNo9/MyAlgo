@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -73,6 +73,7 @@ type SemanticFeatureRecord = {
     taxonomy_only?: boolean;
     pipeline_id?: string;
   }>;
+  modeAffinities: CandidateModeAffinity[];
   generatedAt: string;
 };
 
@@ -193,6 +194,78 @@ const getSemanticProviderContext = async () => {
     provider,
     semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
   };
+};
+
+const refreshDurableModeCatalog = async (
+  state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
+): Promise<DurableSemanticModeCatalog> => {
+  const previous = await getStorage<DurableSemanticModeCatalog | null>(
+    STORAGE_KEYS.DURABLE_MODE_CATALOG,
+    null,
+  );
+  const canonical = buildCanonicalSemanticConcepts(state);
+  const clustered = buildDurableSemanticModeClusters(state, canonical, {
+    minimumSupportPerConcept: 2,
+    minimumSharedContent: 2,
+    minimumSupportJaccard: 0.5,
+    minimumMembers: 2,
+  });
+  const reconciled = reconcileDurableSemanticModes(
+    previous,
+    clustered.proposals,
+    state.graph.currentRevision,
+    new Date().toISOString(),
+    {
+      minimumIdentityJaccard: 0.5,
+      maxModes: 12,
+    },
+  );
+
+  if (reconciled.changed || !previous) {
+    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, reconciled.catalog);
+  }
+  await setStorage(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, {
+    status: 'completed',
+    marker: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+    graphRevision: state.graph.currentRevision,
+    ...clustered.diagnostics,
+    ...reconciled.diagnostics,
+    generatedAt: reconciled.catalog.generatedAt,
+  });
+
+  const activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default');
+  const activeMode = resolveDurableMode(reconciled.catalog, activeModeId);
+  if (activeMode) {
+    const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
+    if (storedMode !== activeMode.label) {
+      await setStorage(STORAGE_KEYS.MODE, activeMode.label);
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'MODE_CHANGED',
+          payload: { mode: activeMode.label },
+        }).catch(() => undefined)
+        : undefined));
+    }
+  }
+
+  return reconciled.catalog;
+};
+
+const resolveModeSelection = async (
+  requested: string | null | undefined,
+): Promise<{ modeId: string; label: string }> => {
+  const value = requested?.trim() || 'default';
+  if (value.toLowerCase() === 'default') return { modeId: 'default', label: 'Default' };
+  const catalog = await getStorage<DurableSemanticModeCatalog | null>(
+    STORAGE_KEYS.DURABLE_MODE_CATALOG,
+    null,
+  );
+  const byId = resolveDurableMode(catalog, value);
+  if (byId) return { modeId: byId.id, label: byId.label };
+  const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
+  if (byLabel) return { modeId: byLabel.id, label: byLabel.label };
+  return { modeId: value, label: value };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -786,6 +859,7 @@ async function hydrateSemanticScoreFeatures(
       semantic_category: record.category,
       semantic_category_confidence: record.categoryConfidence,
       semantic_category_scores: record.categoryScores,
+      semantic_mode_affinities: record.modeAffinities,
     };
   });
 }
@@ -1048,6 +1122,9 @@ async function refreshSemanticConceptGraph(
     semanticRefreshInFlight.clear();
   }
 
+  const modeState = await personalAlgorithmStore.exportState();
+  const durableModes = await refreshDurableModeCatalog(modeState);
+
   const diagnostics = {
     status: 'completed',
     marker: SEMANTIC_CONCEPT_MATERIALIZER_ID,
@@ -1061,6 +1138,8 @@ async function refreshSemanticConceptGraph(
     modelExtractedCandidateCount: generation.diagnostics.extracted,
     modelCachedCandidateCount: extraction.diagnostics.cachedConceptCandidateCount,
     modelPendingCandidateCount: extraction.diagnostics.pending,
+    durableModeCount: durableModes.modes.length,
+    activeDurableModeCount: durableModes.modes.filter((mode) => mode.active).length,
     generatedAt: new Date().toISOString(),
   };
   await setStorage(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, diagnostics);
@@ -1085,6 +1164,7 @@ async function refreshSemanticScoreFeatures(
   }
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
+  const durableModeCatalog = await refreshDurableModeCatalog(state);
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) {
@@ -1313,6 +1393,10 @@ async function refreshSemanticScoreFeatures(
         categoryConfidence: Number(candidate.semantic_category_confidence ?? 0),
         categoryScores: candidate.semantic_category_scores ?? {},
         graphMatches: (candidate.semantic_graph_matches ?? []).slice(0, 3),
+        modeAffinities: buildCandidateModeAffinities(
+          candidate.semantic_graph_matches,
+          durableModeCatalog,
+        ),
         generatedAt,
       };
       const previous = existing[key];
@@ -1321,6 +1405,7 @@ async function refreshSemanticScoreFeatures(
         || Math.abs(previous.graphSimilarity - record.graphSimilarity) > 0.0001
         || Math.abs(previous.modeSimilarity - record.modeSimilarity) > 0.0001
         || JSON.stringify(previous.graphMatches ?? []) !== JSON.stringify(record.graphMatches)
+        || JSON.stringify(previous.modeAffinities ?? []) !== JSON.stringify(record.modeAffinities)
       ) {
         changed += 1;
       }
@@ -1548,6 +1633,7 @@ const handleRuntimeMessage = (
     type: string;
     payload?: {
       mode?: string;
+      modeId?: string;
       algorithmId?: string;
       enabled?: boolean;
       contentItemId?: string;
@@ -1987,23 +2073,29 @@ const handleRuntimeMessage = (
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
-    const nextMode = payload?.mode ?? 'Default';
     void (async () => {
-      await setStorage(STORAGE_KEYS.MODE, nextMode);
+      const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
+      await Promise.all([
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
+        setStorage(STORAGE_KEYS.MODE, selection.label),
+      ]);
       const settings = await getStorage<RetrievalSettings>(
         STORAGE_KEYS.RETRIEVAL_SETTINGS,
         DEFAULT_RETRIEVAL_SETTINGS,
       );
       if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, nextMode).then(async (refresh) => {
+        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
           if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
         }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
       }
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
-        ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'MODE_CHANGED',
+          payload: { mode: selection.label, modeId: selection.modeId },
+        }).catch(() => undefined)
         : undefined));
-      sendResponse({ ok: true });
+      sendResponse({ ok: true, mode: selection.label, modeId: selection.modeId });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
   }
@@ -2136,13 +2228,17 @@ const handleRuntimeMessage = (
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
-    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus]) => {
+      getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, null),
+    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus, durableModes, durableModeDiagnostics]) => {
       sendResponse({
         ok: true,
         diagnostics,
         conceptMaterialization,
         conceptExtraction,
         conceptModelStatus,
+        durableModes,
+        durableModeDiagnostics,
       });
     }).catch((error) => sendResponse({
       ok: false,
