@@ -114,18 +114,18 @@ test('concept verification reuses the local neural sandbox and returns selected 
       modelKind: 'concept',
       ok: true,
       concepts: [['distributed systems', 'CRDTs']],
-      modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
-      modelVersion: 'transformersjs-local-q8-v1',
-      backend: 'webgpu-sandbox',
+      modelId: 'Xenova/nli-deberta-v3-xsmall',
+      modelVersion: 'transformersjs-local-q8-wasm-v1',
+      backend: 'wasm-sandbox',
     },
   }));
 
   assert.deepEqual(await result, {
     ok: true,
     concepts: [['distributed systems', 'CRDTs']],
-    modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
-    modelVersion: 'transformersjs-local-q8-v1',
-    backend: 'webgpu-sandbox',
+    modelId: 'Xenova/nli-deberta-v3-xsmall',
+    modelVersion: 'transformersjs-local-q8-wasm-v1',
+    backend: 'wasm-sandbox',
   });
 });
 
