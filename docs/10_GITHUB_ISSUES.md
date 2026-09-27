@@ -252,11 +252,12 @@ Replay stored candidates against hypothetical graph versions.
 
 ## P6 — Enrichment
 
-Only after measured gaps:
+The first enrichment slice is active in PR #213: rebuildable local text embeddings support semantic graph/mode matching while remaining derived, bounded, and subordinate to deterministic policy.
+
+Still deferred until measured gaps justify them:
 
 - transcripts
-- rebuildable local embeddings
-- thumbnail vision
+- thumbnail/video vision
 - bounded comment analysis
 - optional local LLM resolver / explanation synthesis
 
@@ -295,7 +296,7 @@ Repository audit result: the current launch runtime contains no YouTube Data API
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
-Implementation and clean-profile browser validation are complete in PR #199. Remaining work is Store-dashboard publication/reconciliation plus #168.
+The original local privacy gate was implemented and clean-profile validated in PR #199; #168 is complete. PR #213 introduces disclosure v4 for derived local semantic embeddings/similarities, so clean-profile v4 revalidation plus Store-dashboard publication/reconciliation remain.
 
 
 ### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions
