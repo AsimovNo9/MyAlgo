@@ -82,6 +82,15 @@ const FEATURE_WEIGHTS = {
 const SEMANTIC_NEIGHBOURHOOD_CONTRIBUTION_CAP = 18;
 const TAXONOMY_ONLY_MAX_CONTRIBUTION = 3;
 const TAXONOMY_ONLY_WEIGHT_MULTIPLIER = 0.25;
+const SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY = 0.3;
+const SEMANTIC_MATCH_MINIMUM_SIMILARITY = 0.24;
+const SEMANTIC_MATCH_RELATIVE_TO_BEST = 0.7;
+
+const SEMANTIC_REGION_GENERIC_TOKENS = new Set([
+  'ai', 'artificial', 'blog', 'blogs', 'daily', 'education', 'entertainment',
+  'game', 'games', 'gameplay', 'guide', 'learning', 'music', 'news', 'people',
+  'review', 'tech', 'technology', 'tutorial', 'video', 'videos', 'week',
+]);
 
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'how', 'in',
@@ -197,10 +206,118 @@ type CanonicalSemanticAccumulator = {
   label: string;
   taxonomyOnly: boolean;
   objectiveOnly: boolean;
+  explicitProtected: boolean;
+  canonicalIds: Set<string>;
   sourceNodeIds: Set<string>;
   evidenceIds: Set<string>;
   lexicalValue: number;
   embeddingValue: number;
+};
+
+const semanticLabelsShareScoringRegion = (
+  leftLabel: string,
+  rightLabel: string,
+  sharesEvidence: boolean,
+): boolean => {
+  const leftTokens = new Set(featureTokens(leftLabel));
+  const rightTokens = new Set(featureTokens(rightLabel));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return false;
+
+  const shared = [...leftTokens].filter((token) => rightTokens.has(token));
+  if (shared.length === 0) return false;
+  const containment = shared.length / Math.min(leftTokens.size, rightTokens.size);
+
+  // Strong lexical containment captures nested aliases/subtopics such as
+  // "chill lofi" ↔ "chill lofi beats" and
+  // "Silent Hill Townfall" ↔ "... PS5 Gameplay".
+  if (shared.length >= 2 && containment >= 0.75) return true;
+
+  // A single distinctive token is only enough when both concepts are backed by
+  // the same graph evidence. Generic taxonomy/domain words cannot cause a merge.
+  return shared.length === 1
+    && containment >= 0.5
+    && sharesEvidence
+    && !SEMANTIC_REGION_GENERIC_TOKENS.has(shared[0]!);
+};
+
+const semanticScoringRegionId = (canonicalIds: readonly string[]): string => {
+  const input = [...canonicalIds].sort().join('|');
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `canonical:semantic:score-region:v1:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+};
+
+const mergeRedundantSemanticAccumulators = (
+  input: readonly CanonicalSemanticAccumulator[],
+): CanonicalSemanticAccumulator[] => {
+  if (input.length <= 1) return [...input];
+
+  const parent = input.map((_, index) => index);
+  const find = (index: number): number => {
+    if (parent[index] === index) return index;
+    parent[index] = find(parent[index]!);
+    return parent[index]!;
+  };
+  const union = (left: number, right: number) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot === rightRoot) return;
+    parent[Math.max(leftRoot, rightRoot)] = Math.min(leftRoot, rightRoot);
+  };
+  const setsShareValue = (left: ReadonlySet<string>, right: ReadonlySet<string>) => {
+    for (const value of left) if (right.has(value)) return true;
+    return false;
+  };
+
+  for (let leftIndex = 0; leftIndex < input.length; leftIndex += 1) {
+    const left = input[leftIndex]!;
+    for (let rightIndex = leftIndex + 1; rightIndex < input.length; rightIndex += 1) {
+      const right = input[rightIndex]!;
+      if (left.taxonomyOnly !== right.taxonomyOnly) continue;
+      if (left.objectiveOnly || right.objectiveOnly) continue;
+      if (left.explicitProtected || right.explicitProtected) continue;
+      if (!semanticLabelsShareScoringRegion(
+        left.label,
+        right.label,
+        setsShareValue(left.evidenceIds, right.evidenceIds),
+      )) continue;
+      union(leftIndex, rightIndex);
+    }
+  }
+
+  const groups = new Map<number, CanonicalSemanticAccumulator[]>();
+  input.forEach((entry, index) => {
+    const root = find(index);
+    const group = groups.get(root) ?? [];
+    group.push(entry);
+    groups.set(root, group);
+  });
+
+  return [...groups.values()].map((group) => {
+    if (group.length === 1) return group[0]!;
+    const representative = [...group].sort((left, right) => (
+      Math.max(right.lexicalValue, right.embeddingValue)
+      - Math.max(left.lexicalValue, left.embeddingValue)
+      || left.label.localeCompare(right.label)
+      || left.id.localeCompare(right.id)
+    ))[0]!;
+    const canonicalIds = [...new Set(group.flatMap((entry) => [...entry.canonicalIds]))].sort();
+    return {
+      id: semanticScoringRegionId(canonicalIds),
+      label: representative.label,
+      taxonomyOnly: group.every((entry) => entry.taxonomyOnly),
+      objectiveOnly: group.every((entry) => entry.objectiveOnly),
+      explicitProtected: group.some((entry) => entry.explicitProtected),
+      canonicalIds: new Set(canonicalIds),
+      sourceNodeIds: new Set(group.flatMap((entry) => [...entry.sourceNodeIds])),
+      evidenceIds: new Set(group.flatMap((entry) => [...entry.evidenceIds])),
+      lexicalValue: Math.max(...group.map((entry) => entry.lexicalValue)),
+      embeddingValue: Math.max(...group.map((entry) => entry.embeddingValue)),
+    };
+  });
 };
 
 const canonicalEvidenceIdsForNodes = (
@@ -235,10 +352,12 @@ const extractLocalCandidateFeaturesWithCanonical = (
   const nodeIds: string[] = [];
   const features: ScoreFeatureSignal[] = [];
 
+  const featureNodeById = new Map(featureNodes.map((node) => [node.id, node]));
   const matchMetadataByCanonicalId = new Map<string, {
     label: string;
     taxonomyOnly: boolean;
     objectiveOnly: boolean;
+    explicitProtected: boolean;
     sourceNodeIds: string[];
   }>();
   const canonicalOverrideByNodeId = new Map<string, string>();
@@ -254,6 +373,10 @@ const extractLocalCandidateFeaturesWithCanonical = (
       objectiveOnly: sourceNodeIds.length > 0 && sourceNodeIds.every((nodeId) => (
         canonicalByNodeId.get(nodeId)?.kinds.every((kind) => kind === 'objective') === true
       )),
+      explicitProtected: sourceNodeIds.some((nodeId) => {
+        const provenance = canonicalByNodeId.get(nodeId)?.provenance;
+        return provenance === 'explicit' || provenance === 'mixed';
+      }),
       sourceNodeIds,
     });
     for (const nodeId of sourceNodeIds) canonicalOverrideByNodeId.set(nodeId, canonicalId);
@@ -265,6 +388,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
     label: string,
     taxonomyOnly: boolean,
     objectiveOnly: boolean,
+    explicitProtected: boolean,
     sourceNodeIds: readonly string[],
   ): CanonicalSemanticAccumulator => {
     const existing = accumulators.get(canonicalId);
@@ -274,6 +398,8 @@ const extractLocalCandidateFeaturesWithCanonical = (
         .forEach((evidenceId) => existing.evidenceIds.add(evidenceId));
       existing.taxonomyOnly = existing.taxonomyOnly && taxonomyOnly;
       existing.objectiveOnly = existing.objectiveOnly && objectiveOnly;
+      existing.explicitProtected = existing.explicitProtected || explicitProtected;
+      existing.canonicalIds.add(canonicalId);
       return existing;
     }
     const created: CanonicalSemanticAccumulator = {
@@ -281,6 +407,8 @@ const extractLocalCandidateFeaturesWithCanonical = (
       label,
       taxonomyOnly,
       objectiveOnly,
+      explicitProtected,
+      canonicalIds: new Set([canonicalId]),
       sourceNodeIds: new Set(sourceNodeIds),
       evidenceIds: new Set(canonicalEvidenceIdsForNodes(sourceNodeIds, evidenceIdsByNodeId)),
       lexicalValue: 0,
@@ -321,6 +449,11 @@ const extractLocalCandidateFeaturesWithCanonical = (
       overrideMetadata?.objectiveOnly
         ?? deterministic?.kinds.every((kind) => kind === 'objective')
         ?? node.kind === 'objective',
+      overrideMetadata?.explicitProtected
+        ?? (
+          deterministic?.provenance === 'explicit'
+          || deterministic?.provenance === 'mixed'
+        ),
       sourceNodeIds,
     );
     accumulator.lexicalValue = Math.max(accumulator.lexicalValue, lexicalValue);
@@ -329,6 +462,12 @@ const extractLocalCandidateFeaturesWithCanonical = (
 
   const graphSimilarity = Number(candidate.semantic_graph_similarity ?? 0);
   if (Number.isFinite(graphSimilarity) && graphSimilarity >= 0.2) {
+    const rawSemanticMatches = (candidate.semantic_graph_matches ?? [])
+      .filter((match) => Number.isFinite(match.similarity) && match.similarity > 0);
+    const bestSemanticSimilarity = Math.max(
+      0,
+      ...rawSemanticMatches.map((match) => match.similarity),
+    );
     const groupedMatches = new Map<string, {
       id: string;
       label: string;
@@ -338,8 +477,19 @@ const extractLocalCandidateFeaturesWithCanonical = (
       weight: number;
     }>();
 
-    for (const match of candidate.semantic_graph_matches ?? []) {
-      if (!Number.isFinite(match.similarity) || match.similarity <= 0) continue;
+    for (const match of rawSemanticMatches) {
+      const sourceNodeIdsForSupport = match.source_node_ids?.length
+        ? match.source_node_ids
+        : [match.node_id];
+      const hasLexicalSupport = lexicalMatch(match.node_label, text) > 0
+        || sourceNodeIdsForSupport.some((nodeId) => (
+          lexicalMatch(featureNodeById.get(nodeId)?.label ?? '', text) > 0
+        ));
+      if (!hasLexicalSupport && (
+        bestSemanticSimilarity < SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY
+        || match.similarity < SEMANTIC_MATCH_MINIMUM_SIMILARITY
+        || match.similarity < bestSemanticSimilarity * SEMANTIC_MATCH_RELATIVE_TO_BEST
+      )) continue;
       const deterministic = canonicalByNodeId.get(match.node_id);
       const canonicalId = match.canonical_id?.trim()
         || deterministic?.id
@@ -381,11 +531,16 @@ const extractLocalCandidateFeaturesWithCanonical = (
     const semanticValue = 18 * Math.min(1, graphSimilarity);
     if (totalWeight > 0) {
       for (const match of grouped) {
+        const explicitProtected = match.sourceNodeIds.some((nodeId) => {
+          const provenance = canonicalByNodeId.get(nodeId)?.provenance;
+          return provenance === 'explicit' || provenance === 'mixed';
+        });
         const accumulator = ensureAccumulator(
           match.id,
           match.label,
           match.taxonomyOnly,
           match.objectiveOnly,
+          explicitProtected,
           match.sourceNodeIds,
         );
         accumulator.embeddingValue = Math.max(
@@ -396,9 +551,12 @@ const extractLocalCandidateFeaturesWithCanonical = (
     }
   }
 
-  const hasSpecificSemanticMatch = [...accumulators.values()]
+  const reconciledAccumulators = mergeRedundantSemanticAccumulators(
+    [...accumulators.values()],
+  );
+  const hasSpecificSemanticMatch = reconciledAccumulators
     .some((entry) => !entry.taxonomyOnly && Math.max(entry.lexicalValue, entry.embeddingValue) > 0);
-  const rankedSemantic = [...accumulators.values()]
+  const rankedSemantic = reconciledAccumulators
     .map((entry) => ({
       ...entry,
       combinedValue: Math.max(entry.lexicalValue, entry.embeddingValue),
@@ -410,8 +568,22 @@ const extractLocalCandidateFeaturesWithCanonical = (
       || left.id.localeCompare(right.id)
     ));
 
-  for (const entry of rankedSemantic) {
-    if (entry.taxonomyOnly && hasSpecificSemanticMatch) continue;
+  const taxonomyEntries = rankedSemantic.filter((entry) => entry.taxonomyOnly);
+  const semanticEntries = rankedSemantic.filter((entry) => !entry.taxonomyOnly);
+  if (!hasSpecificSemanticMatch && taxonomyEntries.length > 0) {
+    const representative = taxonomyEntries[0]!;
+    semanticEntries.push({
+      ...representative,
+      id: semanticScoringRegionId(
+        [...new Set(taxonomyEntries.flatMap((entry) => [...entry.canonicalIds]))].sort(),
+      ),
+      sourceNodeIds: new Set(taxonomyEntries.flatMap((entry) => [...entry.sourceNodeIds])),
+      evidenceIds: new Set(taxonomyEntries.flatMap((entry) => [...entry.evidenceIds])),
+      combinedValue: Math.max(...taxonomyEntries.map((entry) => entry.combinedValue)),
+    });
+  }
+
+  for (const entry of semanticEntries) {
     const adjusted = entry.taxonomyOnly
       ? Math.min(
         TAXONOMY_ONLY_MAX_CONTRIBUTION,
@@ -427,7 +599,9 @@ const extractLocalCandidateFeaturesWithCanonical = (
       id: `semantic-neighbourhood:${entry.id}`,
       label: entry.objectiveOnly
         ? `objective match: ${entry.label}`
-        : `semantic neighbourhood: ${entry.label}`,
+        : entry.taxonomyOnly
+          ? `semantic taxonomy: ${entry.label}`
+          : `semantic neighbourhood: ${entry.label}`,
       value,
       sourceId: entry.id,
       sourceIds: [...entry.sourceNodeIds].sort(),
@@ -662,7 +836,7 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p3',
+    revision: 'local-mvp-p4',
     baseScore: 0,
     nodeWeights,
     edgeRelationWeights: {
