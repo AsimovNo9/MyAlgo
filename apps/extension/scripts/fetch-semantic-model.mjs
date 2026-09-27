@@ -29,9 +29,9 @@ const MODELS = [
     ],
   },
   {
-    modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
-    revision: '42dedb8',
-    localName: 'deberta-v3-xsmall-concept-verifier',
+    modelId: 'Xenova/nli-deberta-v3-xsmall',
+    revision: '2a4f614a701367a02d51389039afc998faeda637',
+    localName: 'nli-deberta-v3-xsmall-concept-verifier',
     files: [
       { remote: 'config.json', local: 'config.json', minBytes: 700 },
       { remote: 'tokenizer.json', local: 'tokenizer.json', minBytes: 8_000_000 },
