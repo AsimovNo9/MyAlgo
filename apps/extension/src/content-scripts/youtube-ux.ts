@@ -56,14 +56,14 @@ export type RankedFeedItem = {
 
 export function getContentPresentationLabel(
   item: RankedFeedItem,
-  minimumConfidence = 0.75,
+  minimumConfidence = 0.35,
 ): string | null {
   const semanticConfidence = Number(item.semantic_category_confidence ?? 0);
-  if (item.semantic_category && semanticConfidence >= 0.25) {
-    return item.semantic_category[0].toUpperCase() + item.semantic_category.slice(1);
+  if (item.semantic_category && semanticConfidence >= minimumConfidence) {
+    return item.semantic_category.trim();
   }
   const confidence = Number(item.content_label_confidence ?? 0);
-  if (item.content_label !== 'learning' || confidence < minimumConfidence) return null;
+  if (item.content_label !== 'learning' || confidence < 0.75) return null;
   return 'Learning';
 }
 
@@ -165,6 +165,10 @@ export function getShelfCandidates(
     seen.add(id);
     return true;
   }).slice(0, limit);
+}
+
+export function createReplacementSelectionSeed(routeKey: string): string {
+  return routeKey.trim();
 }
 
 function seededCandidateOrder(seed: string, id: string): number {
