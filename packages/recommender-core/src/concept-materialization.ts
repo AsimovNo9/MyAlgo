@@ -233,7 +233,8 @@ export function buildSemanticConceptMaterialization(
       sourceKinds: new Set<SourceKind>(),
       supportByContent: new Map<string, SupportEntry>(),
     };
-    accumulator.labels.set(label, (accumulator.labels.get(label) ?? 0) + 1);
+    const labelWeight = sourceKind === 'title_phrase' ? 1 : 3;
+    accumulator.labels.set(label, (accumulator.labels.get(label) ?? 0) + labelWeight);
     accumulator.sourceKinds.add(sourceKind);
     accumulator.supportByContent.set(support.contentNodeId, support);
     accumulators.set(key, accumulator);
