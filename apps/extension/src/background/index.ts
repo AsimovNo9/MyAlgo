@@ -991,6 +991,7 @@ const handleRuntimeMessage = (
       await chrome.storage.local.remove([
         STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
         STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
+        STORAGE_KEYS.SEMANTIC_MODEL_STATUS,
       ]);
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
