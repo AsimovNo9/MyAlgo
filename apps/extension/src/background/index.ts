@@ -217,6 +217,7 @@ const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'REFRESH_RETRIEVAL',
   'GET_RETRIEVAL_PLAN',
   'REFRESH_SEMANTICS',
+  'REFRESH_CONCEPT_EXTRACTION',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -873,7 +874,7 @@ async function runConceptExtractionCacheRefresh(
     fallbackReason,
     generatedAt: new Date().toISOString(),
   };
-  if (extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
+  if (enabled && extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
     await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, diagnostics);
   }
 
@@ -1684,6 +1685,42 @@ const handleRuntimeMessage = (
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
       sendResponse({ feed });
     });
+    return true;
+  }
+
+  if (type === 'REFRESH_CONCEPT_EXTRACTION') {
+    void (async () => {
+      const semanticModelMode = await getSemanticModelMode();
+      if (semanticModelMode !== 'neural') {
+        sendResponse({
+          ok: false,
+          error: 'Local neural semantics must be enabled before concept extraction can run.',
+        });
+        return;
+      }
+
+      const materialization = await refreshSemanticConceptGraph(true);
+      const [conceptExtraction, conceptModelStatus] = await Promise.all([
+        getStorage<Record<string, unknown> | null>(
+          STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS,
+          null,
+        ),
+        getStorage<Record<string, unknown> | null>(
+          STORAGE_KEYS.CONCEPT_MODEL_STATUS,
+          null,
+        ),
+      ]);
+
+      sendResponse({
+        ok: true,
+        materialization: materialization.diagnostics,
+        conceptExtraction,
+        conceptModelStatus,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to refresh concept extraction.',
+    }));
     return true;
   }
 
