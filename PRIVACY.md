@@ -1,6 +1,6 @@
 # MyAlgo Privacy Policy
 
-**Effective date:** 2026-09-26  
+**Effective date:** 2026-09-27  
 **Applies to:** the MyAlgo / Personal Algorithm Chrome extension local-only MVP
 
 MyAlgo is a browser extension that builds a user-controlled Personal Algorithm Graph from activity that is observable on YouTube pages. This policy describes the data handling implemented by the local-only MVP. It does not describe hypothetical future sync, cloud enrichment, or additional connectors.
@@ -67,7 +67,7 @@ The project audits the built extension package for common secret/token patterns.
 
 ## Changes to data practices
 
-The privacy disclosure is versioned. A material change to what MyAlgo observes, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
+The privacy disclosure is versioned. Disclosure v4 covers the local semantic embedding/similarity processing introduced with PR #213. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
 
 Optional sync, cloud enrichment, or a new connector is therefore not covered by the current acceptance.
 
