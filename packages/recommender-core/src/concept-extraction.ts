@@ -2,6 +2,7 @@ import { semanticInputHash } from './semantic-reranking.ts';
 
 export const CONCEPT_EXTRACTION_MODEL_ID = 'Xenova/flan-t5-small';
 export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q8-v1';
+export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'prompt-parser-v1';
 
 export type ConceptExtractionCandidate = {
   external_id: string;
