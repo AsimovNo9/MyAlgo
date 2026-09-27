@@ -4,7 +4,7 @@ import { createPriorityNeuralScheduler, type NeuralSchedulerStepResult } from '.
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
-const CONCEPT_MODEL_ID = 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
+const CONCEPT_MODEL_ID = 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary';
 const CONCEPT_MODEL_VERSION = 'transformersjs-local-q8-v1';
 
 type FeatureExtractionPipeline = {
@@ -16,32 +16,36 @@ type FeatureExtractionPipeline = {
   }): Promise<{ tolist(): unknown }>;
 };
 
-type ChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
-
-type TextGenerationPipeline = {
-  (messages: ChatMessage[], options: {
-    max_new_tokens: number;
-    do_sample: false;
-    repetition_penalty: number;
-  }): Promise<Array<{ generated_text?: string | ChatMessage[] }>>;
+type ZeroShotClassificationPipeline = {
+  (
+    text: string,
+    labels: string[],
+    options: {
+      multi_label: true;
+      hypothesis_template: string;
+    },
+  ): Promise<{
+    labels: string[];
+    scores: number[];
+  }>;
 };
 
 type NeuralSandboxRequest = {
   source?: 'myalgo-neural-host';
   id?: string;
-  type?: 'EMBED_TEXTS' | 'EXTRACT_CONCEPTS';
+  type?: 'EMBED_TEXTS' | 'VERIFY_CONCEPTS';
   batchSize?: number;
   texts?: string[];
-  prompts?: string[];
+  conceptItems?: Array<{
+    text?: string;
+    labels?: string[];
+  }>;
 };
 
 type LocalBackend = 'webgpu-sandbox' | 'wasm-sandbox';
 
 let extractorPromise: Promise<{ extractor: FeatureExtractionPipeline; backend: LocalBackend }> | null = null;
-let conceptGeneratorPromise: Promise<{ generator: TextGenerationPipeline; backend: LocalBackend }> | null = null;
+let conceptClassifierPromise: Promise<{ classifier: ZeroShotClassificationPipeline; backend: LocalBackend }> | null = null;
 let activeRequestId: string | null = null;
 const scheduler = createPriorityNeuralScheduler();
 
@@ -90,17 +94,17 @@ const buildExtractor = async (
   },
 ) as Promise<FeatureExtractionPipeline>;
 
-const buildConceptGenerator = async (
+const buildConceptClassifier = async (
   device: 'webgpu' | 'wasm',
-): Promise<TextGenerationPipeline> => pipeline(
-  'text-generation',
-  'smollm2-135m-instruct',
+): Promise<ZeroShotClassificationPipeline> => pipeline(
+  'zero-shot-classification',
+  'deberta-v3-xsmall-concept-verifier',
   {
     device,
     dtype: 'q8',
     progress_callback: progressCallback(device, 'concept'),
   },
-) as Promise<TextGenerationPipeline>;
+) as Promise<ZeroShotClassificationPipeline>;
 
 async function hasUsableWebGpuAdapter(): Promise<boolean> {
   const gpu = (navigator as Navigator & {
@@ -161,16 +165,16 @@ async function getExtractor(): Promise<{
   return extractorPromise;
 }
 
-async function getConceptGenerator(): Promise<{
-  generator: TextGenerationPipeline;
+async function getConceptClassifier(): Promise<{
+  classifier: ZeroShotClassificationPipeline;
   backend: LocalBackend;
 }> {
-  if (!conceptGeneratorPromise) {
-    conceptGeneratorPromise = (async () => {
+  if (!conceptClassifierPromise) {
+    conceptClassifierPromise = (async () => {
       if (await hasUsableWebGpuAdapter()) {
         try {
           return {
-            generator: await buildConceptGenerator('webgpu'),
+            classifier: await buildConceptClassifier('webgpu'),
             backend: 'webgpu-sandbox' as const,
           };
         } catch (error) {
@@ -180,7 +184,7 @@ async function getConceptGenerator(): Promise<{
             modelKind: 'concept',
             from: 'webgpu-sandbox',
             to: 'wasm-sandbox',
-            reason: error instanceof Error ? error.message : 'WebGPU concept-model initialization failed.',
+            reason: error instanceof Error ? error.message : 'WebGPU concept-classifier initialization failed.',
           });
         }
       } else {
@@ -195,17 +199,17 @@ async function getConceptGenerator(): Promise<{
       }
 
       return {
-        generator: await buildConceptGenerator('wasm'),
+        classifier: await buildConceptClassifier('wasm'),
         backend: 'wasm-sandbox' as const,
       };
     })();
 
-    conceptGeneratorPromise.catch(() => {
-      conceptGeneratorPromise = null;
+    conceptClassifierPromise.catch(() => {
+      conceptClassifierPromise = null;
     });
   }
 
-  return conceptGeneratorPromise;
+  return conceptClassifierPromise;
 }
 
 type EmbeddingRequestState = {
@@ -328,57 +332,71 @@ function createEmbeddingRequestStep(
 }
 
 async function runConceptRequest(id: string, request: NeuralSandboxRequest) {
-  const prompts = Array.isArray(request.prompts)
-    ? request.prompts
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.slice(0, 3_000))
+  const items = Array.isArray(request.conceptItems)
+    ? request.conceptItems
+        .map((item) => ({
+          text: typeof item?.text === 'string' ? item.text.slice(0, 3_000) : '',
+          labels: Array.isArray(item?.labels)
+            ? item.labels
+                .filter((label): label is string => typeof label === 'string')
+                .map((label) => label.trim())
+                .filter(Boolean)
+                .slice(0, 12)
+            : [],
+        }))
         .slice(0, 4)
     : [];
-  const { generator, backend } = await getConceptGenerator();
-  const startedAt = performance.now();
-  const outputs: string[] = [];
 
-  for (let index = 0; index < prompts.length; index += 1) {
+  const { classifier, backend } = await getConceptClassifier();
+  const startedAt = performance.now();
+  const concepts: string[][] = [];
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
     postToHost({
       id,
       type: 'concept-inference',
       modelKind: 'concept',
       backend,
       item: index + 1,
-      itemCount: prompts.length,
+      itemCount: items.length,
       completedItems: index,
-      inputCount: prompts.length,
+      inputCount: items.length,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: 'Extract compact reusable interest concepts. Follow the requested output format exactly and do not explain.',
-      },
-      { role: 'user', content: prompts[index] },
-    ];
-    const generated = await generator(messages, {
-      max_new_tokens: 48,
-      do_sample: false,
-      repetition_penalty: 1.05,
-    });
-    const generatedText = generated?.[0]?.generated_text;
-    const text = Array.isArray(generatedText)
-      ? generatedText.at(-1)?.content
-      : generatedText;
-    if (typeof text !== 'string') {
-      throw new Error('Concept extraction model returned an unexpected output.');
+
+    if (!item.text || item.labels.length === 0) {
+      concepts.push([]);
+    } else {
+      const result = await classifier(item.text, item.labels, {
+        multi_label: true,
+        hypothesis_template: 'This video is about {}.',
+      });
+      concepts.push(
+        result.labels
+          .map((label, scoreIndex) => ({
+            label,
+            score: Number(result.scores[scoreIndex] ?? Number.NEGATIVE_INFINITY),
+          }))
+          .filter((entry) => Number.isFinite(entry.score) && entry.score >= 0.58)
+          .sort((left, right) => (
+            right.score - left.score
+            || left.label.localeCompare(right.label)
+          ))
+          .slice(0, 4)
+          .map((entry) => entry.label),
+      );
     }
-    outputs.push(text);
+
     postToHost({
       id,
       type: 'concept-inference',
       modelKind: 'concept',
       backend,
       item: index + 1,
-      itemCount: prompts.length,
+      itemCount: items.length,
       completedItems: index + 1,
-      inputCount: prompts.length,
+      inputCount: items.length,
       elapsedMs: Math.round(performance.now() - startedAt),
     });
   }
@@ -390,7 +408,7 @@ async function runConceptRequest(id: string, request: NeuralSandboxRequest) {
     modelId: CONCEPT_MODEL_ID,
     modelVersion: CONCEPT_MODEL_VERSION,
     backend,
-    outputs,
+    concepts,
   });
 }
 
@@ -399,7 +417,7 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   if (
     event.source !== window.parent
     || request?.source !== 'myalgo-neural-host'
-    || (request.type !== 'EMBED_TEXTS' && request.type !== 'EXTRACT_CONCEPTS')
+    || (request.type !== 'EMBED_TEXTS' && request.type !== 'VERIFY_CONCEPTS')
     || typeof request.id !== 'string'
   ) {
     return;
@@ -420,7 +438,7 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
     if (activeRequestId === id) activeRequestId = null;
   };
 
-  if (request.type === 'EXTRACT_CONCEPTS') {
+  if (request.type === 'VERIFY_CONCEPTS') {
     scheduler.enqueue({
       id,
       kind: 'concept',
