@@ -369,7 +369,7 @@ semantic reranking
 Proposal sources are intentionally narrow:
 - enriched candidate topics/keywords;
 - enriched content type/category;
-- repeated title keyphrases from retained interactions as a bootstrap when richer metadata is absent.
+- retained title keyphrases may reinforce an already-supported metadata topic, but may not create standalone taxonomy nodes.
 
 A proposal must have retained interaction support. Passive Home exposure and search/RSS acquisition alone are not positive preference evidence and cannot materialize a semantic concept.
 
