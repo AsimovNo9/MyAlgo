@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -23,7 +23,7 @@ const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
 let cachedFeed: RankedFeedItem[] = [];
 let rankingInFlight = false;
-let activeMode = 'Work';
+let activeMode = 'Default';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
 let mutationRankTimer: number | undefined;
@@ -43,12 +43,10 @@ let pendingWatchExposure: { videoId: string; exposureId: string | null; observed
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
-const REPLACEMENT_STABILITY_MS = 45_000;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
   routeKey: string;
-  expiresAt: number;
 }>();
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -683,19 +681,21 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const routeKey = getRouteKey();
-    const now = Date.now();
     const nativeIds = new Set(
       nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
     );
     const usedCandidateIds = new Set<string>();
+    for (const sourceId of stableReplacementBySourceId.keys()) {
+      if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
+    }
 
-    // Keep a recently rendered replacement stable across ordinary YouTube DOM
+    // Keep a rendered replacement stable across ordinary YouTube DOM
     // churn while it remains eligible under the current feed mix.
     for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
       const { element, id } = nativeCards[nativeIndex];
       const sticky = stableReplacementBySourceId.get(id);
       if (!sticky) continue;
-      if (sticky.routeKey !== routeKey || sticky.expiresAt <= now) {
+      if (sticky.routeKey !== routeKey) {
         stableReplacementBySourceId.delete(id);
         continue;
       }
@@ -738,7 +738,7 @@ const applyRankedFeed = () => {
     }
 
     if (remainingReplacementCapacity > 0) {
-      const replacementSelectionSeed = `${rankGeneration}|${routeKey}`;
+      const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
       // Retrieved candidates receive no provenance bonus. The slider relaxes
       // the native-score uplift as it approaches full replacement.
       const replacementCandidates = getReplacementCandidates(
@@ -892,7 +892,7 @@ const renderReplacementSlots = (generation: number) => {
     slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
     [...blockedIds, ...boundCandidateIds],
     replacementMinimumScore,
-    `${generation}|${getRouteKey()}`,
+    createReplacementSelectionSeed(getRouteKey()),
   );
   const assignments = [...boundAssignments, ...fallbackAssignments]
     .slice(0, isYouTubeHomePage(location.pathname)
@@ -923,7 +923,6 @@ const renderReplacementSlots = (generation: number) => {
       candidateId: assignment.item.external_id ?? '',
       item: assignment.item,
       routeKey: getRouteKey(),
-      expiresAt: Date.now() + REPLACEMENT_STABILITY_MS,
     });
     filled += 1;
   }
