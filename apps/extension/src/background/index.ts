@@ -155,6 +155,8 @@ let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
 let lastPersistedTraceSignature = '';
 const metadataEnrichmentInFlight = new Set<string>();
+const metadataEnrichmentFailureUntil = new Map<string, number>();
+const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 const semanticRefreshInFlight = new Set<string>();
 let semanticEpoch = 0;
 
@@ -236,7 +238,8 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     .filter((candidate) => {
       const record = existing[candidate.external_id];
       return needsYoutubeMetadataRefresh(record, now, METADATA_REFRESH_MS)
-        && !metadataEnrichmentInFlight.has(candidate.external_id);
+        && !metadataEnrichmentInFlight.has(candidate.external_id)
+        && (metadataEnrichmentFailureUntil.get(candidate.external_id) ?? 0) <= now;
     })
     .slice(0, MAX_METADATA_ENRICHMENTS_PER_SCAN);
   if (missing.length === 0) return [];
@@ -246,7 +249,14 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     const acquisition = youtubeConnector.acquisition;
     if (!acquisition) return null;
     const enriched = await acquisition.enrich(candidate);
-    if (!enriched) return null;
+    if (!enriched) {
+      metadataEnrichmentFailureUntil.set(
+        candidate.external_id,
+        Date.now() + METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS,
+      );
+      return null;
+    }
+    metadataEnrichmentFailureUntil.delete(candidate.external_id);
     return {
       ...candidate,
       ...enriched,
@@ -1084,6 +1094,7 @@ const handleRuntimeMessage = (
       historyReconciliationReady = null;
       semanticEpoch += 1;
       semanticRefreshInFlight.clear();
+      metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
       await chrome.storage.local.clear();
       await semanticEmbeddingCache.clear();
