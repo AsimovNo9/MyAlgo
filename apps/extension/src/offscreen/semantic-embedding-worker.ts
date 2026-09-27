@@ -16,6 +16,7 @@ type FeatureExtractionPipeline = {
   (texts: string[], options: { pooling: 'mean'; normalize: true }): Promise<{ tolist(): unknown }>;
 };
 let neuralPipeline: Promise<FeatureExtractionPipeline> | null = null;
+let activeLoadRequestId: string | null = null;
 
 env.allowRemoteModels = true;
 env.allowLocalModels = false;
@@ -33,6 +34,13 @@ async function getNeuralPipeline(): Promise<FeatureExtractionPipeline> {
       {
         device: 'webgpu',
         dtype: 'q8',
+        progress_callback: (progress: unknown) => {
+          self.postMessage({
+            id: activeLoadRequestId,
+            type: 'progress',
+            progress,
+          });
+        },
       },
     ) as Promise<FeatureExtractionPipeline>;
     neuralPipeline.catch(() => {
@@ -42,7 +50,8 @@ async function getNeuralPipeline(): Promise<FeatureExtractionPipeline> {
   return neuralPipeline;
 }
 
-async function embedNeural(texts: string[]): Promise<number[][]> {
+async function embedNeural(texts: string[], requestId: string): Promise<number[][]> {
+  activeLoadRequestId = requestId;
   const extractor = await getNeuralPipeline();
   const output = await extractor(texts, {
     pooling: 'mean',
@@ -55,6 +64,7 @@ async function embedNeural(texts: string[]): Promise<number[][]> {
   if (values.some((vector) => !Array.isArray(vector) || vector.length !== NEURAL_DIMENSIONS)) {
     throw new Error('Neural embedding pipeline returned an unexpected embedding dimension.');
   }
+  activeLoadRequestId = null;
   return values;
 }
 
@@ -62,7 +72,7 @@ self.onmessage = async (event: MessageEvent<SemanticWorkerRequest>) => {
   const { id, texts, provider = 'hash' } = event.data;
   try {
     if (provider === 'neural') {
-      const embeddings = await embedNeural(texts);
+      const embeddings = await embedNeural(texts, id);
       self.postMessage({
         id,
         ok: true,
@@ -86,6 +96,7 @@ self.onmessage = async (event: MessageEvent<SemanticWorkerRequest>) => {
       embeddings,
     });
   } catch (error) {
+    activeLoadRequestId = null;
     self.postMessage({
       id,
       ok: false,
