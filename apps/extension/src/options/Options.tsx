@@ -8,6 +8,7 @@ export function Options() {
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
+  const [neuralBatchSize, setNeuralBatchSize] = React.useState(1);
   const [semanticModelStatus, setSemanticModelStatus] = React.useState<{
     status?: string;
     progress?: number | null;
@@ -25,6 +26,7 @@ export function Options() {
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
       'personal-algorithm-semantic-model-status',
+      'personal-algorithm-semantic-neural-batch-size',
       'personal-algorithm-privacy-disclosure-accepted-version',
       'personal-algorithm-feed-cache',
     ]).then((result) => {
@@ -33,6 +35,8 @@ export function Options() {
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
       setSemanticModelStatus((result['personal-algorithm-semantic-model-status'] as typeof semanticModelStatus) ?? null);
+      const storedBatchSize = Number(result['personal-algorithm-semantic-neural-batch-size'] ?? 1);
+      setNeuralBatchSize(Number.isFinite(storedBatchSize) ? Math.max(1, Math.min(16, Math.floor(storedBatchSize))) : 1);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
       setModeCategories(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed).categories : []);
@@ -75,6 +79,7 @@ export function Options() {
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
     setSemanticModelStatus(null);
+    setNeuralBatchSize(1);
     setMode('Default');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
@@ -109,6 +114,21 @@ export function Options() {
       return;
     }
     setSemanticModelMode(response.semanticModelMode === 'neural' ? 'neural' : 'hash');
+  };
+
+  const handleNeuralBatchSizeChange = async (nextBatchSize: number) => {
+    const batchSize = Math.max(1, Math.min(16, Math.floor(nextBatchSize)));
+    setNeuralBatchSize(batchSize);
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_SEMANTIC_NEURAL_BATCH_SIZE',
+      payload: { batchSize },
+    }) as { ok?: boolean; error?: string; batchSize?: number };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to change neural batch size.');
+      return;
+    }
+    setNeuralBatchSize(Number(response.batchSize ?? batchSize));
+    setStatus(`Neural WebGPU batch size set to ${response.batchSize ?? batchSize}. New embedding work will use this setting.`);
   };
 
   const modeOptions = buildInferredModeOptions(mode, modeCategories);
@@ -164,6 +184,28 @@ export function Options() {
           fails, MyAlgo falls back to the deterministic local baseline.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU/WASM)' : 'Deterministic baseline'}</p>
+        <div style={{ marginTop: 16 }}>
+          <label htmlFor="semantic-neural-batch-size">
+            WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
+          </label>
+          <input
+            id="semantic-neural-batch-size"
+            type="range"
+            min="1"
+            max="16"
+            step="1"
+            value={neuralBatchSize}
+            disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
+            onChange={(event) => void handleNeuralBatchSizeChange(Number(event.target.value))}
+            style={{ display: 'block', width: '100%', marginTop: 8 }}
+          />
+          <p style={{ marginTop: 6 }}>
+            Higher values process more texts per WebGPU inference call and can drain semantic work faster,
+            but use more GPU memory. Start at 2–4 on older GPUs and increase only while inference remains stable.
+            WASM keeps its separate CPU batch.
+          </p>
+        </div>
+
         {semanticModelStatus ? (
           <p role="status">
             <strong>Model status:</strong> {semanticModelStatus.status ?? 'unknown'}
