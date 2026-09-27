@@ -18,13 +18,15 @@ globalThis.chrome = {
     },
     async sendMessage(message) {
       sentMessages.push(message);
+      const neural = message.provider === 'neural';
+      const dimensions = neural ? 384 : 192;
       return {
         ok: true,
-        modelId: 'myalgo-local-hash-embedding',
-        modelVersion: 'hash-v1-d192',
-        dimensions: 192,
+        modelId: neural ? 'mixedbread-ai/mxbai-embed-xsmall-v1' : 'myalgo-local-hash-embedding',
+        modelVersion: neural ? 'transformersjs-webgpu-q8-v1' : 'hash-v1-d192',
+        dimensions,
         embeddings: message.texts.map(() => {
-          const vector = new Array(192).fill(0);
+          const vector = new Array(dimensions).fill(0);
           vector[0] = 1;
           return vector;
         }),
@@ -68,4 +70,22 @@ test('offscreen embedding provider falls back locally when offscreen APIs are un
   } finally {
     globalThis.chrome.offscreen = originalOffscreen;
   }
+});
+
+
+test('offscreen neural embedding provider requests WebGPU model identity', async () => {
+  sentMessages = [];
+  contexts.splice(0, contexts.length, {
+    contextType: 'OFFSCREEN_DOCUMENT',
+    documentUrl: 'chrome-extension://test/offscreen-search.html',
+  });
+
+  const provider = createOffscreenEmbeddingProvider('neural');
+  const vectors = await provider.embed(['semantic candidate']);
+
+  assert.equal(provider.modelId, 'mixedbread-ai/mxbai-embed-xsmall-v1');
+  assert.equal(provider.modelVersion, 'transformersjs-webgpu-q8-v1');
+  assert.equal(provider.dimensions, 384);
+  assert.equal(sentMessages[0].provider, 'neural');
+  assert.equal(vectors[0].length, 384);
 });
