@@ -528,8 +528,9 @@ export async function runSemanticModeEvaluationFixture(
     const candidate = result.candidates[index];
     const categoryScores = Object.fromEntries(
       Object.entries(candidate?.semantic_category_scores ?? {})
-        .map(([label, score]) => [label, Number(score ?? 0)])
-        .sort(([left], [right]) => left.localeCompare(right)),
+        .map(([label, score]) => ({ label, score: Number(score ?? 0) }))
+        .sort((left, right) => left.label.localeCompare(right.label))
+        .map(({ label, score }) => [label, score]),
     );
     return {
       id: example.id,
