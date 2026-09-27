@@ -104,7 +104,7 @@ const MAX_HOME_OBSERVATIONS = 300;
 const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
 const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const MAX_SEMANTIC_FEATURE_CACHE = 600;
-const MAX_NEURAL_CANDIDATES_PER_REFRESH = 32;
+const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -811,6 +811,22 @@ async function refreshSemanticScoreFeatures(
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
       ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
       : candidates;
+
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
+      status: 'started',
+      phase: 'embedding_slice',
+      mode,
+      graphRevision: state.graph.currentRevision,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      modelVersion: requestedContext.semanticModelIdentity,
+      candidateCount: semanticCandidates.length,
+      totalCandidateCount: candidates.length,
+      pendingCandidateCount: Math.max(
+        0,
+        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+      ),
+      generatedAt: new Date().toISOString(),
+    });
 
     if (requestedContext.semanticModelMode === 'neural' && semanticCandidates.length === 0) {
       const diagnostics = {
