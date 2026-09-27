@@ -346,4 +346,6 @@ The generic retrieval module must not import or encode provider renderer names, 
 
 ## Downstream semantic-enrichment boundary
 
-PR #213 does not extend the connector contract with embedding concepts. Connectors continue to normalize identity, evidence, and candidate metadata. Rebuildable embeddings and graph/mode similarities are downstream derived features over normalized candidate metadata and Personal Algorithm Graph nodes. They remain model/version/input keyed, score through explicit deterministic trace contributions, and must not create evidence or durable graph preference relationships merely because two vectors are similar.
+PR #213 embeddings and PR #220 zero-shot concept verification do not extend the connector contract with model-specific semantics. Connectors continue to normalize identity, evidence, and candidate metadata. Rebuildable verifier outputs, embeddings, canonical semantic neighbourhoods, and graph/mode similarities are downstream derived features over normalized candidate metadata and Personal Algorithm Graph nodes. They remain model/pipeline/version/input keyed and must not create evidence or durable preference relationships merely because a classifier retained a label or two vectors are similar.
+
+When derived semantic state affects ranking, the deterministic scorer/trace remains the policy boundary. Canonical neighbourhoods may reconcile aliases/subtopics into one bounded semantic contribution while preserving the exact source graph nodes/evidence for explanation and replay.
