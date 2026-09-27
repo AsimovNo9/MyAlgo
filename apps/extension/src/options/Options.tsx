@@ -6,6 +6,12 @@ export function Options() {
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
+  const [semanticModelStatus, setSemanticModelStatus] = React.useState<{
+    status?: string;
+    progress?: number | null;
+    backend?: string;
+    file?: string | null;
+  } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
 
@@ -15,14 +21,25 @@ export function Options() {
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
+      'personal-algorithm-semantic-model-status',
       'personal-algorithm-privacy-disclosure-accepted-version',
     ]).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
+      setSemanticModelStatus((result['personal-algorithm-semantic-model-status'] as typeof semanticModelStatus) ?? null);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
     });
+    const handleStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+      if (areaName !== 'local') return;
+      const change = changes['personal-algorithm-semantic-model-status'];
+      if (change) {
+        setSemanticModelStatus((change.newValue as typeof semanticModelStatus) ?? null);
+      }
+    };
+    chrome.storage.onChanged.addListener(handleStorageChanged);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChanged);
   }, []);
 
   const handleAcceptDisclosure = async () => {
@@ -46,6 +63,7 @@ export function Options() {
     setHistoryObservationEnabled(false);
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
+    setSemanticModelStatus(null);
     setMode('Work');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
@@ -67,6 +85,7 @@ export function Options() {
 
   const handleSemanticModelChange = async (enabled: boolean) => {
     const nextMode = enabled ? 'neural' : 'hash';
+    setSemanticModelStatus(null);
     setStatus(enabled
       ? 'Neural semantic model enabled. Model weights will download automatically on first semantic pass.'
       : 'Using the lightweight deterministic semantic baseline.');
@@ -129,6 +148,14 @@ export function Options() {
           implementation. If loading or inference fails, MyAlgo falls back to the deterministic local baseline.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural WebGPU' : 'Deterministic baseline'}</p>
+        {semanticModelStatus ? (
+          <p role="status">
+            <strong>Model status:</strong> {semanticModelStatus.status ?? 'unknown'}
+            {typeof semanticModelStatus.progress === 'number' ? ` · ${semanticModelStatus.progress.toFixed(1)}%` : ''}
+            {semanticModelStatus.backend ? ` · ${semanticModelStatus.backend}` : ''}
+            {semanticModelStatus.file ? ` · ${semanticModelStatus.file}` : ''}
+          </p>
+        ) : null}
       </section>
 
       <section style={{ marginTop: 24 }}>
