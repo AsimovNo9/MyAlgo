@@ -20,16 +20,17 @@ type NeuralSandboxRequest = {
 let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 let activeRequestId: string | null = null;
 
-env.allowRemoteModels = true;
-env.allowLocalModels = false;
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
+env.localModelPath = new URL('./models/', window.location.href).href;
 // Chrome extension sandbox pages use an opaque origin and cannot access
 // CacheStorage because extension sandbox CSP cannot opt into allow-same-origin.
 env.useBrowserCache = false;
 env.useWasmCache = false;
-// ONNX Runtime defaults these executable runtime files to jsDelivr. MV3 must
+// ONNX Runtime defaults these executable runtime files to a CDN. MV3 must
 // execute only code packaged with the extension, so force both URLs to Vite-
-// emitted local assets while model/configuration files remain the only remote
-// neural download boundary.
+// emitted local assets. Model/configuration files are also packaged at build
+// time under env.localModelPath; runtime remote-model loading is disabled.
 env.backends.onnx.wasm.wasmPaths = {
   mjs: new URL(ortMjsUrl, window.location.href).href,
   wasm: new URL(ortWasmUrl, window.location.href).href,
@@ -50,7 +51,7 @@ async function getExtractor(): Promise<FeatureExtractionPipeline> {
   if (!extractorPromise) {
     extractorPromise = pipeline(
       'feature-extraction',
-      NEURAL_MODEL_ID,
+      'mxbai-embed-xsmall-v1',
       {
         device: 'webgpu',
         dtype: 'q8',
