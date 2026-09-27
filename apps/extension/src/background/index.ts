@@ -530,7 +530,7 @@ async function refreshWebSearchCandidates(
   }
 
   const state = await personalAlgorithmStore.exportState();
-  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Work');
+  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
   const baseProfile = buildGraphRetrievalProfile(state);
   const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
   const retrievalRevision = buildGraphRetrievalRevision(state);
@@ -664,7 +664,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
     const firstInstall = details.reason === 'install';
     await chrome.storage.local.set({
-      [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Work',
+      [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Default',
       [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
       [STORAGE_KEYS.FEED_CACHE]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CACHE] ?? [],
       [STORAGE_KEYS.FEED_CANDIDATE_POOL]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CANDIDATE_POOL] ?? [],
@@ -701,7 +701,7 @@ const semanticFeatureKey = (
   mode: string,
   modelVersion: string,
 ): string => [
-  'categories-v1',
+  'graph-categories-v2',
   modelVersion,
   String(graphRevision),
   mode.trim().toLowerCase(),
@@ -1220,7 +1220,7 @@ const handleRuntimeMessage = (
   if (type === 'PERSONAL_ALGORITHM_HEALTH') {
     void Promise.all([
       getStorage(STORAGE_KEYS.ENABLED, false),
-      getStorage(STORAGE_KEYS.MODE, 'Work'),
+      getStorage(STORAGE_KEYS.MODE, 'Default'),
       getStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash'),
     ]).then(([enabled, mode, semanticModelMode]) => sendResponse({
       ok: true,
@@ -1310,7 +1310,7 @@ const handleRuntimeMessage = (
       // persisted again by a later mutation in the same worker lifetime.
       await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
-        [STORAGE_KEYS.MODE]: 'Work',
+        [STORAGE_KEYS.MODE]: 'Default',
         [STORAGE_KEYS.FEED_REPLACEMENT_PERCENT]: 0,
         [STORAGE_KEYS.ENABLED]: false,
         [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
@@ -1560,7 +1560,7 @@ const handleRuntimeMessage = (
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
-    const nextMode = payload?.mode ?? 'Work';
+    const nextMode = payload?.mode ?? 'Default';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
       const settings = await getStorage<RetrievalSettings>(
@@ -1673,7 +1673,7 @@ const handleRuntimeMessage = (
   if (type === 'GET_RETRIEVAL_PLAN') {
     void Promise.all([
       personalAlgorithmStore.exportState(),
-      getStorage<string>(STORAGE_KEYS.MODE, 'Work'),
+      getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
     ]).then(([state, mode]) => {
       const baseProfile = buildGraphRetrievalProfile(state);
       const profile = applyModeToRetrievalProfile(baseProfile, mode);
