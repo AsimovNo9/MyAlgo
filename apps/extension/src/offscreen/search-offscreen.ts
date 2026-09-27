@@ -341,6 +341,11 @@ const extractConceptsNeuralInSandbox = (
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
+      persistConceptStatus({
+        status: 'error',
+        backend: 'unknown',
+        error: 'Local concept extraction sandbox timed out.',
+      });
       reject(new Error('Local concept extraction sandbox timed out.'));
     }, 300_000);
 
@@ -445,7 +450,13 @@ const extractConceptsNeuralInSandbox = (
         || !event.data.modelId
         || !event.data.modelVersion
       ) {
-        reject(new Error(event.data.error ?? 'Local concept extraction failed.'));
+        const error = event.data.error ?? 'Local concept extraction failed.';
+        persistConceptStatus({
+          status: 'error',
+          backend: event.data.backend ?? 'unknown',
+          error,
+        });
+        reject(new Error(error));
         return;
       }
       persistConceptStatus({
@@ -490,9 +501,15 @@ chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse)
       const result = await extractConceptsNeuralInSandbox(prompts);
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Local concept extraction failed.';
+      persistConceptStatus({
+        status: 'error',
+        backend: 'unknown',
+        error: message,
+      });
       sendResponse({
         ok: false,
-        error: error instanceof Error ? error.message : 'Local concept extraction failed.',
+        error: message,
       });
     });
     return true;
