@@ -19,6 +19,7 @@
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
 - [ ] Modes operate over one graph
+- [ ] PR #213 semantic reranking live-validated: first paint unaffected, semantic follow-up rerank stable, mode-dependent changes observed, caches bounded
 
 ## P2 — Privacy/compliance
 
@@ -27,7 +28,7 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Revalidate clean-profile disclosure v2: no observation or RSS retrieval before acceptance; deletion disables observation/retrieval
+- [ ] Revalidate clean-profile disclosure v4: prior v3 acceptance is rejected; no observation/retrieval/semantic processing before acceptance; deletion disables observation/retrieval and clears semantic caches
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
@@ -36,7 +37,8 @@
 
 ## P3 — Quality
 
-- [ ] RSS acquisition live-validated with bounded channel requests and no evidence creation
+- [x] RSS/YouTube-search acquisition foundation merged (#206/#212); retain as regression coverage
+- [ ] PR #213 semantic diagnostics captured for cold and cached runs
 - [ ] Candidate coverage measured
 - [ ] Empty-feed rate measured
 - [ ] Replacement success measured
