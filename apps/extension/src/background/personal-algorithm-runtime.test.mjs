@@ -563,3 +563,29 @@ test('broad content-type taxonomy does not add preference mass beside a specific
   assert.equal(semantic[0].sourceIds.includes('concept:education'), false);
   assert.equal(semantic[0].sourceIds.includes('topic:grok-bot'), true);
 });
+
+
+test('independent canonical neighbourhoods retain separate bounded contributions', () => {
+  const fixture = semanticFixtureState();
+  fixture.graph.nodes.push({
+    id: 'topic:ceramics',
+    kind: 'topic',
+    label: 'ceramic glazing',
+    provenance: 'inferred',
+    confidence: 0.8,
+    attributes: { sourceKinds: ['model_topic'] },
+    createdAt: '2026-09-27T00:00:00.000Z',
+    updatedAt: '2026-09-27T00:00:00.000Z',
+  });
+
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'multi-interest',
+    title: 'Grok bot tutorial plus ceramic glazing',
+  }], 'Default')[0];
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+
+  assert.equal(semantic.length, 2);
+  assert.ok(semantic.reduce((sum, item) => sum + item.value, 0) > 18);
+  assert.ok(semantic.every((item) => item.value <= 18));
+});
