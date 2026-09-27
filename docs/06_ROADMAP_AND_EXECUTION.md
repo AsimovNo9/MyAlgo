@@ -313,9 +313,9 @@ A local generative model may later convert exact trace/path data into concise pr
 
 Channel context is a separate enrichment/cache layer, not an uncontrolled extension of per-video analysis. A creator summary should be built from a bounded recent window and reused across videos from that creator.
 
-## Retrieval expansion — current active slice
+## Retrieval expansion — implemented foundation
 
-MyAlgo can now safely transform the native feed and use a bounded local candidate reservoir, so the next measured limitation is candidate acquisition: browser-observed DOM alone cannot reliably supply distinct replacement candidates or broaden discovery. The first retrieval slice is therefore active now through #206 rather than deferred as a generic future phase.
+MyAlgo can safely transform the native feed and use a bounded local candidate reservoir. The #206/#212 retrieval foundation is now merged: observed DOM, opt-in RSS, and opt-in YouTube search-page discovery populate the source-neutral reservoir without becoming preference evidence. The active limitation has moved from candidate acquisition to semantic matching and score resolution.
 
 Retrieval expands the candidate universe; it does not become the preference model. Retrieved candidates must enter the same local reservoir and deterministic scorer used by browser-observed candidates, with acquisition provenance kept distinct from graph/evidence provenance.
 
