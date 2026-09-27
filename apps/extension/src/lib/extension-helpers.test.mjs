@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { summarizeFeed } from './extension-helpers.ts';
+import { buildInferredModeOptions, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -28,4 +28,19 @@ test('summarizeFeed handles an empty feed', () => {
   assert.equal(summary.discoveredCount, 0);
   assert.deepEqual(summary.topTopics, []);
   assert.deepEqual(summary.categories, []);
+});
+
+
+test('buildInferredModeOptions uses inferred categories instead of a fixed taxonomy', () => {
+  assert.deepEqual(
+    buildInferredModeOptions('Default', [
+      { category: 'Distributed systems', count: 4 },
+      { category: 'Ambient music', count: 2 },
+    ]),
+    ['Default', 'Distributed systems', 'Ambient music'],
+  );
+  assert.deepEqual(
+    buildInferredModeOptions('Legacy Work', [{ category: 'Distributed systems', count: 4 }]),
+    ['Default', 'Distributed systems', 'Legacy Work'],
+  );
 });
