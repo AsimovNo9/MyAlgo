@@ -6,7 +6,10 @@ type SearchJob = {
   provider?: 'hash' | 'neural';
   batchSize?: number;
   texts?: string[];
-  prompts?: string[];
+  conceptItems?: Array<{
+    text?: string;
+    labels?: string[];
+  }>;
 };
 
 const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url), {
@@ -69,7 +72,7 @@ type SemanticResult = {
 };
 
 type ConceptResult = {
-  outputs: string[];
+  concepts: string[][];
   modelId: string;
   modelVersion: string;
   backend: string;
@@ -125,7 +128,7 @@ const persistConceptStatus = (data: Record<string, unknown>) => {
   void chrome.runtime.sendMessage({
     type: 'CONCEPT_MODEL_STATUS',
     payload: {
-      modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
+      modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
       ...data,
       updatedAt: new Date().toISOString(),
     },
@@ -332,8 +335,8 @@ const embedNeuralInSandbox = (
   });
 };
 
-const extractConceptsNeuralInSandbox = (
-  prompts: string[],
+const verifyConceptsNeuralInSandbox = (
+  conceptItems: Array<{ text: string; labels: string[] }>,
 ): Promise<ConceptResult> => {
   const id = `concept-sandbox-${++sequence}`;
   const frame = ensureNeuralSandbox();
@@ -344,9 +347,9 @@ const extractConceptsNeuralInSandbox = (
       persistConceptStatus({
         status: 'error',
         backend: 'unknown',
-        error: 'Local concept extraction sandbox timed out.',
+        error: 'Local concept verification sandbox timed out.',
       });
-      reject(new Error('Local concept extraction sandbox timed out.'));
+      reject(new Error('Local concept verification sandbox timed out.'));
     }, 300_000);
 
     const cleanup = () => {
@@ -362,8 +365,8 @@ const extractConceptsNeuralInSandbox = (
       frame.contentWindow.postMessage({
         source: 'myalgo-neural-host',
         id,
-        type: 'EXTRACT_CONCEPTS',
-        prompts,
+        type: 'VERIFY_CONCEPTS',
+        conceptItems,
       }, '*');
     };
     const onLoad = () => {
@@ -393,7 +396,7 @@ const extractConceptsNeuralInSandbox = (
       inputCount?: number;
       elapsedMs?: number;
       ok?: boolean;
-      outputs?: string[];
+      concepts?: string[][];
       modelId?: string;
       modelVersion?: string;
       error?: string;
@@ -446,11 +449,11 @@ const extractConceptsNeuralInSandbox = (
       cleanup();
       if (
         !event.data.ok
-        || !Array.isArray(event.data.outputs)
+        || !Array.isArray(event.data.concepts)
         || !event.data.modelId
         || !event.data.modelVersion
       ) {
-        const error = event.data.error ?? 'Local concept extraction failed.';
+        const error = event.data.error ?? 'Local concept verification failed.';
         persistConceptStatus({
           status: 'error',
           backend: event.data.backend ?? 'unknown',
@@ -465,7 +468,7 @@ const extractConceptsNeuralInSandbox = (
         backend: event.data.backend ?? 'webgpu-sandbox',
       });
       resolve({
-        outputs: event.data.outputs,
+        concepts: event.data.concepts,
         modelId: event.data.modelId,
         modelVersion: event.data.modelVersion,
         backend: event.data.backend ?? 'webgpu-sandbox',
@@ -493,15 +496,22 @@ const embedSemantics = (
 );
 
 chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
-  if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EXTRACT_CONCEPTS') {
+  if (message?.target === 'semantic-embedding-offscreen' && message.type === 'VERIFY_CONCEPTS') {
     void (async () => {
-      const prompts = Array.isArray(message.prompts)
-        ? message.prompts.filter((value): value is string => typeof value === 'string').slice(0, 4)
+      const conceptItems = Array.isArray(message.conceptItems)
+        ? message.conceptItems
+            .map((item) => ({
+              text: typeof item?.text === 'string' ? item.text : '',
+              labels: Array.isArray(item?.labels)
+                ? item.labels.filter((label): label is string => typeof label === 'string')
+                : [],
+            }))
+            .slice(0, 4)
         : [];
-      const result = await extractConceptsNeuralInSandbox(prompts);
+      const result = await verifyConceptsNeuralInSandbox(conceptItems);
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
-      const message = error instanceof Error ? error.message : 'Local concept extraction failed.';
+      const message = error instanceof Error ? error.message : 'Local concept verification failed.';
       persistConceptStatus({
         status: 'error',
         backend: 'unknown',
