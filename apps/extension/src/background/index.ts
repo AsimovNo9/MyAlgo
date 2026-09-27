@@ -1472,6 +1472,7 @@ const handleRuntimeMessage = (
       metrics?: unknown;
       semanticModelMode?: SemanticModelMode;
       batchSize?: number;
+      generate?: boolean;
     };
   };
 
