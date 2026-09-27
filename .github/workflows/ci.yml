@@ -32,6 +32,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Semantic replay evaluation
+        run: pnpm eval:semantic
+
       - name: Build extension
         run: pnpm --filter extension build
 
