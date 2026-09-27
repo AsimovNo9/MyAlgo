@@ -440,7 +440,7 @@ Live replacement traces after PR #220 exposed the next correctness problem. The 
 
 Broad concepts such as `Music`, `Education`, `Commentary`, `review`, or `gameplay` can also accumulate alongside specific labels. Because presentation scoring uses a saturating calibration over the raw additive score, duplicated semantic evidence compresses many materially different raw scores into 97–100/100.
 
-Do not solve this by merely retuning the display calibration. The immediate #214 slice should:
+Do not solve this by merely retuning the display calibration. The immediate #221 slice under #214 should:
 - create replayable canonical concept/neighbourhood IDs over related source graph nodes;
 - preserve source-node/evidence provenance rather than deleting the original nodes;
 - compute candidate affinity to the canonical neighbourhood;
