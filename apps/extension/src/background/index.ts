@@ -11,12 +11,13 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildConceptExtractionPrompt, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
+import { createLocalConceptExtractionProvider } from '../lib/concept-extraction-provider';
 
 type PageCandidate = {
   external_id: string;
@@ -71,6 +72,15 @@ type SemanticFeatureRecord = {
   generatedAt: string;
 };
 
+type ConceptExtractionCacheRecord = {
+  externalId: string;
+  inputHash: string;
+  modelVersion: string;
+  concepts: string[];
+  backend: string;
+  generatedAt: string;
+};
+
 type LocalFeedItem = CandidatePoolItem & {
   id: string;
   rawScore: number;
@@ -107,6 +117,8 @@ const MAX_HOME_OBSERVATIONS = 300;
 const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
 const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const MAX_SEMANTIC_FEATURE_CACHE = 600;
+const MAX_CONCEPT_EXTRACTION_CACHE = 600;
+const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 4;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
@@ -755,14 +767,129 @@ async function hydrateSemanticScoreFeatures(
   });
 }
 
-async function refreshSemanticConceptGraph(): Promise<{
+async function refreshConceptExtractionCache(
+  state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
+  candidatePool: CandidatePoolItem[],
+  enabled: boolean,
+): Promise<{
+  conceptsByExternalId: Map<string, string[]>;
+  diagnostics: Record<string, unknown>;
+}> {
+  const existing = await getStorage<Record<string, ConceptExtractionCacheRecord>>(
+    STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE,
+    {},
+  );
+  const modelVersion = `${CONCEPT_EXTRACTION_MODEL_ID}@${CONCEPT_EXTRACTION_MODEL_VERSION}`;
+  const interactionSupportedIds = new Set(
+    state.evidence
+      .filter((record) => (
+        record.evidence.kind === 'interaction'
+        && ['clicked', 'watched', 'saved', 'shared'].includes(record.evidence.interaction)
+      ))
+      .map((record) => (
+        `${record.evidence.content.source}:${record.evidence.content.externalId}`
+      )),
+  );
+
+  const supportedCandidates = candidatePool
+    .filter((candidate) => interactionSupportedIds.has(`youtube:${candidate.external_id}`))
+    .sort((left, right) => (
+      right.lastSeenAt.localeCompare(left.lastSeenAt)
+      || left.external_id.localeCompare(right.external_id)
+    ));
+
+  const validByExternalId = new Map<string, string[]>();
+  const needingExtraction: CandidatePoolItem[] = [];
+  let cacheHits = 0;
+
+  for (const candidate of supportedCandidates) {
+    const inputHash = conceptExtractionInputHash(candidate);
+    const cached = existing[candidate.external_id];
+    if (cached?.inputHash === inputHash && cached.modelVersion === modelVersion) {
+      validByExternalId.set(candidate.external_id, [...cached.concepts]);
+      cacheHits += 1;
+    } else {
+      needingExtraction.push(candidate);
+    }
+  }
+
+  let extracted = 0;
+  let backend: string | null = null;
+  let fallbackReason: string | null = null;
+
+  if (enabled && needingExtraction.length > 0) {
+    const batch = needingExtraction.slice(0, MAX_CONCEPT_EXTRACTIONS_PER_REFRESH);
+    try {
+      const provider = createLocalConceptExtractionProvider();
+      const result = await provider.extract(batch.map(buildConceptExtractionPrompt));
+      backend = result.backend;
+      const generatedAt = new Date().toISOString();
+
+      batch.forEach((candidate, index) => {
+        const concepts = result.concepts[index] ?? [];
+        const record: ConceptExtractionCacheRecord = {
+          externalId: candidate.external_id,
+          inputHash: conceptExtractionInputHash(candidate),
+          modelVersion,
+          concepts: [...concepts],
+          backend: result.backend,
+          generatedAt,
+        };
+        existing[candidate.external_id] = record;
+        validByExternalId.set(candidate.external_id, [...concepts]);
+        extracted += 1;
+      });
+
+      const bounded = Object.fromEntries(
+        Object.entries(existing)
+          .sort(([, left], [, right]) => right.generatedAt.localeCompare(left.generatedAt))
+          .slice(0, MAX_CONCEPT_EXTRACTION_CACHE),
+      );
+      await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE, bounded);
+    } catch (error) {
+      fallbackReason = error instanceof Error ? error.message : 'Local concept extraction failed.';
+      console.warn('[MyAlgo] local concept extraction unavailable; retaining metadata concepts', error);
+    }
+  }
+
+  const diagnostics = {
+    status: fallbackReason ? 'fallback' : (enabled ? 'completed' : 'disabled'),
+    modelId: CONCEPT_EXTRACTION_MODEL_ID,
+    modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+    enabled,
+    interactionSupportedCandidateCount: supportedCandidates.length,
+    cacheHits,
+    extracted,
+    pending: Math.max(0, needingExtraction.length - extracted),
+    cachedConceptCandidateCount: validByExternalId.size,
+    backend,
+    fallbackReason,
+    generatedAt: new Date().toISOString(),
+  };
+  await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, diagnostics);
+
+  return {
+    conceptsByExternalId: enabled ? validByExternalId : new Map(),
+    diagnostics,
+  };
+}
+
+async function refreshSemanticConceptGraph(
+  allowModelExtraction = true,
+): Promise<{
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [state, candidatePool] = await Promise.all([
+  const [state, candidatePool, semanticModelMode] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
+    getSemanticModelMode(),
   ]);
+  const extraction = await refreshConceptExtractionCache(
+    state,
+    candidatePool,
+    allowModelExtraction && semanticModelMode === 'neural',
+  );
 
   const projection = buildSemanticConceptMaterialization(
     state,
@@ -770,6 +897,7 @@ async function refreshSemanticConceptGraph(): Promise<{
       external_id: candidate.external_id,
       source: 'youtube',
       topics: candidate.topics,
+      model_topics: extraction.conceptsByExternalId.get(candidate.external_id),
       content_type: candidate.content_type,
     })),
     {
@@ -802,6 +930,10 @@ async function refreshSemanticConceptGraph(): Promise<{
     materializedNodeCount: reconciled.nodeCount,
     materializedEdgeCount: reconciled.edgeCount,
     preservedReferencedNodeCount: reconciled.preservedReferencedNodeCount,
+    modelExtractionStatus: extraction.diagnostics.status,
+    modelExtractedCandidateCount: extraction.diagnostics.extracted,
+    modelCachedCandidateCount: extraction.diagnostics.cachedConceptCandidateCount,
+    modelPendingCandidateCount: extraction.diagnostics.pending,
     generatedAt: new Date().toISOString(),
   };
   await setStorage(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, diagnostics);
@@ -811,6 +943,7 @@ async function refreshSemanticConceptGraph(): Promise<{
 async function refreshSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
+  allowConceptExtraction = true,
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) {
     const diagnostics = {
@@ -823,7 +956,7 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     return { changed: 0, diagnostics };
   }
-  const conceptMaterialization = await refreshSemanticConceptGraph();
+  const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
@@ -1159,7 +1292,7 @@ async function drainPendingSemanticCandidates(
     && diagnostics.semanticModelMode === 'neural'
     && pending > 0
   ) {
-    const next = await refreshSemanticScoreFeatures(candidates, mode);
+    const next = await refreshSemanticScoreFeatures(candidates, mode, false);
     changed += next.changed;
     diagnostics = next.diagnostics;
     const nextPending = Number(diagnostics?.pendingCandidateCount ?? 0);
@@ -1321,6 +1454,16 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'CONCEPT_MODEL_STATUS') {
+    void setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, payload ?? null)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unable to persist concept model status.',
+      }));
+    return true;
+  }
+
   if (type === 'SEMANTIC_MODEL_STATUS') {
     void setStorage(STORAGE_KEYS.SEMANTIC_MODEL_STATUS, payload ?? null)
       .then(() => sendResponse({ ok: true }))
@@ -1361,6 +1504,8 @@ const handleRuntimeMessage = (
         STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
         STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
         STORAGE_KEYS.SEMANTIC_MODEL_STATUS,
+        STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS,
+        STORAGE_KEYS.CONCEPT_MODEL_STATUS,
       ]);
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
@@ -1811,8 +1956,16 @@ const handleRuntimeMessage = (
     void Promise.all([
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, null),
-    ]).then(([diagnostics, conceptMaterialization]) => {
-      sendResponse({ ok: true, diagnostics, conceptMaterialization });
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, null),
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
+    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus]) => {
+      sendResponse({
+        ok: true,
+        diagnostics,
+        conceptMaterialization,
+        conceptExtraction,
+        conceptModelStatus,
+      });
     }).catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to read semantic diagnostics.',
