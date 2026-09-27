@@ -11,6 +11,13 @@ const secretPatterns = [
   ['PEM private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
 ];
 
+const requiredLocalModelFiles = [
+  'models/mxbai-embed-xsmall-v1/onnx/model_quantized.onnx',
+  'models/flan-t5-small/onnx/encoder_model_quantized.onnx',
+  'models/flan-t5-small/onnx/decoder_model_merged_quantized.onnx',
+  'models/flan-t5-small/tokenizer.json',
+];
+
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -23,7 +30,11 @@ async function walk(directory) {
 }
 
 const files = await walk(root);
+const relativeFiles = new Set(files.map((file) => relative(root, file).replaceAll('\\', '/')));
 const findings = [];
+for (const required of requiredLocalModelFiles) {
+  if (!relativeFiles.has(required)) findings.push(`Missing packaged local model asset: ${required}`);
+}
 for (const file of files) {
   if (!textExtensions.has(extname(file))) continue;
   const content = await readFile(file, 'utf8');
@@ -38,5 +49,5 @@ if (findings.length > 0) {
   for (const finding of findings) console.error(`- ${finding}`);
   process.exitCode = 1;
 } else {
-  console.log(`Extension artifact secret scan passed (${files.length} files inspected).`);
+  console.log(`Extension artifact secret/model audit passed (${files.length} files inspected).`);
 }
