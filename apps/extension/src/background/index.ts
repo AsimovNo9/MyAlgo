@@ -181,6 +181,7 @@ const PRIVACY_GATED_MESSAGE_TYPES = new Set<string>([
   'SET_RETRIEVAL_SETTINGS',
   'REFRESH_RETRIEVAL',
   'GET_RETRIEVAL_PLAN',
+  'REFRESH_SEMANTICS',
   EXTENSION_MESSAGE_TYPES.ACTIVITY,
   EXTENSION_MESSAGE_TYPES.FEEDBACK,
   EXTENSION_MESSAGE_TYPES.HISTORY_OBSERVATION,
@@ -1168,6 +1169,34 @@ const handleRuntimeMessage = (
     void getStorage(STORAGE_KEYS.FEED_CACHE, []).then((feed) => {
       sendResponse({ feed });
     });
+    return true;
+  }
+
+  if (type === 'REFRESH_SEMANTICS') {
+    void (async () => {
+      const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
+      const mode = payload?.mode ?? 'default';
+      if (incomingCandidates.length === 0) {
+        sendResponse({ ok: true, changed: 0, diagnostics: null, skipped: 'no_candidates' });
+        return;
+      }
+
+      const candidatePool = await mergeCandidatePool(incomingCandidates);
+      const currentPageIds = new Set(
+        incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean),
+      );
+      const currentPagePool = candidatePool.filter((item) => currentPageIds.has(item.external_id));
+      const hydrated = await hydrateCandidatePool(currentPagePool.slice(0, MAX_RANK_WORKING_SET));
+      const semanticRefresh = await refreshSemanticScoreFeatures(hydrated, mode);
+      sendResponse({
+        ok: true,
+        changed: semanticRefresh.changed,
+        diagnostics: semanticRefresh.diagnostics,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to refresh semantic features.',
+    }));
     return true;
   }
 
