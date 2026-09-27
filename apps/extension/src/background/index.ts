@@ -937,6 +937,7 @@ async function refreshSemanticScoreFeatures(
       const fallbackIdentity = semanticProviderIdentity('hash');
       effectiveContext = {
         semanticModelMode: 'hash',
+        neuralBatchSize: requestedContext.neuralBatchSize,
         provider: fallbackProvider,
         semanticModelIdentity: `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`,
       };
@@ -1234,12 +1235,14 @@ const handleRuntimeMessage = (
       getStorage(STORAGE_KEYS.ENABLED, false),
       getStorage(STORAGE_KEYS.MODE, 'Default'),
       getStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash'),
-    ]).then(([enabled, mode, semanticModelMode]) => sendResponse({
+      getStorage(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, 1),
+    ]).then(([enabled, mode, semanticModelMode, neuralBatchSize]) => sendResponse({
       ok: true,
       worker: 'ready',
       enabled,
       mode,
       semanticModelMode,
+      neuralBatchSize,
     })).catch((error) => sendResponse({
       ok: false,
       worker: 'error',
