@@ -8,6 +8,7 @@ import {
   reconcileDurableSemanticModes,
 } from '../src/durable-semantic-modes.ts';
 import {
+  evaluateModeClusterAssignments,
   evaluateModeStability,
 } from '../src/replay-evaluation.ts';
 
@@ -125,6 +126,32 @@ test('durable mode clustering groups co-supported canonical concepts and exclude
     false,
   );
   assert.equal(result.diagnostics.assignedConceptCount, 3);
+});
+
+test('mode clustering is insertion-order deterministic and consumes cluster metrics', () => {
+  const firstState = fixtureState();
+  const first = buildDurableSemanticModeClusters(firstState);
+
+  const reordered = fixtureState();
+  reordered.graph.nodes.reverse();
+  reordered.graph.edges.reverse();
+  const second = buildDurableSemanticModeClusters(reordered);
+
+  assert.deepEqual(second.proposals, first.proposals);
+  assert.deepEqual(second.assignmentByCanonicalId, first.assignmentByCanonicalId);
+
+  const expectedModeId = 'fixture:local-ai';
+  const assignments = first.proposals[0].members.map((member) => ({
+    conceptId: member.canonicalId,
+    expectedModeId,
+    predictedModeId: expectedModeId,
+  }));
+  const metrics = evaluateModeClusterAssignments(assignments);
+
+  assert.equal(metrics.assignmentAccuracy, 1);
+  assert.equal(metrics.averageClusterPurity, 1);
+  assert.equal(metrics.averageExpectedModeFragmentation, 1);
+  assert.deepEqual(metrics.unassignedConceptIds, []);
 });
 
 test('mode reconciliation preserves stable identity while membership evolves', () => {
