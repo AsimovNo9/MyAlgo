@@ -13,9 +13,9 @@ const secretPatterns = [
 
 const requiredLocalModelFiles = [
   'models/mxbai-embed-xsmall-v1/onnx/model_quantized.onnx',
-  'models/flan-t5-small/onnx/encoder_model_quantized.onnx',
-  'models/flan-t5-small/onnx/decoder_model_merged_quantized.onnx',
-  'models/flan-t5-small/tokenizer.json',
+  'models/smollm2-135m-instruct/onnx/model_q4f16.onnx',
+  'models/smollm2-135m-instruct/tokenizer.json',
+  'models/smollm2-135m-instruct/tokenizer_config.json',
 ];
 
 async function walk(directory) {
