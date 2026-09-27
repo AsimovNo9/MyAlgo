@@ -192,7 +192,6 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
       modelId?: string;
       modelVersion?: string;
       dimensions?: number;
-      backend?: string;
       error?: string;
     }>) => {
       if (
