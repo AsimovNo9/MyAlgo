@@ -20,8 +20,10 @@ let activeRequestId: string | null = null;
 
 env.allowRemoteModels = true;
 env.allowLocalModels = false;
-env.useBrowserCache = true;
-env.cacheKey = 'myalgo-transformers-cache-v1';
+// Chrome extension sandbox pages use an opaque origin and cannot access
+// CacheStorage because extension sandbox CSP cannot opt into allow-same-origin.
+env.useBrowserCache = false;
+env.useWasmCache = false;
 
 const postToHost = (message: Record<string, unknown>) => {
   window.parent.postMessage({
