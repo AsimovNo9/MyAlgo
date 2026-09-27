@@ -88,8 +88,9 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
       if (event.data.id !== id) return;
       if (event.data.type === 'progress') {
         const progress = event.data.progress ?? {};
-        void chrome.storage.local.set({
-          'personal-algorithm-semantic-model-status': {
+        void chrome.runtime.sendMessage({
+          type: 'SEMANTIC_MODEL_STATUS',
+          payload: {
             mode: 'neural',
             modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
             backend: 'webgpu',
@@ -100,7 +101,7 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
             file: progress.file ?? null,
             updatedAt: new Date().toISOString(),
           },
-        });
+        }).catch(() => undefined);
         return;
       }
       cleanup();
@@ -108,8 +109,9 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
         reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
         return;
       }
-      void chrome.storage.local.set({
-        'personal-algorithm-semantic-model-status': {
+      void chrome.runtime.sendMessage({
+        type: 'SEMANTIC_MODEL_STATUS',
+        payload: {
           mode: provider,
           modelId: event.data.modelId,
           backend: provider === 'neural' ? 'webgpu' : 'hash',
@@ -120,7 +122,7 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
           file: null,
           updatedAt: new Date().toISOString(),
         },
-      });
+      }).catch(() => undefined);
       resolve({
         embeddings: event.data.embeddings,
         modelId: event.data.modelId,
