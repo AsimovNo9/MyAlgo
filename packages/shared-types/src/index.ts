@@ -51,6 +51,7 @@ export interface FeedItem {
   lane?: 'matched' | 'discovery' | 'explore';
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
 }
 
 export interface FeedResponse {
