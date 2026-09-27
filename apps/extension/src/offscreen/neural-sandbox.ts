@@ -1,7 +1,7 @@
 import { env, pipeline } from '@huggingface/transformers';
 
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
-const NEURAL_MODEL_VERSION = 'transformersjs-webgpu-q8-v1';
+const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
 
 type FeatureExtractionPipeline = {
@@ -15,7 +15,7 @@ type NeuralSandboxRequest = {
   texts?: string[];
 };
 
-let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
+let extractorPromise: Promise<{ extractor: FeatureExtractionPipeline; backend: 'webgpu-sandbox' | 'wasm-sandbox' }> | null = null;
 let activeRequestId: string | null = null;
 
 env.allowRemoteModels = false;
@@ -26,9 +26,8 @@ env.localModelPath = new URL('./models/', window.location.href).href;
 env.useBrowserCache = false;
 env.useWasmCache = false;
 // ONNX Runtime defaults these executable runtime files to a CDN. MV3 must
-// execute only code packaged with the extension, so force both URLs to Vite-
-// emitted local assets. Model/configuration files are also packaged at build
-// time under env.localModelPath; runtime remote-model loading is disabled.
+// execute only code packaged with the extension, so force both URLs to local
+// packaged assets. Model/configuration files are also packaged at build time.
 env.backends.onnx.wasm!.wasmPaths = {
   mjs: new URL('./runtime/onnx/ort-wasm-simd-threaded.asyncify.mjs', window.location.href).href,
   wasm: new URL('./runtime/onnx/ort-wasm-simd-threaded.asyncify.wasm', window.location.href).href,
@@ -41,27 +40,53 @@ const postToHost = (message: Record<string, unknown>) => {
   }, '*');
 };
 
-async function getExtractor(): Promise<FeatureExtractionPipeline> {
-  if (!('gpu' in navigator)) {
-    throw new Error('WebGPU is unavailable in this browser.');
-  }
+const buildExtractor = async (
+  device: 'webgpu' | 'wasm',
+): Promise<FeatureExtractionPipeline> => pipeline(
+  'feature-extraction',
+  'mxbai-embed-xsmall-v1',
+  {
+    device,
+    dtype: 'q8',
+    progress_callback: (progress: unknown) => {
+      postToHost({
+        id: activeRequestId,
+        type: 'progress',
+        backend: device === 'webgpu' ? 'webgpu-sandbox' : 'wasm-sandbox',
+        progress,
+      });
+    },
+  },
+) as Promise<FeatureExtractionPipeline>;
 
+async function getExtractor(): Promise<{
+  extractor: FeatureExtractionPipeline;
+  backend: 'webgpu-sandbox' | 'wasm-sandbox';
+}> {
   if (!extractorPromise) {
-    extractorPromise = pipeline(
-      'feature-extraction',
-      'mxbai-embed-xsmall-v1',
-      {
-        device: 'webgpu',
-        dtype: 'q8',
-        progress_callback: (progress: unknown) => {
+    extractorPromise = (async () => {
+      if ('gpu' in navigator) {
+        try {
+          return {
+            extractor: await buildExtractor('webgpu'),
+            backend: 'webgpu-sandbox' as const,
+          };
+        } catch (error) {
           postToHost({
             id: activeRequestId,
-            type: 'progress',
-            progress,
+            type: 'backend-fallback',
+            from: 'webgpu-sandbox',
+            to: 'wasm-sandbox',
+            reason: error instanceof Error ? error.message : 'WebGPU initialization failed.',
           });
-        },
-      },
-    ) as Promise<FeatureExtractionPipeline>;
+        }
+      }
+
+      return {
+        extractor: await buildExtractor('wasm'),
+        backend: 'wasm-sandbox' as const,
+      };
+    })();
 
     extractorPromise.catch(() => {
       extractorPromise = null;
@@ -88,7 +113,7 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
 
   void (async () => {
     activeRequestId = request.id!;
-    const extractor = await getExtractor();
+    const { extractor, backend } = await getExtractor();
     const output = await extractor(texts, {
       pooling: 'mean',
       normalize: true,
@@ -108,7 +133,7 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
       modelId: NEURAL_MODEL_ID,
       modelVersion: NEURAL_MODEL_VERSION,
       dimensions: NEURAL_DIMENSIONS,
-      backend: 'webgpu-sandbox',
+      backend,
       embeddings,
     });
   })().catch((error) => {
