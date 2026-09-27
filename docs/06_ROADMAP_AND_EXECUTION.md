@@ -231,7 +231,7 @@ PR #216/#162 established replay/evaluation, PR #218/#217 established evidence-ba
 3. **P0 — #214 graph-grounded mode retrieval/supply.** Resolve active-mode score changes to exact member nodes, derive bounded retrieval terms from cluster members, compute slider-relative native supply, and fill only eligible shortfalls from the existing acquired reservoir.
 4. **P1 — #210 + #153 + #170 trust/calibration UX.** Recalibrate 0–100 display scores only after duplicate semantic evidence is removed, then expose exact graph/provenance paths and trace contributions.
 5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-6. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, graph editing, and counterfactual replay.**
+6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
 7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
 Live post-#220 validation makes the dependency explicit. The verifier can successfully keep or abstain from bounded metadata labels, but semantically redundant labels can all survive verification because they are genuinely entailed. Broad graph concepts can also independently match the same candidate. The current additive scorer treats those matches as separate positive terms, inflating raw scores and compressing useful differences in the display score.
