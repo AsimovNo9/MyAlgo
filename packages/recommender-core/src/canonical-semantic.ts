@@ -179,7 +179,6 @@ export function buildCanonicalSemanticConcepts(
   options: CanonicalSemanticBuildOptions = {},
 ): CanonicalSemanticBuildResult {
   const nodes = semanticNodes(state);
-  const semanticById = new Map(nodes.map((node) => [node.id, node]));
   const unionFind = new UnionFind(nodes.map((node) => node.id));
 
   for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
@@ -319,13 +318,3 @@ export function canonicalConceptByNodeId(
       .filter((entry): entry is readonly [string, CanonicalSemanticConcept] => Boolean(entry[1])),
   );
 }
-
-export function canonicalSemanticNode(
-  state: PersonalAlgorithmState,
-  nodeId: string,
-): GraphNode | null {
-  return semanticByIdForState(state).get(nodeId) ?? null;
-}
-
-const semanticByIdForState = (state: PersonalAlgorithmState): Map<string, GraphNode> =>
-  new Map(semanticNodes(state).map((node) => [node.id, node]));
