@@ -477,7 +477,7 @@ PR #218 is merged and remains the authoritative evidence-backed materialization/
 - a model-backed concept list replaces raw keyword topics for that candidate before #218 materialization;
 - missing/failed model output falls back to the #218 metadata path rather than fabricating concepts;
 - passive exposure and search/RSS acquisition alone still cannot materialize preference concepts;
-- concept and embedding neural requests share a serialized sandbox queue;
+- concept and embedding inference share one mutually exclusive sandbox scheduler; embedding requests yield between batches and queued concept work must start before the next embedding batch;
 - candidate embedding drain cannot trigger additional concept generations and must still reuse cached model concepts instead of rematerializing metadata-only graph state;
 - full local-data deletion removes the concept extraction cache and diagnostics;
 - prior disclosure-v5 acceptance is rejected after disclosure-v6.
@@ -515,6 +515,16 @@ A model load/inference failure must persist `conceptModelStatus.status: "error"`
 Graph revision changes during a long concept-generation request must **not** invalidate that request. Concept proposals are keyed by candidate input + model/pipeline identity, not graph revision. Only privacy/local-data reset or semantic-model boundary changes cancel in-flight concept generation. Validation should allow ordinary graph updates while SmolLM2 is running and still observe the completed batch in the concept cache.
 
 After generation completes, the materializer must re-read current evidence and the current candidate pool before graph reconciliation. A concept result whose candidate input changed while generation was running is rejected by its input hash; unchanged generated concepts remain reusable. This prevents preserving model work at the cost of reconciling an obsolete graph snapshot.
+
+### Neural scheduler fairness
+
+A direct concept request issued while the embedding model is in multi-batch WebGPU inference must not wait for the entire embedding request. The currently running embedding batch may finish, then the concept request gets priority before the next embedding batch. The scheduler must never run the two models concurrently.
+
+Validation signal:
+- embedding status may show `inference · webgpu-sandbox`;
+- a direct concept refresh should transition from `queued` to concept model loading/inference before the embedding request fully drains;
+- the concept provider must not hit its sandbox timeout solely because embeddings have more queued batches;
+- after concept completion, the embedding request resumes and preserves output count/order.
 
 ### Live validation
 
