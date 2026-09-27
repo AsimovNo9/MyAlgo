@@ -141,6 +141,7 @@ let privacyDisclosureReady: Promise<boolean> | null = null;
 let lastPersistedTraceSignature = '';
 const metadataEnrichmentInFlight = new Set<string>();
 const semanticRefreshInFlight = new Set<string>();
+let semanticEpoch = 0;
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -713,6 +714,18 @@ async function refreshSemanticScoreFeatures(
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) return { changed: 0, diagnostics: null };
   semanticRefreshInFlight.add(refreshKey);
+  const refreshEpoch = semanticEpoch;
+  const scopedEmbeddingCache = {
+    get: (key: string) => refreshEpoch === semanticEpoch
+      ? semanticEmbeddingCache.get(key)
+      : Promise.resolve(null),
+    set: (key: string, record: Parameters<typeof semanticEmbeddingCache.set>[1]) => refreshEpoch === semanticEpoch
+      ? semanticEmbeddingCache.set(key, record)
+      : Promise.resolve(),
+    flush: () => refreshEpoch === semanticEpoch
+      ? semanticEmbeddingCache.flush?.() ?? Promise.resolve()
+      : Promise.resolve(),
+  };
 
   try {
     const startedAt = performance.now();
@@ -721,12 +734,13 @@ async function refreshSemanticScoreFeatures(
       candidates,
       mode,
       semanticEmbeddingProvider,
-      semanticEmbeddingCache,
+      scopedEmbeddingCache,
       {
         maxGraphNodes: 64,
         minimumModeNodeSimilarity: 0.15,
       },
     );
+    if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
       STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
       {},
@@ -774,6 +788,7 @@ async function refreshSemanticScoreFeatures(
         .sort(([, left], [, right]) => right.generatedAt.localeCompare(left.generatedAt))
         .slice(0, MAX_SEMANTIC_FEATURE_CACHE),
     );
+    if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
 
     const diagnostics = {
@@ -786,6 +801,7 @@ async function refreshSemanticScoreFeatures(
       changed,
       generatedAt,
     };
+    if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     console.info('[MyAlgo] semantic enrichment', {
       model: semantic.diagnostics.modelVersion,
@@ -960,7 +976,11 @@ const handleRuntimeMessage = (
       privacyDisclosureAccepted = false;
       privacyDisclosureReady = Promise.resolve(false);
       historyReconciliationReady = null;
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+      lastPersistedTraceSignature = '';
       await chrome.storage.local.clear();
+      await semanticEmbeddingCache.clear();
       // The store caches state in the service worker. Reset it after clearing
       // storage so deleted graph/evidence cannot survive in memory or be
       // persisted again by a later mutation in the same worker lifetime.
