@@ -262,9 +262,9 @@ Required invariants:
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
-12. upgrading from disclosure v4 requires affirmative acceptance of disclosure v5 before observation/ranking resumes;
+12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
-14. the production artifact contains the pinned mxbai model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only those packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, graph state, history, feedback, embeddings, or traces outside the extension;
+14. the production artifact contains the pinned mxbai embedding model and FLAN-T5 concept-extraction model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, extracted concepts, graph state, history, feedback, embeddings, or traces outside the extension;
 15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
@@ -459,3 +459,63 @@ console.table(
 ```
 
 Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
+
+
+## PR #220 local concept extraction validation (#219)
+
+PR #218 is merged and remains the authoritative evidence-backed materialization/reconciliation boundary. PR #220 changes the preferred source of topic labels, not that boundary.
+
+### Automated requirements
+
+- the production build contains pinned local FLAN-T5 Small q8 encoder/decoder/tokenizer assets as well as the existing mxbai embedding assets;
+- installed runtime has `allowRemoteModels = false` and cannot fetch model files from a model host;
+- deterministic prompt construction produces the same input hash for unchanged metadata;
+- parser returns at most four short concepts and rejects generic, malformed, repeated and prompt-echo outputs;
+- only candidates with retained clicked/watched/saved/shared interaction evidence enter the model queue;
+- cache identity includes concept model ID/version + input hash;
+- unchanged cached inputs do not regenerate;
+- a model-backed concept list replaces raw keyword topics for that candidate before #218 materialization;
+- missing/failed model output falls back to the #218 metadata path rather than fabricating concepts;
+- passive exposure and search/RSS acquisition alone still cannot materialize preference concepts;
+- concept and embedding neural requests share a serialized sandbox queue;
+- candidate embedding drain cannot trigger additional concept generations/graph-revision churn;
+- full local-data deletion removes the concept extraction cache and diagnostics;
+- prior disclosure-v5 acceptance is rejected after disclosure-v6.
+
+### Live validation
+
+Enable local neural semantics and trigger normal semantic enrichment. Then inspect:
+
+```js
+const r = await chrome.runtime.sendMessage({ type: 'GET_SEMANTIC_DIAGNOSTICS' });
+console.log(r.conceptExtraction);
+console.log(r.conceptModelStatus);
+console.log(r.conceptMaterialization);
+console.log(r.diagnostics);
+```
+
+Healthy first-run signals include:
+- `conceptExtraction.interactionSupportedCandidateCount > 0`;
+- `conceptExtraction.extracted` between 0 and 4 on one top-level refresh;
+- `conceptExtraction.pending` decreases over later refreshes;
+- `conceptModelStatus.backend` is `webgpu-sandbox` or `wasm-sandbox`;
+- `conceptExtraction.fallbackReason === null`;
+- later materialized topic nodes include `sourceKinds: ['model_topic', ...]`.
+
+Repeat the same semantic refresh after the cache warms. `cacheHits` should increase and unchanged candidates should not regenerate.
+
+Disable neural semantics and verify the materializer returns to metadata-derived topics without deleting canonical evidence. Re-enable neural semantics and confirm valid cached concept outputs can be reused.
+
+### Quality comparison
+
+Compare #218 metadata-only vs #220 model-proposal output on a fixed labelled/local-reviewed sample. Measure:
+- concept precision/recall/F1;
+- generic/noisy label rate;
+- normalized duplicate rate;
+- fragmentation (multiple labels representing one intended concept);
+- abstention/empty-output rate;
+- extraction latency and WebGPU→WASM fallback rate;
+- package-size and long-session memory impact.
+
+Do not promote concept generation merely because labels look cleaner in one feed. Use #162 evaluation metrics plus live examples.
+
