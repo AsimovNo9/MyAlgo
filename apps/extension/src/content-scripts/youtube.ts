@@ -996,6 +996,14 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
+    // Reuse the already-scored feed for presentation, but do not skip semantic
+    // enrichment. A warm feed cache can outlive semantic caches (for example
+    // after a model-mode switch or extension update), and previously this early
+    // return meant no semantic pass/diagnostics would ever be produced.
+    safeSendMessage({
+      type: 'REFRESH_SEMANTICS',
+      payload: { mode: requestMode, candidates },
+    });
     rankingInFlight = false;
     applyRankedFeed();
     clearLegacyRecommendationShelf();
