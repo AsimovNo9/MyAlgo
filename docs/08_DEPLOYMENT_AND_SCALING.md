@@ -117,7 +117,7 @@ Home exposure evidence is reconciled to the retained 300-observation window rath
 
 Semantic inference is not part of overlay first paint.
 
-Current PR #213 bounds:
+PR #213 live-test bounds:
 - at most 64 objective/topic/concept graph nodes are embedded for a semantic pass;
 - at most the existing 320-candidate live ranking working set participates;
 - persistent embedding cache: 600 records;
@@ -126,4 +126,4 @@ Current PR #213 bounds:
 
 The dependency-free hash embedding baseline runs locally and is primarily an integration/fallback benchmark. A compact neural encoder must be benchmarked against it for first-run latency, cached latency, memory, extension/package impact, multilingual quality, and long-session stability before becoming the default provider.
 
-Heavy model inference must execute outside the service-worker ranking critical path. Cached semantic similarities may be consumed synchronously by the scorer because they are small derived numbers; generating new embeddings is asynchronous and requests a later rerank.
+The current hash baseline is cheap enough to validate the complete browser-local pipeline, but it is not the target semantic-quality model. Any neural provider must execute outside the service-worker ranking critical path before becoming the default. Cached semantic similarities may be consumed synchronously by the scorer because they are small derived numbers; generating missing features is asynchronous and requests a later rerank only when values change. Full local-data deletion must clear both persisted and in-memory semantic caches.
