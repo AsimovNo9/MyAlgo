@@ -43,18 +43,19 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #162 / PR #216:** establish deterministic graph replay and labelled semantic-mode evaluation before further threshold, clustering, or model tuning.
-2. **P0 — #214:** use the replay baseline to canonicalize near-duplicate graph concepts, cluster canonical nodes into durable modes, preserve multi-label affinities, ground mode score changes in exact graph structure, and measure mode-supply shortfalls.
+1. **P0 — #217:** materialize bounded, evidence-backed topic/concept nodes so semantic reranking has real graph vocabulary instead of `graphNodesConsidered: 0`.
+2. **P0 — #214:** canonicalize those derived concepts, cluster them into durable modes, preserve multi-label affinities, ground mode score changes in exact graph structure, and measure mode-supply shortfalls using the merged #162 replay/evaluation suite.
 3. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over exact mode/node/edge contributions.
 4. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
 5. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #215 is merged. PR #216 is the active evaluation branch and creates the measurement contract required for the remaining #214 mode architecture work.
+PR #216 is merged. #162 now provides the measurement contract. #217 is the active semantic-graph materialization slice discovered by live validation: the real graph had thousands of content/creator nodes but no topic/concept/objective nodes.
 
 The intended hierarchy is:
 
 ```text
-evidence → Personal Algorithm Graph
+evidence + interaction-supported candidate metadata
+         → derived topic/concept materialization
          → canonical concepts
          → semantic neighbourhoods / durable mode clusters
          → multi-label candidate affinities

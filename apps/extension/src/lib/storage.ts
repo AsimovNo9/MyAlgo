@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
   PERSONAL_ALGORITHM_LOCAL_TRACES: 'personal-algorithm-local-traces',
   SEMANTIC_EMBEDDING_CACHE: 'personal-algorithm-semantic-embedding-cache',
   SEMANTIC_DIAGNOSTICS: 'personal-algorithm-semantic-diagnostics',
+  SEMANTIC_CONCEPT_DIAGNOSTICS: 'personal-algorithm-semantic-concept-diagnostics',
   SEMANTIC_FEATURE_CACHE: 'personal-algorithm-semantic-feature-cache',
   SEMANTIC_MODEL_MODE: 'personal-algorithm-semantic-model-mode',
   SEMANTIC_MODEL_STATUS: 'personal-algorithm-semantic-model-status',

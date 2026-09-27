@@ -957,3 +957,54 @@ export function evaluateRetrievalModeChanges(
     mismatches: mismatches.sort(),
   };
 }
+
+
+export type ConceptMaterializationLabel = {
+  kind: 'topic' | 'concept';
+  label: string;
+};
+
+export type ConceptMaterializationMetrics = {
+  expectedCount: number;
+  predictedCount: number;
+  truePositive: number;
+  falsePositive: number;
+  falseNegative: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  duplicateNormalizedLabelCount: number;
+  missing: string[];
+  unexpected: string[];
+};
+
+const normalizeConceptMetricLabel = (item: ConceptMaterializationLabel): string =>
+  `${item.kind}:${item.label.trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ')}`;
+
+export function evaluateConceptMaterialization(
+  expected: readonly ConceptMaterializationLabel[],
+  predicted: readonly ConceptMaterializationLabel[],
+): ConceptMaterializationMetrics {
+  const expectedKeys = new Set(expected.map(normalizeConceptMetricLabel));
+  const predictedKeys = predicted.map(normalizeConceptMetricLabel);
+  const predictedSet = new Set(predictedKeys);
+  const truePositive = [...predictedSet].filter((key) => expectedKeys.has(key)).length;
+  const falsePositive = [...predictedSet].filter((key) => !expectedKeys.has(key)).length;
+  const falseNegative = [...expectedKeys].filter((key) => !predictedSet.has(key)).length;
+  const precision = safeDivide(truePositive, truePositive + falsePositive);
+  const recall = safeDivide(truePositive, truePositive + falseNegative);
+
+  return {
+    expectedCount: expectedKeys.size,
+    predictedCount: predictedSet.size,
+    truePositive,
+    falsePositive,
+    falseNegative,
+    precision,
+    recall,
+    f1: precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0,
+    duplicateNormalizedLabelCount: predictedKeys.length - predictedSet.size,
+    missing: [...expectedKeys].filter((key) => !predictedSet.has(key)).sort(),
+    unexpected: [...predictedSet].filter((key) => !expectedKeys.has(key)).sort(),
+  };
+}

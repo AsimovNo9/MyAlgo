@@ -185,3 +185,35 @@ The deterministic hash reference provider on `semantic-mode-eval-v1.json` curren
 - ambiguous false-confident primary badges: 0.
 
 This exposes the current architecture clearly: broad soft semantic membership has excessive false positives, while the stricter primary-badge gate is conservative and precise. The numbers are a baseline for #214, not a production-quality target.
+
+
+## Concept materialization metrics (#217)
+
+The merged #162 evaluator now also exposes `evaluateConceptMaterialization` for the first post-evaluation semantic graph slice.
+
+It compares expected vs predicted `topic`/`concept` labels and reports:
+
+- precision;
+- recall;
+- F1;
+- missing expected concepts;
+- unexpected concepts;
+- duplicate normalized labels.
+
+#217 unit fixtures separately require deterministic, order-independent projection generation and verify that passive exposure-only data cannot create semantic graph concepts.
+
+The initial #217 materializer intentionally favors precision over coverage:
+- candidate topics/content types require support from at least two interacted-with content items;
+- title-only keyphrases are not eligible to create taxonomy nodes after live validation showed they dominated the vocabulary with noisy n-grams; title phrases may only reinforce existing metadata-derived topics;
+- proposals are bounded to 64 nodes and 24 evidence-backed content edges per node by default.
+
+These are bootstrap safeguards, not final taxonomy thresholds. Canonicalization and clustering remain downstream #214 work and should be measured against this evaluation boundary rather than tuned only from live screenshots.
+
+
+### Live precision correction
+
+Initial live materialization saturated the 64-node cap with 35 title-only nodes and 15 mixed candidate-topic/title nodes. Several top labels were generic or title-fragment artifacts such as `cut rope`, `all time`, and `most disturbing`.
+
+The materializer therefore treats enriched candidate topics/content types as the taxonomy source. Title phrases are supporting evidence only. It also suppresses a candidate topic when the same normalized label already exists as a content-type concept, preventing duplicate `Music`/ `Entertainment` topic+concept pairs.
+
+Diagnostics expose `qualifiedBeforeCap` and `droppedByCap` so cap saturation is measurable rather than hidden.

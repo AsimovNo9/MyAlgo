@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, enrichCandidatesWithSemanticReranking, semanticInputHash } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -755,6 +755,59 @@ async function hydrateSemanticScoreFeatures(
   });
 }
 
+async function refreshSemanticConceptGraph(): Promise<{
+  changed: boolean;
+  diagnostics: Record<string, unknown>;
+}> {
+  const [state, candidatePool] = await Promise.all([
+    personalAlgorithmStore.exportState(),
+    getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
+  ]);
+
+  const projection = buildSemanticConceptMaterialization(
+    state,
+    candidatePool.map((candidate) => ({
+      external_id: candidate.external_id,
+      source: 'youtube',
+      topics: candidate.topics,
+      content_type: candidate.content_type,
+    })),
+    {
+      minimumContentSupport: 2,
+      maxProposals: 64,
+      maxSupportEdgesPerProposal: 24,
+      maxCandidateTopics: 16,
+    },
+  );
+
+  const reconciled = await personalAlgorithmStore.reconcileDerivedGraphProjection({
+    marker: SEMANTIC_CONCEPT_MATERIALIZER_ID,
+    nodes: projection.nodes,
+    edges: projection.edges,
+  });
+
+  if (reconciled.changed) {
+    // Graph revision invalidates semantic feature keys. Prevent older in-flight
+    // refreshes from persisting against the newly materialized graph.
+    semanticEpoch += 1;
+    semanticRefreshInFlight.clear();
+  }
+
+  const diagnostics = {
+    status: 'completed',
+    marker: SEMANTIC_CONCEPT_MATERIALIZER_ID,
+    ...projection.diagnostics,
+    changed: reconciled.changed,
+    graphRevision: reconciled.graphRevision,
+    materializedNodeCount: reconciled.nodeCount,
+    materializedEdgeCount: reconciled.edgeCount,
+    preservedReferencedNodeCount: reconciled.preservedReferencedNodeCount,
+    generatedAt: new Date().toISOString(),
+  };
+  await setStorage(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, diagnostics);
+  return { changed: reconciled.changed, diagnostics };
+}
+
 async function refreshSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
@@ -770,6 +823,7 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     return { changed: 0, diagnostics };
   }
+  const conceptMaterialization = await refreshSemanticConceptGraph();
   const state = await personalAlgorithmStore.exportState();
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
@@ -797,6 +851,9 @@ async function refreshSemanticScoreFeatures(
     requestedSemanticModelMode: requestedContext.semanticModelMode,
     modelVersion: requestedContext.semanticModelIdentity,
     candidateCount: candidates.length,
+    conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
+    conceptEdgeCount: Number(conceptMaterialization.diagnostics.materializedEdgeCount ?? 0),
+    conceptGraphChanged: conceptMaterialization.changed,
     generatedAt: new Date().toISOString(),
   });
   const scopedEmbeddingCache = {
@@ -902,6 +959,9 @@ async function refreshSemanticScoreFeatures(
         candidateCount: semanticCandidates.length,
         totalCandidateCount: candidates.length,
         pendingCandidateCount: Math.max(0, candidatesNeedingRequestedFeatures.length - semanticCandidates.length),
+        conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
+        conceptEdgeCount: Number(conceptMaterialization.diagnostics.materializedEdgeCount ?? 0),
+        conceptGraphChanged: conceptMaterialization.changed,
         generatedAt: new Date().toISOString(),
       });
     };
@@ -1035,6 +1095,12 @@ async function refreshSemanticScoreFeatures(
         candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
       ),
       changed,
+      conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
+      conceptEdgeCount: Number(conceptMaterialization.diagnostics.materializedEdgeCount ?? 0),
+      conceptGraphChanged: conceptMaterialization.changed,
+      conceptInteractionSupportedContentCount: Number(
+        conceptMaterialization.diagnostics.interactionSupportedContentCount ?? 0,
+      ),
       generatedAt,
     };
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
@@ -1054,6 +1120,9 @@ async function refreshSemanticScoreFeatures(
       ),
       graphNodes: semantic.diagnostics.graphNodesConsidered,
       modeNodes: semantic.diagnostics.modeNodeCount,
+      conceptNodes: conceptMaterialization.diagnostics.materializedNodeCount,
+      conceptEdges: conceptMaterialization.diagnostics.materializedEdgeCount,
+      conceptGraphChanged: conceptMaterialization.changed,
       changed,
       elapsedMs: diagnostics.elapsedMs,
     });
@@ -1739,11 +1808,11 @@ const handleRuntimeMessage = (
   }
 
   if (type === 'GET_SEMANTIC_DIAGNOSTICS') {
-    void getStorage<Record<string, unknown> | null>(
-      STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
-      null,
-    ).then((diagnostics) => {
-      sendResponse({ ok: true, diagnostics });
+    void Promise.all([
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, null),
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, null),
+    ]).then(([diagnostics, conceptMaterialization]) => {
+      sendResponse({ ok: true, diagnostics, conceptMaterialization });
     }).catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to read semantic diagnostics.',

@@ -4,22 +4,24 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #215 is merged. PR #216 is the active P0 branch.
+PR #216 is merged and #162 supplies the replay/evaluation baseline.
 
-1. **P0 — #162 replay/evaluation.** Build the reproducible graph and semantic-mode measurement boundary first: exported-state replay, graph consistency checks, labelled multi-label fixture, badge/abstention metrics, canonical-assignment metrics, mode-supply metrics, replacement stability, and inference throughput.
-2. **P0 — #214 durable mode architecture.** Implement canonical graph concepts, semantic neighbourhood clustering, stable mode IDs/revisions, multi-label affinity, graph-grounded mode scoring, mode-aware retrieval and slider-relative supply shortfall against the #162 fixtures.
+1. **P0 — #217 semantic concept materialization.** Populate a bounded rebuildable topic/concept layer from retained interaction-supported evidence and enriched local candidate metadata. This is the immediate fix for live `graphNodesConsidered: 0`.
+2. **P0 — #214 durable mode architecture.** Canonicalize/alias the materialized concepts, cluster them into stable modes, retain multi-label affinity, ground mode score contributions in exact graph members, and implement mode-aware retrieval/supply behavior against #162 metrics.
 3. **P1 — #153 + #170 trust UX.**
 4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
 5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
 6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-The critical distinction remains:
-- **canonical graph node:** fine-grained inspectable concept identity;
-- **mode cluster:** durable user-facing grouping over multiple canonical nodes;
-- **candidate affinity:** bounded multi-label candidate↔node/mode features;
-- **primary badge:** optional conservative presentation label.
+#217 deliberately does not canonicalize or cluster. It creates the semantic graph vocabulary those later stages need.
 
-Do not tune thresholds or fine-tune the encoder by live impression alone. PR #216 establishes the CI/replay contract that subsequent #214 changes must satisfy.
+Preference boundary for #217:
+- retained interaction support is required;
+- passive Home exposure alone is insufficient;
+- search/RSS acquisition alone is insufficient;
+- derived nodes/edges are marked rebuildable and inferred;
+- explicit/user-authored graph structure is preserved;
+- no fixed Work/Learning/Relax/Gaming/French taxonomy is reintroduced.
 
 
 ## P0 — Validate the data boundary
