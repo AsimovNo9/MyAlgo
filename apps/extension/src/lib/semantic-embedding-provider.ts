@@ -49,7 +49,7 @@ export function createOffscreenEmbeddingProvider(
     ...identity,
     mode,
     execution: mode === 'neural'
-      ? 'offscreen_worker_webgpu_with_hash_fallback'
+      ? 'offscreen_worker_webgpu'
       : 'offscreen_worker_with_hash_fallback',
 
     async embed(texts) {
@@ -88,8 +88,8 @@ export function createOffscreenEmbeddingProvider(
         return response.embeddings;
       } catch (error) {
         if (mode === 'neural') {
-          console.warn('[MyAlgo] neural semantic embedding unavailable; falling back to deterministic hash embeddings', error);
-          return fallback.embed(texts);
+          console.warn('[MyAlgo] neural semantic embedding unavailable', error);
+          throw error;
         }
         console.warn('[MyAlgo] offscreen semantic embedding unavailable; using local hash fallback', error);
         return fallback.embed(texts);
