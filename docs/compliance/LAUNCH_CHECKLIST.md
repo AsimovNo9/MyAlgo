@@ -40,7 +40,7 @@
 - [ ] Final release package receives manual endpoint/credential review
 
 - [ ] Local concept extraction validated (#219): only interaction-supported candidates are queued, cached outputs replace raw keyword topics when present, model failure falls back to metadata, and WebGPU/WASM execution remains off first paint
-- [ ] Built artifact audit confirms both mxbai embedding and FLAN-T5 concept model q8 assets are packaged locally
+- [ ] Built artifact audit confirms both mxbai embedding and SmolLM2 concept model q8 assets are packaged locally
 
 ## P3 — Quality
 
