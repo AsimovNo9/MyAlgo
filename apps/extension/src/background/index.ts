@@ -1086,6 +1086,16 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'SEMANTIC_MODEL_STATUS') {
+    void setStorage(STORAGE_KEYS.SEMANTIC_MODEL_STATUS, payload ?? null)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unable to persist semantic model status.',
+      }));
+    return true;
+  }
+
   if (type === 'SET_SEMANTIC_MODEL_MODE') {
     void (async () => {
       const semanticModelMode: SemanticModelMode = payload?.semanticModelMode === 'neural' ? 'neural' : 'hash';
