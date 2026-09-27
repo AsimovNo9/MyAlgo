@@ -84,21 +84,27 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
 });
 
 
-test('concept extraction reuses the local neural sandbox and returns model output', async () => {
+test('concept verification reuses the local neural sandbox and returns selected labels', async () => {
   hostMessages.length = 0;
   frame.contentDocument = null;
 
   const result = new Promise((resolve) => {
     assert.equal(runtimeListener({
       target: 'semantic-embedding-offscreen',
-      type: 'EXTRACT_CONCEPTS',
-      prompts: ['extract topics from fixture metadata'],
+      type: 'VERIFY_CONCEPTS',
+      conceptItems: [{
+        text: 'distributed systems and CRDT implementation',
+        labels: ['distributed systems', 'CRDTs', 'cooking'],
+      }],
     }, {}, resolve), true);
   });
 
   assert.equal(hostMessages.length, 1);
-  assert.equal(hostMessages[0].type, 'EXTRACT_CONCEPTS');
-  assert.deepEqual(hostMessages[0].prompts, ['extract topics from fixture metadata']);
+  assert.equal(hostMessages[0].type, 'VERIFY_CONCEPTS');
+  assert.deepEqual(hostMessages[0].conceptItems, [{
+    text: 'distributed systems and CRDT implementation',
+    labels: ['distributed systems', 'CRDTs', 'cooking'],
+  }]);
 
   window.dispatchEvent(Object.assign(new Event('message'), {
     source: frame.contentWindow,
@@ -107,8 +113,8 @@ test('concept extraction reuses the local neural sandbox and returns model outpu
       id: hostMessages[0].id,
       modelKind: 'concept',
       ok: true,
-      outputs: ['distributed systems, CRDTs'],
-      modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
+      concepts: [['distributed systems', 'CRDTs']],
+      modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
       modelVersion: 'transformersjs-local-q8-v1',
       backend: 'webgpu-sandbox',
     },
@@ -116,15 +122,15 @@ test('concept extraction reuses the local neural sandbox and returns model outpu
 
   assert.deepEqual(await result, {
     ok: true,
-    outputs: ['distributed systems, CRDTs'],
-    modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
+    concepts: [['distributed systems', 'CRDTs']],
+    modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
     modelVersion: 'transformersjs-local-q8-v1',
     backend: 'webgpu-sandbox',
   });
 });
 
 
-test('concept extraction persists an explicit runtime error status', async () => {
+test('concept verification persists an explicit runtime error status', async () => {
   hostMessages.length = 0;
   runtimeMessages.length = 0;
   frame.contentDocument = null;
@@ -132,8 +138,8 @@ test('concept extraction persists an explicit runtime error status', async () =>
   const result = new Promise((resolve) => {
     assert.equal(runtimeListener({
       target: 'semantic-embedding-offscreen',
-      type: 'EXTRACT_CONCEPTS',
-      prompts: ['fixture'],
+      type: 'VERIFY_CONCEPTS',
+      conceptItems: [{ text: 'fixture', labels: ['fixture'] }],
     }, {}, resolve), true);
   });
 
