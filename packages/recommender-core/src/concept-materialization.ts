@@ -267,11 +267,12 @@ export function buildSemanticConceptMaterialization(
     const support = interactionsByContent.get(contentKey(source, candidate.external_id));
     if (!support) continue;
 
+    const hasVerifiedModelTopics = candidate.model_topics !== undefined;
     const modelTopics = (candidate.model_topics ?? [])
       .map((topic) => topic.trim())
       .filter(Boolean)
       .slice(0, maxCandidateTopics);
-    const taxonomyTopics = modelTopics.length > 0
+    const taxonomyTopics = hasVerifiedModelTopics
       ? modelTopics
       : (candidate.topics ?? []).slice(0, maxCandidateTopics);
 
@@ -280,7 +281,7 @@ export function buildSemanticConceptMaterialization(
       addLabel(
         'topic',
         topic,
-        modelTopics.length > 0 ? 'model_topic' : 'candidate_topic',
+        hasVerifiedModelTopics ? 'model_topic' : 'candidate_topic',
         support,
       );
     }
