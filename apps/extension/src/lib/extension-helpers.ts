@@ -41,7 +41,7 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
     for (const topic of item.matched_topics ?? []) {
       topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
     }
-    if (item.semantic_category && Number(item.semantic_category_confidence ?? 0) >= 0.25) {
+    if (item.semantic_category && Number(item.semantic_category_confidence ?? 0) >= 0.35) {
       categoryCounts.set(item.semantic_category, (categoryCounts.get(item.semantic_category) ?? 0) + 1);
     }
   }
@@ -55,4 +55,29 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
     .sort((left, right) => right[1] - left[1])
     .map(([category, count]) => ({ category, count }));
   return { subscribedCount, discoveredCount, topTopics, categories };
+}
+
+
+export function buildInferredModeOptions(
+  currentMode: string,
+  categories: FeedSummary['categories'],
+  limit = 5,
+): string[] {
+  const result = ['Default'];
+  const seen = new Set(['default']);
+
+  for (const entry of categories) {
+    if (result.length > limit) break;
+    const category = entry.category.trim();
+    const key = category.toLowerCase();
+    if (!category || seen.has(key) || entry.count <= 0) continue;
+    result.push(category);
+    seen.add(key);
+  }
+
+  const current = currentMode.trim();
+  const currentKey = current.toLowerCase();
+  if (current && !seen.has(currentKey)) result.push(current);
+
+  return result;
 }
