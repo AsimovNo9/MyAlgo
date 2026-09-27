@@ -384,7 +384,43 @@ Derived nodes/edges:
 
 This slice does **not** solve canonicalization. Multiple related concepts may still exist after materialization; #214 canonicalization and durable clustering are the next measured stages.
 
-## Durable semantic mode architecture (#214 / post-#217)
+## Local semantic concept extraction (#219 / PR #220)
+
+PR #218 proved the graph projection boundary but also showed that repeated YouTube keywords are not equivalent to conceptual abstraction. The next stage separates **concept proposal** from **graph materialization**.
+
+```text
+interaction-supported candidate
+        ↓
+title + description + raw keywords + category
+        ↓
+packaged local concept proposer
+        ↓
+bounded cached concept labels
+        ↓
+#218 evidence-backed materializer
+        ↓
+derived graph nodes
+        ↓
+mxbai embedding/canonicalization layer
+```
+
+The initial proposer is pinned `Xenova/flan-t5-small` q8, executed through the same sandboxed Transformers.js/ONNX surface as the embedding model. Requests are serialized with embedding work so two neural models do not compete for the GPU simultaneously.
+
+Concept extraction constraints:
+- only retained interaction-supported candidates are eligible;
+- generation is deterministic (`do_sample: false`, one beam);
+- each item yields at most four short parsed concepts;
+- malformed/generic/prompt-echo outputs are rejected;
+- output is cached by model identity + prompt/input hash;
+- only a small bounded extraction slice runs per top-level semantic refresh;
+- the embedding drain cannot trigger more generation;
+- when a valid model concept list exists, it replaces raw keyword topics for that candidate;
+- an empty/failed/missing model result leaves the existing metadata materializer available;
+- model output remains derived/rebuildable and does not directly create explicit preference state.
+
+The purpose of this stage is to improve abstraction quality, not to solve alias merging. `lofi`, `lo-fi music`, and `chillhop` may still require embedding-assisted canonicalization after extraction.
+
+## Durable semantic mode architecture (#214 / post-#219)
 
 The post-#217 mode architecture must keep four semantic layers separate.
 
