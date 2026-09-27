@@ -311,3 +311,69 @@ Then deliberately trigger meaningful invalidations and confirm reselection is al
 - replacement candidate becoming ineligible/suppressed.
 
 This distinguishes YouTube DOM recycling from MyAlgo-owned candidate cycling. Diagnostics should report the stable/bound replacement counts without logging private candidate text.
+
+
+## P0: labelled semantic-mode evaluation inside PR #215 (#162)
+
+Do not merge the semantic-mode architecture based only on live screenshots. PR #215 must carry a small reproducible labelled fixture set as a merge gate.
+
+### Initial fixture target
+
+Start with **50–100 real candidate examples** sampled from local MyAlgo state. Store only test-safe/exported fixture data required for replay.
+
+For each candidate, label:
+- zero, one, or multiple expected semantic categories/modes;
+- obvious ambiguous/unknown cases;
+- expected canonical concept aliases where relevant;
+- whether the item should qualify for each tested mode;
+- source class: current-Home/native vs acquired reservoir;
+- expected hard-policy/feedback eligibility.
+
+Include graph fixtures with deliberate near-duplicates such as:
+- broad topic vs subtopic;
+- casing/formatting aliases;
+- game/product/entity plus activity variants;
+- multilingual aliases where relevant.
+
+### Metrics
+
+Report at minimum:
+
+- **multi-label precision / recall / F1** per mode and micro/macro aggregate;
+- primary-badge precision and abstention rate;
+- unknown/ambiguous false-positive rate;
+- canonical-node merge/split errors;
+- cluster purity / fragmentation;
+- mode coverage: fraction of labelled modes represented by at least one durable cluster;
+- mode stability across replayed feed-cache churn;
+- native-mode supply vs requested replacement demand;
+- acquired-pool shortfall fill rate;
+- replacement source→candidate stability;
+- WebGPU batch throughput and failure/fallback rate by configured batch size.
+
+Do not optimize only overall accuracy. False confident category assignment and unstable mode identity are separate failure modes and must have separate measurements.
+
+### Multi-label acceptance
+
+A candidate can have multiple qualified mode affinities. Evaluation should treat labels as a set, not a single winner. A primary badge is scored separately from the multi-label semantic feature set.
+
+### Mode-grounded trace acceptance
+
+For every score change attributable to the active mode:
+- the trace must identify the stable mode ID/revision;
+- at least one exact contributing graph node/member must be present;
+- the displayed contribution must reconcile numerically with scorer output;
+- no untraceable free-floating mode similarity may alter final rank.
+
+### Retrieval/supply acceptance
+
+For each active mode and slider setting:
+1. compute requested replacement slots;
+2. compute eligible current-Home mode supply;
+3. verify the shortfall banner/status fires iff native mode supply is insufficient for the requested quota;
+4. verify existing RSS/search acquisition is invoked/consumed rather than a new side pool;
+5. verify acquired candidates use the same policy/scorer/trace path;
+6. verify light-touch slider settings trigger fewer shortfall states than strict/high-replacement settings on the same fixture.
+
+Every shortfall event should be captured in bounded local diagnostics and replayable from the fixture.
+
