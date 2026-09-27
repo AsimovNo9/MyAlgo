@@ -15,6 +15,14 @@ export function Options() {
     backend?: string;
     file?: string | null;
   } | null>(null);
+  const [conceptModelStatus, setConceptModelStatus] = React.useState<{
+    status?: string;
+    progress?: number | null;
+    backend?: string;
+    file?: string | null;
+    item?: number | null;
+    itemCount?: number | null;
+  } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
   const [modeCategories, setModeCategories] = React.useState<FeedSummary['categories']>([]);
@@ -26,6 +34,7 @@ export function Options() {
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
       'personal-algorithm-semantic-model-status',
+      'personal-algorithm-concept-model-status',
       'personal-algorithm-semantic-neural-batch-size',
       'personal-algorithm-privacy-disclosure-accepted-version',
       'personal-algorithm-feed-cache',
@@ -35,6 +44,7 @@ export function Options() {
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
       setSemanticModelStatus((result['personal-algorithm-semantic-model-status'] as typeof semanticModelStatus) ?? null);
+      setConceptModelStatus((result['personal-algorithm-concept-model-status'] as typeof conceptModelStatus) ?? null);
       const storedBatchSize = Number(result['personal-algorithm-semantic-neural-batch-size'] ?? 1);
       setNeuralBatchSize(Number.isFinite(storedBatchSize) ? Math.max(1, Math.min(16, Math.floor(storedBatchSize))) : 1);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
@@ -46,6 +56,10 @@ export function Options() {
       const change = changes['personal-algorithm-semantic-model-status'];
       if (change) {
         setSemanticModelStatus((change.newValue as typeof semanticModelStatus) ?? null);
+      }
+      const conceptChange = changes['personal-algorithm-concept-model-status'];
+      if (conceptChange) {
+        setConceptModelStatus((conceptChange.newValue as typeof conceptModelStatus) ?? null);
       }
       const feedChange = changes['personal-algorithm-feed-cache'];
       if (feedChange) {
@@ -79,6 +93,7 @@ export function Options() {
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
     setSemanticModelStatus(null);
+    setConceptModelStatus(null);
     setNeuralBatchSize(1);
     setMode('Default');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
@@ -102,8 +117,9 @@ export function Options() {
   const handleSemanticModelChange = async (enabled: boolean) => {
     const nextMode = enabled ? 'neural' : 'hash';
     setSemanticModelStatus(null);
+    setConceptModelStatus(null);
     setStatus(enabled
-      ? 'Neural semantic model enabled. The packaged local model will be used on the next semantic pass.'
+      ? 'Local neural semantics enabled. The packaged embedding and concept-extraction models will run on upcoming semantic passes.'
       : 'Using the lightweight deterministic semantic baseline.');
     const response = await chrome.runtime.sendMessage({
       type: 'SET_SEMANTIC_MODEL_MODE',
@@ -174,16 +190,16 @@ export function Options() {
             disabled={!disclosureAccepted}
             onChange={(event) => void handleSemanticModelChange(event.target.checked)}
           />
-          Use the neural semantic encoder
+          Use local neural semantics
         </label>
         <p>
-          When enabled, MyAlgo uses the mixedbread-ai/mxbai-embed-xsmall-v1 model packaged with this
-          extension build. Candidate text, graph state, embeddings, and inference stay local. The installed
-          extension does not download model files at runtime. MyAlgo prefers WebGPU and falls back to local
-          WebAssembly CPU inference when no usable GPU adapter is available. If neural loading or inference still
-          fails, MyAlgo falls back to the deterministic local baseline.
+          When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
+          for semantic similarity and Xenova/flan-t5-small for bounded concept extraction. Candidate text, extracted
+          concepts, graph state, embeddings, and inference stay local. The installed extension does not download
+          model files at runtime. MyAlgo prefers WebGPU and falls back to local WebAssembly CPU inference when needed.
+          Concept extraction remains asynchronous and falls back to the existing metadata materializer if it fails.
         </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU/WASM)' : 'Deterministic baseline'}</p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (embeddings + concept extraction)' : 'Deterministic baseline'}</p>
         <div style={{ marginTop: 16 }}>
           <label htmlFor="semantic-neural-batch-size">
             WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
@@ -200,18 +216,29 @@ export function Options() {
             style={{ display: 'block', width: '100%', marginTop: 8 }}
           />
           <p style={{ marginTop: 6 }}>
-            Higher values process more texts per WebGPU inference call and can drain semantic work faster,
+            Higher values process more embedding texts per WebGPU inference call and can drain embedding work faster,
             but use more GPU memory. Start at 2–4 on older GPUs and increase only while inference remains stable.
-            WASM keeps its separate CPU batch.
+            This slider does not change concept extraction, which uses its own small serialized queue. WASM keeps its separate CPU batch.
           </p>
         </div>
 
         {semanticModelStatus ? (
           <p role="status">
-            <strong>Model status:</strong> {semanticModelStatus.status ?? 'unknown'}
+            <strong>Embedding model:</strong> {semanticModelStatus.status ?? 'unknown'}
             {typeof semanticModelStatus.progress === 'number' ? ` · ${semanticModelStatus.progress.toFixed(1)}%` : ''}
             {semanticModelStatus.backend ? ` · ${semanticModelStatus.backend}` : ''}
             {semanticModelStatus.file ? ` · ${semanticModelStatus.file}` : ''}
+          </p>
+        ) : null}
+        {conceptModelStatus ? (
+          <p role="status">
+            <strong>Concept model:</strong> {conceptModelStatus.status ?? 'unknown'}
+            {typeof conceptModelStatus.progress === 'number' ? ` · ${conceptModelStatus.progress.toFixed(1)}%` : ''}
+            {conceptModelStatus.backend ? ` · ${conceptModelStatus.backend}` : ''}
+            {conceptModelStatus.file ? ` · ${conceptModelStatus.file}` : ''}
+            {typeof conceptModelStatus.item === 'number' && typeof conceptModelStatus.itemCount === 'number'
+              ? ` · item ${conceptModelStatus.item}/${conceptModelStatus.itemCount}`
+              : ''}
           </p>
         ) : null}
       </section>
