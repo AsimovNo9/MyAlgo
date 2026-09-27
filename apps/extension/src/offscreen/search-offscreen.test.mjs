@@ -22,7 +22,7 @@ globalThis.chrome = {
 
 await import('./search-offscreen.ts');
 
-test('sandbox ready and iframe load dispatch each neural request only once', async () => {
+test('ready and load dispatch once, then an opaque-origin iframe accepts a second request', async () => {
   const result = new Promise((resolve) => {
     assert.equal(runtimeListener({
       target: 'semantic-embedding-offscreen',
@@ -52,4 +52,32 @@ test('sandbox ready and iframe load dispatch each neural request only once', asy
     },
   }));
   assert.equal((await result).ok, true);
+
+  // Sandboxed extension pages have an opaque origin. contentDocument cannot
+  // reveal that this already-loaded iframe is ready for the mode-seed request.
+  frame.contentDocument = null;
+  const secondResult = new Promise((resolve) => {
+    runtimeListener({
+      target: 'semantic-embedding-offscreen',
+      type: 'EMBED_TEXTS',
+      provider: 'neural',
+      texts: ['learning mode seed'],
+    }, {}, resolve);
+  });
+  assert.equal(hostMessages.length, 2);
+  assert.deepEqual(hostMessages[1].texts, ['learning mode seed']);
+
+  window.dispatchEvent(Object.assign(new Event('message'), {
+    source: frame.contentWindow,
+    data: {
+      source: 'myalgo-neural-sandbox',
+      id: hostMessages[1].id,
+      ok: true,
+      embeddings: [new Array(384).fill(0)],
+      modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
+      modelVersion: 'transformersjs-local-q8-v2',
+      dimensions: 384,
+    },
+  }));
+  assert.equal((await secondResult).ok, true);
 });

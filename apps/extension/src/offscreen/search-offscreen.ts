@@ -13,6 +13,9 @@ const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url)
 const semanticWorker = new Worker(new URL('./semantic-embedding-worker.ts', import.meta.url), {
   type: 'module',
 });
+// Sandbox pages have an opaque origin, so contentDocument is null even after
+// load. Remember readiness for later requests to the same iframe.
+const readyNeuralFrames = new WeakSet<HTMLIFrameElement>();
 
 let sequence = 0;
 const pending = new Map<string, {
@@ -175,7 +178,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
     const cleanup = () => {
       window.clearTimeout(timeout);
       window.removeEventListener('message', onMessage);
-      frame.removeEventListener('load', postRequest);
+      frame.removeEventListener('load', onLoad);
     };
 
     let requestSent = false;
@@ -188,6 +191,10 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
         type: 'EMBED_TEXTS',
         texts,
       }, '*');
+    };
+    const onLoad = () => {
+      readyNeuralFrames.add(frame);
+      postRequest();
     };
 
     const onMessage = (event: MessageEvent<{
@@ -227,6 +234,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
       }
 
       if (event.data.type === 'ready') {
+        readyNeuralFrames.add(frame);
         postRequest();
         return;
       }
@@ -291,10 +299,11 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
 
     window.addEventListener('message', onMessage);
 
-    if (frame.contentDocument?.readyState === 'complete') {
+    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
+      readyNeuralFrames.add(frame);
       postRequest();
     } else {
-      frame.addEventListener('load', postRequest, { once: true });
+      frame.addEventListener('load', onLoad, { once: true });
     }
   });
 };
