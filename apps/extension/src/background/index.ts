@@ -11,11 +11,12 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, createLocalHashEmbeddingProvider, enrichCandidatesWithSemanticReranking, semanticInputHash } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, enrichCandidatesWithSemanticReranking, semanticInputHash } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
+import { createOffscreenEmbeddingProvider } from '../lib/semantic-embedding-provider';
 
 type PageCandidate = {
   external_id: string;
@@ -132,7 +133,7 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
-const semanticEmbeddingProvider = createLocalHashEmbeddingProvider(192);
+const semanticEmbeddingProvider = createOffscreenEmbeddingProvider(192);
 const semanticEmbeddingCache = createChromeEmbeddingCache(600);
 const semanticModelIdentity = `${semanticEmbeddingProvider.modelId}@${semanticEmbeddingProvider.modelVersion}`;
 let historyReconciliationReady: Promise<void> | null = null;
@@ -805,6 +806,7 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     console.info('[MyAlgo] semantic enrichment', {
       model: semantic.diagnostics.modelVersion,
+      execution: semanticEmbeddingProvider.execution,
       mode,
       candidates: semantic.diagnostics.candidateCount,
       graphNodes: semantic.diagnostics.graphNodesConsidered,
@@ -1598,7 +1600,7 @@ const handleRuntimeMessage = (
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if ((message as { target?: string } | null)?.target === 'youtube-search-offscreen') {
+  if ((message as { target?: string } | null)?.target?.endsWith('-offscreen')) {
     return false;
   }
   return handleRuntimeMessage(message, sender, sendResponse);
