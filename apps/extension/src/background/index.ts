@@ -68,6 +68,10 @@ type SemanticFeatureRecord = {
     node_label: string;
     similarity: number;
     weight: number;
+    canonical_id?: string;
+    source_node_ids?: string[];
+    taxonomy_only?: boolean;
+    pipeline_id?: string;
   }>;
   generatedAt: string;
 };
@@ -100,7 +104,14 @@ type LocalFeedItem = CandidatePoolItem & {
     displayScore: number;
     graphRevision: number;
     acquisitionMechanism: string | null;
-    contributions: Array<{ label: string; value: number; kind: string }>;
+    contributions: Array<{
+      label: string;
+      value: number;
+      kind: string;
+      sourceId?: string;
+      sourceIds?: string[];
+      evidenceIds: string[];
+    }>;
   };
 };
 
@@ -1485,6 +1496,9 @@ async function rankLocalCandidates(
         label: contribution.label,
         value: contribution.value,
         kind: contribution.kind,
+        ...(contribution.sourceId ? { sourceId: contribution.sourceId } : {}),
+        ...(contribution.sourceIds?.length ? { sourceIds: contribution.sourceIds } : {}),
+        evidenceIds: contribution.evidenceIds,
       }));
 
     return {
