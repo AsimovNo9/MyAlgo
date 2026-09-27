@@ -104,6 +104,7 @@ const MAX_HOME_OBSERVATIONS = 300;
 const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
 const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const MAX_SEMANTIC_FEATURE_CACHE = 600;
+const MAX_NEURAL_CANDIDATES_PER_REFRESH = 32;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -753,18 +754,19 @@ async function refreshSemanticScoreFeatures(
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) {
-    const diagnostics = {
-      status: 'skipped',
-      reason: 'refresh_in_flight',
-      mode,
-      graphRevision: state.graph.currentRevision,
-      requestedSemanticModelMode: requestedContext.semanticModelMode,
-      modelVersion: requestedContext.semanticModelIdentity,
-      candidateCount: candidates.length,
-      generatedAt: new Date().toISOString(),
+    return {
+      changed: 0,
+      diagnostics: {
+        status: 'skipped',
+        reason: 'refresh_in_flight',
+        mode,
+        graphRevision: state.graph.currentRevision,
+        requestedSemanticModelMode: requestedContext.semanticModelMode,
+        modelVersion: requestedContext.semanticModelIdentity,
+        candidateCount: candidates.length,
+        generatedAt: new Date().toISOString(),
+      },
     };
-    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
-    return { changed: 0, diagnostics };
   }
   semanticRefreshInFlight.add(refreshKey);
   const refreshEpoch = semanticEpoch;
@@ -791,13 +793,62 @@ async function refreshSemanticScoreFeatures(
 
   try {
     const startedAt = performance.now();
+    const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
+      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+      {},
+    );
+    const candidatesNeedingRequestedFeatures = candidates.filter((candidate) => {
+      const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
+      const key = semanticFeatureKey(
+        candidate.external_id,
+        inputHash,
+        state.graph.currentRevision,
+        mode,
+        requestedContext.semanticModelIdentity,
+      );
+      return existing[key] === undefined;
+    });
+    const semanticCandidates = requestedContext.semanticModelMode === 'neural'
+      ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
+      : candidates;
+
+    if (requestedContext.semanticModelMode === 'neural' && semanticCandidates.length === 0) {
+      const diagnostics = {
+        status: 'completed',
+        modelId: requestedContext.provider.modelId,
+        modelVersion: requestedContext.provider.modelVersion,
+        graphNodesConsidered: 0,
+        graphEmbeddingsComputed: 0,
+        graphEmbeddingsFromCache: 0,
+        candidateEmbeddingsComputed: 0,
+        candidateEmbeddingsFromCache: 0,
+        candidateCount: 0,
+        totalCandidateCount: candidates.length,
+        pendingCandidateCount: 0,
+        modeNodeCount: 0,
+        requestedSemanticModelMode: requestedContext.semanticModelMode,
+        semanticModelMode: requestedContext.semanticModelMode,
+        execution: requestedContext.provider.execution,
+        fallbackReason: null,
+        mode,
+        graphRevision: state.graph.currentRevision,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        embeddingCacheSize: await semanticEmbeddingCache.size(),
+        featureCacheSize: Object.keys(existing).length,
+        changed: 0,
+        generatedAt: new Date().toISOString(),
+      };
+      await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
+      return { changed: 0, diagnostics };
+    }
+
     let effectiveContext = requestedContext;
     let fallbackReason: string | null = null;
     let semantic;
     try {
       semantic = await enrichCandidatesWithSemanticReranking(
         state,
-        candidates,
+        semanticCandidates,
         mode,
         requestedContext.provider,
         scopedEmbeddingCache,
@@ -818,7 +869,7 @@ async function refreshSemanticScoreFeatures(
       };
       semantic = await enrichCandidatesWithSemanticReranking(
         state,
-        candidates,
+        semanticCandidates,
         mode,
         fallbackProvider,
         scopedEmbeddingCache,
@@ -838,16 +889,12 @@ async function refreshSemanticScoreFeatures(
       });
     }
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
-    const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
-      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-      {},
-    );
     const next = { ...existing };
     let changed = 0;
     const generatedAt = new Date().toISOString();
 
     semantic.candidates.forEach((candidate, index) => {
-      const original = candidates[index];
+      const original = semanticCandidates[index];
       if (!original) return;
       const inputHash = semanticInputHash(buildCandidateEmbeddingText(original));
       const key = semanticFeatureKey(
@@ -900,6 +947,11 @@ async function refreshSemanticScoreFeatures(
       elapsedMs: Math.round(performance.now() - startedAt),
       embeddingCacheSize: await semanticEmbeddingCache.size(),
       featureCacheSize: Object.keys(bounded).length,
+      totalCandidateCount: candidates.length,
+      pendingCandidateCount: Math.max(
+        0,
+        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+      ),
       changed,
       generatedAt,
     };
@@ -913,6 +965,11 @@ async function refreshSemanticScoreFeatures(
       fallbackReason,
       mode,
       candidates: semantic.diagnostics.candidateCount,
+      totalCandidates: candidates.length,
+      pendingCandidates: Math.max(
+        0,
+        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+      ),
       graphNodes: semantic.diagnostics.graphNodesConsidered,
       modeNodes: semantic.diagnostics.modeNodeCount,
       changed,
