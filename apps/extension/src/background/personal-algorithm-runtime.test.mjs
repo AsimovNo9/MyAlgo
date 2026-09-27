@@ -99,7 +99,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p2');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p3');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
@@ -302,23 +302,31 @@ test('matching mode adds a traceable alignment feature without relabeling unrela
 });
 
 
-test('semantic graph and mode similarities become explicit trace contributions', () => {
+test('semantic graph and mode similarities become exact trace contributions when graph provenance is available', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'semantic-video',
     title: 'A semantically relevant candidate',
     semantic_graph_similarity: 0.75,
     semantic_mode_similarity: 0.6,
     semantic_model_version: 'mxbai-xsmall:test',
+    semantic_graph_matches: [{
+      node_id: 'topic:fixture',
+      node_label: 'Fixture topic',
+      similarity: 0.75,
+      weight: 0.75,
+      canonical_id: 'canonical:fixture',
+      source_node_ids: ['topic:fixture'],
+    }],
   }], 'Learning')[0];
 
   const graphFeature = ranked.trace.featureContributions
-    .find((item) => item.label === 'semantic match: personal graph');
+    .find((item) => item.sourceId === 'canonical:fixture');
   const modeFeature = ranked.trace.featureContributions
     .find((item) => item.label === 'semantic match: active mode');
 
   assert.equal(graphFeature?.value, 13.5);
+  assert.deepEqual(graphFeature?.sourceIds, ['topic:fixture']);
   assert.equal(modeFeature?.value, 8.4);
-  assert.equal(graphFeature?.sourceId, 'embedding:mxbai-xsmall:test');
   assert.equal(modeFeature?.sourceId, 'embedding:mxbai-xsmall:test');
 });
 
@@ -371,7 +379,7 @@ test('semantic mode similarity replaces the legacy heuristic mode boost instead 
 });
 
 
-test('semantic graph matches are split into symbolic trace contributions without changing total graph weight', () => {
+test('semantic graph matches become canonical trace contributions without changing total graph weight', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'semantic-symbolic',
     title: 'Distributed systems design',
@@ -379,16 +387,179 @@ test('semantic graph matches are split into symbolic trace contributions without
     semantic_mode_similarity: 0,
     semantic_model_version: 'fixture-model@v1',
     semantic_graph_matches: [
-      { node_id: 'objective:systems', node_label: 'Distributed systems', similarity: 0.8 },
-      { node_id: 'topic:local-first', node_label: 'Local-first software', similarity: 0.4 },
+      {
+        node_id: 'objective:systems',
+        node_label: 'Distributed systems',
+        similarity: 0.8,
+        weight: 0.8,
+        canonical_id: 'canonical:systems',
+        source_node_ids: ['objective:systems'],
+      },
+      {
+        node_id: 'topic:local-first',
+        node_label: 'Local-first software',
+        similarity: 0.4,
+        weight: 0.4,
+        canonical_id: 'canonical:local-first',
+        source_node_ids: ['topic:local-first'],
+      },
     ],
   }], 'Work')[0];
 
   const graphFeatures = ranked.trace.featureContributions
-    .filter((item) => item.id.startsWith('feature:semantic:graph:'));
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
   assert.equal(graphFeatures.length, 2);
-  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Distributed systems'), true);
-  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Local-first software'), true);
+  assert.equal(graphFeatures.some((item) => item.sourceId === 'canonical:systems'), true);
+  assert.equal(graphFeatures.some((item) => item.sourceId === 'canonical:local-first'), true);
   const total = graphFeatures.reduce((sum, item) => sum + item.value, 0);
   assert.ok(Math.abs(total - 13.5) <= 0.01);
+});
+
+
+const semanticFixtureState = () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push(
+    {
+      id: 'topic:grok-bot',
+      kind: 'topic',
+      label: 'grok bot',
+      provenance: 'inferred',
+      confidence: 0.82,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:grok-how',
+      kind: 'topic',
+      label: 'how to use grok bot',
+      provenance: 'inferred',
+      confidence: 0.82,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:grok-cases',
+      kind: 'topic',
+      label: 'grok bot use cases',
+      provenance: 'inferred',
+      confidence: 0.82,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:grok-tutorial',
+      kind: 'topic',
+      label: 'grok bot tutorial',
+      provenance: 'inferred',
+      confidence: 0.82,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'concept:education',
+      kind: 'concept',
+      label: 'Education',
+      provenance: 'inferred',
+      confidence: 0.72,
+      attributes: { sourceKinds: ['content_type'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  for (const nodeId of [
+    'topic:grok-bot',
+    'topic:grok-how',
+    'topic:grok-cases',
+    'topic:grok-tutorial',
+    'concept:education',
+  ]) {
+    fixture.graph.edges.push({
+      id: `edge:about:${nodeId}`,
+      sourceNodeId: nodeId,
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.8,
+      evidenceIds: [`evidence:${nodeId}`],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    });
+  }
+  fixture.graph.currentRevision += 1;
+  return fixture;
+};
+
+test('Grok aliases emit one bounded canonical contribution with exact source-node provenance', () => {
+  const fixture = semanticFixtureState();
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'grok-candidate',
+    title: 'Grok bot tutorial: how to use Grok bot and practical use cases',
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.equal(semantic[0].value, 11.48);
+  assert.deepEqual(semantic[0].sourceIds, [
+    'topic:grok-bot',
+    'topic:grok-cases',
+    'topic:grok-how',
+    'topic:grok-tutorial',
+  ]);
+});
+
+test('lexical and embedding evidence for the same canonical neighbourhood reconcile instead of stacking', () => {
+  const fixture = semanticFixtureState();
+  const lexicalOnly = scoreLocalCandidates(fixture, [{
+    external_id: 'grok-lexical',
+    title: 'Grok bot tutorial and use cases',
+  }], 'Default')[0];
+  const lexicalFeature = lexicalOnly.trace.featureContributions
+    .find((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.ok(lexicalFeature);
+
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'grok-combined',
+    title: 'Grok bot tutorial and use cases',
+    semantic_graph_similarity: 0.9,
+    semantic_model_version: 'fixture-mxbai@v1',
+    semantic_graph_matches: [{
+      node_id: 'topic:grok-bot',
+      node_label: 'grok bot',
+      similarity: 0.9,
+      weight: 0.9,
+      canonical_id: lexicalFeature.sourceId,
+      source_node_ids: [
+        'topic:grok-bot',
+        'topic:grok-cases',
+        'topic:grok-how',
+        'topic:grok-tutorial',
+      ],
+    }],
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.equal(semantic[0].value, 16.2);
+  assert.ok(semantic[0].value < Number((11.48 + 16.2).toFixed(2)));
+});
+
+test('broad content-type taxonomy does not add preference mass beside a specific semantic match', () => {
+  const fixture = semanticFixtureState();
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'taxonomy-candidate',
+    title: 'Education: Grok bot tutorial',
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.equal(semantic[0].sourceIds.includes('concept:education'), false);
+  assert.equal(semantic[0].sourceIds.includes('topic:grok-bot'), true);
 });
