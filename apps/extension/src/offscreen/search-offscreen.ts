@@ -43,34 +43,139 @@ const parseInWorker = (html: string, limit: number): Promise<unknown[]> => {
   });
 };
 
-const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
+const ensureNeuralSandbox = (): HTMLIFrameElement => {
+  let frame = document.querySelector<HTMLIFrameElement>('[data-myalgo-neural-sandbox]');
+  if (frame) return frame;
+
+  frame = document.createElement('iframe');
+  frame.dataset.myalgoNeuralSandbox = 'true';
+  frame.src = chrome.runtime.getURL('neural-sandbox.html');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.display = 'none';
+  document.body.append(frame);
+  return frame;
+};
+
+type SemanticResult = {
   embeddings: number[][];
   modelId: string;
   modelVersion: string;
   dimensions: number;
-}> => {
+};
+
+const persistSemanticStatus = (
+  provider: 'hash' | 'neural',
+  data: {
+    modelId?: string;
+    status?: string;
+    progress?: number | null;
+    loaded?: number | null;
+    total?: number | null;
+    file?: string | null;
+    backend?: string;
+  },
+) => {
+  void chrome.runtime.sendMessage({
+    type: 'SEMANTIC_MODEL_STATUS',
+    payload: {
+      mode: provider,
+      modelId: data.modelId ?? (
+        provider === 'neural'
+          ? 'mixedbread-ai/mxbai-embed-xsmall-v1'
+          : 'myalgo-local-hash-embedding'
+      ),
+      backend: data.backend ?? (provider === 'neural' ? 'webgpu-sandbox' : 'hash'),
+      status: data.status ?? 'loading',
+      progress: data.progress ?? null,
+      loaded: data.loaded ?? null,
+      total: data.total ?? null,
+      file: data.file ?? null,
+      updatedAt: new Date().toISOString(),
+    },
+  }).catch(() => undefined);
+};
+
+const embedHashInWorker = (texts: string[]): Promise<SemanticResult> => {
   const id = `semantic-embedding-${++sequence}`;
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       semanticWorker.removeEventListener('message', onMessage);
       semanticWorker.removeEventListener('error', onError);
       reject(new Error('Semantic embedding worker timed out.'));
-    }, provider === 'neural' ? 120_000 : 15_000);
+    }, 15_000);
 
     const cleanup = () => {
       window.clearTimeout(timeout);
       semanticWorker.removeEventListener('message', onMessage);
       semanticWorker.removeEventListener('error', onError);
     };
-
     const onError = (event: ErrorEvent) => {
       cleanup();
       reject(new Error(event.message || 'Semantic embedding worker crashed.'));
     };
+    const onMessage = (event: MessageEvent<{
+      id: string;
+      ok?: boolean;
+      embeddings?: number[][];
+      modelId?: string;
+      modelVersion?: string;
+      dimensions?: number;
+      error?: string;
+    }>) => {
+      if (event.data.id !== id) return;
+      cleanup();
+      if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
+        reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
+        return;
+      }
+      persistSemanticStatus('hash', {
+        modelId: event.data.modelId,
+        backend: 'hash',
+        status: 'ready',
+        progress: 100,
+      });
+      resolve({
+        embeddings: event.data.embeddings,
+        modelId: event.data.modelId,
+        modelVersion: event.data.modelVersion,
+        dimensions: event.data.dimensions,
+      });
+    };
+
+    semanticWorker.addEventListener('message', onMessage);
+    semanticWorker.addEventListener('error', onError);
+    semanticWorker.postMessage({ id, texts });
+  });
+};
+
+const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
+  const id = `neural-sandbox-${++sequence}`;
+  const frame = ensureNeuralSandbox();
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', onMessage);
+      reject(new Error('Neural semantic sandbox timed out.'));
+    }, 120_000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+    };
+
+    const postRequest = () => {
+      frame.contentWindow?.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'EMBED_TEXTS',
+        texts,
+      }, '*');
+    };
 
     const onMessage = (event: MessageEvent<{
-      id: string | null;
-      type?: 'progress';
+      source?: string;
+      id?: string | null;
+      type?: 'ready' | 'progress';
       progress?: {
         status?: string;
         progress?: number;
@@ -83,46 +188,47 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
       modelId?: string;
       modelVersion?: string;
       dimensions?: number;
+      backend?: string;
       error?: string;
     }>) => {
+      if (
+        event.source !== frame.contentWindow
+        || event.data?.source !== 'myalgo-neural-sandbox'
+      ) {
+        return;
+      }
+
+      if (event.data.type === 'ready') {
+        postRequest();
+        return;
+      }
       if (event.data.id !== id) return;
+
       if (event.data.type === 'progress') {
         const progress = event.data.progress ?? {};
-        void chrome.runtime.sendMessage({
-          type: 'SEMANTIC_MODEL_STATUS',
-          payload: {
-            mode: 'neural',
-            modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
-            backend: 'webgpu',
-            status: progress.status ?? 'loading',
-            progress: typeof progress.progress === 'number' ? progress.progress : null,
-            loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
-            total: typeof progress.total === 'number' ? progress.total : null,
-            file: progress.file ?? null,
-            updatedAt: new Date().toISOString(),
-          },
-        }).catch(() => undefined);
+        persistSemanticStatus('neural', {
+          status: progress.status ?? 'loading',
+          progress: typeof progress.progress === 'number' ? progress.progress : null,
+          loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
+          total: typeof progress.total === 'number' ? progress.total : null,
+          file: progress.file ?? null,
+          backend: 'webgpu-sandbox',
+        });
         return;
       }
+
       cleanup();
       if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
-        reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
+        reject(new Error(event.data.error ?? 'Neural semantic sandbox failed.'));
         return;
       }
-      void chrome.runtime.sendMessage({
-        type: 'SEMANTIC_MODEL_STATUS',
-        payload: {
-          mode: provider,
-          modelId: event.data.modelId,
-          backend: provider === 'neural' ? 'webgpu' : 'hash',
-          status: 'ready',
-          progress: 100,
-          loaded: null,
-          total: null,
-          file: null,
-          updatedAt: new Date().toISOString(),
-        },
-      }).catch(() => undefined);
+
+      persistSemanticStatus('neural', {
+        modelId: event.data.modelId,
+        status: 'ready',
+        progress: 100,
+        backend: event.data.backend ?? 'webgpu-sandbox',
+      });
       resolve({
         embeddings: event.data.embeddings,
         modelId: event.data.modelId,
@@ -130,11 +236,25 @@ const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
         dimensions: event.data.dimensions,
       });
     };
-    semanticWorker.addEventListener('message', onMessage);
-    semanticWorker.addEventListener('error', onError);
-    semanticWorker.postMessage({ id, texts, provider });
+
+    window.addEventListener('message', onMessage);
+
+    if (frame.contentDocument?.readyState === 'complete') {
+      postRequest();
+    } else {
+      frame.addEventListener('load', postRequest, { once: true });
+    }
   });
 };
+
+const embedSemantics = (
+  texts: string[],
+  provider: 'hash' | 'neural',
+): Promise<SemanticResult> => (
+  provider === 'neural'
+    ? embedNeuralInSandbox(texts)
+    : embedHashInWorker(texts)
+);
 
 chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
   if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EMBED_TEXTS') {
@@ -142,7 +262,7 @@ chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse)
       const texts = Array.isArray(message.texts)
         ? message.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
         : [];
-      const result = await embedInWorker(texts, message.provider === 'neural' ? 'neural' : 'hash');
+      const result = await embedSemantics(texts, message.provider === 'neural' ? 'neural' : 'hash');
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
       sendResponse({
