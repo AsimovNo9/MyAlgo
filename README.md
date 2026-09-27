@@ -43,14 +43,15 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. implement and validate semantic mode reranking (#209 + #210): local candidate/graph embeddings, graph-derived mode lenses, exact trace contributions, and measurable rank changes;
-2. build graph provenance visualization and complete per-item explanation paths (#170, #153);
-3. establish replay/evaluation baselines for semantic model/scorer comparisons (#162);
+1. refine the merged semantic-ranking slice in #214: infer categories/modes from the Personal Algorithm Graph, leave ambiguous candidates uncategorized, and keep valid Home replacements stable across ordinary reranks;
+2. establish replay/evaluation baselines for category quality, semantic model/scorer comparisons, and replacement stability (#162);
+3. build graph provenance visualization and complete per-item explanation paths (#170, #153);
 4. add correction/Forget/history-selection controls (#154, #155, #178);
 5. continue broader mode editing, graph editing, counterfactuals, portability, sync, and additional connectors after the semantic/trust loop is stable.
 
-PR #212 is merged and #206 is closed as the acquisition foundation. PR #213 is the active semantic-reranking branch. It ships a dependency-free local vector baseline behind a replaceable embedding-provider contract so the full graph/mode/cache/scorer path can be validated before selecting a compact neural encoder.
+PR #213 is merged. It established local neural/hash semantic enrichment, graph/mode similarities, asynchronous reranking, packaged WebGPU/WASM inference, and traceable semantic score contributions. Live review after merge exposed two refinement needs now tracked in #214: the five fixed semantic anchors were too coarse as a content taxonomy, and generation/time-based replacement rotation could make an otherwise unchanged Home feed feel unstable.
 
+The current direction is **not to fine-tune the embedding model first**. Candidate categories are derived from candidate-to-graph topic/concept similarities with an explicit score floor and winner-margin gate, and the mode controls are populated from the categories actually inferred in local state. Model training is deferred until a labelled replay set shows systematic errors that remain after taxonomy, metadata, threshold, and model-choice evaluation.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
