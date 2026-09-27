@@ -557,8 +557,25 @@ Compare #218 metadata-only vs #220 verifier output on a fixed labelled/local-rev
 - generic/noisy label rate;
 - abstention rate;
 - duplicate/fragmentation rate before canonicalization;
-- verifier latency and WebGPU→WASM fallback rate;
+- verifier latency on the deliberate q8 WASM path;
 - package-size and long-session memory impact.
 
 The verifier is expected to improve precision and abstention, not solve aliases. Evaluate canonicalization separately in the next #214 slice.
+
+### Post-merge live result and next gate
+
+The merged verifier path completed a two-candidate q8 WASM batch in approximately 11.1 seconds with `fallbackReason: null`, cached verified results, and demonstrated an explicit empty abstention. Example retained topic sets included `Education`, `jordan peterson | peterson academy`, and several Grok-related metadata labels. The latter is a useful canonicalization fixture: several labels can all be correctly entailed while still representing one semantic neighbourhood.
+
+A subsequent cache-only observation showed `changed: false` while the externally sampled graph revision had advanced between measurements. Code review confirmed that `reconcileDerivedGraphProjection()` does not increment graph revision on its own `changed: false` branch; background verifier/materialization work can legitimately advance the revision between two console samples. Future stability tests should therefore capture the revision immediately before and after one isolated cache-only request rather than compare against an older asynchronous generation result.
+
+Live replacement traces also exposed semantic score overcount. Multiple related graph labels can each add independent topic/concept feature contributions, and broad concepts can stack with specific ones. The next #214 replay gate must therefore measure:
+- canonical neighbourhood assignment accuracy;
+- number of raw source-node matches per canonical neighbourhood;
+- bounded neighbourhood contribution count/value;
+- reduction in duplicate semantic contribution mass;
+- raw-score distribution before/after canonical aggregation;
+- calibrated-score saturation rate (for example, fraction of candidates at 97–100);
+- trace reconciliation from the neighbourhood contribution back to every supporting source graph node.
+
+Do not retune the 0–100 presentation calibration until this raw semantic overcount is corrected.
 
