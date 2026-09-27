@@ -93,7 +93,18 @@ const state = {
 test('local runtime scores candidates from the persisted graph and returns deterministic traces', () => {
   const ranked = scoreLocalCandidates(state, [
     { external_id: 'video-b', title: 'Video B' },
-    { external_id: 'video-a', title: 'Video A' },
+    {
+      external_id: 'video-a',
+      title: 'Video A',
+      semantic_mode_affinities: [{
+        modeId: 'mode:inferred:v1:test',
+        modeRevision: 2,
+        label: 'Test durable mode',
+        affinity: 0.72,
+        matchedCanonicalIds: ['canonical:test'],
+        sourceNodeIds: ['topic:test'],
+      }],
+    },
   ], 'Work');
 
   assert.equal(ranked[0].external_id, 'video-a');
@@ -105,6 +116,14 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
   assert.equal(ranked[0].trace.nodeContributions.length, 2);
   assert.equal(ranked[0].trace.suppressed, false);
+  assert.deepEqual(ranked[0].semantic_mode_affinities, [{
+    modeId: 'mode:inferred:v1:test',
+    modeRevision: 2,
+    label: 'Test durable mode',
+    affinity: 0.72,
+    matchedCanonicalIds: ['canonical:test'],
+    sourceNodeIds: ['topic:test'],
+  }]);
 });
 
 test('explicit local feedback changes the score without treating watch evidence as preference', () => {
