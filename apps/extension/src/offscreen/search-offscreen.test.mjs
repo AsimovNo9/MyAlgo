@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const hostMessages = [];
+const runtimeMessages = [];
 const frame = new EventTarget();
 frame.contentWindow = { postMessage: (message) => hostMessages.push(message) };
 frame.contentDocument = { readyState: 'loading' };
@@ -16,7 +17,7 @@ let runtimeListener;
 globalThis.chrome = {
   runtime: {
     onMessage: { addListener: (listener) => { runtimeListener = listener; } },
-    sendMessage: async () => ({ ok: true }),
+    sendMessage: async (message) => { runtimeMessages.push(message); return { ok: true }; },
   },
 };
 
@@ -120,4 +121,43 @@ test('concept extraction reuses the local neural sandbox and returns model outpu
     modelVersion: 'transformersjs-local-q8-v1',
     backend: 'webgpu-sandbox',
   });
+});
+
+
+test('concept extraction persists an explicit runtime error status', async () => {
+  hostMessages.length = 0;
+  runtimeMessages.length = 0;
+  frame.contentDocument = null;
+
+  const result = new Promise((resolve) => {
+    assert.equal(runtimeListener({
+      target: 'semantic-embedding-offscreen',
+      type: 'EXTRACT_CONCEPTS',
+      prompts: ['fixture'],
+    }, {}, resolve), true);
+  });
+
+  assert.equal(hostMessages.length, 1);
+  window.dispatchEvent(Object.assign(new Event('message'), {
+    source: frame.contentWindow,
+    data: {
+      source: 'myalgo-neural-sandbox',
+      id: hostMessages[0].id,
+      modelKind: 'concept',
+      ok: false,
+      error: 'fixture model load failed',
+      backend: 'wasm-sandbox',
+    },
+  }));
+
+  const response = await result;
+  assert.equal(response.ok, false);
+  assert.match(response.error, /fixture model load failed/);
+
+  const statusMessages = runtimeMessages.filter((message) => (
+    message?.type === 'CONCEPT_MODEL_STATUS'
+  ));
+  assert.ok(statusMessages.length >= 1);
+  assert.equal(statusMessages.at(-1).payload.status, 'error');
+  assert.equal(statusMessages.at(-1).payload.error, 'fixture model load failed');
 });
