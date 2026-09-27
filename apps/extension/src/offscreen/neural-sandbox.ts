@@ -403,6 +403,8 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
     postToHost({
       id,
       ok: false,
+      modelKind: request.type === 'VERIFY_CONCEPTS' ? 'concept' : 'embedding',
+      backend: request.type === 'VERIFY_CONCEPTS' ? 'wasm-sandbox' : undefined,
       error: error instanceof Error ? error.message : 'Local neural sandbox failed.',
     });
   };
