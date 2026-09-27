@@ -497,9 +497,16 @@ const result = await chrome.runtime.sendMessage({
   type: 'REFRESH_CONCEPT_EXTRACTION'
 });
 console.log(result);
+
+// Validate cache-only reuse without starting another generation batch.
+const cached = await chrome.runtime.sendMessage({
+  type: 'REFRESH_CONCEPT_EXTRACTION',
+  payload: { generate: false }
+});
+console.log(cached);
 ```
 
-This runs one bounded concept-generation batch against the persisted candidate reservoir and immediately returns materialization, last-generation diagnostics, and concept-model status. It is intended for validation/debugging, not routine UI use.
+The first request runs one bounded concept-generation batch against the persisted candidate reservoir and immediately returns materialization, last-generation diagnostics, and concept-model status. The second request reuses only valid cached concepts, which is useful for checking that the embedding-drain path cannot rematerialize metadata-only graph state or increment the graph revision when the projection is unchanged. This command is intended for validation/debugging, not routine UI use.
 
 `CONCEPT_EXTRACTION_DIAGNOSTICS` records the last actual generation attempt. Cache-only embedding-drain passes no longer overwrite it. Cache-only usage is still visible through materializer diagnostics as `modelExtractionStatus: "cache_only"`.
 
