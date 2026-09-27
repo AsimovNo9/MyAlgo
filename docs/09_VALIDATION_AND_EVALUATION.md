@@ -167,7 +167,7 @@ For #210/#208 scoring validation, also verify:
 5. replacement cards visibly retain title and creator/channel even when thumbnail metadata is null;
 6. the compact `Why this?` view reports the same contribution values as the trace;
 7. RSS/web-search acquisition mechanism does not itself add preference weight;
-8. web-search execution is not claimed as validated until a real provider adapter exists and is live-tested.
+8. YouTube search-page acquisition remains score-neutral and is distinguished from downstream scoring/presentation success.
 
 
 ## Long-session performance validation (#211)
@@ -233,7 +233,7 @@ searchCandidatesInPool: 35
 error: null
 ```
 
-Interpretation: acquisition is working; the active validation target is downstream scoring/presentation. The next live run must capture the promotion diagnostics below and confirm at least one qualified search-origin candidate can reach a replacement without destabilizing the overlay.
+Interpretation: acquisition is working and PR #212 is merged. These diagnostics remain a regression baseline; PR #213 live testing should confirm semantic reranking does not regress downstream search-origin scoring/presentation or overlay responsiveness.
 
 ### Search-to-feed promotion diagnostics
 
@@ -261,5 +261,7 @@ Required invariants:
 8. the same model/version/input yields deterministic semantic features;
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
+11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
+12. upgrading from disclosure v3 requires affirmative acceptance of disclosure v4 before observation/ranking resumes.
 
 Compare the baseline local hash provider against the selected compact neural encoder using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
