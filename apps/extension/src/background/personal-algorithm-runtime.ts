@@ -79,7 +79,7 @@ const FEATURE_WEIGHTS = {
   format: 6,
 } as const;
 
-const SEMANTIC_NEIGHBOURHOOD_MASS_CAP = 18;
+const SEMANTIC_NEIGHBOURHOOD_CONTRIBUTION_CAP = 18;
 const TAXONOMY_ONLY_MAX_CONTRIBUTION = 3;
 const TAXONOMY_ONLY_WEIGHT_MULTIPLIER = 0.25;
 
@@ -176,6 +176,7 @@ type CanonicalSemanticAccumulator = {
   id: string;
   label: string;
   taxonomyOnly: boolean;
+  objectiveOnly: boolean;
   sourceNodeIds: Set<string>;
   evidenceIds: Set<string>;
   lexicalValue: number;
@@ -219,34 +220,10 @@ const extractLocalCandidateFeaturesWithCanonical = (
   const nodeIds: string[] = [];
   const features: ScoreFeatureSignal[] = [];
 
-  for (const node of featureNodes) {
-    if (node.kind !== 'objective') continue;
-    const similarity = lexicalMatch(node.label, text);
-    if (similarity <= 0) continue;
-    const confidence = Math.min(
-      1,
-      Math.max(
-        0,
-        typeof node.confidence === 'number' && Number.isFinite(node.confidence)
-          ? node.confidence
-          : 1,
-      ),
-    );
-    const value = Number((FEATURE_WEIGHTS.objective * similarity * confidence).toFixed(2));
-    if (value <= 0) continue;
-    nodeIds.push(node.id);
-    features.push({
-      id: `objective:${node.id}`,
-      label: `objective match: ${node.label}`,
-      value,
-      sourceId: node.id,
-      sourceIds: [node.id],
-    });
-  }
-
   const matchMetadataByCanonicalId = new Map<string, {
     label: string;
     taxonomyOnly: boolean;
+    objectiveOnly: boolean;
     sourceNodeIds: string[];
   }>();
   const canonicalOverrideByNodeId = new Map<string, string>();
@@ -259,6 +236,9 @@ const extractLocalCandidateFeaturesWithCanonical = (
     matchMetadataByCanonicalId.set(canonicalId, {
       label: match.node_label,
       taxonomyOnly: Boolean(match.taxonomy_only),
+      objectiveOnly: sourceNodeIds.length > 0 && sourceNodeIds.every((nodeId) => (
+        canonicalByNodeId.get(nodeId)?.kinds.every((kind) => kind === 'objective') === true
+      )),
       sourceNodeIds,
     });
     for (const nodeId of sourceNodeIds) canonicalOverrideByNodeId.set(nodeId, canonicalId);
@@ -269,6 +249,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
     canonicalId: string,
     label: string,
     taxonomyOnly: boolean,
+    objectiveOnly: boolean,
     sourceNodeIds: readonly string[],
   ): CanonicalSemanticAccumulator => {
     const existing = accumulators.get(canonicalId);
@@ -277,12 +258,14 @@ const extractLocalCandidateFeaturesWithCanonical = (
       canonicalEvidenceIdsForNodes(state, sourceNodeIds)
         .forEach((evidenceId) => existing.evidenceIds.add(evidenceId));
       existing.taxonomyOnly = existing.taxonomyOnly && taxonomyOnly;
+      existing.objectiveOnly = existing.objectiveOnly && objectiveOnly;
       return existing;
     }
     const created: CanonicalSemanticAccumulator = {
       id: canonicalId,
       label,
       taxonomyOnly,
+      objectiveOnly,
       sourceNodeIds: new Set(sourceNodeIds),
       evidenceIds: new Set(canonicalEvidenceIdsForNodes(state, sourceNodeIds)),
       lexicalValue: 0,
@@ -293,7 +276,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
   };
 
   for (const node of featureNodes) {
-    if (node.kind !== 'topic' && node.kind !== 'concept') continue;
+    if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
     const similarity = lexicalMatch(node.label, text);
     if (similarity <= 0) continue;
     const confidence = Math.min(
@@ -305,7 +288,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
           : 1,
       ),
     );
-    const weight = FEATURE_WEIGHTS[node.kind];
+    const weight = FEATURE_WEIGHTS[node.kind as keyof typeof FEATURE_WEIGHTS];
     const lexicalValue = Number((weight * similarity * confidence).toFixed(2));
     if (lexicalValue <= 0) continue;
 
@@ -320,6 +303,9 @@ const extractLocalCandidateFeaturesWithCanonical = (
       canonicalId,
       overrideMetadata?.label ?? deterministic?.label ?? node.label,
       overrideMetadata?.taxonomyOnly ?? deterministic?.taxonomyOnly ?? false,
+      overrideMetadata?.objectiveOnly
+        ?? deterministic?.kinds.every((kind) => kind === 'objective')
+        ?? node.kind === 'objective',
       sourceNodeIds,
     );
     accumulator.lexicalValue = Math.max(accumulator.lexicalValue, lexicalValue);
@@ -332,6 +318,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
       id: string;
       label: string;
       taxonomyOnly: boolean;
+      objectiveOnly: boolean;
       sourceNodeIds: string[];
       weight: number;
     }>();
@@ -357,11 +344,17 @@ const extractLocalCandidateFeaturesWithCanonical = (
         existing.taxonomyOnly = existing.taxonomyOnly && Boolean(
           match.taxonomy_only ?? deterministic?.taxonomyOnly,
         );
+        existing.objectiveOnly = existing.objectiveOnly && Boolean(
+          deterministic?.kinds.every((kind) => kind === 'objective'),
+        );
       } else {
         groupedMatches.set(canonicalId, {
           id: canonicalId,
           label: match.node_label || deterministic?.label || match.node_id,
           taxonomyOnly: Boolean(match.taxonomy_only ?? deterministic?.taxonomyOnly),
+          objectiveOnly: Boolean(
+            deterministic?.kinds.every((kind) => kind === 'objective'),
+          ),
           sourceNodeIds,
           weight,
         });
@@ -377,6 +370,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
           match.id,
           match.label,
           match.taxonomyOnly,
+          match.objectiveOnly,
           match.sourceNodeIds,
         );
         accumulator.embeddingValue = Math.max(
@@ -389,7 +383,6 @@ const extractLocalCandidateFeaturesWithCanonical = (
 
   const hasSpecificSemanticMatch = [...accumulators.values()]
     .some((entry) => !entry.taxonomyOnly && Math.max(entry.lexicalValue, entry.embeddingValue) > 0);
-  let remainingSemanticMass = SEMANTIC_NEIGHBOURHOOD_MASS_CAP;
   const rankedSemantic = [...accumulators.values()]
     .map((entry) => ({
       ...entry,
@@ -403,7 +396,6 @@ const extractLocalCandidateFeaturesWithCanonical = (
     ));
 
   for (const entry of rankedSemantic) {
-    if (remainingSemanticMass <= 0) break;
     if (entry.taxonomyOnly && hasSpecificSemanticMatch) continue;
     const adjusted = entry.taxonomyOnly
       ? Math.min(
@@ -411,17 +403,21 @@ const extractLocalCandidateFeaturesWithCanonical = (
         entry.combinedValue * TAXONOMY_ONLY_WEIGHT_MULTIPLIER,
       )
       : entry.combinedValue;
-    const value = Number(Math.min(remainingSemanticMass, adjusted).toFixed(2));
+    const value = Number(Math.min(
+      SEMANTIC_NEIGHBOURHOOD_CONTRIBUTION_CAP,
+      adjusted,
+    ).toFixed(2));
     if (value <= 0) continue;
     features.push({
       id: `semantic-neighbourhood:${entry.id}`,
-      label: `semantic neighbourhood: ${entry.label}`,
+      label: entry.objectiveOnly
+        ? `objective match: ${entry.label}`
+        : `semantic neighbourhood: ${entry.label}`,
       value,
       sourceId: entry.id,
       sourceIds: [...entry.sourceNodeIds].sort(),
       evidenceIds: [...entry.evidenceIds].sort(),
     });
-    remainingSemanticMass = Number((remainingSemanticMass - value).toFixed(2));
   }
 
   const format = inferredFormat(candidate);
