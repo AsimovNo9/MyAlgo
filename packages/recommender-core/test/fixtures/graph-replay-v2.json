@@ -1,0 +1,288 @@
+{
+  "fixtureVersion": 1,
+  "name": "graph-replay-v2",
+  "description": "Test-safe exported Personal Algorithm state for #162 graph replay checks.",
+  "state": {
+    "schemaVersion": 2,
+    "evidence": [
+      {
+        "id": "evidence-video-c",
+        "evidence": {
+          "kind": "interaction",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-c"
+          },
+          "exposureId": null,
+          "interaction": "watched",
+          "observedAt": "2026-01-02T10:10:00.000Z",
+          "provenance": {
+            "connector": "youtube",
+            "mechanism": "history_dom"
+          },
+          "metadata": {
+            "title": "Local AI tooling C",
+            "creatorId": "creator-2",
+            "creatorName": "Creator Two"
+          }
+        },
+        "confidence": 1,
+        "retainedAt": "2026-01-02T00:00:00.000Z",
+        "retention": {
+          "policy": "indefinite",
+          "expiresAt": null
+        }
+      },
+      {
+        "id": "evidence-video-a",
+        "evidence": {
+          "kind": "exposure",
+          "exposureId": "video-a|home||0",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-a"
+          },
+          "surface": "home",
+          "section": null,
+          "position": 0,
+          "observedAt": "2026-01-02T10:00:00.000Z",
+          "provenance": {
+            "connector": "youtube",
+            "mechanism": "home_dom"
+          },
+          "metadata": {
+            "title": "Distributed systems A",
+            "creatorId": "creator-1",
+            "creatorName": "Creator One"
+          }
+        },
+        "confidence": 1,
+        "retainedAt": "2026-01-02T00:00:00.000Z",
+        "retention": {
+          "policy": "default",
+          "expiresAt": null
+        }
+      },
+      {
+        "id": "evidence-video-b",
+        "evidence": {
+          "kind": "interaction",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-b"
+          },
+          "exposureId": "video-b|home||1",
+          "interaction": "watched",
+          "observedAt": "2026-01-02T10:05:00.000Z",
+          "provenance": {
+            "connector": "youtube",
+            "mechanism": "watch"
+          },
+          "metadata": {
+            "title": "Distributed systems B",
+            "creatorId": "creator-1",
+            "creatorName": "Creator One"
+          }
+        },
+        "confidence": 0.9,
+        "retainedAt": "2026-01-02T00:00:00.000Z",
+        "retention": {
+          "policy": "default",
+          "expiresAt": null
+        }
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "creator:youtube:creator-2",
+          "kind": "creator",
+          "label": "Creator Two",
+          "provenance": "inferred",
+          "confidence": 1,
+          "attributes": {
+            "source": "youtube"
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "content:youtube:video-b",
+          "kind": "content",
+          "label": "Distributed systems B",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-b"
+          },
+          "provenance": "explicit",
+          "confidence": null,
+          "attributes": {
+            "metadata": {
+              "title": "Distributed systems B",
+              "creatorId": "creator-1",
+              "creatorName": "Creator One"
+            }
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "topic:distributed-systems",
+          "kind": "topic",
+          "label": "Distributed systems",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "aliases": [
+              "CRDTs",
+              "local-first software"
+            ]
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "content:youtube:video-c",
+          "kind": "content",
+          "label": "Local AI tooling C",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-c"
+          },
+          "provenance": "explicit",
+          "confidence": null,
+          "attributes": {
+            "metadata": {
+              "title": "Local AI tooling C",
+              "creatorId": "creator-2",
+              "creatorName": "Creator Two"
+            }
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "creator:youtube:creator-1",
+          "kind": "creator",
+          "label": "Creator One",
+          "provenance": "inferred",
+          "confidence": 1,
+          "attributes": {
+            "source": "youtube"
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "content:youtube:video-a",
+          "kind": "content",
+          "label": "Distributed systems A",
+          "content": {
+            "source": "youtube",
+            "externalId": "video-a"
+          },
+          "provenance": "explicit",
+          "confidence": null,
+          "attributes": {
+            "metadata": {
+              "title": "Distributed systems A",
+              "creatorId": "creator-1",
+              "creatorName": "Creator One"
+            }
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge:created_by:video-c",
+          "sourceNodeId": "content:youtube:video-c",
+          "targetNodeId": "creator:youtube:creator-2",
+          "relation": "created_by",
+          "provenance": "inferred",
+          "confidence": 1,
+          "evidenceIds": [
+            "evidence-video-c"
+          ],
+          "attributes": {},
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "edge:created_by:video-a",
+          "sourceNodeId": "content:youtube:video-a",
+          "targetNodeId": "creator:youtube:creator-1",
+          "relation": "created_by",
+          "provenance": "inferred",
+          "confidence": 1,
+          "evidenceIds": [
+            "evidence-video-a"
+          ],
+          "attributes": {},
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "edge:topic:video-a",
+          "sourceNodeId": "topic:distributed-systems",
+          "targetNodeId": "content:youtube:video-a",
+          "relation": "about",
+          "provenance": "explicit",
+          "confidence": 1,
+          "evidenceIds": [],
+          "attributes": {},
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        },
+        {
+          "id": "edge:created_by:video-b",
+          "sourceNodeId": "content:youtube:video-b",
+          "targetNodeId": "creator:youtube:creator-1",
+          "relation": "created_by",
+          "provenance": "inferred",
+          "confidence": 0.9,
+          "evidenceIds": [
+            "evidence-video-b"
+          ],
+          "attributes": {},
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "updatedAt": "2026-01-02T00:00:00.000Z"
+        }
+      ],
+      "userEdits": [
+        {
+          "id": "edit-topic",
+          "action": "create_node",
+          "targetId": "topic:distributed-systems",
+          "before": null,
+          "after": {
+            "id": "topic:distributed-systems",
+            "kind": "topic",
+            "label": "Distributed systems",
+            "provenance": "explicit",
+            "confidence": 1,
+            "attributes": {
+              "aliases": [
+                "CRDTs",
+                "local-first software"
+              ]
+            },
+            "createdAt": "2026-01-02T00:00:00.000Z",
+            "updatedAt": "2026-01-02T00:00:00.000Z"
+          },
+          "createdAt": "2026-01-02T00:00:00.000Z"
+        }
+      ],
+      "revisions": [
+        {
+          "id": "revision-1",
+          "revision": 1,
+          "reason": "graph_create_node",
+          "createdAt": "2026-01-02T00:00:00.000Z"
+        }
+      ],
+      "currentRevision": 1
+    }
+  }
+}
