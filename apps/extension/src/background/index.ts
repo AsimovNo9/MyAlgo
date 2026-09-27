@@ -81,6 +81,11 @@ type ConceptExtractionCacheRecord = {
   generatedAt: string;
 };
 
+type ConceptExtractionRefreshResult = {
+  conceptsByExternalId: Map<string, string[]>;
+  diagnostics: Record<string, unknown>;
+};
+
 type LocalFeedItem = CandidatePoolItem & {
   id: string;
   rawScore: number;
@@ -185,6 +190,7 @@ const metadataEnrichmentInFlight = new Set<string>();
 const metadataEnrichmentFailureUntil = new Map<string, number>();
 const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 const semanticRefreshInFlight = new Set<string>();
+let conceptExtractionRefreshInFlight: Promise<ConceptExtractionRefreshResult> | null = null;
 let semanticEpoch = 0;
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
@@ -767,14 +773,12 @@ async function hydrateSemanticScoreFeatures(
   });
 }
 
-async function refreshConceptExtractionCache(
+async function runConceptExtractionCacheRefresh(
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
   candidatePool: CandidatePoolItem[],
   enabled: boolean,
-): Promise<{
-  conceptsByExternalId: Map<string, string[]>;
-  diagnostics: Record<string, unknown>;
-}> {
+  extractionEpoch: number,
+): Promise<ConceptExtractionRefreshResult> {
   const existing = await getStorage<Record<string, ConceptExtractionCacheRecord>>(
     STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE,
     {},
@@ -845,7 +849,9 @@ async function refreshConceptExtractionCache(
           .sort(([, left], [, right]) => right.generatedAt.localeCompare(left.generatedAt))
           .slice(0, MAX_CONCEPT_EXTRACTION_CACHE),
       );
-      await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE, bounded);
+      if (extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
+        await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE, bounded);
+      }
     } catch (error) {
       fallbackReason = error instanceof Error ? error.message : 'Local concept extraction failed.';
       console.warn('[MyAlgo] local concept extraction unavailable; retaining metadata concepts', error);
@@ -866,12 +872,43 @@ async function refreshConceptExtractionCache(
     fallbackReason,
     generatedAt: new Date().toISOString(),
   };
-  await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, diagnostics);
+  if (extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
+    await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, diagnostics);
+  }
 
   return {
     conceptsByExternalId: enabled ? validByExternalId : new Map(),
     diagnostics,
   };
+}
+
+async function refreshConceptExtractionCache(
+  state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
+  candidatePool: CandidatePoolItem[],
+  enabled: boolean,
+): Promise<ConceptExtractionRefreshResult> {
+  const extractionEpoch = semanticEpoch;
+  if (!enabled) {
+    return runConceptExtractionCacheRefresh(state, candidatePool, false, extractionEpoch);
+  }
+  if (conceptExtractionRefreshInFlight) {
+    return conceptExtractionRefreshInFlight;
+  }
+
+  const pending = runConceptExtractionCacheRefresh(
+    state,
+    candidatePool,
+    true,
+    extractionEpoch,
+  );
+  conceptExtractionRefreshInFlight = pending;
+  try {
+    return await pending;
+  } finally {
+    if (conceptExtractionRefreshInFlight === pending) {
+      conceptExtractionRefreshInFlight = null;
+    }
+  }
 }
 
 async function refreshSemanticConceptGraph(
@@ -1455,6 +1492,10 @@ const handleRuntimeMessage = (
   }
 
   if (type === 'CONCEPT_MODEL_STATUS') {
+    if (!privacyDisclosureAccepted) {
+      sendResponse({ ok: true, ignored: true });
+      return false;
+    }
     void setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, payload ?? null)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({
@@ -1498,6 +1539,7 @@ const handleRuntimeMessage = (
       const semanticModelMode: SemanticModelMode = payload?.semanticModelMode === 'neural' ? 'neural' : 'hash';
       semanticEpoch += 1;
       semanticRefreshInFlight.clear();
+      conceptExtractionRefreshInFlight = null;
       await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, semanticModelMode);
       await semanticEmbeddingCache.clear();
       await chrome.storage.local.remove([
@@ -1550,6 +1592,7 @@ const handleRuntimeMessage = (
       historyReconciliationReady = null;
       semanticEpoch += 1;
       semanticRefreshInFlight.clear();
+      conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
       await chrome.storage.local.clear();
