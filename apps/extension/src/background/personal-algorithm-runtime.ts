@@ -297,7 +297,10 @@ const semanticAlignmentFeatures = (
     }
   }
 
-  if (Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
+  const activeMode = mode.trim().toLowerCase();
+  const hasActiveMode = Boolean(activeMode && activeMode !== 'default');
+
+  if (hasActiveMode && Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
     features.push({
       id: 'semantic:mode',
       label: 'semantic match: active mode',
@@ -308,19 +311,22 @@ const semanticAlignmentFeatures = (
     });
   }
 
-  // Relative affinity resolves otherwise similar cosine scores. This remains
-  // an exact, bounded score contribution subject to hard policy and feedback.
+  // Category affinity is only applied when the active inferred mode matches a
+  // graph-derived category strongly enough to beat the alternatives.
   const scores = candidate.semantic_category_scores;
-  const activeMode = mode.trim().toLowerCase();
-  if (scores && activeMode && activeMode in scores) {
-    const active = Number(scores[activeMode as SemanticCategoryId] ?? 0);
-    const strongestOther = Math.max(0, ...Object.entries(scores)
-      .filter(([category]) => category !== activeMode)
+  const scoreEntries = Object.entries(scores ?? {});
+  const activeEntry = hasActiveMode
+    ? scoreEntries.find(([category]) => category.trim().toLowerCase() === activeMode)
+    : undefined;
+  if (activeEntry) {
+    const active = Number(activeEntry[1] ?? 0);
+    const strongestOther = Math.max(0, ...scoreEntries
+      .filter(([category]) => category.trim().toLowerCase() !== activeMode)
       .map(([, similarity]) => Number(similarity ?? 0)));
-    if (active >= 0.25 && active > strongestOther) {
+    if (active >= 0.35 && active - strongestOther >= 0.04) {
       features.push({
         id: 'semantic:category:active',
-        label: `semantic category: ${activeMode}`,
+        label: `semantic category: ${activeEntry[0]}`,
         value: Number((24 * Math.min(1, (active - strongestOther) / 0.12)).toFixed(2)),
         sourceId: candidate.semantic_model_version
           ? `embedding:${candidate.semantic_model_version}`
