@@ -16,7 +16,7 @@ import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
-import { createOffscreenEmbeddingProvider } from '../lib/semantic-embedding-provider';
+import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
 
 type PageCandidate = {
   external_id: string;
@@ -133,9 +133,23 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
-const semanticEmbeddingProvider = createOffscreenEmbeddingProvider(192);
 const semanticEmbeddingCache = createChromeEmbeddingCache(600);
-const semanticModelIdentity = `${semanticEmbeddingProvider.modelId}@${semanticEmbeddingProvider.modelVersion}`;
+
+const getSemanticModelMode = async (): Promise<SemanticModelMode> => {
+  const stored = await getStorage<string>(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash');
+  return stored === 'neural' ? 'neural' : 'hash';
+};
+
+const getSemanticProviderContext = async () => {
+  const semanticModelMode = await getSemanticModelMode();
+  const provider = createOffscreenEmbeddingProvider(semanticModelMode);
+  const identity = semanticProviderIdentity(semanticModelMode);
+  return {
+    semanticModelMode,
+    provider,
+    semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
+  };
+};
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
@@ -649,6 +663,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       },
       [STORAGE_KEYS.RETRIEVAL_SETTINGS]: current[STORAGE_KEYS.RETRIEVAL_SETTINGS] ?? DEFAULT_RETRIEVAL_SETTINGS,
       [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: current[STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS] ?? EMPTY_RETRIEVAL_DIAGNOSTICS,
+      [STORAGE_KEYS.SEMANTIC_MODEL_MODE]: current[STORAGE_KEYS.SEMANTIC_MODEL_MODE] ?? 'hash',
       // User-owned/local observational state must survive extension updates.
       [STORAGE_KEYS.HISTORY_METRICS]: current[STORAGE_KEYS.HISTORY_METRICS] ?? null,
       [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: current[STORAGE_KEYS.HOME_OBSERVATION_ENABLED] ?? false,
@@ -680,6 +695,7 @@ async function hydrateSemanticScoreFeatures(
   state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportState']>>,
   candidates: CandidatePoolItem[],
   mode: string,
+  semanticModelIdentity: string,
 ): Promise<CandidatePoolItem[]> {
   const cache = await getStorage<Record<string, SemanticFeatureRecord>>(
     STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
@@ -712,6 +728,7 @@ async function refreshSemanticScoreFeatures(
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) return { changed: 0, diagnostics: null };
   const state = await personalAlgorithmStore.exportState();
+  const { semanticModelMode, provider: semanticEmbeddingProvider, semanticModelIdentity } = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) return { changed: 0, diagnostics: null };
   semanticRefreshInFlight.add(refreshKey);
@@ -794,6 +811,8 @@ async function refreshSemanticScoreFeatures(
 
     const diagnostics = {
       ...semantic.diagnostics,
+      semanticModelMode,
+      execution: semanticEmbeddingProvider.execution,
       mode,
       graphRevision: state.graph.currentRevision,
       elapsedMs: Math.round(performance.now() - startedAt),
@@ -806,6 +825,7 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     console.info('[MyAlgo] semantic enrichment', {
       model: semantic.diagnostics.modelVersion,
+      semanticModelMode,
       execution: semanticEmbeddingProvider.execution,
       mode,
       candidates: semantic.diagnostics.candidateCount,
@@ -839,10 +859,12 @@ async function rankLocalCandidates(
       })),
     state,
   );
+  const { semanticModelIdentity } = await getSemanticProviderContext();
   const candidatesWithSemanticFeatures = await hydrateSemanticScoreFeatures(
     state,
     candidates,
     mode,
+    semanticModelIdentity,
   );
   const ranked = scoreLocalCandidates(
     state,
@@ -936,6 +958,7 @@ const handleRuntimeMessage = (
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
+      semanticModelMode?: SemanticModelMode;
     };
   };
 
@@ -943,15 +966,47 @@ const handleRuntimeMessage = (
     void Promise.all([
       getStorage(STORAGE_KEYS.ENABLED, false),
       getStorage(STORAGE_KEYS.MODE, 'Work'),
-    ]).then(([enabled, mode]) => sendResponse({
+      getStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash'),
+    ]).then(([enabled, mode, semanticModelMode]) => sendResponse({
       ok: true,
       worker: 'ready',
       enabled,
       mode,
+      semanticModelMode,
     })).catch((error) => sendResponse({
       ok: false,
       worker: 'error',
       error: error instanceof Error ? error.message : 'Unable to read worker state.',
+    }));
+    return true;
+  }
+
+  if (type === 'SET_SEMANTIC_MODEL_MODE') {
+    void (async () => {
+      const semanticModelMode: SemanticModelMode = payload?.semanticModelMode === 'neural' ? 'neural' : 'hash';
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+      await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, semanticModelMode);
+      await semanticEmbeddingCache.clear();
+      await chrome.storage.local.remove([
+        STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+        STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
+      ]);
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'PERSONAL_ALGORITHM_CHANGED',
+          payload: { reason: 'semantic_model' },
+        }).catch(() => undefined)
+        : undefined));
+      sendResponse({
+        ok: true,
+        semanticModelMode,
+        model: semanticProviderIdentity(semanticModelMode),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update semantic model.',
     }));
     return true;
   }
@@ -996,6 +1051,7 @@ const handleRuntimeMessage = (
         [STORAGE_KEYS.SELECTION_EVENTS]: [],
         [STORAGE_KEYS.RETRIEVAL_SETTINGS]: DEFAULT_RETRIEVAL_SETTINGS,
         [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: EMPTY_RETRIEVAL_DIAGNOSTICS,
+        [STORAGE_KEYS.SEMANTIC_MODEL_MODE]: 'hash',
       });
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
