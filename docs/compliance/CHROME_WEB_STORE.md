@@ -30,7 +30,7 @@ The launch extension handles web activity / website content and user interaction
 | Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
 | Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned YouTube video IDs/titles/snippets | expand candidate reservoir | bounded requests to YouTube search pages under the existing YouTube host permission; results stored locally and enriched from canonical YouTube watch pages before scoring |
 
-The local-first MVP does not send observed activity, raw evidence, full graph state, derived embedding vectors/similarity features, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages.
+The local-first MVP does not send observed activity, raw evidence, full graph state, derived embedding vectors/similarity features, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages. Optional neural semantics downloads public model/configuration files from Hugging Face; those requests do not include recommendation or user-model payloads.
 
 ## Disclosure and affirmative acceptance
 
@@ -39,7 +39,7 @@ Chrome Web Store disclosure has two layers:
 1. **Before installation:** the Store listing and Privacy practices tab must prominently describe the user data handled and its use. Publishing requires the developer to complete these dashboard fields.
 2. **Before in-product observation:** MyAlgo uses a versioned disclosure gate. Until the current disclosure version is affirmatively accepted, the content script starts paused and the background rejects observation/ranking messages.
 
-Disclosure v3 added optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. PR #213 increments the disclosure to **v4** because MyAlgo now derives and stores bounded local semantic vectors/similarity features for candidate/graph/mode matching. The current disclosure explains:
+Disclosure v3 added optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. PR #213 incremented disclosure to v4 for bounded local semantic vectors/similarity features, then to **v5** when the optional neural encoder introduced a first-use Hugging Face model-file download. The download is model-only: candidate text, graph state, history, feedback, embeddings, and scoring traces are not sent to Hugging Face. The current disclosure explains:
 
 - pages observed;
 - data categories;
@@ -88,6 +88,8 @@ Pause is not deletion: pausing stops new observation/enforcement but retained lo
 The extension runs on YouTube and can request YouTube-owned URLs for metadata or user navigation. With explicit RSS discovery enabled it can also request public YouTube channel RSS feeds using already observed channel IDs.
 
 With explicit web discovery enabled, MyAlgo requests YouTube search pages using only bounded graph-derived goal/topic queries plus active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-page snippets are discovery metadata and are followed by canonical YouTube watch-page enrichment before scoring.
+
+With the neural semantic encoder explicitly enabled, the extension downloads public `mixedbread-ai/mxbai-embed-xsmall-v1` model/configuration files from Hugging Face and caches them under the extension/browser model cache. Transformers.js/ONNX execution code is bundled with the extension artifact; inference runs locally.
 
 Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, third-party search provider, or materially different processor is a new data-flow boundary and requires review before collection begins.
 
