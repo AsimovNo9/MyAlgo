@@ -4,8 +4,8 @@ import { createPriorityNeuralScheduler, type NeuralSchedulerStepResult } from '.
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
-const CONCEPT_MODEL_ID = 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary';
-const CONCEPT_MODEL_VERSION = 'transformersjs-local-q8-v1';
+const CONCEPT_MODEL_ID = 'Xenova/nli-deberta-v3-xsmall';
+const CONCEPT_MODEL_VERSION = 'transformersjs-local-q8-wasm-v1';
 
 type FeatureExtractionPipeline = {
   (texts: string[], options: {
@@ -94,15 +94,13 @@ const buildExtractor = async (
   },
 ) as Promise<FeatureExtractionPipeline>;
 
-const buildConceptClassifier = async (
-  device: 'webgpu' | 'wasm',
-): Promise<ZeroShotClassificationPipeline> => pipeline(
+const buildConceptClassifier = async (): Promise<ZeroShotClassificationPipeline> => pipeline(
   'zero-shot-classification',
-  'deberta-v3-xsmall-concept-verifier',
+  'nli-deberta-v3-xsmall-concept-verifier',
   {
-    device,
+    device: 'wasm',
     dtype: 'q8',
-    progress_callback: progressCallback(device, 'concept'),
+    progress_callback: progressCallback('wasm', 'concept'),
   },
 ) as Promise<ZeroShotClassificationPipeline>;
 
@@ -170,39 +168,13 @@ async function getConceptClassifier(): Promise<{
   backend: LocalBackend;
 }> {
   if (!conceptClassifierPromise) {
-    conceptClassifierPromise = (async () => {
-      if (await hasUsableWebGpuAdapter()) {
-        try {
-          return {
-            classifier: await buildConceptClassifier('webgpu'),
-            backend: 'webgpu-sandbox' as const,
-          };
-        } catch (error) {
-          postToHost({
-            id: activeRequestId,
-            type: 'backend-fallback',
-            modelKind: 'concept',
-            from: 'webgpu-sandbox',
-            to: 'wasm-sandbox',
-            reason: error instanceof Error ? error.message : 'WebGPU concept-classifier initialization failed.',
-          });
-        }
-      } else {
-        postToHost({
-          id: activeRequestId,
-          type: 'backend-fallback',
-          modelKind: 'concept',
-          from: 'webgpu-sandbox',
-          to: 'wasm-sandbox',
-          reason: 'No usable WebGPU adapter is available.',
-        });
-      }
-
-      return {
-        classifier: await buildConceptClassifier('wasm'),
-        backend: 'wasm-sandbox' as const,
-      };
-    })();
+    // DeBERTa zero-shot classification is deliberately kept on q8 WASM.
+    // For this model family, Transformers.js users have reported q8 WASM
+    // outperforming WebGPU, while embeddings remain WebGPU-accelerated.
+    conceptClassifierPromise = buildConceptClassifier().then((classifier) => ({
+      classifier,
+      backend: 'wasm-sandbox' as const,
+    }));
 
     conceptClassifierPromise.catch(() => {
       conceptClassifierPromise = null;
