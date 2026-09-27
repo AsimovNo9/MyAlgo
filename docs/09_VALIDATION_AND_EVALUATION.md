@@ -14,7 +14,7 @@ It is:
 
 - history items collected
 - usable metadata rate
-- concept extraction rate
+- concept verification/abstention rate
 - initial graph size
 - time to first graph
 
@@ -264,10 +264,10 @@ Required invariants:
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
 12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
-14. the production artifact contains the pinned mxbai embedding model and SmolLM2-135M-Instruct concept-extraction model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, extracted concepts, graph state, history, feedback, embeddings, or traces outside the extension;
-15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
+14. the production artifact contains the pinned mxbai embedding model and DeBERTa `nli-deberta-v3-xsmall` verifier/tokenizer assets plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, verified concept labels, graph state, history, feedback, embeddings, or traces outside the extension;
+15. mxbai embedding execution prefers WebGPU and can fall back to local WASM/hash behavior without blocking first paint; the DeBERTa verifier deliberately runs q8 WASM in its bounded asynchronous slice. Neither path may block canonical graph/evidence updates.
 
-Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
+Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider using the fixed replay fixture, and benchmark the DeBERTa verifier separately on its deliberate q8 WASM path. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
 
 
 ## Post-#213 category/mode and Home-stability validation (#214)
