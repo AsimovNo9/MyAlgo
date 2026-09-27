@@ -664,7 +664,7 @@ export class LocalPersonalAlgorithmStore {
             evidenceIds: evidenceIdsForEdge,
             confidence: edge.confidence == null ? null : clampConfidence(edge.confidence),
             createdAt: previous?.createdAt ?? timestamp,
-            updatedAt: unchanged ? previous.updatedAt : timestamp,
+            updatedAt: unchanged && previous ? previous.updatedAt : timestamp,
           };
         })
         .sort((left, right) => left.id.localeCompare(right.id));
