@@ -1,4 +1,4 @@
-export type AlgorithmMode = 'Work' | 'Learning' | 'Relax' | 'Gaming' | 'French';
+export type AlgorithmMode = string;
 
 export type RuleType = 'always_show' | 'never_show' | 'priority';
 
@@ -317,7 +317,7 @@ export interface RecommendationCandidate {
   content_label_confidence?: number | null;
 }
 
-export type SemanticCategoryId = 'work' | 'learning' | 'relax' | 'gaming' | 'french';
+export type SemanticCategoryId = string;
 
 export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
 
