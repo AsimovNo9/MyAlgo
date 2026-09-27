@@ -1699,7 +1699,8 @@ const handleRuntimeMessage = (
         return;
       }
 
-      const materialization = await refreshSemanticConceptGraph(true);
+      const generate = payload?.generate !== false;
+      const materialization = await refreshSemanticConceptGraph(generate);
       const [conceptExtraction, conceptModelStatus] = await Promise.all([
         getStorage<Record<string, unknown> | null>(
           STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS,
@@ -1713,6 +1714,7 @@ const handleRuntimeMessage = (
 
       sendResponse({
         ok: true,
+        generate,
         materialization: materialization.diagnostics,
         conceptExtraction,
         conceptModelStatus,
