@@ -901,7 +901,7 @@ async function runConceptExtractionCacheRefresh(
         await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE, bounded);
       }
     } catch (error) {
-      fallbackReason = error instanceof Error ? error.message : 'Local concept extraction failed.';
+      fallbackReason = error instanceof Error ? error.message : 'Local concept verification failed.';
       if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
         await setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, {
           status: 'error',
@@ -914,7 +914,7 @@ async function runConceptExtractionCacheRefresh(
           updatedAt: new Date().toISOString(),
         });
       }
-      console.warn('[MyAlgo] local concept extraction unavailable; retaining metadata concepts', error);
+      console.warn('[MyAlgo] local concept verification unavailable; retaining metadata concepts', error);
     }
   }
 
