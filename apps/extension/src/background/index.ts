@@ -695,7 +695,7 @@ async function hydrateSemanticScoreFeatures(
   state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportState']>>,
   candidates: CandidatePoolItem[],
   mode: string,
-  semanticModelIdentity: string,
+  semanticModelIdentities: string[],
 ): Promise<CandidatePoolItem[]> {
   const cache = await getStorage<Record<string, SemanticFeatureRecord>>(
     STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
@@ -703,14 +703,15 @@ async function hydrateSemanticScoreFeatures(
   );
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
-    const key = semanticFeatureKey(
-      candidate.external_id,
-      inputHash,
-      state.graph.currentRevision,
-      mode,
-      semanticModelIdentity,
-    );
-    const record = cache[key];
+    const record = semanticModelIdentities
+      .map((semanticModelIdentity) => cache[semanticFeatureKey(
+        candidate.external_id,
+        inputHash,
+        state.graph.currentRevision,
+        mode,
+        semanticModelIdentity,
+      )])
+      .find(Boolean);
     if (!record) return candidate;
     return {
       ...candidate,
@@ -728,8 +729,8 @@ async function refreshSemanticScoreFeatures(
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) return { changed: 0, diagnostics: null };
   const state = await personalAlgorithmStore.exportState();
-  const { semanticModelMode, provider: semanticEmbeddingProvider, semanticModelIdentity } = await getSemanticProviderContext();
-  const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${semanticModelIdentity}`;
+  const requestedContext = await getSemanticProviderContext();
+  const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) return { changed: 0, diagnostics: null };
   semanticRefreshInFlight.add(refreshKey);
   const refreshEpoch = semanticEpoch;
@@ -747,17 +748,52 @@ async function refreshSemanticScoreFeatures(
 
   try {
     const startedAt = performance.now();
-    const semantic = await enrichCandidatesWithSemanticReranking(
-      state,
-      candidates,
-      mode,
-      semanticEmbeddingProvider,
-      scopedEmbeddingCache,
-      {
-        maxGraphNodes: 64,
-        minimumModeNodeSimilarity: 0.15,
-      },
-    );
+    let effectiveContext = requestedContext;
+    let fallbackReason: string | null = null;
+    let semantic;
+    try {
+      semantic = await enrichCandidatesWithSemanticReranking(
+        state,
+        candidates,
+        mode,
+        requestedContext.provider,
+        scopedEmbeddingCache,
+        {
+          maxGraphNodes: 64,
+          minimumModeNodeSimilarity: 0.15,
+        },
+      );
+    } catch (error) {
+      if (requestedContext.semanticModelMode !== 'neural') throw error;
+      fallbackReason = error instanceof Error ? error.message : 'Neural semantic provider failed.';
+      const fallbackProvider = createOffscreenEmbeddingProvider('hash');
+      const fallbackIdentity = semanticProviderIdentity('hash');
+      effectiveContext = {
+        semanticModelMode: 'hash',
+        provider: fallbackProvider,
+        semanticModelIdentity: `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`,
+      };
+      semantic = await enrichCandidatesWithSemanticReranking(
+        state,
+        candidates,
+        mode,
+        fallbackProvider,
+        scopedEmbeddingCache,
+        {
+          maxGraphNodes: 64,
+          minimumModeNodeSimilarity: 0.15,
+        },
+      );
+      await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_STATUS, {
+        mode: 'neural',
+        effectiveMode: 'hash',
+        modelId: requestedContext.provider.modelId,
+        backend: 'hash-fallback',
+        status: 'fallback',
+        error: fallbackReason,
+        updatedAt: new Date().toISOString(),
+      });
+    }
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
       STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
@@ -776,14 +812,14 @@ async function refreshSemanticScoreFeatures(
         inputHash,
         state.graph.currentRevision,
         mode,
-        semanticModelIdentity,
+        effectiveContext.semanticModelIdentity,
       );
       const record: SemanticFeatureRecord = {
         externalId: original.external_id,
         inputHash,
         graphRevision: state.graph.currentRevision,
         mode,
-        modelVersion: semanticModelIdentity,
+        modelVersion: effectiveContext.semanticModelIdentity,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
         graphMatches: (candidate.semantic_graph_matches ?? []).slice(0, 3),
@@ -811,8 +847,10 @@ async function refreshSemanticScoreFeatures(
 
     const diagnostics = {
       ...semantic.diagnostics,
-      semanticModelMode,
-      execution: semanticEmbeddingProvider.execution,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      semanticModelMode: effectiveContext.semanticModelMode,
+      execution: effectiveContext.provider.execution,
+      fallbackReason,
       mode,
       graphRevision: state.graph.currentRevision,
       elapsedMs: Math.round(performance.now() - startedAt),
@@ -825,8 +863,10 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
     console.info('[MyAlgo] semantic enrichment', {
       model: semantic.diagnostics.modelVersion,
-      semanticModelMode,
-      execution: semanticEmbeddingProvider.execution,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      semanticModelMode: effectiveContext.semanticModelMode,
+      execution: effectiveContext.provider.execution,
+      fallbackReason,
       mode,
       candidates: semantic.diagnostics.candidateCount,
       graphNodes: semantic.diagnostics.graphNodesConsidered,
@@ -859,12 +899,19 @@ async function rankLocalCandidates(
       })),
     state,
   );
-  const { semanticModelIdentity } = await getSemanticProviderContext();
+  const { semanticModelMode, semanticModelIdentity } = await getSemanticProviderContext();
+  const fallbackIdentity = semanticProviderIdentity('hash');
+  const semanticModelIdentities = semanticModelMode === 'neural'
+    ? [
+        semanticModelIdentity,
+        `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`,
+      ]
+    : [semanticModelIdentity];
   const candidatesWithSemanticFeatures = await hydrateSemanticScoreFeatures(
     state,
     candidates,
     mode,
-    semanticModelIdentity,
+    semanticModelIdentities,
   );
   const ranked = scoreLocalCandidates(
     state,
