@@ -24,7 +24,9 @@ final score = base score + Σ contribution
 
 Every displayed contribution must correspond to an actual term in MyAlgo's scoring function.
 
-Do not present post-hoc explainability such as SHAP values as though they were the native score decomposition. The #151 trace is the native additive decomposition: base + node + edge + feedback + mode + suppression terms.
+Additivity does **not** mean every synonymous or nested semantic graph node should contribute independently. Rebuildable canonical semantic neighbourhoods may reconcile several source graph nodes into one bounded score term while preserving the exact source-node/evidence provenance in the trace. Broad content-type taxonomy should not automatically carry the same preference weight as a specific interest concept.
+
+Do not present post-hoc explainability such as SHAP values as though they were the native score decomposition. The #151 trace is the native additive decomposition: base + node + edge + feature + feedback + mode + suppression terms.
 
 ## 4. Evidence versus model
 
