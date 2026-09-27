@@ -176,19 +176,17 @@ Possible enrichment later:
 The Personal Algorithm Graph remains the authoritative, inspectable user model. Embeddings are **rebuildable derived data**, not canonical preference state.
 
 ```text
-evidence + explicit edits
-        ↓
-Personal Algorithm Graph (authoritative)
-        │
-        ├── symbolic nodes / edges / provenance
-        │
-        └── local embeddings (recomputable)
-                  ↓
-          semantic neighbourhoods
-                  ↓
-retrieval expansion / candidate matching / score features
-                  ↓
-deterministic scorer + trace
+observed/user evidence ─────────→ Personal Algorithm Graph (authoritative)
+                                      │
+                                      ├── symbolic nodes / edges / provenance
+                                      │
+candidate + graph text ─→ rebuildable embeddings / semantic features
+                                      │
+                                      ├── semantic neighbourhoods
+                                      ├── retrieval expansion
+                                      └── candidate/graph + mode similarity
+                                                   ↓
+                                      deterministic scorer + exact trace
 ```
 
 Embeddings may propose semantically related graph concepts, expand retrieval intents, cluster user-interest regions, and produce candidate similarity features. Similarity alone must not silently create permanent preference edges or override explicit feedback/hard policy.
@@ -311,7 +309,7 @@ YouTube is the first connector.
 
 ## 6.1 Candidate acquisition boundary
 
-PR #205 completes the native presentation boundary: MyAlgo can score, hide, annotate, and safely replace native cards using its local reservoir. The next expansion (#206) broadens that reservoir without changing the preference model.
+PR #205 completed the native presentation boundary, and PR #212 completed the first source-neutral acquisition expansion (#202/#206) through observed DOM, opt-in RSS, and opt-in YouTube search-page discovery. Acquisition remains upstream of scoring and does not change the preference model. PR #213 now adds rebuildable semantic matching over the normalized candidate reservoir and Personal Algorithm Graph.
 
 Candidate acquisition is upstream of scoring:
 
@@ -331,7 +329,7 @@ native feed presentation
 
 Acquisition provenance and graph/evidence provenance are separate. A candidate retrieved through RSS or web search does **not** become preference evidence merely because it was retrieved. Only separately defined user/observation events may affect the graph.
 
-Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. The current graph state is authoritative: an explicit deterministic graph-to-retrieval-intent adapter should feed the query planner rather than reconstructing a separate legacy preference object. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter must remain provider-neutral even if an initial implementation targets a Google-compatible search service.
+Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. The current graph state is authoritative: an explicit deterministic graph-to-retrieval-intent adapter should feed the query planner rather than reconstructing a separate legacy preference object. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter remains provider-neutral; the launch implementation uses YouTube search pages behind that connector-owned boundary.
 
 The launch YouTube Data API boundary remains unchanged: #206 must not add YouTube Data API search.
 
