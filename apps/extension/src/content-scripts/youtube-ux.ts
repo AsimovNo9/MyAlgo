@@ -10,6 +10,7 @@ export type VideoCandidate = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -44,6 +45,7 @@ export type RankedFeedItem = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -62,6 +64,11 @@ export function getContentPresentationLabel(
   if (item.semantic_category && semanticConfidence >= minimumConfidence) {
     return item.semantic_category.trim();
   }
+  // Once a semantic pass has run, an empty/weak category is a deliberate
+  // ambiguous result. Do not overwrite that decision with the older lexical
+  // Learning heuristic.
+  if (item.semantic_model_version) return null;
+
   const confidence = Number(item.content_label_confidence ?? 0);
   if (item.content_label !== 'learning' || confidence < 0.75) return null;
   return 'Learning';
