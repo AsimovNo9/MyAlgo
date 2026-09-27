@@ -406,7 +406,7 @@ derived graph nodes
 mxbai embedding canonicalization (#214 next)
 ```
 
-The active verifier is pinned `Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model.
+The active verifier is pinned `Xenova/nli-deberta-v3-xsmall` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model.
 
 ### Generative-model rejection
 
