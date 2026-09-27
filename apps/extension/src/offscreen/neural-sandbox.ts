@@ -22,6 +22,8 @@ type NeuralSandboxRequest = {
 
 let extractorPromise: Promise<{ extractor: FeatureExtractionPipeline; backend: 'webgpu-sandbox' | 'wasm-sandbox' }> | null = null;
 let activeRequestId: string | null = null;
+const queuedRequestIds = new Set<string>();
+let requestQueue: Promise<void> = Promise.resolve();
 
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
@@ -135,14 +137,32 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   const texts = Array.isArray(request.texts)
     ? request.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
     : [];
+  const id = request.id;
+  if (queuedRequestIds.has(id)) return;
+  queuedRequestIds.add(id);
 
-  void (async () => {
-    activeRequestId = request.id!;
+  const runRequest = async () => {
+    activeRequestId = id;
     const { extractor, backend } = await getExtractor();
-    const batchSize = backend === 'wasm-sandbox' ? 16 : 64;
+    // One text per WebGPU call while diagnosing Pascal-era GPU stalls.
+    const batchSize = backend === 'wasm-sandbox' ? 16 : 1;
+    const inferenceBatchCount = Math.ceil(texts.length / batchSize);
+    const startedAt = performance.now();
     const embeddings: number[][] = [];
     for (let index = 0; index < texts.length; index += batchSize) {
       const batch = texts.slice(index, index + batchSize);
+      const progress = {
+        id,
+        type: 'inference',
+        backend,
+        inferenceBatch: Math.floor(index / batchSize) + 1,
+        inferenceBatchCount,
+        completedBatches: Math.floor(index / batchSize),
+        batchSize,
+        inputCount: texts.length,
+        tokenMaxLength: 128,
+      };
+      postToHost({ ...progress, elapsedMs: Math.round(performance.now() - startedAt) });
       const output = await extractor(batch, {
         pooling: 'mean',
         normalize: true,
@@ -154,6 +174,11 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
         throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
       }
       embeddings.push(...batchEmbeddings);
+      postToHost({
+        ...progress,
+        completedBatches: progress.inferenceBatch,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
     }
 
     if (embeddings.length !== texts.length) {
@@ -164,7 +189,7 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
     }
 
     postToHost({
-      id: request.id,
+      id,
       ok: true,
       modelId: NEURAL_MODEL_ID,
       modelVersion: NEURAL_MODEL_VERSION,
@@ -172,14 +197,17 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
       backend,
       embeddings,
     });
-  })().catch((error) => {
+  };
+
+  requestQueue = requestQueue.then(runRequest).catch((error) => {
     postToHost({
-      id: request.id,
+      id,
       ok: false,
       error: error instanceof Error ? error.message : 'Neural semantic sandbox failed.',
     });
   }).finally(() => {
     activeRequestId = null;
+    queuedRequestIds.delete(id);
   });
 });
 

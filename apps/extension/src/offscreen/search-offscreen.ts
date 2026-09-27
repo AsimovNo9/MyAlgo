@@ -73,6 +73,13 @@ const persistSemanticStatus = (
     total?: number | null;
     file?: string | null;
     backend?: string;
+    inferenceBatch?: number | null;
+    inferenceBatchCount?: number | null;
+    completedBatches?: number | null;
+    batchSize?: number | null;
+    inputCount?: number | null;
+    tokenMaxLength?: number | null;
+    elapsedMs?: number | null;
   },
 ) => {
   void chrome.runtime.sendMessage({
@@ -90,6 +97,13 @@ const persistSemanticStatus = (
       loaded: data.loaded ?? null,
       total: data.total ?? null,
       file: data.file ?? null,
+      inferenceBatch: data.inferenceBatch ?? null,
+      inferenceBatchCount: data.inferenceBatchCount ?? null,
+      completedBatches: data.completedBatches ?? null,
+      batchSize: data.batchSize ?? null,
+      inputCount: data.inputCount ?? null,
+      tokenMaxLength: data.tokenMaxLength ?? null,
+      elapsedMs: data.elapsedMs ?? null,
       updatedAt: new Date().toISOString(),
     },
   }).catch(() => undefined);
@@ -154,17 +168,21 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
 
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      window.removeEventListener('message', onMessage);
+      cleanup();
       reject(new Error('Neural semantic sandbox timed out.'));
     }, 300_000);
 
     const cleanup = () => {
       window.clearTimeout(timeout);
       window.removeEventListener('message', onMessage);
+      frame.removeEventListener('load', postRequest);
     };
 
+    let requestSent = false;
     const postRequest = () => {
-      frame.contentWindow?.postMessage({
+      if (requestSent || !frame.contentWindow) return;
+      requestSent = true;
+      frame.contentWindow.postMessage({
         source: 'myalgo-neural-host',
         id,
         type: 'EMBED_TEXTS',
@@ -175,7 +193,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
     const onMessage = (event: MessageEvent<{
       source?: string;
       id?: string | null;
-      type?: 'ready' | 'progress' | 'backend-fallback';
+      type?: 'ready' | 'progress' | 'inference' | 'backend-fallback';
       backend?: string;
       from?: string;
       to?: string;
@@ -187,6 +205,13 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
         total?: number;
         file?: string;
       };
+      inferenceBatch?: number;
+      inferenceBatchCount?: number;
+      completedBatches?: number;
+      batchSize?: number;
+      inputCount?: number;
+      tokenMaxLength?: number;
+      elapsedMs?: number;
       ok?: boolean;
       embeddings?: number[][];
       modelId?: string;
@@ -225,6 +250,21 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
           total: typeof progress.total === 'number' ? progress.total : null,
           file: progress.file ?? null,
           backend: event.data.backend ?? 'webgpu-sandbox',
+        });
+        return;
+      }
+
+      if (event.data.type === 'inference') {
+        persistSemanticStatus('neural', {
+          status: 'inference',
+          backend: event.data.backend ?? 'webgpu-sandbox',
+          inferenceBatch: event.data.inferenceBatch,
+          inferenceBatchCount: event.data.inferenceBatchCount,
+          completedBatches: event.data.completedBatches,
+          batchSize: event.data.batchSize,
+          inputCount: event.data.inputCount,
+          tokenMaxLength: event.data.tokenMaxLength,
+          elapsedMs: event.data.elapsedMs,
         });
         return;
       }

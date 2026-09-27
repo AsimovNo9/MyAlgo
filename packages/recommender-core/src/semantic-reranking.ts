@@ -285,6 +285,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   options: {
     maxGraphNodes?: number;
     minimumModeNodeSimilarity?: number;
+    onEmbeddingPhase?: (phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings', inputCount: number) => void | Promise<void>;
   } = {},
 ): Promise<SemanticRerankingResult<T>> {
   const maxGraphNodes = Math.max(1, Math.floor(options.maxGraphNodes ?? 64));
@@ -306,12 +307,14 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     ownerId: node.id,
     text: buildGraphNodeEmbeddingText(node),
   }));
+  await options.onEmbeddingPhase?.('graph_embeddings', graphInputs.length);
   const graphEmbeddings = await embedWithCache(provider, cache, graphInputs);
   const nodeEmbeddingById = new Map(
     eligibleGraphNodes.map((node, index) => [node.id, graphEmbeddings.records[index]?.embedding ?? []]),
   );
 
   const seedText = semanticModeSeed(mode);
+  await options.onEmbeddingPhase?.('mode_seed', 1);
   const modeSeed = await embedWithCache(provider, cache, [{
     ownerType: 'mode',
     ownerId: `mode-seed:${mode.trim().toLowerCase() || 'default'}`,
@@ -352,6 +355,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     ownerId: candidate.external_id,
     text: buildCandidateEmbeddingText(candidate),
   }));
+  await options.onEmbeddingPhase?.('candidate_embeddings', candidateInputs.length);
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
 
   const enriched = candidates.map((candidate, index) => {

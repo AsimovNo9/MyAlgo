@@ -163,6 +163,23 @@ test('semantic reranking derives graph and mode similarities and reuses cached e
   assert.ok(second.diagnostics.graphEmbeddingsFromCache >= 4);
 });
 
+test('embedding phases identify the graph, mode seed, and candidate workload in order', async () => {
+  const phases = [];
+  await enrichCandidatesWithSemanticReranking(
+    state,
+    [{ external_id: 'video', title: 'Distributed systems' }],
+    'Work',
+    provider,
+    createMemoryEmbeddingCache(),
+    { onEmbeddingPhase: (phase, inputCount) => phases.push([phase, inputCount]) },
+  );
+  assert.deepEqual(phases, [
+    ['graph_embeddings', 3],
+    ['mode_seed', 1],
+    ['candidate_embeddings', 1],
+  ]);
+});
+
 test('changing mode changes semantic mode alignment without changing graph similarity', async () => {
   const cache = createMemoryEmbeddingCache();
   const candidates = [{
