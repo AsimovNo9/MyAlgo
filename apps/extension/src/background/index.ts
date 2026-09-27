@@ -103,6 +103,7 @@ type LocalFeedItem = CandidatePoolItem & {
     rawScore: number;
     displayScore: number;
     graphRevision: number;
+    policyRevision: string;
     acquisitionMechanism: string | null;
     contributions: Array<{
       label: string;
@@ -1511,6 +1512,7 @@ async function rankLocalCandidates(
         rawScore: trace.finalScore,
         displayScore: item.score,
         graphRevision: trace.graphRevision,
+        policyRevision: trace.policyRevision,
         acquisitionMechanism: item.provenance?.mechanism ?? null,
         contributions,
       },
