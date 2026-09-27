@@ -31,7 +31,7 @@ env.useWasmCache = false;
 // execute only code packaged with the extension, so force both URLs to Vite-
 // emitted local assets. Model/configuration files are also packaged at build
 // time under env.localModelPath; runtime remote-model loading is disabled.
-env.backends.onnx.wasm.wasmPaths = {
+env.backends.onnx.wasm!.wasmPaths = {
   mjs: new URL(ortMjsUrl, window.location.href).href,
   wasm: new URL(ortWasmUrl, window.location.href).href,
 };
