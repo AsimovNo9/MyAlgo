@@ -22,13 +22,13 @@ globalThis.chrome = {
       if (forceFailure) return { ok: false, error: 'fixture concept failure' };
       return {
         ok: true,
-        modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
+        modelId: 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary',
         modelVersion: 'transformersjs-local-q8-v1',
         backend: 'webgpu-sandbox',
-        outputs: message.prompts.map((_prompt, index) => (
+        concepts: message.conceptItems.map((_item, index) => (
           index === 0
-            ? 'Silent Hill, survival horror, puzzle games'
-            : 'local LLMs, WebGPU inference'
+            ? ['Silent Hill', 'survival horror']
+            : ['local LLMs', 'WebGPU inference']
         )),
       };
     },
@@ -38,7 +38,7 @@ globalThis.chrome = {
 const { createLocalConceptExtractionProvider } =
   await import('./concept-extraction-provider.ts');
 
-test('local concept provider uses offscreen transport and conservative parser', async () => {
+test('local concept provider sends bounded zero-shot verification items', async () => {
   sentMessages = [];
   contexts.splice(0, contexts.length, {
     contextType: 'OFFSCREEN_DOCUMENT',
@@ -46,21 +46,25 @@ test('local concept provider uses offscreen transport and conservative parser', 
   });
 
   const provider = createLocalConceptExtractionProvider();
-  const result = await provider.extract(['first prompt', 'second prompt']);
+  const result = await provider.verify([
+    { text: 'Silent Hill survival horror walkthrough', labels: ['Silent Hill', 'survival horror'] },
+    { text: 'Local LLM WebGPU tooling', labels: ['local LLMs', 'WebGPU inference'] },
+  ]);
 
-  assert.equal(provider.modelId, 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA');
+  assert.equal(provider.modelId, 'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary');
   assert.equal(provider.modelVersion, 'transformersjs-local-q8-v1');
-  assert.equal(provider.execution, 'offscreen_sandbox_text_generation');
+  assert.equal(provider.execution, 'offscreen_sandbox_zero_shot_classification');
   assert.equal(sentMessages.length, 1);
-  assert.equal(sentMessages[0].type, 'EXTRACT_CONCEPTS');
+  assert.equal(sentMessages[0].type, 'VERIFY_CONCEPTS');
+  assert.equal(sentMessages[0].conceptItems.length, 2);
   assert.deepEqual(result.concepts, [
-    ['Silent Hill', 'survival horror', 'puzzle games'],
+    ['Silent Hill', 'survival horror'],
     ['local LLMs', 'WebGPU inference'],
   ]);
   assert.equal(result.backend, 'webgpu-sandbox');
 });
 
-test('local concept provider throws instead of fabricating model output on failure', async () => {
+test('local concept provider throws instead of fabricating verifier output on failure', async () => {
   forceFailure = true;
   contexts.splice(0, contexts.length, {
     contextType: 'OFFSCREEN_DOCUMENT',
@@ -68,7 +72,9 @@ test('local concept provider throws instead of fabricating model output on failu
   });
   try {
     await assert.rejects(
-      createLocalConceptExtractionProvider().extract(['prompt']),
+      createLocalConceptExtractionProvider().verify([
+        { text: 'fixture', labels: ['fixture topic'] },
+      ]),
       /fixture concept failure/,
     );
   } finally {
