@@ -43,7 +43,7 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #214 canonical concepts + bounded semantic scoring:** reconcile near-duplicate verified/materialized topic nodes into deterministic canonical neighbourhoods, preserve source-node provenance, and stop semantically redundant/broad matches from stacking as independent score evidence.
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring:** reconcile near-duplicate verified/materialized topic nodes into deterministic canonical neighbourhoods, preserve source-node provenance, and stop semantically redundant/broad matches from stacking as independent score evidence.
 2. **P0 — #214 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, and stop deriving mode identity from the current feed cache.
 3. **P0 — #214 graph-grounded mode retrieval/supply:** resolve every mode score change to exact member nodes, make mode selection change retrieval planning, and measure slider-relative native-mode supply before filling from the existing acquired reservoir.
 4. **P1 — #210 + #153 + #170:** recalibrate display scoring after raw semantic overcounting is fixed, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
@@ -69,7 +69,7 @@ interaction-supported candidate metadata
 
 A visible video badge remains conservative and may show one label or none. Internal semantic classification is multi-label. User-facing modes are stable clusters over multiple canonical graph nodes rather than transient one-node labels derived from the current feed cache.
 
-Do not retune display-score calibration or fine-tune a model to hide duplicate semantic evidence. First make canonicalization and semantic contribution aggregation replayable against the #162 evaluation boundary; only then calibrate the presentation score or compare alternative encoders.
+Do not retune display-score calibration or fine-tune a model to hide duplicate semantic evidence. First make #221 canonicalization and semantic contribution aggregation replayable against the #162 evaluation boundary; only then calibrate the presentation score or compare alternative encoders.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
