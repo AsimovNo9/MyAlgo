@@ -142,27 +142,55 @@ const lexicalCompatibility = (left: string, right: string): boolean => {
   return shared / Math.min(leftTokens.size, rightTokens.size) >= 0.5;
 };
 
-const canonicalGroupKey = (nodes: readonly GraphNode[]): string => {
-  const representative = [...nodes].sort((left, right) => (
-    Number(right.provenance === 'explicit') - Number(left.provenance === 'explicit')
-    || Number(isTaxonomyOnlyNode(left)) - Number(isTaxonomyOnlyNode(right))
-    || (right.confidence ?? 0) - (left.confidence ?? 0)
-    || normalizeSemanticLabel(left.label).length - normalizeSemanticLabel(right.label).length
-    || left.id.localeCompare(right.id)
-  ))[0];
+const supportKeysByNodeId = (
+  state: PersonalAlgorithmState,
+  nodeIds: ReadonlySet<string>,
+): Map<string, Set<string>> => {
+  const support = new Map<string, Set<string>>();
+  for (const nodeId of nodeIds) support.set(nodeId, new Set());
+  for (const edge of state.graph.edges) {
+    const source = support.get(edge.sourceNodeId);
+    if (source) {
+      source.add(`node:${edge.targetNodeId}`);
+      for (const evidenceId of edge.evidenceIds ?? []) source.add(`evidence:${evidenceId}`);
+    }
+    const target = support.get(edge.targetNodeId);
+    if (target) {
+      target.add(`node:${edge.sourceNodeId}`);
+      for (const evidenceId of edge.evidenceIds ?? []) target.add(`evidence:${evidenceId}`);
+    }
+  }
+  return support;
+};
 
+const sharesSupport = (
+  left: ReadonlySet<string> | undefined,
+  right: ReadonlySet<string> | undefined,
+): boolean => {
+  if (!left?.size || !right?.size) return false;
+  for (const key of left) if (right.has(key)) return true;
+  return false;
+};
+
+const canonicalGroupKey = (nodes: readonly GraphNode[]): string => {
+  const representative = chooseRepresentative(nodes);
   if (!representative) return 'empty';
   if (representative.kind === 'objective') return `objective:${representative.id}`;
   if (nodes.some((node) => node.provenance === 'explicit')) {
     const explicit = nodes
       .filter((node) => node.provenance === 'explicit')
-      .sort((left, right) => left.id.localeCompare(right.id))[0];
+      .sort((left, right) => (
+        left.createdAt.localeCompare(right.createdAt)
+        || left.id.localeCompare(right.id)
+      ))[0];
     return `explicit:${explicit?.id ?? representative.id}`;
   }
   const prefix = nodes.every(isTaxonomyOnlyNode) ? 'taxonomy' : 'specific';
-  const key = [...new Set(nodes.map((node) => aliasNormalizationKey(node.label)))].sort()[0]
-    ?? normalizeSemanticLabel(representative.label);
-  return `${prefix}:${key}`;
+  const anchor = [...nodes].sort((left, right) => (
+    left.createdAt.localeCompare(right.createdAt)
+    || left.id.localeCompare(right.id)
+  ))[0] ?? representative;
+  return `${prefix}:${aliasNormalizationKey(anchor.label)}`;
 };
 
 const chooseRepresentative = (nodes: readonly GraphNode[]): GraphNode =>
@@ -206,11 +234,12 @@ export function buildCanonicalSemanticConcepts(
     }
   }
 
-  const threshold = Math.max(0, Math.min(1, options.embeddingSimilarityThreshold ?? 0.92));
+  const threshold = Math.max(0, Math.min(1, options.embeddingSimilarityThreshold ?? 0.94));
   let embeddingComparisonCount = 0;
   let embeddingMergeCount = 0;
   let explicitSimilarityMergeBlockedCount = 0;
   const embeddings = options.embeddingsByNodeId;
+  const supportByNodeId = supportKeysByNodeId(state, new Set(nodes.map((node) => node.id)));
 
   if (embeddings) {
     for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
@@ -226,7 +255,9 @@ export function buildCanonicalSemanticConcepts(
 
         const rightEmbedding = embeddings.get(right.id);
         if (!rightEmbedding?.length || rightEmbedding.length !== leftEmbedding.length) continue;
-        if (!lexicalCompatibility(left.label, right.label)) continue;
+        const assignmentSignal = lexicalCompatibility(left.label, right.label)
+          || sharesSupport(supportByNodeId.get(left.id), supportByNodeId.get(right.id));
+        if (!assignmentSignal) continue;
 
         embeddingComparisonCount += 1;
         const similarity = Math.max(0, cosineSimilarity(leftEmbedding, rightEmbedding));
