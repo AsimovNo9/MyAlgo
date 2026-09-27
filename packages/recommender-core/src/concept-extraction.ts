@@ -1,9 +1,8 @@
 import { semanticInputHash } from './semantic-reranking.ts';
 
-export const CONCEPT_EXTRACTION_MODEL_ID =
-  'Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary';
-export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q8-v1';
-export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'zero-shot-verifier-v1';
+export const CONCEPT_EXTRACTION_MODEL_ID = 'Xenova/nli-deberta-v3-xsmall';
+export const CONCEPT_EXTRACTION_MODEL_VERSION = 'transformersjs-local-q8-wasm-v1';
+export const CONCEPT_EXTRACTION_PIPELINE_VERSION = 'zero-shot-verifier-v2';
 
 export type ConceptExtractionCandidate = {
   external_id: string;
