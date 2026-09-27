@@ -738,13 +738,45 @@ async function refreshSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
-  if (candidates.length === 0) return { changed: 0, diagnostics: null };
+  if (candidates.length === 0) {
+    const diagnostics = {
+      status: 'skipped',
+      reason: 'no_candidates',
+      mode,
+      candidateCount: 0,
+      generatedAt: new Date().toISOString(),
+    };
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
+    return { changed: 0, diagnostics };
+  }
   const state = await personalAlgorithmStore.exportState();
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
-  if (semanticRefreshInFlight.has(refreshKey)) return { changed: 0, diagnostics: null };
+  if (semanticRefreshInFlight.has(refreshKey)) {
+    const diagnostics = {
+      status: 'skipped',
+      reason: 'refresh_in_flight',
+      mode,
+      graphRevision: state.graph.currentRevision,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      modelVersion: requestedContext.semanticModelIdentity,
+      candidateCount: candidates.length,
+      generatedAt: new Date().toISOString(),
+    };
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
+    return { changed: 0, diagnostics };
+  }
   semanticRefreshInFlight.add(refreshKey);
   const refreshEpoch = semanticEpoch;
+  await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
+    status: 'started',
+    mode,
+    graphRevision: state.graph.currentRevision,
+    requestedSemanticModelMode: requestedContext.semanticModelMode,
+    modelVersion: requestedContext.semanticModelIdentity,
+    candidateCount: candidates.length,
+    generatedAt: new Date().toISOString(),
+  });
   const scopedEmbeddingCache = {
     get: (key: string) => refreshEpoch === semanticEpoch
       ? semanticEmbeddingCache.get(key)
@@ -857,6 +889,7 @@ async function refreshSemanticScoreFeatures(
     await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
 
     const diagnostics = {
+      status: 'completed',
       ...semantic.diagnostics,
       requestedSemanticModelMode: requestedContext.semanticModelMode,
       semanticModelMode: effectiveContext.semanticModelMode,
@@ -886,6 +919,20 @@ async function refreshSemanticScoreFeatures(
       elapsedMs: diagnostics.elapsedMs,
     });
     return { changed, diagnostics };
+  } catch (error) {
+    const diagnostics = {
+      status: 'error',
+      mode,
+      graphRevision: state.graph.currentRevision,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      modelVersion: requestedContext.semanticModelIdentity,
+      candidateCount: candidates.length,
+      error: error instanceof Error ? error.message : 'Semantic enrichment failed.',
+      generatedAt: new Date().toISOString(),
+    };
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, diagnostics);
+    console.error('[MyAlgo] semantic enrichment failed', diagnostics);
+    return { changed: 0, diagnostics };
   } finally {
     semanticRefreshInFlight.delete(refreshKey);
   }
