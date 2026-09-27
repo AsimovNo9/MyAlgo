@@ -129,7 +129,7 @@ test('passive exposure and acquired metadata alone cannot create preference conc
   assert.equal(result.diagnostics.interactionSupportedContentCount, 0);
 });
 
-test('three repeated interaction titles can bootstrap a topic without rich metadata', () => {
+test('repeated interaction titles cannot create standalone taxonomy nodes', () => {
   const inputState = state([
     interactionRecord('e1', 'v1', 'Distributed systems tutorial'),
     interactionRecord('e2', 'v2', 'Distributed systems guide'),
@@ -137,12 +137,10 @@ test('three repeated interaction titles can bootstrap a topic without rich metad
   ]);
 
   const result = buildSemanticConceptMaterialization(inputState, []);
-  const distributed = result.proposals.find((proposal) => proposal.label === 'distributed systems');
 
-  assert.ok(distributed);
-  assert.equal(distributed.kind, 'topic');
-  assert.equal(distributed.supportCount, 3);
-  assert.deepEqual(distributed.sourceKinds, ['title_phrase']);
+  assert.equal(result.proposals.length, 0);
+  assert.equal(result.nodes.length, 0);
+  assert.equal(result.diagnostics.rawLabelCount, 0);
 });
 
 test('explicit semantic nodes suppress same-kind derived duplicates', () => {
@@ -194,4 +192,46 @@ test('materialization is deterministic, bounded and order independent', () => {
   assert.deepEqual(second, first);
   assert.equal(first.nodes.length, 3);
   assert.ok(first.edges.every((edge) => edge.evidenceIds.length > 0));
+});
+
+
+test('content type suppresses duplicate candidate-topic taxonomy at the same normalized label', () => {
+  const inputState = state([
+    interactionRecord('e1', 'v1', 'Music mix one'),
+    interactionRecord('e2', 'v2', 'Music mix two'),
+  ]);
+
+  const result = buildSemanticConceptMaterialization(inputState, [
+    { external_id: 'v1', topics: ['Music', 'Lo-fi'], content_type: 'Music' },
+    { external_id: 'v2', topics: ['music', 'Lo-fi'], content_type: 'Music' },
+  ]);
+
+  assert.equal(
+    result.proposals.some((proposal) => proposal.kind === 'topic' && proposal.label.toLowerCase() === 'music'),
+    false,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.kind === 'concept' && proposal.label === 'Music'),
+    true,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.kind === 'topic' && proposal.label === 'Lo-fi'),
+    true,
+  );
+});
+
+test('diagnostics expose qualification pressure before the materialization cap', () => {
+  const inputState = state([
+    interactionRecord('e1', 'v1', 'One'),
+    interactionRecord('e2', 'v2', 'Two'),
+  ]);
+
+  const result = buildSemanticConceptMaterialization(inputState, [
+    { external_id: 'v1', topics: ['Alpha', 'Beta', 'Gamma'] },
+    { external_id: 'v2', topics: ['Alpha', 'Beta', 'Gamma'] },
+  ], { maxProposals: 2 });
+
+  assert.equal(result.diagnostics.qualifiedBeforeCap, 3);
+  assert.equal(result.diagnostics.qualifiedProposalCount, 2);
+  assert.equal(result.diagnostics.droppedByCap, 1);
 });
