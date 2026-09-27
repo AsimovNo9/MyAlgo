@@ -30,7 +30,7 @@ The launch extension handles web activity / website content and user interaction
 | Optional RSS discovery | observed YouTube channel IDs; public feed candidate metadata | expand candidate reservoir | bounded requests to YouTube-owned RSS endpoints; results stored locally |
 | Optional web-search discovery | normalized graph-derived goal/topic terms + active mode intent; returned YouTube video IDs/titles/snippets | expand candidate reservoir | bounded requests to YouTube search pages under the existing YouTube host permission; results stored locally and enriched from canonical YouTube watch pages before scoring |
 
-The local-first MVP does not send observed activity, raw evidence, full graph state, derived embedding vectors/similarity features, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, or data broker. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages. Optional neural semantics downloads public model/configuration files from Hugging Face; those requests do not include recommendation or user-model payloads.
+The local-first MVP does not send observed activity, raw evidence, full graph state, derived embedding vectors/similarity features, feedback records, or traces to a MyAlgo backend, analytics vendor, advertising service, data broker, or model host. Optional RSS discovery sends bounded channel-feed requests only to YouTube-owned HTTPS endpoints. Optional web discovery sends only bounded normalized graph-derived goal/topic queries plus active mode intent to YouTube search pages. Optional neural semantics uses model/runtime assets packaged with the extension artifact and requires no model-host request at runtime.
 
 ## Disclosure and affirmative acceptance
 
@@ -39,7 +39,7 @@ Chrome Web Store disclosure has two layers:
 1. **Before installation:** the Store listing and Privacy practices tab must prominently describe the user data handled and its use. Publishing requires the developer to complete these dashboard fields.
 2. **Before in-product observation:** MyAlgo uses a versioned disclosure gate. Until the current disclosure version is affirmatively accepted, the content script starts paused and the background rejects observation/ranking messages.
 
-Disclosure v3 added optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. PR #213 incremented disclosure to v4 for bounded local semantic vectors/similarity features, then to **v5** when the optional neural encoder introduced a first-use Hugging Face model-file download. The download is model-only: candidate text, graph state, history, feedback, embeddings, and scoring traces are not sent to Hugging Face. The current disclosure explains:
+Disclosure v3 added optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. PR #213 incremented disclosure to v4 for bounded local semantic vectors/similarity features, then to **v5** for the neural-provider boundary. The implementation was subsequently tightened so the model/runtime assets are packaged at build time and the installed extension no longer contacts a model host. The current disclosure explains:
 
 - pages observed;
 - data categories;
@@ -89,7 +89,7 @@ The extension runs on YouTube and can request YouTube-owned URLs for metadata or
 
 With explicit web discovery enabled, MyAlgo requests YouTube search pages using only bounded graph-derived goal/topic queries plus active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-page snippets are discovery metadata and are followed by canonical YouTube watch-page enrichment before scoring.
 
-With the neural semantic encoder explicitly enabled, the extension downloads public `mixedbread-ai/mxbai-embed-xsmall-v1` model/configuration files from Hugging Face. Transformers.js/ONNX execution code is bundled with the extension artifact; inference runs locally in a sandboxed extension page. Because Chrome disables CacheStorage for that sandboxed opaque-origin page, the current implementation keeps the loaded model in memory while the sandbox stays active and may re-download public model files after a full extension reload.
+With the neural semantic encoder explicitly enabled, the extension loads the packaged `mixedbread-ai/mxbai-embed-xsmall-v1` quantized model/tokenizer/configuration files and bundled Transformers.js/ONNX runtime from the extension artifact. Inference runs locally in a sandboxed extension page. Runtime remote-model loading is disabled and there is no Hugging Face/jsDelivr model or executable-code request from the installed extension.
 
 Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, third-party search provider, or materially different processor is a new data-flow boundary and requires review before collection begins.
 
