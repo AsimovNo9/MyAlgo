@@ -477,11 +477,23 @@ A mode cluster should contain:
 
 Derived clusters can be recomputed, but once exposed as a control they need stable identity. A promoted/pinned mode must not disappear because the current feed lacks matching candidates.
 
+PR #224 implements this identity/persistence slice with a conservative graph-grounded bootstrap:
+- only non-taxonomy canonical concepts with repeated retained-content support are eligible;
+- concepts cluster when they share at least two supported content nodes and their support-set Jaccard clears the bootstrap threshold;
+- cluster snapshots reconcile one-to-one against the previous durable catalog by canonical-member Jaccard, preserving mode IDs and incrementing revisions only when membership/label/support state changes;
+- an exposed mode that temporarily loses support becomes dormant instead of losing its identity;
+- the catalog is bounded and stored separately from the current feed cache;
+- the UI selects by stable mode ID while the existing mode-label seed remains a compatibility bridge until graph-grounded mode scoring/retrieval lands.
+
+These support/Jaccard values are deterministic bootstrap safeguards, not calibrated semantic-quality thresholds. Tune them only against labelled replay/live review rather than ad hoc feed screenshots.
+
 ### 3. Multi-label candidate affinity
 
 Candidates may qualify for multiple graph regions/modes simultaneously. Preserve a bounded list/map of qualified affinities rather than collapsing all semantic state to one winning label.
 
 The UI may still show one conservative primary badge when the leading label clears the badge confidence/margin rule. That badge is presentation only. Scoring, retrieval and evaluation consume the multi-label affinity set.
+
+PR #224 persists a bounded candidate↔mode affinity list alongside semantic candidate features. Each affinity resolves to a stable mode ID/revision, matched canonical IDs, and exact source graph node IDs. This slice does not yet award score from that list; the next #214 slice will convert qualified member affinities into exact trace contributions.
 
 ### 4. Graph-grounded mode scoring
 
