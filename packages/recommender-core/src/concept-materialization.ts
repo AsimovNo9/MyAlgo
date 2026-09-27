@@ -10,6 +10,7 @@ export type SemanticConceptCandidate = {
   external_id: string;
   source?: string | null;
   topics?: string[];
+  model_topics?: string[];
   content_type?: string | null;
 };
 
@@ -21,7 +22,7 @@ export type SemanticConceptProposal = {
   kind: 'topic' | 'concept';
   label: string;
   confidence: number;
-  sourceKinds: Array<'candidate_topic' | 'content_type' | 'title_phrase'>;
+  sourceKinds: Array<'model_topic' | 'candidate_topic' | 'content_type' | 'title_phrase'>;
   supportCount: number;
   evidenceCount: number;
   contentNodeIds: string[];
@@ -155,11 +156,13 @@ const proposalConfidence = (
   sourceKinds: Set<SourceKind>,
   supportCount: number,
 ): number => {
-  const sourceBase = sourceKinds.has('content_type')
-    ? 0.72
-    : sourceKinds.has('candidate_topic')
-      ? 0.66
-      : 0.54;
+  const sourceBase = sourceKinds.has('model_topic')
+    ? 0.82
+    : sourceKinds.has('content_type')
+      ? 0.72
+      : sourceKinds.has('candidate_topic')
+        ? 0.66
+        : 0.54;
   const supportBoost = Math.min(0.2, Math.max(0, supportCount - 2) * 0.04);
   return Number(Math.min(0.92, sourceBase + supportBoost).toFixed(4));
 };
@@ -264,9 +267,22 @@ export function buildSemanticConceptMaterialization(
     const support = interactionsByContent.get(contentKey(source, candidate.external_id));
     if (!support) continue;
 
-    for (const topic of (candidate.topics ?? []).slice(0, maxCandidateTopics)) {
+    const modelTopics = (candidate.model_topics ?? [])
+      .map((topic) => topic.trim())
+      .filter(Boolean)
+      .slice(0, maxCandidateTopics);
+    const taxonomyTopics = modelTopics.length > 0
+      ? modelTopics
+      : (candidate.topics ?? []).slice(0, maxCandidateTopics);
+
+    for (const topic of taxonomyTopics) {
       if (supportedContentTypeLabels.has(normalizeLabelKey(topic))) continue;
-      addLabel('topic', topic, 'candidate_topic', support);
+      addLabel(
+        'topic',
+        topic,
+        modelTopics.length > 0 ? 'model_topic' : 'candidate_topic',
+        support,
+      );
     }
     if (candidate.content_type?.trim()) {
       addLabel('concept', candidate.content_type, 'content_type', support);
