@@ -1,0 +1,267 @@
+{
+  "fixtureVersion": 1,
+  "name": "canonical-semantic-eval-v1",
+  "description": "Synthetic/test-safe canonical-neighbourhood and aggregation regression fixture for #221.",
+  "state": {
+    "schemaVersion": 2,
+    "evidence": [],
+    "graph": {
+      "nodes": [
+        {
+          "id": "topic:grok-bot",
+          "kind": "topic",
+          "label": "grok bot",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:grok-how",
+          "kind": "topic",
+          "label": "how to use grok bot",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:grok-cases",
+          "kind": "topic",
+          "label": "grok bot use cases",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:grok-tutorial",
+          "kind": "topic",
+          "label": "grok bot tutorial",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:silent-hill",
+          "kind": "topic",
+          "label": "Silent Hill",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:silent-hill-gameplay",
+          "kind": "topic",
+          "label": "Silent Hill gameplay",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:silent-hill-full",
+          "kind": "topic",
+          "label": "Silent Hill full game",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "concept:education",
+          "kind": "concept",
+          "label": "Education",
+          "provenance": "inferred",
+          "confidence": 0.72,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "content_type"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:local-ai-tooling",
+          "kind": "topic",
+          "label": "Local AI tooling",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:local-ai-tools",
+          "kind": "topic",
+          "label": "Local AI tools",
+          "provenance": "inferred",
+          "confidence": 0.82,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:explicit-ai-workflows",
+          "kind": "topic",
+          "label": "Local AI tooling workflows",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {},
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        }
+      ],
+      "edges": [],
+      "userEdits": [],
+      "revisions": [],
+      "currentRevision": 1
+    }
+  },
+  "embeddingsByNodeId": {
+    "topic:local-ai-tooling": [
+      1,
+      0,
+      0
+    ],
+    "topic:local-ai-tools": [
+      0.999,
+      0.001,
+      0
+    ],
+    "topic:explicit-ai-workflows": [
+      1,
+      0,
+      0
+    ]
+  },
+  "embeddingModelVersion": "fixture-mxbai@v1",
+  "expectedAssignments": [
+    {
+      "alias": "topic:grok-bot",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Agrok%20bot"
+    },
+    {
+      "alias": "topic:grok-how",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Agrok%20bot"
+    },
+    {
+      "alias": "topic:grok-cases",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Agrok%20bot"
+    },
+    {
+      "alias": "topic:grok-tutorial",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Agrok%20bot"
+    },
+    {
+      "alias": "topic:silent-hill",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Asilent%20hill"
+    },
+    {
+      "alias": "topic:silent-hill-gameplay",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Asilent%20hill"
+    },
+    {
+      "alias": "topic:silent-hill-full",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Asilent%20hill"
+    },
+    {
+      "alias": "concept:education",
+      "expectedCanonicalId": "canonical:semantic:v1:taxonomy%3Aeducation"
+    },
+    {
+      "alias": "topic:local-ai-tooling",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Alocal%20ai%20tooling"
+    },
+    {
+      "alias": "topic:local-ai-tools",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Alocal%20ai%20tooling"
+    },
+    {
+      "alias": "topic:explicit-ai-workflows",
+      "expectedCanonicalId": "canonical:semantic:v1:explicit%3Atopic%3Aexplicit-ai-workflows"
+    }
+  ],
+  "aggregationSamples": [
+    {
+      "id": "grok-cross-path",
+      "sourceNodeMatchCount": 4,
+      "canonicalNeighbourhoodMatchCount": 1,
+      "lexicalContributionMass": 45.92,
+      "embeddingContributionMass": 16.2,
+      "reconciledContributionMass": 16.2,
+      "rawScoreBefore": 62.12,
+      "rawScoreAfter": 16.2,
+      "displayScoreBefore": 98,
+      "displayScoreAfter": 75
+    },
+    {
+      "id": "specific-plus-taxonomy",
+      "sourceNodeMatchCount": 2,
+      "canonicalNeighbourhoodMatchCount": 1,
+      "lexicalContributionMass": 18.68,
+      "embeddingContributionMass": 0,
+      "reconciledContributionMass": 11.48,
+      "rawScoreBefore": 18.68,
+      "rawScoreAfter": 11.48,
+      "displayScoreBefore": 78,
+      "displayScoreAfter": 68
+    }
+  ]
+}
