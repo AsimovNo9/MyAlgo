@@ -59,13 +59,22 @@ const buildExtractor = async (
   },
 ) as Promise<FeatureExtractionPipeline>;
 
+async function hasUsableWebGpuAdapter(): Promise<boolean> {
+  if (!('gpu' in navigator) || !navigator.gpu) return false;
+  try {
+    return (await navigator.gpu.requestAdapter()) !== null;
+  } catch {
+    return false;
+  }
+}
+
 async function getExtractor(): Promise<{
   extractor: FeatureExtractionPipeline;
   backend: 'webgpu-sandbox' | 'wasm-sandbox';
 }> {
   if (!extractorPromise) {
     extractorPromise = (async () => {
-      if ('gpu' in navigator) {
+      if (await hasUsableWebGpuAdapter()) {
         try {
           return {
             extractor: await buildExtractor('webgpu'),
@@ -80,6 +89,14 @@ async function getExtractor(): Promise<{
             reason: error instanceof Error ? error.message : 'WebGPU initialization failed.',
           });
         }
+      } else {
+        postToHost({
+          id: activeRequestId,
+          type: 'backend-fallback',
+          from: 'webgpu-sandbox',
+          to: 'wasm-sandbox',
+          reason: 'No usable WebGPU adapter is available.',
+        });
       }
 
       return {
@@ -114,13 +131,22 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   void (async () => {
     activeRequestId = request.id!;
     const { extractor, backend } = await getExtractor();
-    const output = await extractor(texts, {
-      pooling: 'mean',
-      normalize: true,
-    });
-    const embeddings = output.tolist() as number[][];
+    const batchSize = backend === 'wasm-sandbox' ? 16 : 64;
+    const embeddings: number[][] = [];
+    for (let index = 0; index < texts.length; index += batchSize) {
+      const batch = texts.slice(index, index + batchSize);
+      const output = await extractor(batch, {
+        pooling: 'mean',
+        normalize: true,
+      });
+      const batchEmbeddings = output.tolist() as number[][];
+      if (!Array.isArray(batchEmbeddings) || batchEmbeddings.length !== batch.length) {
+        throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
+      }
+      embeddings.push(...batchEmbeddings);
+    }
 
-    if (!Array.isArray(embeddings) || embeddings.length !== texts.length) {
+    if (embeddings.length !== texts.length) {
       throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
     }
     if (embeddings.some((vector) => !Array.isArray(vector) || vector.length !== NEURAL_DIMENSIONS)) {
