@@ -7,7 +7,7 @@ export default defineConfig(() => {
   return {
   plugins: [react(), crx({ manifest })],
   worker: {
-    format: 'es',
+    format: 'es' as const,
   },
   build: {
     outDir: 'dist',
