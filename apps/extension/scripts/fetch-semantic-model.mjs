@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +9,14 @@ const MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const REVISION = 'b0561d9a97e6b298da39f0ef3e7d3cf153b1b29a';
 const TARGET_ROOT = join(ROOT, 'public', 'models', 'mxbai-embed-xsmall-v1');
 const MANIFEST_PATH = join(TARGET_ROOT, '.myalgo-model.json');
+const RUNTIME_ROOT = join(ROOT, 'public', 'runtime', 'onnx');
+const require = createRequire(import.meta.url);
+const ONNX_RUNTIME_ENTRY = require.resolve('onnxruntime-web');
+const ONNX_RUNTIME_DIST = dirname(ONNX_RUNTIME_ENTRY);
+const RUNTIME_FILES = [
+  'ort-wasm-simd-threaded.asyncify.mjs',
+  'ort-wasm-simd-threaded.asyncify.wasm',
+];
 
 const FILES = [
   { remote: 'config.json', local: 'config.json', minBytes: 600 },
@@ -90,8 +99,21 @@ async function downloadFile(file) {
   );
 }
 
+async function packageOnnxRuntime() {
+  await rm(RUNTIME_ROOT, { recursive: true, force: true });
+  await mkdir(RUNTIME_ROOT, { recursive: true });
+  for (const file of RUNTIME_FILES) {
+    const source = join(ONNX_RUNTIME_DIST, file);
+    const target = join(RUNTIME_ROOT, file);
+    await copyFile(source, target);
+    const info = await stat(target);
+    console.log(`[MyAlgo] packaged ONNX runtime ${file} (${info.size} bytes)`);
+  }
+}
+
 if (await isPrepared()) {
   console.log(`[MyAlgo] packaged semantic model already present: ${MODEL_ID}@${REVISION}`);
+  await packageOnnxRuntime();
   process.exit(0);
 }
 
@@ -116,4 +138,5 @@ await writeFile(
   }, null, 2) + '\n',
 );
 
+await packageOnnxRuntime();
 console.log('[MyAlgo] semantic model packaging complete');
