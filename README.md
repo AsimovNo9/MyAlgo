@@ -47,7 +47,7 @@ Current execution order:
 2. **P0 — #214 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, and stop deriving mode identity from the current feed cache.
 3. **P0 — #214 graph-grounded mode retrieval/supply:** resolve every mode score change to exact member nodes, make mode selection change retrieval planning, and measure slider-relative native-mode supply before filling from the existing acquired reservoir.
 4. **P1 — #210 + #153 + #170:** recalibrate display scoring after raw semantic overcounting is fixed, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
-5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
+5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
 6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
 PR #220/#219 is merged. It verifies bounded metadata topic candidates with a packaged local zero-shot NLI classifier before #218's evidence-backed materializer. Live validation confirmed the verifier can run locally and abstain, but also exposed the next bottleneck: broad and near-duplicate graph nodes are still scored as independent additive evidence, which inflates raw scores and saturates the 0–100 presentation score.
