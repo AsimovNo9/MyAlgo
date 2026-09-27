@@ -572,6 +572,7 @@ Live replacement traces also exposed semantic score overcount. Multiple related 
 - canonical neighbourhood assignment accuracy;
 - number of raw source-node matches per canonical neighbourhood;
 - bounded neighbourhood contribution count/value;
+- overlap between legacy lexical graph features and embedding graph features for the same canonical neighbourhood;
 - reduction in duplicate semantic contribution mass;
 - raw-score distribution before/after canonical aggregation;
 - calibrated-score saturation rate (for example, fraction of candidates at 97–100);
