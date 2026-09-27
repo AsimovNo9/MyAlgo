@@ -19,11 +19,13 @@
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
 - [ ] Modes operate over one graph
-- [ ] PR #215 semantic-mode architecture validated (#214/#162): canonical concept aliases are replayable, candidate affinities are multi-label, mode clusters have stable local identity, and primary badges abstain when ambiguous
+- [ ] #214 canonical semantic architecture validated against #162: canonical neighbourhood assignments are replayable, redundant source-node matches do not stack as independent score evidence, candidate affinities are multi-label, and durable mode clusters have stable local identity
 - [ ] Every active-mode score contribution resolves to the stable mode revision and exact contributing graph node/member in the deterministic trace
 - [ ] Mode selection affects retrieval planning as well as reranking; short native-mode supply is measured against the current Home replacement quota and may be filled only through the existing acquired reservoir
 - [ ] Mode-supply shortfall status/banner uses the same eligibility/membership contract as ranking and records bounded local diagnostics
 - [ ] Valid Home source→replacement assignments and unchanged replacement DOM remain stable across ordinary reranks
+- [ ] Each canonical semantic neighbourhood contributes at most one bounded score term; aliases/subtopics remain available as trace provenance rather than additive duplicates
+- [ ] Recalibrated 0–100 display score is validated only after raw semantic overcount is removed
 
 ## P2 — Privacy/compliance
 
@@ -32,15 +34,15 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Revalidate clean-profile disclosure v6: prior v5 acceptance is rejected; production artifact contains both pinned neural model sets plus runtime assets; enabling local neural semantics performs no model-host/CDN request; deletion disables observation/retrieval and clears embedding, semantic-feature, and concept-extraction caches
+- [ ] Revalidate clean-profile disclosure v6: prior v5 acceptance is rejected; production artifact contains both pinned neural model sets plus runtime assets; enabling local neural semantics performs no model-host/CDN request; deletion disables observation/retrieval and clears embedding, semantic-feature, and concept-verification caches
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
 - [x] CI built-artifact secret scan passes
 - [ ] Final release package receives manual endpoint/credential review
 
-- [ ] Local concept verification validated (#219): only interaction-supported candidates are queued, cached outputs replace raw keyword topics when present, model failure falls back to metadata, and WebGPU/WASM execution remains off first paint
-- [ ] Built artifact audit confirms both mxbai embedding and DeBERTa nli-deberta-v3-xsmall q8 assets are packaged locally
+- [x] Local concept verification runtime validated (#219/#220): only interaction-supported candidates are queued, q8 WASM verification completes locally, explicit abstention is supported, cached verified labels replace raw keyword topics when present, and failure retains the metadata path
+- [x] Built artifact audit confirms both mxbai embedding and DeBERTa nli-deberta-v3-xsmall q8 assets are packaged locally
 
 ## P3 — Quality
 

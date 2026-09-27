@@ -224,34 +224,33 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #216/#162 established replay/evaluation and PR #218/#217 established evidence-backed semantic graph materialization.
+PR #216/#162 established replay/evaluation, PR #218/#217 established evidence-backed semantic graph materialization, and PR #220/#219 established local zero-shot topic verification.
 
-1. **P0 — #219 / PR #220 local concept verification.** Package a small local NLI classifier, verify bounded metadata topic candidates only for interaction-supported candidates, cache outputs by model/version/input hash, and feed verified multi-label topics through the existing #218 materializer. Unverified metadata remains fallback only when no verifier result exists.
-2. **P0 — #214 canonicalization + durable modes.** Use the existing embedding layer to reconcile aliases/near-duplicates from extracted concepts, then cluster canonical concepts into stable mode IDs, preserve multi-label affinity, ground mode scoring in exact graph members, and implement mode-aware supply handling against #162 metrics.
-3. **P1 — #153 + #170 trust UX.** Resolve every mode/category contribution to exact graph members, evidence/provenance, and trace values.
-4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
-6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring.** Deterministically reconcile near-duplicate verified/materialized labels into canonical neighbourhoods while retaining source-node/evidence provenance. Candidate scoring must award a bounded contribution per semantic neighbourhood rather than independently stacking aliases/subtopics and broad content-type concepts.
+2. **P0 — #214 durable inferred modes.** Cluster canonical concepts into stable local mode IDs/revisions, retain multi-label candidate↔mode affinity, and persist mode identity independently of current feed-cache churn.
+3. **P0 — #214 graph-grounded mode retrieval/supply.** Resolve active-mode score changes to exact member nodes, derive bounded retrieval terms from cluster members, compute slider-relative native supply, and fill only eligible shortfalls from the existing acquired reservoir.
+4. **P1 — #210 + #153 + #170 trust/calibration UX.** Recalibrate 0–100 display scores only after duplicate semantic evidence is removed, then expose exact graph/provenance paths and trace contributions.
+5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
+7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-Live #218 validation showed the remaining distinction clearly: materialization mechanics are sound, but YouTube keywords are metadata strings rather than semantic abstractions. The next stage therefore uses a local concept proposer before embedding-assisted canonicalization.
+Live post-#220 validation makes the dependency explicit. The verifier can successfully keep or abstain from bounded metadata labels, but semantically redundant labels can all survive verification because they are genuinely entailed. Broad graph concepts can also independently match the same candidate. The current additive scorer treats those matches as separate positive terms, inflating raw scores and compressing useful differences in the display score.
 
 ```text
-retained interaction evidence + enriched candidate metadata
+verified/materialized graph labels
     ↓
-local DeBERTa zero-shot topic verification (#219)
+deterministic canonical concept neighbourhoods
     ↓
-evidence-backed derived graph projection (#218)
+one bounded semantic contribution per neighbourhood
     ↓
-embedding-assisted canonicalization / aliases (#214)
-    ↓
-semantic neighbourhoods / durable modes
+durable mode clusters
     ↓
 multi-label candidate affinities
     ↓
-graph-grounded scoring and mode-aware retrieval
+graph-grounded mode scoring + retrieval/supply
 ```
 
-The concept model is advisory/rebuildable. It cannot bypass retained interaction support or directly create explicit preference state.
+Canonicalization must preserve every source graph node and its evidence/provenance. It is a derived reconciliation layer, not permission to delete explicit/user-authored distinctions.
 
 
 ## Phase 1 scope discipline

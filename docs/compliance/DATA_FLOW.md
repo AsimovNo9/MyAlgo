@@ -110,7 +110,7 @@ When RSS discovery is explicitly enabled:
 - candidate/feed caches;
 - score/trace metadata;
 - retrieval settings and privacy-safe retrieval diagnostics;
-- rebuildable semantic embeddings, graph/mode similarities, semantic diagnostics, and local model download/readiness status.
+- rebuildable semantic embeddings, graph/mode similarities, zero-shot concept-verification cache/diagnostics, and packaged local model readiness status.
 
 Purpose: ranking, explanation, replay/debugging, semantic matching, and enforcement. Semantic derived state is model/version/input keyed, bounded, locally stored, and non-canonical.
 

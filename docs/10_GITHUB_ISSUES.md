@@ -4,16 +4,17 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #216/#162 replay evaluation and PR #218/#217 graph materialization are merged.
+PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/#219 local topic verification are merged.
 
-1. **P0 — #219 / PR #220 local concept verification.** Use a packaged local zero-shot NLI classifier to score/retain multiple metadata topic candidates for retained interaction-supported candidates. Cache verified labels and route them through the existing evidence-backed materializer; raw metadata remains fallback only when no verifier result exists.
-2. **P0 — #214 durable mode architecture.** Apply embedding-assisted canonicalization to extracted/materialized concepts, cluster them into stable modes, retain multi-label affinity, ground mode score contributions in exact graph members, and implement mode-aware retrieval/supply behavior against #162 metrics.
-3. **P1 — #153 + #170 trust UX.**
-4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
-6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods and ensure aliases/subtopics/broad categories cannot stack as independent positive score terms.
+2. **P0 — #214 durable inferred modes.** Build stable local mode IDs/revisions over canonical concept neighbourhoods, retain multi-label candidate affinity, and persist modes independently of feed-cache churn.
+3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
+4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
+5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
+7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-#219 does not make classifier output authoritative preference state. Retained interaction evidence remains the gate; verified topic labels are cached derived inputs to #218's deterministic graph projection. Passive exposure/search acquisition alone still cannot produce preference concepts.
+#219/#220 is now a completed upstream boundary. Zero-shot verifier output remains rebuildable derived content understanding; retained interaction evidence is still the preference gate and #218 remains the deterministic graph-materialization authority.
 
 
 ## P0 — Validate the data boundary
@@ -173,7 +174,7 @@ This is maintenance hardening of #148's graph invariant, not new preference-infe
 
 PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
 
-### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime — **runtime scoring slice completed in PR #195**
+### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Finish offline/signed-out local-runtime validation — **runtime scoring/enforcement foundation complete**
 
 PR #195 completes the first runtime integration slice of #169 and has passed CI plus real-browser validation.
 
@@ -239,7 +240,7 @@ Replay stored candidates against hypothetical graph versions.
 
 ## P6 — Enrichment
 
-The first enrichment slice is active in PR #213: rebuildable local text embeddings support semantic graph/mode matching while remaining derived, bounded, and subordinate to deterministic policy.
+The local enrichment foundation is implemented: PR #213 added rebuildable text embeddings and PR #220 added local zero-shot topic verification. The active enrichment work is now #214 canonical neighbourhood reconciliation and bounded semantic score aggregation.
 
 Still deferred until measured gaps justify them:
 
@@ -248,9 +249,17 @@ Still deferred until measured gaps justify them:
 - bounded comment analysis
 - optional local LLM resolver / explanation synthesis
 
-### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Add rebuildable local semantic embeddings for graph, retrieval, scoring, and explanations
+### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Complete remaining local semantic-embedding enrichment uses
 
-Treat embeddings as replaceable derived enrichment around the canonical Personal Algorithm Graph. Use them for semantic neighbours, bounded retrieval expansion, explicit semantic score contributions, interest-cluster suggestions, and symbolic Why-this paths. A later local generative model may verbalize exact trace/path data but must not become the preference or ranking authority.
+The embedding infrastructure is implemented and now supports #221/#214. Remaining #209 work is bounded semantic-neighbour retrieval expansion, cluster output, broader benchmark coverage, and symbolic semantic paths for #153. Embeddings remain rebuildable derived enrichment and never authoritative preference state.
+
+### [#221](https://github.com/AsimovNo9/MyAlgo/issues/221): Canonicalize semantic concepts and bound redundant score contributions — **active P0**
+
+Reconcile aliases/near-duplicates into stable derived semantic neighbourhoods, preserve every source graph node/evidence chain, and emit at most one bounded semantic score contribution per neighbourhood. This is the immediate prerequisite for durable inferred modes and final score calibration.
+
+### [#214](https://github.com/AsimovNo9/MyAlgo/issues/214): Build durable inferred modes, graph-grounded scoring, and stable Home replacement — **P0 umbrella**
+
+After #221, cluster canonical neighbourhoods into durable mode IDs/revisions, preserve multi-label candidate affinity, ground every mode contribution in exact graph members, and make retrieval/supply mode-aware.
 
 ### [#162](https://github.com/AsimovNo9/MyAlgo/issues/162): Build local graph replay and evaluation suite
 
@@ -283,7 +292,7 @@ Repository audit result: the current launch runtime contains no YouTube Data API
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
-The original local privacy gate was implemented and clean-profile validated in PR #199; #168 is complete. PR #213 introduces disclosure v4 for derived local semantic embeddings/similarities, so clean-profile v4 revalidation plus Store-dashboard publication/reconciliation remain.
+The original local privacy gate was implemented and clean-profile validated in PR #199; #168 is complete. Disclosure is now v6 after packaged local embedding and concept-verification changes. The remaining #167 release-owner work is clean-profile v6 revalidation plus Chrome Web Store dashboard/listing reconciliation and publication.
 
 
 ### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions

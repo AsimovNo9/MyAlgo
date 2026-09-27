@@ -43,13 +43,14 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #219 / PR #220:** filter raw YouTube topic candidates with a packaged local zero-shot concept verifier, while preserving #218's evidence/provenance gates and metadata fallback.
-2. **P0 — #214:** use embeddings to canonicalize/alias the extracted/materialized concepts, then cluster canonical concepts into durable modes, preserve multi-label affinities, ground mode score changes in exact graph structure, and measure mode-supply shortfalls.
-3. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over exact mode/node/edge contributions.
-4. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
-5. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring:** reconcile near-duplicate verified/materialized topic nodes into deterministic canonical neighbourhoods, preserve source-node provenance, and stop semantically redundant/broad matches from stacking as independent score evidence.
+2. **P0 — #214 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, and stop deriving mode identity from the current feed cache.
+3. **P0 — #214 graph-grounded mode retrieval/supply:** resolve every mode score change to exact member nodes, make mode selection change retrieval planning, and measure slider-relative native-mode supply before filling from the existing acquired reservoir.
+4. **P1 — #210 + #153 + #170:** recalibrate display scoring after raw semantic overcounting is fixed, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
+5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
+6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #218 is merged. It supplies deterministic evidence-backed semantic graph materialization, but live validation showed raw YouTube keywords are still too literal and fragmented to be the preferred taxonomy source. #219/PR #220 inserts a packaged local zero-shot verifier before materialization.
+PR #220/#219 is merged. It verifies bounded metadata topic candidates with a packaged local zero-shot NLI classifier before #218's evidence-backed materializer. Live validation confirmed the verifier can run locally and abstain, but also exposed the next bottleneck: broad and near-duplicate graph nodes are still scored as independent additive evidence, which inflates raw scores and saturates the 0–100 presentation score.
 
 The intended hierarchy is:
 
@@ -58,18 +59,17 @@ interaction-supported candidate metadata
          → local zero-shot concept verification
          → evidence-backed topic/concept materialization
          → embedding-assisted canonical concepts
-         → semantic neighbourhoods / durable mode clusters
+         → bounded semantic-neighbourhood score contribution
+         → durable mode clusters
          → multi-label candidate affinities
-         → graph-grounded scorer contributions
+         → graph-grounded mode contributions
          → mode-aware retrieval + existing candidate reservoir
          → stable Home presentation + exact Why-this trace
 ```
 
 A visible video badge remains conservative and may show one label or none. Internal semantic classification is multi-label. User-facing modes are stable clusters over multiple canonical graph nodes rather than transient one-node labels derived from the current feed cache.
 
-The Home replacement slider controls how much of the page MyAlgo attempts to replace. For an active mode, the same quota defines how much mode-matching supply is required. If eligible current-Home supply cannot meet that demand, MyAlgo should state the shortfall and use the existing acquired reservoir; acquired items never bypass hard policy, deterministic scoring, or traceability.
-
-Do not fine-tune the embedding model yet. The P0 replay/evaluation fixture must first determine whether measured errors come from graph fragmentation, clustering, multi-label classification, metadata, thresholds, or the encoder itself.
+Do not retune display-score calibration or fine-tune a model to hide duplicate semantic evidence. First make #221 canonicalization and semantic contribution aggregation replayable against the #162 evaluation boundary; only then calibrate the presentation score or compare alternative encoders.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 

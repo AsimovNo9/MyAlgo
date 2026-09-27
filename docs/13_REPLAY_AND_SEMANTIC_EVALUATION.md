@@ -241,4 +241,19 @@ For labelled/reviewed examples, compare:
 - first-run and cached latency;
 - WebGPU/WASM fallback rate.
 
-The initial model output is not canonical truth. Even a cleaner label such as `Lo-fi music` remains a derived proposal until it is evidence-supported and passes the same #218 materializer. Embedding-assisted alias/canonical decisions remain a later #214 stage.
+The verifier output is not canonical truth. Even a correctly retained label remains a derived proposal until it is evidence-supported and passes the same #218 materializer. Embedding-assisted alias/canonical decisions remain the immediate #214 stage.
+
+### Post-#220 canonicalization/scoring fixture requirements (#221)
+
+Live #220 validation produced the exact failure class the next fixture should encode: several verified labels can all be correct yet semantically redundant. Examples include tutorial/use-case variants around one product/topic, or multiple gameplay/franchise labels around the same interest. The current scorer can award each source node an independent additive term.
+
+Extend the fixed evaluation boundary with cases that assert:
+- expected source-label → canonical-neighbourhood assignment;
+- explicit/user-authored distinctions that must **not** merge solely from embedding similarity;
+- broad content-type concepts separated from specific interest concepts;
+- one bounded semantic score contribution per canonical neighbourhood;
+- exact trace provenance listing the source graph nodes that reconciled into that contribution;
+- unchanged canonical IDs across ordinary feed/cache churn;
+- raw-score and calibrated-score distributions before/after canonical aggregation.
+
+A successful canonicalization slice should reduce duplicate semantic contribution mass without hiding the source nodes or weakening exact trace reconciliation.

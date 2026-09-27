@@ -424,9 +424,16 @@ Keep these three concepts separate:
 2. **Content classification** describes the candidate itself. UI labels such as `Learning` may be shown only when candidate metadata supports that classification with sufficient confidence.
 3. **Semantic enrichment** is rebuildable derived data. Text embeddings may improve candidate↔goal/topic similarity and retrieval expansion, but do not become canonical graph truth.
 
-The current deterministic classifier uses enriched textual metadata (title, description, keywords/category, format, creator) and returns a label plus confidence. It is intentionally conservative.
+The launch semantic stack now has two distinct local model roles:
 
-Text embeddings are the next model layer to evaluate because they can improve semantic matching without requiring image/video inference. Multimodal thumbnail/video classification is deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
+- the packaged DeBERTa zero-shot verifier filters bounded metadata topic candidates and may abstain with an empty verified set;
+- the packaged mxbai embedding encoder supplies rebuildable candidate↔graph semantic similarity.
+
+Neither model output is canonical preference state. Verified labels still pass through the evidence-backed #218 materializer, while embeddings remain derived enrichment.
+
+The next semantic layer is deterministic canonicalization over the materialized topic/concept graph. Near-duplicate labels and subtopic variants may share one derived canonical neighbourhood while their original graph nodes/evidence remain inspectable. Scoring should consume a bounded neighbourhood-level semantic contribution rather than independently adding every matching alias/subtopic/broad category. Only after that layer is replayable should durable mode clusters be built over canonical concepts.
+
+Multimodal thumbnail/video classification remains deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
 
 
 ### YouTube search-page acquisition
