@@ -821,8 +821,13 @@ const applyRankedFeed = () => {
 };
 
 const renderReplacementSlots = (generation: number) => {
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
-  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
+  const existingReplacements = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]'),
+  );
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) {
+    existingReplacements.forEach((element) => element.remove());
+    return;
+  }
 
   const nativeElements = getVideoElements();
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
@@ -898,7 +903,14 @@ const renderReplacementSlots = (generation: number) => {
     .slice(0, isYouTubeHomePage(location.pathname)
       ? replacementQuota(feedReplacementPercent, nativeElements.length)
       : 0);
+  const existingBySourceId = new Map<string, HTMLElement>();
+  for (const replacement of existingReplacements) {
+    const sourceId = replacement.dataset.personalAlgorithmReplacementSourceVideoId?.trim();
+    if (sourceId && !existingBySourceId.has(sourceId)) existingBySourceId.set(sourceId, replacement);
+  }
+  const retainedReplacements = new Set<HTMLElement>();
   let filled = 0;
+  let reused = 0;
 
   for (const assignment of assignments) {
     const target = targetBySlot.get(assignment.slot.slotId);
@@ -911,26 +923,56 @@ const renderReplacementSlots = (generation: number) => {
     ) {
       continue;
     }
-    const replacement = createReplacementCard(
-      assignment.item,
-      target,
-      assignment.slot.slotId,
-      assignment.slot.sourceVideoId,
-      generation,
-    );
-    target.parentElement.insertBefore(replacement, target);
+
+    const existing = existingBySourceId.get(assignment.slot.sourceVideoId);
+    const replacementVideoId = assignment.item.external_id ?? '';
+    const replacementScore = String(assignment.item.score ?? 0);
+    const replacementTraceId = assignment.item.traceId ?? '';
+    if (
+      existing
+      && existing.isConnected
+      && existing.dataset.personalAlgorithmVideoId === replacementVideoId
+      && existing.dataset.personalAlgorithmTraceId === replacementTraceId
+      && existing.dataset.personalAlgorithmReplacementScore === replacementScore
+    ) {
+      existing.dataset.personalAlgorithmReplacementSlot = assignment.slot.slotId;
+      existing.dataset.personalAlgorithmReplacementGeneration = String(generation);
+      if (existing.parentElement !== target.parentElement || target.previousElementSibling !== existing) {
+        target.parentElement.insertBefore(existing, target);
+      }
+      retainedReplacements.add(existing);
+      reused += 1;
+      filled += 1;
+    } else {
+      existing?.remove();
+      const replacement = createReplacementCard(
+        assignment.item,
+        target,
+        assignment.slot.slotId,
+        assignment.slot.sourceVideoId,
+        generation,
+      );
+      target.parentElement.insertBefore(replacement, target);
+      retainedReplacements.add(replacement);
+      filled += 1;
+    }
+
     stableReplacementBySourceId.set(assignment.slot.sourceVideoId, {
-      candidateId: assignment.item.external_id ?? '',
+      candidateId: replacementVideoId,
       item: assignment.item,
       routeKey: getRouteKey(),
     });
-    filled += 1;
+  }
+
+  for (const replacement of existingReplacements) {
+    if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
   console.info('[MyAlgo] replacement slots', {
     generation,
     eligibleSlots: slots.length,
     filled,
+    reused,
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
