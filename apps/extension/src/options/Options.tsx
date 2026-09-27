@@ -5,6 +5,7 @@ export function Options() {
   const [mode, setMode] = React.useState('Work');
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
+  const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
 
@@ -13,11 +14,13 @@ export function Options() {
       'personal-algorithm-mode',
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
+      'personal-algorithm-semantic-model-mode',
       'personal-algorithm-privacy-disclosure-accepted-version',
     ]).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
+      setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
     });
   }, []);
@@ -42,6 +45,7 @@ export function Options() {
     setDisclosureAccepted(false);
     setHistoryObservationEnabled(false);
     setHomeObservationEnabled(false);
+    setSemanticModelMode('hash');
     setMode('Work');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
@@ -59,6 +63,22 @@ export function Options() {
   const handleHomeObservationChange = async (enabled: boolean) => {
     setHomeObservationEnabled(enabled);
     await chrome.storage.local.set({ 'personal-algorithm-home-observation-enabled': enabled });
+  };
+
+  const handleSemanticModelChange = async (enabled: boolean) => {
+    const nextMode = enabled ? 'neural' : 'hash';
+    setStatus(enabled
+      ? 'Neural semantic model enabled. Model weights will download automatically on first semantic pass.'
+      : 'Using the lightweight deterministic semantic baseline.');
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_SEMANTIC_MODEL_MODE',
+      payload: { semanticModelMode: nextMode },
+    }) as { ok?: boolean; error?: string; semanticModelMode?: 'hash' | 'neural' };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to change semantic model.');
+      return;
+    }
+    setSemanticModelMode(response.semanticModelMode === 'neural' ? 'neural' : 'hash');
   };
 
   return (
@@ -89,6 +109,26 @@ export function Options() {
       <section>
         <h2>Local-first MVP</h2>
         <p>Observation, feed controls, and recorded interactions stay in this browser until optional sync is introduced.</p>
+      </section>
+
+      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Local semantic model</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={semanticModelMode === 'neural'}
+            disabled={!disclosureAccepted}
+            onChange={(event) => void handleSemanticModelChange(event.target.checked)}
+          />
+          Use the neural semantic encoder
+        </label>
+        <p>
+          When enabled, MyAlgo automatically downloads the public mixedbread-ai/mxbai-embed-xsmall-v1
+          model weights on the first semantic pass and caches them in this browser. Candidate and graph text
+          stay local; only the public model files are downloaded. WebGPU is required for this first neural
+          implementation. If loading or inference fails, MyAlgo falls back to the deterministic local baseline.
+        </p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural WebGPU' : 'Deterministic baseline'}</p>
       </section>
 
       <section style={{ marginTop: 24 }}>
