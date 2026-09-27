@@ -157,11 +157,13 @@ active mode seed ──────────→ semantic mode lens over graph
                      calibrated reranking
 ```
 
-Modes remain one graph with different semantic emphasis. Work, Learning, Relax, Gaming, and French have fixed text anchors in the local model. Each candidate embedding is compared with all five anchors, independently of the selected mode; the highest qualifying cosine similarity gives the category badge. This affinity is a relative signal, not a calibrated probability or evidence that the model has trained on the user's feed. A mode profile also selects/weights graph objective/topic/concept nodes according to embedding similarity. Graph-derived or user-created modes remain future work under #161.
+PR #213 initially bootstrapped candidate labels from five fixed intent anchors. Post-merge live review showed that nearest-anchor similarity is too coarse to serve as the authoritative content taxonomy: broad anchors can become the least-wrong label for unrelated content. #214 replaces that bootstrap rule with **graph-derived category inference**.
 
-Selecting a mode applies a bounded, traceable category-affinity contribution alongside the existing graph and mode semantic contributions. It also shapes optional search intent. A candidate can retain its inferred badge while a different mode is selected. If local neural inference fails, the existing hash fallback remains available and diagnostics identify the effective backend; inferred categories are recomputable derived features.
+Candidate category vocabulary comes from eligible Personal Algorithm Graph topic/concept labels. A candidate vector is compared with those symbolic graph-node vectors, the strongest bounded scores are retained as rebuildable features, and a visible category is emitted only when the winner clears both an absolute similarity floor and a runner-up margin. Ambiguous candidates remain uncategorized. This is still embedding inference, not model training, and similarity alone never creates a preference edge.
 
-On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
+Modes remain semantic lenses over one graph, but the mode surface is no longer a fixed Work/Learning/Relax/Gaming/French list. Available modes are populated from categories actually inferred in local state plus a neutral All/Default state. Selecting an inferred mode adds that category as bounded retrieval/semantic intent and applies exact traceable mode/category-affinity contributions. Existing stored legacy/custom mode values are preserved during migration until the user changes them.
+
+On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. #214 also makes a valid source-card → replacement assignment stable across ordinary mutation, metadata, and semantic reranks; generation changes and a short wall-clock timer must not rotate content by themselves. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
 
 ### Local embedding layer (#209)
 
@@ -316,7 +318,7 @@ Examples:
 - Gaming mode adds gaming/gameplay intent and prefers gameplay/review/guide forms.
 - French mode adds French-language/francophone intent and prefers language practice and French video forms.
 
-The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own highest qualifying anchor similarity, independent of the active mode; the conservative metadata-based Learning badge remains a fallback. A video can therefore be scored while Learning mode is active without being labeled Learning.
+The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own unambiguous graph-derived category match, independent of the active mode; the conservative metadata-based Learning badge remains only a fallback when semantic enrichment is unavailable. A candidate with no clear semantic winner should show no category badge.
 
 ### Web search adapter
 
@@ -329,7 +331,7 @@ Search result snippets are discovery metadata, not recommendation evidence and n
 
 PR #212 is merged and #206 is closed. Live acquisition diagnostics established the search → reservoir path; its connector-owned acquisition, offscreen search worker, bounded retention, and retrieved-discovery exploration are now foundation behavior rather than the active implementation slice.
 
-PR #213 is the active #209/#210 branch. Live validation should focus on semantic first-paint isolation, semantic follow-up reranking, mode-dependent score/rank changes, cache bounds, replacement stability, and deletion/re-disclosure behavior.
+PR #213 is merged. #214 is the active post-merge refinement: graph-derived category/mode inference, explicit ambiguity handling, and deterministic replacement stability. Replay-backed category quality evaluation belongs with #162 before any decision to fine-tune or replace the embedding encoder.
 
 ### Retrieved-discovery exploration
 
