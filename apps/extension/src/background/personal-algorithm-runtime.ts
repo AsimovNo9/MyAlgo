@@ -116,6 +116,7 @@ type LocalScoringIndex = {
   featureNodes: PersonalAlgorithmState['graph']['nodes'];
   canonicalConcepts: CanonicalSemanticConcept[];
   canonicalByNodeId: Map<string, CanonicalSemanticConcept>;
+  evidenceIdsByNodeId: Map<string, string[]>;
 };
 
 function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringIndex {
@@ -135,11 +136,29 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
   }
 
   const creatorByContent = new Map<string, string>();
+  const semanticNodeIds = new Set(featureNodes.map((node) => node.id));
+  const evidenceSetsByNodeId = new Map<string, Set<string>>(
+    featureNodes.map((node) => [node.id, new Set<string>()]),
+  );
   for (const edge of state.graph.edges) {
     if (edge.relation === 'created_by' && creatorIds.has(edge.targetNodeId) && !creatorByContent.has(edge.sourceNodeId)) {
       creatorByContent.set(edge.sourceNodeId, edge.targetNodeId);
     }
+    if (semanticNodeIds.has(edge.sourceNodeId)) {
+      const evidence = evidenceSetsByNodeId.get(edge.sourceNodeId);
+      for (const evidenceId of edge.evidenceIds ?? []) evidence?.add(evidenceId);
+    }
+    if (semanticNodeIds.has(edge.targetNodeId)) {
+      const evidence = evidenceSetsByNodeId.get(edge.targetNodeId);
+      for (const evidenceId of edge.evidenceIds ?? []) evidence?.add(evidenceId);
+    }
   }
+  const evidenceIdsByNodeId = new Map(
+    [...evidenceSetsByNodeId.entries()].map(([nodeId, evidence]) => [
+      nodeId,
+      [...evidence].sort(),
+    ]),
+  );
 
   const canonical = buildCanonicalSemanticConcepts(state);
   const canonicalById = new Map(canonical.concepts.map((concept) => [concept.id, concept]));
@@ -157,6 +176,7 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
     featureNodes,
     canonicalConcepts: canonical.concepts,
     canonicalByNodeId,
+    evidenceIdsByNodeId,
   };
 }
 
@@ -184,16 +204,11 @@ type CanonicalSemanticAccumulator = {
 };
 
 const canonicalEvidenceIdsForNodes = (
-  state: PersonalAlgorithmState,
   sourceNodeIds: Iterable<string>,
-): string[] => {
-  const ids = new Set(sourceNodeIds);
-  return [...new Set(state.graph.edges
-    .filter((edge) => ids.has(edge.sourceNodeId) || ids.has(edge.targetNodeId))
-    .flatMap((edge) => edge.evidenceIds ?? []))]
-    .filter(Boolean)
-    .sort();
-};
+  evidenceIdsByNodeId: ReadonlyMap<string, readonly string[]>,
+): string[] => [...new Set(
+  [...sourceNodeIds].flatMap((nodeId) => evidenceIdsByNodeId.get(nodeId) ?? []),
+)].filter(Boolean).sort();
 
 const canonicalByNodeIdFromConcepts = (
   concepts: readonly CanonicalSemanticConcept[],
@@ -206,10 +221,10 @@ const canonicalByNodeIdFromConcepts = (
 };
 
 const extractLocalCandidateFeaturesWithCanonical = (
-  state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
   featureNodes: PersonalAlgorithmState['graph']['nodes'],
   canonicalByNodeId: ReadonlyMap<string, CanonicalSemanticConcept>,
+  evidenceIdsByNodeId: ReadonlyMap<string, readonly string[]>,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
   const text = normalizeFeatureText([
     candidate.title,
@@ -255,7 +270,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
     const existing = accumulators.get(canonicalId);
     if (existing) {
       sourceNodeIds.forEach((nodeId) => existing.sourceNodeIds.add(nodeId));
-      canonicalEvidenceIdsForNodes(state, sourceNodeIds)
+      canonicalEvidenceIdsForNodes(sourceNodeIds, evidenceIdsByNodeId)
         .forEach((evidenceId) => existing.evidenceIds.add(evidenceId));
       existing.taxonomyOnly = existing.taxonomyOnly && taxonomyOnly;
       existing.objectiveOnly = existing.objectiveOnly && objectiveOnly;
@@ -267,7 +282,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
       taxonomyOnly,
       objectiveOnly,
       sourceNodeIds: new Set(sourceNodeIds),
-      evidenceIds: new Set(canonicalEvidenceIdsForNodes(state, sourceNodeIds)),
+      evidenceIds: new Set(canonicalEvidenceIdsForNodes(sourceNodeIds, evidenceIdsByNodeId)),
       lexicalValue: 0,
       embeddingValue: 0,
     };
@@ -467,11 +482,25 @@ export function extractLocalCandidateFeatures(
   featureNodes: PersonalAlgorithmState['graph']['nodes'] = state.graph.nodes,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } {
   const canonical = buildCanonicalSemanticConcepts(state);
+  const evidenceIdsByNodeId = new Map<string, string[]>(
+    featureNodes.map((node) => [node.id, []]),
+  );
+  for (const edge of state.graph.edges) {
+    for (const nodeId of [edge.sourceNodeId, edge.targetNodeId]) {
+      if (!evidenceIdsByNodeId.has(nodeId)) continue;
+      evidenceIdsByNodeId.set(nodeId, [
+        ...new Set([
+          ...(evidenceIdsByNodeId.get(nodeId) ?? []),
+          ...(edge.evidenceIds ?? []),
+        ]),
+      ].sort());
+    }
+  }
   return extractLocalCandidateFeaturesWithCanonical(
-    state,
     candidate,
     featureNodes,
     canonicalByNodeIdFromConcepts(canonical.concepts),
+    evidenceIdsByNodeId,
   );
 }
 
@@ -593,10 +622,10 @@ const candidateContext = (
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
   const extracted = extractLocalCandidateFeaturesWithCanonical(
-    state,
     candidate,
     index.featureNodes,
     index.canonicalByNodeId,
+    index.evidenceIdsByNodeId,
   );
   const classification = classifyCandidateContent(candidate);
   // Once semantic mode similarity exists, it becomes the mode-ranking signal.
