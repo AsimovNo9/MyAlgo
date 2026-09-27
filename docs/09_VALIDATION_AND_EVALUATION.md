@@ -580,3 +580,19 @@ Live replacement traces also exposed semantic score overcount. Multiple related 
 
 Do not retune the 0–100 presentation calibration until this raw semantic overcount is corrected.
 
+### PR #223 live browser regression (2026-09-27)
+
+The first browser run of #223 confirmed healthy packaged neural execution (`mxbai-embed-xsmall-v1`, WebGPU sandbox, no fallback) but also found gaps not represented by the initial synthetic fixture:
+
+- nested but non-identical canonical concepts such as `chill lofi`, `chill lofi beats`, and `lofi beats` could still each contribute large score terms to the same candidate;
+- weak embedding neighbours could receive score mass when they were merely among the top positive matches, producing visibly unrelated semantic reasons;
+- taxonomy-only matches could stack several broad categories when no specific match was present.
+
+The corrective #223 runtime gate therefore validates three layers separately:
+
+1. conservative canonical identity remains intact for provenance;
+2. nested non-explicit canonical concepts may reconcile into one bounded **scoring region** without erasing their source nodes;
+3. embedding-only matches must clear absolute + relative confidence thresholds, and taxonomy-only evidence contributes through one collective bounded fallback.
+
+Re-run the live browser trace after these changes and require that lofi/Silent-Hill-style examples collapse to one score-region contribution with all source node IDs, unrelated weak neighbours disappear from `Why this?`, broad taxonomy no longer stacks, and hard policy/feedback behavior remains unchanged. Presentation calibration remains deferred to #210.
+
