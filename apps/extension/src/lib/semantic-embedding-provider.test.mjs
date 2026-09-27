@@ -90,6 +90,7 @@ test('offscreen neural embedding provider requests packaged neural model identit
   assert.equal(provider.dimensions, 384);
   assert.equal(provider.execution, 'offscreen_sandbox_neural');
   assert.equal(sentMessages[0].provider, 'neural');
+  assert.equal(sentMessages[0].batchSize, 1);
   assert.equal(vectors[0].length, 384);
 });
 
@@ -111,4 +112,20 @@ test('neural provider throws on worker failure so orchestration can fall back wi
   } finally {
     forceWorkerFailure = false;
   }
+});
+
+
+test('neural provider clamps and forwards configured WebGPU batch size', async () => {
+  sentMessages = [];
+  contexts.splice(0, contexts.length, {
+    contextType: 'OFFSCREEN_DOCUMENT',
+    documentUrl: 'chrome-extension://test/offscreen-search.html',
+  });
+
+  const provider = createOffscreenEmbeddingProvider('neural', { neuralBatchSize: 8 });
+  await provider.embed(['one', 'two']);
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].provider, 'neural');
+  assert.equal(sentMessages[0].batchSize, 8);
 });
