@@ -224,19 +224,18 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #213 is merged. Draft PR #215 is now the active **mode architecture + feed stability** branch. Do not treat #215 as only a threshold/replacement patch; it owns the remaining structure required for a durable mode-filter loop.
+PR #215 is merged. The immediate risk is no longer whether local semantic inference runs; it is whether semantic/category/mode changes can be measured reproducibly.
 
-1. **P0 — #162 evaluation baseline inside #215.** Build a small labelled replay set from real local candidate/graph snapshots before further semantic threshold tuning. Measure multi-label category precision/recall, mode coverage, node fragmentation, native/pool supply, replacement stability, and model/backend latency.
-2. **P0 — #214 semantic mode architecture.** Add graph-node canonicalization, semantic neighbourhood clustering, multi-label candidate affinity, durable mode clusters, graph-grounded mode scoring, and explicit mode-supply diagnostics/banner behavior.
-3. **P0 — #214 replacement stability.** Preserve valid source→replacement identity and replacement DOM across ordinary mutation/metadata/semantic reranks; only meaningful invalidations may reseat content.
-4. **P1 — #153 + #170 trust UX.** Explanations must resolve mode/category boosts to exact contributing graph nodes/edges and acquisition provenance rather than a free-floating `mode_adjustment`.
-5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-6. **P2 — #169 + remaining #161 + #158 + #159 editable modes, graph editing, and counterfactual work beyond the #215 inferred-mode slice.**
-7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P0 — #162 / PR #216 replay and evaluation.** Add an order-independent exported-state replay projection, graph consistency reviewer, fixed labelled semantic fixture, multi-label/badge metrics, mode-supply metrics, replacement-stability metrics, and inference-throughput summaries. Keep real personal exports local unless intentionally anonymized.
+2. **P0 — #214 durable mode architecture.** Use #162 metrics to evaluate graph-node canonicalization, semantic neighbourhood clustering, durable mode IDs, multi-label candidate affinity, graph-grounded mode scoring, mode-aware retrieval, and slider-relative native-supply shortfall handling.
+3. **P1 — #153 + #170 trust UX.** Resolve every mode/category contribution to exact graph members, evidence/provenance, and trace values.
+4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
+6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-### Required semantic layers
+PR #216's committed fixture is a test-safe bootstrap, not a claim of representative production quality. Its purpose is to make future semantic changes comparable and CI-gated. Real labelled local evaluation can use the same fixture schema without committing personal feed/history data.
 
-Do not collapse these into one "category" concept:
+The semantic architecture remains:
 
 ```text
 canonical evidence
@@ -245,41 +244,18 @@ Personal Algorithm Graph
     ↓
 canonicalized topic/concept nodes
     ↓
-semantic neighbourhoods / clusters
+semantic neighbourhoods / durable modes
     ↓
-durable mode definitions
+multi-label candidate affinities
     ↓
-multi-label candidate↔node / candidate↔mode affinities
+graph-grounded scorer contributions
     ↓
-graph-grounded additive scorer contributions
-    ↓
-mode-aware retrieval + pool fallback
+mode-aware retrieval + existing reservoir
     ↓
 stable feed presentation + exact Why-this trace
 ```
 
-**Canonical graph nodes** remain fine-grained and inspectable. Near-duplicate labels must be normalized/merged or represented as aliases so "Elden Ring", "elden ring pvp", and "Elden Ring builds" do not fragment one semantic region accidentally.
-
-**Mode clusters** are a separate derived layer. A user-facing mode should represent a stable cluster of multiple related graph nodes, not whichever individual node labels happen to appear in the current feed cache. A mode therefore survives ordinary feed churn and can be promoted/persisted locally.
-
-**Candidate classification is multi-label.** Candidate→graph similarities should retain multiple qualified affinities. A conservative primary badge may still display one label or none, but scoring/retrieval must not discard legitimate secondary matches.
-
-### Mode supply and the Home replacement slider
-
-The existing Home slider controls **how much of the Home presentation MyAlgo attempts to replace**, not classification confidence.
-
-For an active non-All mode:
-
-1. compute the requested replacement demand from the same quota function used by presentation;
-2. count eligible **current-Home/native** candidates that qualify for the active mode;
-3. if native mode supply cannot satisfy the requested demand, expose a deterministic "not enough native <mode> supply" state;
-4. use the existing source-neutral acquisition reservoir (RSS + zero-config YouTube search-page acquisition) to fill the shortfall;
-5. acquired candidates go through the same hard exclusion → eligibility → additive score → ordering → trace pipeline as every other candidate;
-6. never create a side-door score or untraced "pool boost."
-
-The banner condition must be derived from the same eligibility/mode-membership contract used by ranking. Its trigger should scale with the user's replacement slider rather than a fixed global count. Record every shortfall event as local diagnostics for #162 evaluation.
-
-Do not fine-tune the embedding encoder simply because live examples look wrong. #162 must first show which errors are caused by graph fragmentation, clustering, multi-label coverage, taxonomy, metadata, thresholds, or the embedding model itself.
+Do not fine-tune the encoder until #162 separates model error from graph fragmentation, clustering, metadata and threshold effects.
 
 
 ## Phase 1 scope discipline
