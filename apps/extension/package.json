@@ -14,7 +14,8 @@
     "@repo/shared-types": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@repo/recommender-core": "workspace:*"
+    "@repo/recommender-core": "workspace:*",
+    "@huggingface/transformers": "4.3.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",
