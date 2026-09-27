@@ -39,7 +39,7 @@ Chrome Web Store disclosure has two layers:
 1. **Before installation:** the Store listing and Privacy practices tab must prominently describe the user data handled and its use. Publishing requires the developer to complete these dashboard fields.
 2. **Before in-product observation:** MyAlgo uses a versioned disclosure gate. Until the current disclosure version is affirmatively accepted, the content script starts paused and the background rejects observation/ranking messages.
 
-Disclosure v3 adds optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. The current disclosure explains:
+Disclosure v3 added optional graph-derived YouTube search-page candidate acquisition on top of the v2 YouTube RSS boundary. PR #213 increments the disclosure to **v4** because MyAlgo now derives and stores bounded local semantic vectors/similarity features for candidate/graph/mode matching. The current disclosure explains:
 
 - pages observed;
 - data categories;
@@ -79,7 +79,7 @@ Limited Use: certify only after verifying the release artifact and policy remain
 
 Operational stores are bounded where implemented. PR #213 additionally bounds derived semantic embedding records and graph/mode similarity records to 600 entries each. These derived records are model/version/input keyed and safe to discard/rebuild. Personal Algorithm evidence/graph state can persist in `chrome.storage.local` until deleted/reset or an explicit future retention rule applies.
 
-Settings provides **Delete all local MyAlgo data**, which clears extension-local state and disclosure acceptance. Observation stays disabled after deletion until the current disclosure is accepted again.
+Settings provides **Delete all local MyAlgo data**, which clears extension-local state, including persisted and in-memory semantic caches, and disclosure acceptance. Observation stays disabled after deletion until the current disclosure is accepted again.
 
 Pause is not deletion: pausing stops new observation/enforcement but retained local state remains until deletion/reset.
 
