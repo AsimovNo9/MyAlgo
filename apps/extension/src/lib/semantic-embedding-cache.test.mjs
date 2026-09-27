@@ -11,6 +11,9 @@ globalThis.chrome = {
       async set(values) {
         for (const [key, value] of Object.entries(values)) backing.set(key, value);
       },
+      async remove(keys) {
+        for (const key of keys) backing.delete(key);
+      },
     },
   },
 };
@@ -56,4 +59,19 @@ test('semantic embedding cache trims oldest entries to configured bound', async 
   assert.equal(Object.keys(persisted).length, 32);
   assert.equal('k-0' in persisted, false);
   assert.equal('k-39' in persisted, true);
+});
+
+
+test('semantic embedding cache clear removes persisted and in-memory records', async () => {
+  backing.clear();
+  const cache = createChromeEmbeddingCache(32);
+  await cache.set('a', record('a', '2026-09-26T00:00:00.000Z'));
+  await cache.flush();
+  assert.equal((await cache.get('a')).owner_id, 'a');
+
+  await cache.clear();
+
+  assert.equal(await cache.get('a'), null);
+  assert.equal(await cache.size(), 0);
+  assert.equal(backing.has(STORAGE_KEYS.SEMANTIC_EMBEDDING_CACHE), false);
 });
