@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
   SEMANTIC_EMBEDDING_CACHE: 'personal-algorithm-semantic-embedding-cache',
   SEMANTIC_DIAGNOSTICS: 'personal-algorithm-semantic-diagnostics',
   SEMANTIC_FEATURE_CACHE: 'personal-algorithm-semantic-feature-cache',
+  SEMANTIC_MODEL_MODE: 'personal-algorithm-semantic-model-mode',
   PRIVACY_DISCLOSURE_ACCEPTED_VERSION: 'personal-algorithm-privacy-disclosure-accepted-version',
 } as const;
 
