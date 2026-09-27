@@ -112,6 +112,14 @@ const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
 const MAX_REPLACEMENT_WORKING_SET = 180;
+const LEGACY_FIXED_MODES = new Set(['work', 'learning', 'relax', 'gaming', 'french']);
+
+const migrateStoredMode = (value: unknown): string => {
+  const mode = typeof value === 'string' ? value.trim() : '';
+  if (!mode || LEGACY_FIXED_MODES.has(mode.toLowerCase())) return 'Default';
+  return mode;
+};
+
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
@@ -664,7 +672,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
     const firstInstall = details.reason === 'install';
     await chrome.storage.local.set({
-      [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Default',
+      [STORAGE_KEYS.MODE]: firstInstall ? 'Default' : migrateStoredMode(current[STORAGE_KEYS.MODE]),
       [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
       [STORAGE_KEYS.FEED_CACHE]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CACHE] ?? [],
       [STORAGE_KEYS.FEED_CANDIDATE_POOL]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CANDIDATE_POOL] ?? [],
