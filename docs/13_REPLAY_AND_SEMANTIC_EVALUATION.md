@@ -243,7 +243,7 @@ For labelled/reviewed examples, compare:
 
 The verifier output is not canonical truth. Even a correctly retained label remains a derived proposal until it is evidence-supported and passes the same #218 materializer. Embedding-assisted alias/canonical decisions remain the immediate #214 stage.
 
-### Post-#220 canonicalization/scoring fixture requirements
+### Post-#220 canonicalization/scoring fixture requirements (#221)
 
 Live #220 validation produced the exact failure class the next fixture should encode: several verified labels can all be correct yet semantically redundant. Examples include tutorial/use-case variants around one product/topic, or multiple gameplay/franchise labels around the same interest. The current scorer can award each source node an independent additive term.
 
