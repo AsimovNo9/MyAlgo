@@ -346,9 +346,47 @@ To prevent qualified retrieved candidates from being permanently crowded out of 
 All remaining opportunistic replacements retain the stricter normal uplift requirement. This changes presentation opportunity, not candidate score.
 
 
-## Durable semantic mode architecture (#214 / PR #215)
+## Evidence-backed semantic concept materialization (#217)
 
-PR #215 must keep four semantic layers separate.
+Live validation after PR #215 showed the real Personal Algorithm Graph had thousands of `content` and `creator` nodes but no `topic`, `concept`, or `objective` nodes. Graph-derived semantic category inference therefore had no vocabulary and correctly reported `graphNodesConsidered: 0`.
+
+#217 inserts the missing layer before canonicalization:
+
+```text
+retained interaction evidence
+        +
+enriched local candidate metadata
+        ↓
+bounded semantic concept proposals
+        ↓
+inferred/rebuildable topic + concept nodes
+        ↓
+evidence-backed about edges
+        ↓
+semantic reranking
+```
+
+Proposal sources are intentionally narrow:
+- enriched candidate topics/keywords;
+- enriched content type/category;
+- repeated title keyphrases from retained interactions as a bootstrap when richer metadata is absent.
+
+A proposal must have retained interaction support. Passive Home exposure and search/RSS acquisition alone are not positive preference evidence and cannot materialize a semantic concept.
+
+Derived nodes/edges:
+- have deterministic IDs;
+- carry `provenance: inferred`;
+- carry `derivedBy: semantic-concept-materializer-v1`;
+- are marked rebuildable;
+- retain exact supporting evidence IDs on inferred edges;
+- reconcile as one derived projection without generating synthetic user-edit records;
+- bump graph revision only when the derived projection actually changes.
+
+This slice does **not** solve canonicalization. Multiple related concepts may still exist after materialization; #214 canonicalization and durable clustering are the next measured stages.
+
+## Durable semantic mode architecture (#214 / post-#217)
+
+The post-#217 mode architecture must keep four semantic layers separate.
 
 ### 1. Canonical graph concepts
 
