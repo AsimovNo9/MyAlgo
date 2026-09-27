@@ -275,3 +275,35 @@ test('model topics replace raw metadata topics when extraction is available', ()
     true,
   );
 });
+
+
+test('verified empty model topics abstain instead of falling back to raw metadata', () => {
+  const inputState = state([
+    interactionRecord('e1', 'v1', 'Generic review one'),
+    interactionRecord('e2', 'v2', 'Generic review two'),
+  ]);
+
+  const result = buildSemanticConceptMaterialization(inputState, [
+    {
+      external_id: 'v1',
+      topics: ['review', 'gameplay'],
+      model_topics: [],
+      content_type: 'Gaming',
+    },
+    {
+      external_id: 'v2',
+      topics: ['review', 'gameplay'],
+      model_topics: [],
+      content_type: 'Gaming',
+    },
+  ]);
+
+  assert.equal(
+    result.proposals.some((proposal) => ['review', 'gameplay'].includes(proposal.label.toLowerCase())),
+    false,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.kind === 'concept' && proposal.label === 'Gaming'),
+    true,
+  );
+});
