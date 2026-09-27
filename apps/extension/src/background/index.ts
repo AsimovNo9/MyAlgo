@@ -860,12 +860,15 @@ async function refreshSemanticScoreFeatures(
 
     let effectiveContext = requestedContext;
     let fallbackReason: string | null = null;
+    let lastNeuralPhase: string | null = null;
+    let lastNeuralStatus: Record<string, unknown> | null = null;
     let semantic;
     const reportEmbeddingPhase = async (
       phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings',
       inputCount: number,
     ) => {
       if (refreshEpoch !== semanticEpoch) return;
+      if (effectiveContext.semanticModelMode === 'neural') lastNeuralPhase = phase;
       await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
         status: 'started',
         phase,
@@ -897,6 +900,18 @@ async function refreshSemanticScoreFeatures(
     } catch (error) {
       if (requestedContext.semanticModelMode !== 'neural') throw error;
       fallbackReason = error instanceof Error ? error.message : 'Neural semantic provider failed.';
+      const observedStatus = await getStorage<Record<string, unknown> | null>(
+        STORAGE_KEYS.SEMANTIC_MODEL_STATUS,
+        null,
+      );
+      if (observedStatus?.mode === 'neural') {
+        lastNeuralStatus = Object.fromEntries(
+          ['status', 'backend', 'inferenceBatch', 'inferenceBatchCount', 'completedBatches',
+            'batchSize', 'inputCount', 'tokenMaxLength', 'elapsedMs', 'updatedAt']
+            .filter((key) => observedStatus[key] !== undefined)
+            .map((key) => [key, observedStatus[key]]),
+        );
+      }
       const fallbackProvider = createOffscreenEmbeddingProvider('hash');
       const fallbackIdentity = semanticProviderIdentity('hash');
       effectiveContext = {
@@ -923,6 +938,8 @@ async function refreshSemanticScoreFeatures(
         backend: 'hash-fallback',
         status: 'fallback',
         error: fallbackReason,
+        lastNeuralPhase,
+        lastNeuralStatus,
         updatedAt: new Date().toISOString(),
       });
     }
@@ -980,6 +997,8 @@ async function refreshSemanticScoreFeatures(
       semanticModelMode: effectiveContext.semanticModelMode,
       execution: effectiveContext.provider.execution,
       fallbackReason,
+      lastNeuralPhase,
+      lastNeuralStatus,
       mode,
       graphRevision: state.graph.currentRevision,
       elapsedMs: Math.round(performance.now() - startedAt),

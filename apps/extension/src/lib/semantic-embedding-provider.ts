@@ -75,7 +75,9 @@ export function createOffscreenEmbeddingProvider(
           new Promise<SemanticEmbeddingResponse>((_, reject) => {
             timeout = setTimeout(
               () => reject(new Error('Timed out waiting for semantic offscreen response.')),
-              mode === 'neural' ? 300_000 : 20_000,
+              // Let the sandbox host report its own timeout first, preserving
+              // whether the request was posted and which inference batch ran.
+              mode === 'neural' ? 330_000 : 20_000,
             );
           }),
         ]).finally(() => {
