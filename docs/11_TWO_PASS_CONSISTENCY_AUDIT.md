@@ -43,21 +43,26 @@ feed enforcement / stale-loop hardening — implemented
       ↓
 source-neutral candidate acquisition (#202/#206) — implemented
       ↓
-semantic matching + mode-aware reranking (#209/#210) — active PR #213
+semantic embeddings + evidence-backed concepts + zero-shot verification — implemented foundations
       ↓
-graph provenance + Why/trace UX (#170/#153)
+canonical concept reconciliation + bounded semantic score aggregation (#214)
       ↓
-replay/evaluation baseline (#162)
+durable inferred modes + multi-label affinities (#214/#161)
+      ↓
+graph-grounded mode scoring + retrieval/supply (#214)
+      ↓
+display-score recalibration + graph provenance / Why-this UX (#210/#170/#153)
       ↓
 correction / Forget / history controls (#154/#155/#178)
       ↓
-broader mode editing / counterfactuals
+editable modes / graph editing / counterfactuals
       ↓
 sync/cloud/productization
       ↓
 additional connectors
 ```
 
+Canonicalization precedes mode clustering because fragmented source labels should not define durable mode identity. Bounded semantic score aggregation precedes presentation-score retuning because calibration must not hide duplicated additive evidence.
 Any document that presents the historical server-ranked/API-derived recommender as the current MVP architecture, or places cloud AI, multi-platform support, or API-derived graph bootstrap ahead of the local feed/trust loop, is stale.
 
 ## Known legacy concepts to remove
