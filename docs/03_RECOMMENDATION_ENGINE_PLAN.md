@@ -412,6 +412,8 @@ The first live #220 implementation used FLAN-T5 Small q8. It loaded successfully
 
 The PR therefore replaces FLAN-T5 Small rather than growing an open-ended stopword/parser patch set. SmolLM2-135M-Instruct is still browser-small, is explicitly instruction-tuned, and supports Transformers.js text generation. The cached output contract is revisioned so the model/parser replacement invalidates the FLAN cache automatically.
 
+A single serialized neural surface remains important for GPU stability, but whole-request serialization is too coarse. Large embedding refreshes can contain many batches, so the sandbox schedules them cooperatively: one embedding batch executes, control returns to the browser task queue, and a waiting concept request may run before the next embedding batch. This prevents concept-provider timeouts without concurrent GPU inference.
+
 Concept extraction constraints:
 - only retained interaction-supported candidates are eligible;
 - generation is deterministic (`do_sample: false`, one beam);
