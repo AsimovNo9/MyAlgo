@@ -43,19 +43,19 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #219 / PR #220:** replace raw YouTube keyword strings as the preferred concept source with a packaged local concept-extraction model, while preserving #218's evidence/provenance gates and metadata fallback.
+1. **P0 — #219 / PR #220:** filter raw YouTube topic candidates with a packaged local zero-shot concept verifier, while preserving #218's evidence/provenance gates and metadata fallback.
 2. **P0 — #214:** use embeddings to canonicalize/alias the extracted/materialized concepts, then cluster canonical concepts into durable modes, preserve multi-label affinities, ground mode score changes in exact graph structure, and measure mode-supply shortfalls.
 3. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over exact mode/node/edge contributions.
 4. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
 5. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #218 is merged. It supplies deterministic evidence-backed semantic graph materialization, but live validation showed raw YouTube keywords are still too literal and fragmented to be the preferred taxonomy source. #219/PR #220 inserts a packaged local instruction model before materialization.
+PR #218 is merged. It supplies deterministic evidence-backed semantic graph materialization, but live validation showed raw YouTube keywords are still too literal and fragmented to be the preferred taxonomy source. #219/PR #220 inserts a packaged local zero-shot verifier before materialization.
 
 The intended hierarchy is:
 
 ```text
 interaction-supported candidate metadata
-         → local concept extraction
+         → local zero-shot concept verification
          → evidence-backed topic/concept materialization
          → embedding-assisted canonical concepts
          → semantic neighbourhoods / durable mode clusters
