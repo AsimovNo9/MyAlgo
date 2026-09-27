@@ -1,6 +1,4 @@
 import { env, pipeline } from '@huggingface/transformers';
-import ortMjsUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs?url';
-import ortWasmUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm?url';
 
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-webgpu-q8-v1';
@@ -32,8 +30,8 @@ env.useWasmCache = false;
 // emitted local assets. Model/configuration files are also packaged at build
 // time under env.localModelPath; runtime remote-model loading is disabled.
 env.backends.onnx.wasm!.wasmPaths = {
-  mjs: new URL(ortMjsUrl, window.location.href).href,
-  wasm: new URL(ortWasmUrl, window.location.href).href,
+  mjs: new URL('./runtime/onnx/ort-wasm-simd-threaded.asyncify.mjs', window.location.href).href,
+  wasm: new URL('./runtime/onnx/ort-wasm-simd-threaded.asyncify.wasm', window.location.href).href,
 };
 
 const postToHost = (message: Record<string, unknown>) => {
