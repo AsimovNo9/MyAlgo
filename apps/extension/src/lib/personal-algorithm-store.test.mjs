@@ -639,3 +639,132 @@ test('evidence compaction bounds default evidence while preserving indefinite ev
   assert.equal(retained.filter((record) => record.retention.policy === 'default').length, 2);
   assert.equal(retained.some((record) => record.id === 'pinned'), true);
 });
+
+
+test('derived graph projection increments revision once and does not create synthetic user edits', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'semantic-1' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-09-27T10:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: { title: 'Distributed systems tutorial' },
+    },
+    confidence: 1,
+  }, 'semantic-evidence-1');
+
+  const projection = {
+    marker: 'semantic-concept-materializer-v1',
+    nodes: [{
+      id: 'topic:derived:distributed%20systems',
+      kind: 'topic',
+      label: 'Distributed systems',
+      content: null,
+      provenance: 'inferred',
+      confidence: 0.66,
+      attributes: {
+        derivedBy: 'semantic-concept-materializer-v1',
+        rebuildable: true,
+      },
+    }],
+    edges: [{
+      id: 'edge:derived-about:test',
+      sourceNodeId: 'topic:derived:distributed%20systems',
+      targetNodeId: 'content:youtube:semantic-1',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.66,
+      evidenceIds: ['semantic-evidence-1'],
+      attributes: {
+        derivedBy: 'semantic-concept-materializer-v1',
+        rebuildable: true,
+      },
+    }],
+  };
+
+  const before = await store.exportState();
+  const first = await store.reconcileDerivedGraphProjection(projection);
+  const afterFirst = await store.exportState();
+  const second = await store.reconcileDerivedGraphProjection(projection);
+  const afterSecond = await store.exportState();
+
+  assert.equal(first.changed, true);
+  assert.equal(second.changed, false);
+  assert.equal(afterFirst.graph.currentRevision, before.graph.currentRevision + 1);
+  assert.equal(afterSecond.graph.currentRevision, afterFirst.graph.currentRevision);
+  assert.equal(afterFirst.graph.userEdits.length, before.graph.userEdits.length);
+  assert.equal(
+    afterFirst.graph.revisions.at(-1)?.reason,
+    'derived_graph_reconcile:semantic-concept-materializer-v1',
+  );
+  assert.equal(
+    afterSecond.graph.nodes.some((node) => node.id === 'topic:derived:distributed%20systems'),
+    true,
+  );
+});
+
+test('derived graph projection removes only owned derived structure and preserves explicit nodes', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'semantic-2' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-09-27T10:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: { title: 'Local AI tooling guide' },
+    },
+  }, 'semantic-evidence-2');
+
+  await store.upsertNode({
+    id: 'topic:explicit:local-ai',
+    kind: 'topic',
+    label: 'Local AI',
+    provenance: 'explicit',
+    confidence: 1,
+    attributes: {},
+  });
+
+  await store.reconcileDerivedGraphProjection({
+    marker: 'semantic-concept-materializer-v1',
+    nodes: [{
+      id: 'topic:derived:local%20llm',
+      kind: 'topic',
+      label: 'Local LLM',
+      content: null,
+      provenance: 'inferred',
+      confidence: 0.7,
+      attributes: { derivedBy: 'semantic-concept-materializer-v1', rebuildable: true },
+    }],
+    edges: [{
+      id: 'edge:derived-about:local-llm',
+      sourceNodeId: 'topic:derived:local%20llm',
+      targetNodeId: 'content:youtube:semantic-2',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.7,
+      evidenceIds: ['semantic-evidence-2'],
+      attributes: { derivedBy: 'semantic-concept-materializer-v1', rebuildable: true },
+    }],
+  });
+
+  const cleared = await store.reconcileDerivedGraphProjection({
+    marker: 'semantic-concept-materializer-v1',
+    nodes: [],
+    edges: [],
+  });
+  const graph = await store.getGraph();
+
+  assert.equal(cleared.changed, true);
+  assert.equal(graph.nodes.some((node) => node.id === 'topic:derived:local%20llm'), false);
+  assert.equal(graph.edges.some((edge) => edge.id === 'edge:derived-about:local-llm'), false);
+  assert.equal(graph.nodes.some((node) => node.id === 'topic:explicit:local-ai'), true);
+});
