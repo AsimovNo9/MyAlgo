@@ -403,3 +403,59 @@ The repository fixture is intentionally synthetic/test-safe. It is a determinist
 The existing extension store tests continue to exercise current-schema persistence, v1→v2 migration, unknown-schema safe reset, deterministic creator-relationship rebuild and incremental evidence consistency. PR #216 adds the source-independent replay comparison/review layer over those exported-state contracts.
 
 See `docs/13_REPLAY_AND_SEMANTIC_EVALUATION.md` for the fixture and metric contract.
+
+
+## PR #217 semantic concept materialization validation
+
+PR #216 is merged and supplies the replay/evaluation contract. #217 validates the missing live graph layer discovered after #215.
+
+### Automated requirements
+
+- interaction-supported enriched topics/content types materialize deterministic inferred nodes;
+- repeated title keyphrases can bootstrap topics only with stronger repeated interaction support;
+- passive Home exposure alone cannot materialize concepts;
+- acquired/search/RSS metadata alone cannot materialize concepts without retained interaction support;
+- derived nodes/edges have deterministic IDs and exact retained evidence references;
+- unchanged projection reconciliation does not bump graph revision;
+- projection changes bump graph revision once without creating synthetic user-edit records;
+- explicit graph nodes survive derived projection replacement/removal;
+- proposal count and support-edge count remain bounded;
+- concept evaluation reports precision/recall/F1, unexpected/missing labels and duplicate normalized labels.
+
+### Live acceptance
+
+After loading a build with real retained interactions, run a semantic refresh and inspect:
+
+```js
+const result = await chrome.runtime.sendMessage({ type: 'GET_SEMANTIC_DIAGNOSTICS' });
+console.log(result.conceptMaterialization);
+console.log(result.diagnostics);
+```
+
+Expected progression:
+
+```text
+conceptMaterialization.interactionSupportedContentCount > 0
+conceptMaterialization.materializedNodeCount > 0   // when repeated supported signals exist
+semantic diagnostics graphNodesConsidered > 0
+```
+
+A user with insufficient repeated supported signals may legitimately remain at zero concepts; #217 must abstain rather than create topics from passive exposure.
+
+Then verify graph kinds directly:
+
+```js
+const { ['personal-algorithm-state']: state } =
+  await chrome.storage.local.get('personal-algorithm-state');
+
+console.table(
+  Object.entries(
+    (state?.graph?.nodes ?? []).reduce((acc, node) => {
+      acc[node.kind] = (acc[node.kind] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([kind, count]) => ({ kind, count }))
+);
+```
+
+Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
