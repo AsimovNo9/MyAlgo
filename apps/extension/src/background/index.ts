@@ -233,20 +233,28 @@ const refreshDurableModeCatalog = async (
     generatedAt: reconciled.catalog.generatedAt,
   });
 
-  const activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default');
+  const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
+  let activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
+  if (!activeModeId) {
+    const migrated = storedMode.toLowerCase() === 'default'
+      ? null
+      : reconciled.catalog.modes.find((mode) => (
+          mode.label.toLowerCase() === storedMode.toLowerCase()
+        ));
+    activeModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, activeModeId);
+  }
+
   const activeMode = resolveDurableMode(reconciled.catalog, activeModeId);
-  if (activeMode) {
-    const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
-    if (storedMode !== activeMode.label) {
-      await setStorage(STORAGE_KEYS.MODE, activeMode.label);
-      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
-      await Promise.all(tabs.map((tab) => tab.id
-        ? chrome.tabs.sendMessage(tab.id, {
-          type: 'MODE_CHANGED',
-          payload: { mode: activeMode.label },
-        }).catch(() => undefined)
-        : undefined));
-    }
+  if (activeMode && storedMode !== activeMode.label) {
+    await setStorage(STORAGE_KEYS.MODE, activeMode.label);
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    await Promise.all(tabs.map((tab) => tab.id
+      ? chrome.tabs.sendMessage(tab.id, {
+        type: 'MODE_CHANGED',
+        payload: { mode: activeMode.label, modeId: activeMode.id },
+      }).catch(() => undefined)
+      : undefined));
   }
 
   return reconciled.catalog;
