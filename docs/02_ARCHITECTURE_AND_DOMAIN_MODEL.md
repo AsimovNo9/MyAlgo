@@ -191,6 +191,10 @@ candidate + graph text ─→ rebuildable embeddings / semantic features
 
 Embeddings may propose semantically related graph concepts, expand retrieval intents, cluster user-interest regions, and produce candidate similarity features. Similarity alone must not silently create permanent preference edges or override explicit feedback/hard policy.
 
+PR #223 keeps **canonical identity** and **score-region reconciliation** distinct. Canonical concepts remain conservative derived identities with exact source-node provenance. At scoring time, nested non-explicit canonical concepts with strong lexical containment (for example `chill lofi` / `chill lofi beats` / `lofi beats`, or a base topic plus a gameplay-qualified variant) may reconcile into one bounded score region so related subtopics do not stack merely because materialization retained useful distinctions. Explicit/mixed user-authored concepts are protected from this score-region merge.
+
+Embedding-only graph matches also pass a confidence gate before receiving score mass: weak matches must clear an absolute similarity floor and remain sufficiently close to the candidate's strongest semantic match, while direct lexical support can retain a match. Broad taxonomy-only matches are a collective bounded fallback rather than multiple additive preference terms. These rules affect scoring only; they do not delete graph nodes, canonical concepts, evidence, or cached semantic diagnostics.
+
 Each embedding cache record should be tied to stable owner identity plus model ID/version, input hash, dimensions, and generation time so a model change can invalidate/rebuild semantic enrichment without changing canonical evidence, graph edits, or preference state.
 
 A compact local embedding encoder is preferred for vector generation. A later local generative model may synthesize natural-language explanations from bounded structured trace/path inputs, but it must not independently infer why the user likes an item from raw history.
