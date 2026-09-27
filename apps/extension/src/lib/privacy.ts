@@ -1,4 +1,4 @@
-export const PRIVACY_DISCLOSURE_VERSION = 3;
+export const PRIVACY_DISCLOSURE_VERSION = 4;
 
 export const PRIVACY_DISCLOSURE = {
   pages: 'YouTube pages you visit while MyAlgo is enabled',
