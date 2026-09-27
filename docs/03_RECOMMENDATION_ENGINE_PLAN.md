@@ -420,6 +420,7 @@ Concept extraction constraints:
 - output is cached by model identity + prompt/input hash;
 - diagnostics preserve the last actual generation attempt; cache-only drain passes cannot overwrite generation failure/success state;
 - concept-generation validity is independent of graph revision: cached/generated proposals are invalidated by candidate input hash or concept model/pipeline identity, while in-flight generation is cancelled only by privacy reset/model-boundary changes;
+- after a long generation request completes, graph materialization re-reads the latest evidence/candidate state and revalidates cached concepts against current candidate input hashes before reconciliation;
 - only a small bounded extraction slice runs per top-level semantic refresh;
 - the embedding drain cannot trigger more generation, but must continue using valid cached model concepts;
 - when a valid model concept list exists, it replaces raw keyword topics for that candidate;
