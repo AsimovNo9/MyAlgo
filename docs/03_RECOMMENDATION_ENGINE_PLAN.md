@@ -445,6 +445,7 @@ Do not solve this by merely retuning the display calibration. The immediate #221
 - preserve source-node/evidence provenance rather than deleting the original nodes;
 - compute candidate affinity to the canonical neighbourhood;
 - allow at most one bounded semantic score contribution per neighbourhood;
+- reconcile legacy lexical graph matches and embedding graph matches so the same canonical neighbourhood cannot contribute twice through two semantic feature paths;
 - downweight or separate broad content-type taxonomy from specific preference concepts;
 - keep every score-affecting term exact in the trace.
 
