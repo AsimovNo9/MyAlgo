@@ -224,36 +224,34 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #216 is merged and #162 now provides the deterministic replay/evaluation contract.
+PR #216/#162 established replay/evaluation and PR #218/#217 established evidence-backed semantic graph materialization.
 
-1. **P0 — #217 semantic concept materialization.** Derive bounded topic/concept proposals from retained interaction evidence plus existing enriched candidate metadata, materialize evidence-backed rebuildable graph nodes/edges, and make semantic reranking see non-zero graph vocabulary.
-2. **P0 — #214 canonicalization + durable modes.** Once semantic nodes exist, measure and reduce duplicate/fragmented concepts, cluster canonical concepts into stable mode IDs, preserve multi-label affinity, ground mode scoring in exact graph members, and implement mode-aware supply handling against #162 metrics.
+1. **P0 — #219 / PR #220 local concept extraction.** Package a small local instruction model, extract bounded concepts only for interaction-supported candidates, cache outputs by model/version/input hash, and feed them through the existing #218 materializer. Raw YouTube keywords remain fallback only.
+2. **P0 — #214 canonicalization + durable modes.** Use the existing embedding layer to reconcile aliases/near-duplicates from extracted concepts, then cluster canonical concepts into stable mode IDs, preserve multi-label affinity, ground mode scoring in exact graph members, and implement mode-aware supply handling against #162 metrics.
 3. **P1 — #153 + #170 trust UX.** Resolve every mode/category contribution to exact graph members, evidence/provenance, and trace values.
 4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
 5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
 6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-Live validation established the missing dependency: the real graph contained 2,124 content nodes and 1,091 creator nodes but zero topic/concept/objective nodes. #217 therefore precedes canonicalization and clustering.
-
-The semantic sequence is now:
+Live #218 validation showed the remaining distinction clearly: materialization mechanics are sound, but YouTube keywords are metadata strings rather than semantic abstractions. The next stage therefore uses a local concept proposer before embedding-assisted canonicalization.
 
 ```text
-retained interaction evidence + enriched local candidate metadata
+retained interaction evidence + enriched candidate metadata
     ↓
-evidence-backed derived topic/concept nodes (#217)
+local FLAN-T5 concept proposals (#219)
     ↓
-canonicalization / aliases (#214)
+evidence-backed derived graph projection (#218)
+    ↓
+embedding-assisted canonicalization / aliases (#214)
     ↓
 semantic neighbourhoods / durable modes
     ↓
 multi-label candidate affinities
     ↓
-graph-grounded scorer contributions
-    ↓
-mode-aware retrieval + stable presentation
+graph-grounded scoring and mode-aware retrieval
 ```
 
-Passive Home exposure or search/RSS acquisition alone must not create positive preference concepts. Derived semantic structure is rebuildable and distinct from explicit user edits.
+The concept model is advisory/rebuildable. It cannot bypass retained interaction support or directly create explicit preference state.
 
 
 ## Phase 1 scope discipline
