@@ -125,7 +125,7 @@ const persistConceptStatus = (data: Record<string, unknown>) => {
   void chrome.runtime.sendMessage({
     type: 'CONCEPT_MODEL_STATUS',
     payload: {
-      modelId: 'Xenova/flan-t5-small',
+      modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
       ...data,
       updatedAt: new Date().toISOString(),
     },
