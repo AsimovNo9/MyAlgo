@@ -89,7 +89,7 @@ The extension runs on YouTube and can request YouTube-owned URLs for metadata or
 
 With explicit web discovery enabled, MyAlgo requests YouTube search pages using only bounded graph-derived goal/topic queries plus active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-page snippets are discovery metadata and are followed by canonical YouTube watch-page enrichment before scoring.
 
-With the neural semantic encoder explicitly enabled, the extension downloads public `mixedbread-ai/mxbai-embed-xsmall-v1` model/configuration files from Hugging Face and caches them under the extension/browser model cache. Transformers.js/ONNX execution code is bundled with the extension artifact; inference runs locally.
+With the neural semantic encoder explicitly enabled, the extension downloads public `mixedbread-ai/mxbai-embed-xsmall-v1` model/configuration files from Hugging Face. Transformers.js/ONNX execution code is bundled with the extension artifact; inference runs locally in a sandboxed extension page. Because Chrome disables CacheStorage for that sandboxed opaque-origin page, the current implementation keeps the loaded model in memory while the sandbox stays active and may re-download public model files after a full extension reload.
 
 Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, third-party search provider, or materially different processor is a new data-flow boundary and requires review before collection begins.
 
