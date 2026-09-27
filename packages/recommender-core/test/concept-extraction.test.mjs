@@ -2,48 +2,74 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildConceptExtractionPrompt,
+  buildConceptCandidateLabels,
+  buildConceptVerificationInput,
+  buildConceptVerificationText,
   conceptExtractionInputHash,
-  parseConceptExtractionOutput,
+  selectVerifiedConcepts,
 } from '../src/concept-extraction.ts';
 
-test('concept extraction prompt is bounded and deterministic', () => {
-  const candidate = {
-    external_id: 'video-1',
-    title: 'Silent Hill Townfall Full Gameplay Ending',
-    description: 'A complete survival horror walkthrough with combat and puzzle sections.',
-    topics: ['Silent Hill Townfall Full Gameplay', 'Horror Game', 'Review'],
-    content_type: 'Gaming',
-    channel_name: 'Example Creator',
-  };
-  const first = buildConceptExtractionPrompt(candidate);
-  const second = buildConceptExtractionPrompt(candidate);
+const candidate = {
+  external_id: 'video-1',
+  title: 'Silent Hill Townfall Full Gameplay Ending',
+  description: 'A complete survival horror walkthrough with combat and puzzle sections.',
+  topics: [
+    'Silent Hill Townfall',
+    'Silent Hill Townfall Full Gameplay',
+    'survival horror',
+    'gameplay',
+    'Review',
+    'Silent Hill Townfall',
+  ],
+  content_type: 'Gaming',
+  channel_name: 'Example Creator',
+};
 
-  assert.equal(second, first);
+test('concept verification input is bounded and deterministic', () => {
+  const first = buildConceptVerificationInput(candidate);
+  const second = buildConceptVerificationInput(candidate);
+
+  assert.deepEqual(second, first);
   assert.equal(conceptExtractionInputHash(candidate), conceptExtractionInputHash(candidate));
-  assert.match(first, /Output exactly one comma-separated line/);
-  assert.match(first, /Silent Hill Townfall Full Gameplay Ending/);
+  assert.match(buildConceptVerificationText(candidate), /Silent Hill Townfall Full Gameplay Ending/);
+  assert.deepEqual(first.labels, [
+    'Silent Hill Townfall',
+    'Silent Hill Townfall Full Gameplay',
+    'survival horror',
+  ]);
 });
 
-test('concept extraction parser is conservative and bounded', () => {
+test('candidate labels reject generic metadata noise and duplicates', () => {
   assert.deepEqual(
-    parseConceptExtractionOutput('Topics: Silent Hill, survival horror, video, gameplay video, puzzle games, Silent Hill', 4),
+    buildConceptCandidateLabels({
+      external_id: 'v',
+      title: 'Example',
+      topics: [
+        'video',
+        'Review',
+        'YouTube video metadata',
+        'local LLMs',
+        'WebGPU inference',
+        'local LLMs',
+        'https://example.com',
+      ],
+    }),
+    ['local LLMs', 'WebGPU inference'],
+  );
+});
+
+test('verified concepts are multi-label, thresholded, deterministic, and bounded', () => {
+  assert.deepEqual(
+    selectVerifiedConcepts(
+      ['Silent Hill', 'survival horror', 'review', 'puzzle games', 'gaming'],
+      [0.96, 0.91, 0.12, 0.68, 0.61],
+      { minimumScore: 0.58, maxConcepts: 3 },
+    ),
     ['Silent Hill', 'survival horror', 'puzzle games'],
   );
 
   assert.deepEqual(
-    parseConceptExtractionOutput('- local LLMs\n- WebGPU inference\n- AI development\n- review', 3),
-    ['local LLMs', 'WebGPU inference', 'AI development'],
-  );
-});
-
-test('concept extraction parser rejects prompt echoes and malformed labels', () => {
-  assert.deepEqual(
-    parseConceptExtractionOutput('Title: example, Description: something, https://example.com, this phrase has far too many individual words for a compact concept label'),
-    [],
-  );
-  assert.deepEqual(
-    parseConceptExtractionOutput('YouTube video - wikipedia, List all episodes in chronological order., video video, seconds, Identify the topic of video games.'),
+    selectVerifiedConcepts(['alpha', 'beta'], [0.2, 0.3]),
     [],
   );
 });
