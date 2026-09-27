@@ -32,12 +32,15 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Revalidate clean-profile disclosure v5: prior v4 acceptance is rejected; production artifact contains the pinned neural model/runtime assets; enabling neural mode performs no model-host/CDN request; deletion disables observation/retrieval and clears MyAlgo semantic caches
+- [ ] Revalidate clean-profile disclosure v6: prior v5 acceptance is rejected; production artifact contains both pinned neural model sets plus runtime assets; enabling local neural semantics performs no model-host/CDN request; deletion disables observation/retrieval and clears embedding, semantic-feature, and concept-extraction caches
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
 - [x] CI built-artifact secret scan passes
 - [ ] Final release package receives manual endpoint/credential review
+
+- [ ] Local concept verification validated (#219): only interaction-supported candidates are queued, cached outputs replace raw keyword topics when present, model failure falls back to metadata, and WebGPU/WASM execution remains off first paint
+- [ ] Built artifact audit confirms both mxbai embedding and DeBERTa nli-deberta-v3-xsmall q8 assets are packaged locally
 
 ## P3 — Quality
 

@@ -217,3 +217,28 @@ Initial live materialization saturated the 64-node cap with 35 title-only nodes 
 The materializer therefore treats enriched candidate topics/content types as the taxonomy source. Title phrases are supporting evidence only. It also suppresses a candidate topic when the same normalized label already exists as a content-type concept, preventing duplicate `Music`/ `Entertainment` topic+concept pairs.
 
 Diagnostics expose `qualifiedBeforeCap` and `droppedByCap` so cap saturation is measurable rather than hidden.
+
+
+## Local concept verification comparison (#219)
+
+PR #220 introduces a model-verification stage before #218's deterministic materializer. Evaluation should compare raw metadata topics against zero-shot-verified metadata topics under the same retained evidence fixture:
+
+```text
+A: enriched YouTube keyword/category metadata → #218 materializer
+B: zero-shot-verified metadata topics          → #218 materializer
+```
+
+The graph projection, evidence gate, support thresholds and concept-materialization metrics remain the same. This isolates whether the verifier improves topic precision/abstention without crediting unrelated pipeline changes. Alias abstraction remains the next embedding-canonicalization slice.
+
+For labelled/reviewed examples, compare:
+- concept precision, recall and F1;
+- unexpected/generic labels;
+- normalized duplicate labels;
+- fragmentation: number of labels representing one intended concept;
+- over-broad merges or abstraction loss;
+- empty-output/abstention rate;
+- extraction cache hit rate;
+- first-run and cached latency;
+- WebGPU/WASM fallback rate.
+
+The initial model output is not canonical truth. Even a cleaner label such as `Lo-fi music` remains a derived proposal until it is evidence-supported and passes the same #218 materializer. Embedding-assisted alias/canonical decisions remain a later #214 stage.

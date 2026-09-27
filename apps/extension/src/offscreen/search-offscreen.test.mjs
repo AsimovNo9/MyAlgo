@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const hostMessages = [];
+const runtimeMessages = [];
 const frame = new EventTarget();
 frame.contentWindow = { postMessage: (message) => hostMessages.push(message) };
 frame.contentDocument = { readyState: 'loading' };
@@ -16,7 +17,7 @@ let runtimeListener;
 globalThis.chrome = {
   runtime: {
     onMessage: { addListener: (listener) => { runtimeListener = listener; } },
-    sendMessage: async () => ({ ok: true }),
+    sendMessage: async (message) => { runtimeMessages.push(message); return { ok: true }; },
   },
 };
 
@@ -80,4 +81,89 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
     },
   }));
   assert.equal((await secondResult).ok, true);
+});
+
+
+test('concept verification reuses the local neural sandbox and returns selected labels', async () => {
+  hostMessages.length = 0;
+  frame.contentDocument = null;
+
+  const result = new Promise((resolve) => {
+    assert.equal(runtimeListener({
+      target: 'semantic-embedding-offscreen',
+      type: 'VERIFY_CONCEPTS',
+      conceptItems: [{
+        text: 'distributed systems and CRDT implementation',
+        labels: ['distributed systems', 'CRDTs', 'cooking'],
+      }],
+    }, {}, resolve), true);
+  });
+
+  assert.equal(hostMessages.length, 1);
+  assert.equal(hostMessages[0].type, 'VERIFY_CONCEPTS');
+  assert.deepEqual(hostMessages[0].conceptItems, [{
+    text: 'distributed systems and CRDT implementation',
+    labels: ['distributed systems', 'CRDTs', 'cooking'],
+  }]);
+
+  window.dispatchEvent(Object.assign(new Event('message'), {
+    source: frame.contentWindow,
+    data: {
+      source: 'myalgo-neural-sandbox',
+      id: hostMessages[0].id,
+      modelKind: 'concept',
+      ok: true,
+      concepts: [['distributed systems', 'CRDTs']],
+      modelId: 'Xenova/nli-deberta-v3-xsmall',
+      modelVersion: 'transformersjs-local-q8-wasm-v1',
+      backend: 'wasm-sandbox',
+    },
+  }));
+
+  assert.deepEqual(await result, {
+    ok: true,
+    concepts: [['distributed systems', 'CRDTs']],
+    modelId: 'Xenova/nli-deberta-v3-xsmall',
+    modelVersion: 'transformersjs-local-q8-wasm-v1',
+    backend: 'wasm-sandbox',
+  });
+});
+
+
+test('concept verification persists an explicit runtime error status', async () => {
+  hostMessages.length = 0;
+  runtimeMessages.length = 0;
+  frame.contentDocument = null;
+
+  const result = new Promise((resolve) => {
+    assert.equal(runtimeListener({
+      target: 'semantic-embedding-offscreen',
+      type: 'VERIFY_CONCEPTS',
+      conceptItems: [{ text: 'fixture', labels: ['fixture'] }],
+    }, {}, resolve), true);
+  });
+
+  assert.equal(hostMessages.length, 1);
+  window.dispatchEvent(Object.assign(new Event('message'), {
+    source: frame.contentWindow,
+    data: {
+      source: 'myalgo-neural-sandbox',
+      id: hostMessages[0].id,
+      modelKind: 'concept',
+      ok: false,
+      error: 'fixture model load failed',
+      backend: 'wasm-sandbox',
+    },
+  }));
+
+  const response = await result;
+  assert.equal(response.ok, false);
+  assert.match(response.error, /fixture model load failed/);
+
+  const statusMessages = runtimeMessages.filter((message) => (
+    message?.type === 'CONCEPT_MODEL_STATUS'
+  ));
+  assert.ok(statusMessages.length >= 1);
+  assert.equal(statusMessages.at(-1).payload.status, 'error');
+  assert.equal(statusMessages.at(-1).payload.error, 'fixture model load failed');
 });

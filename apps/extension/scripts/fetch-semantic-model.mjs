@@ -5,10 +5,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
-const REVISION = 'b0561d9a97e6b298da39f0ef3e7d3cf153b1b29a';
-const TARGET_ROOT = join(ROOT, 'public', 'models', 'mxbai-embed-xsmall-v1');
-const MANIFEST_PATH = join(TARGET_ROOT, '.myalgo-model.json');
 const RUNTIME_ROOT = join(ROOT, 'public', 'runtime', 'onnx');
 const require = createRequire(import.meta.url);
 const ONNX_RUNTIME_ENTRY = require.resolve('onnxruntime-web');
@@ -18,35 +14,54 @@ const RUNTIME_FILES = [
   'ort-wasm-simd-threaded.asyncify.wasm',
 ];
 
-const FILES = [
-  { remote: 'config.json', local: 'config.json', minBytes: 600 },
-  { remote: 'tokenizer.json', local: 'tokenizer.json', minBytes: 700_000 },
-  { remote: 'tokenizer_config.json', local: 'tokenizer_config.json', minBytes: 1_000 },
-  { remote: 'special_tokens_map.json', local: 'special_tokens_map.json', minBytes: 600 },
-  { remote: 'vocab.txt', local: 'vocab.txt', minBytes: 200_000 },
-  { remote: 'onnx/model_quantized.onnx', local: 'onnx/model_quantized.onnx', minBytes: 24_000_000 },
+const MODELS = [
+  {
+    modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
+    revision: 'b0561d9a97e6b298da39f0ef3e7d3cf153b1b29a',
+    localName: 'mxbai-embed-xsmall-v1',
+    files: [
+      { remote: 'config.json', local: 'config.json', minBytes: 600 },
+      { remote: 'tokenizer.json', local: 'tokenizer.json', minBytes: 700_000 },
+      { remote: 'tokenizer_config.json', local: 'tokenizer_config.json', minBytes: 1_000 },
+      { remote: 'special_tokens_map.json', local: 'special_tokens_map.json', minBytes: 600 },
+      { remote: 'vocab.txt', local: 'vocab.txt', minBytes: 200_000 },
+      { remote: 'onnx/model_quantized.onnx', local: 'onnx/model_quantized.onnx', minBytes: 24_000_000 },
+    ],
+  },
+  {
+    modelId: 'Xenova/nli-deberta-v3-xsmall',
+    revision: '2a4f614a701367a02d51389039afc998faeda637',
+    localName: 'nli-deberta-v3-xsmall-concept-verifier',
+    files: [
+      { remote: 'config.json', local: 'config.json', minBytes: 700 },
+      { remote: 'tokenizer.json', local: 'tokenizer.json', minBytes: 8_000_000 },
+      { remote: 'tokenizer_config.json', local: 'tokenizer_config.json', minBytes: 200 },
+      { remote: 'special_tokens_map.json', local: 'special_tokens_map.json', minBytes: 100 },
+      { remote: 'added_tokens.json', local: 'added_tokens.json', minBytes: 10 },
+      { remote: 'spm.model', local: 'spm.model', minBytes: 2_000_000 },
+      { remote: 'onnx/model_quantized.onnx', local: 'onnx/model_quantized.onnx', minBytes: 80_000_000 },
+    ],
+  },
 ];
-
-const expectedManifest = {
-  modelId: MODEL_ID,
-  revision: REVISION,
-  files: FILES.map(({ remote, local }) => ({ remote, local })),
-};
 
 const sha256 = (buffer) => createHash('sha256').update(buffer).digest('hex');
 
-async function isPrepared() {
+const modelTargetRoot = (model) => join(ROOT, 'public', 'models', model.localName);
+const modelManifestPath = (model) => join(modelTargetRoot(model), '.myalgo-model.json');
+
+async function isPrepared(model) {
+  const targetRoot = modelTargetRoot(model);
   try {
-    const parsed = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
+    const parsed = JSON.parse(await readFile(modelManifestPath(model), 'utf8'));
     if (
-      parsed.modelId !== expectedManifest.modelId
-      || parsed.revision !== expectedManifest.revision
+      parsed.modelId !== model.modelId
+      || parsed.revision !== model.revision
       || !Array.isArray(parsed.files)
-      || parsed.files.length !== FILES.length
+      || parsed.files.length !== model.files.length
     ) return false;
 
-    for (const file of FILES) {
-      const info = await stat(join(TARGET_ROOT, file.local));
+    for (const file of model.files) {
+      const info = await stat(join(targetRoot, file.local));
       if (info.size < file.minBytes) return false;
     }
     return true;
@@ -55,11 +70,12 @@ async function isPrepared() {
   }
 }
 
-async function downloadFile(file) {
-  const target = join(TARGET_ROOT, file.local);
+async function downloadFile(model, file) {
+  const targetRoot = modelTargetRoot(model);
+  const target = join(targetRoot, file.local);
   await mkdir(dirname(target), { recursive: true });
 
-  const url = `https://huggingface.co/${MODEL_ID}/resolve/${REVISION}/${file.remote}?download=true`;
+  const url = `https://huggingface.co/${model.modelId}/resolve/${model.revision}/${file.remote}?download=true`;
   let lastError = null;
 
   for (let attempt = 1; attempt <= 4; attempt += 1) {
@@ -95,7 +111,36 @@ async function downloadFile(file) {
   }
 
   throw new Error(
-    `Unable to package ${file.remote} from pinned model revision: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    `Unable to package ${file.remote} from ${model.modelId}@${model.revision}: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+  );
+}
+
+async function packageModel(model) {
+  const targetRoot = modelTargetRoot(model);
+  if (await isPrepared(model)) {
+    console.log(`[MyAlgo] packaged model already present: ${model.modelId}@${model.revision}`);
+    return;
+  }
+
+  await rm(targetRoot, { recursive: true, force: true });
+  await mkdir(targetRoot, { recursive: true });
+
+  console.log(`[MyAlgo] packaging model ${model.modelId}@${model.revision}`);
+  const files = [];
+  for (const file of model.files) {
+    const downloaded = await downloadFile(model, file);
+    files.push(downloaded);
+    console.log(`[MyAlgo] packaged ${model.localName}/${downloaded.local} (${downloaded.bytes} bytes)`);
+  }
+
+  await writeFile(
+    modelManifestPath(model),
+    JSON.stringify({
+      modelId: model.modelId,
+      revision: model.revision,
+      packagedAt: new Date().toISOString(),
+      files,
+    }, null, 2) + '\n',
   );
 }
 
@@ -111,32 +156,8 @@ async function packageOnnxRuntime() {
   }
 }
 
-if (await isPrepared()) {
-  console.log(`[MyAlgo] packaged semantic model already present: ${MODEL_ID}@${REVISION}`);
-  await packageOnnxRuntime();
-  process.exit(0);
+for (const model of MODELS) {
+  await packageModel(model);
 }
-
-await rm(TARGET_ROOT, { recursive: true, force: true });
-await mkdir(TARGET_ROOT, { recursive: true });
-
-console.log(`[MyAlgo] packaging semantic model ${MODEL_ID}@${REVISION}`);
-const files = [];
-for (const file of FILES) {
-  const downloaded = await downloadFile(file);
-  files.push(downloaded);
-  console.log(`[MyAlgo] packaged ${downloaded.local} (${downloaded.bytes} bytes)`);
-}
-
-await writeFile(
-  MANIFEST_PATH,
-  JSON.stringify({
-    modelId: MODEL_ID,
-    revision: REVISION,
-    packagedAt: new Date().toISOString(),
-    files,
-  }, null, 2) + '\n',
-);
-
 await packageOnnxRuntime();
-console.log('[MyAlgo] semantic model packaging complete');
+console.log('[MyAlgo] local semantic model packaging complete');

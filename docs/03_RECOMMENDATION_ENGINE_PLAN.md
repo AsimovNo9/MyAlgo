@@ -384,7 +384,57 @@ Derived nodes/edges:
 
 This slice does **not** solve canonicalization. Multiple related concepts may still exist after materialization; #214 canonicalization and durable clustering are the next measured stages.
 
-## Durable semantic mode architecture (#214 / post-#217)
+## Local semantic concept verification (#219 / PR #220)
+
+PR #218 proved the graph projection boundary but also showed that repeated YouTube keywords are too literal/noisy to be accepted directly as semantic graph topics. Live #220 testing also rejected two small generative models for this job. The active design therefore separates **candidate generation**, **topic verification**, and later **canonicalization**.
+
+```text
+interaction-supported candidate
+        ↓
+title + description + metadata keywords
+        ↓
+deterministic bounded candidate labels
+        ↓
+local zero-shot NLI verifier
+        ↓
+0–4 verified multi-label topics
+        ↓
+#218 evidence-backed materializer
+        ↓
+derived graph nodes
+        ↓
+mxbai embedding canonicalization (#214 next)
+```
+
+The active verifier is pinned `Xenova/nli-deberta-v3-xsmall` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model.
+
+### Generative-model rejection
+
+Two live generative attempts were useful negative results:
+
+- **FLAN-T5 Small q8** loaded locally, but the 64-item cache contained roughly half empty outputs plus prompt-like/generic strings such as `YouTube video - wikipedia`, `video video`, `seconds`, and instruction echoes.
+- **SmolLM2-135M-Instruct q8** reached both WASM and WebGPU execution, but 22 real cached outputs were still dominated by empties/title fragments/prompt fragments, and a two-item WebGPU generation batch could exceed five minutes.
+
+The failure mode was structural: a tiny generative model was being asked to invent clean taxonomy labels. PR #220 now does the narrower task a classifier is strong at: decide which bounded metadata labels are actually entailed by the video text. Alias/abstraction work remains an embedding-canonicalization problem rather than a text-generation problem.
+
+### Verification constraints
+
+- only retained interaction-supported candidates are eligible;
+- deterministic candidate labels come from enriched metadata topics, after generic/malformed/duplicate filtering;
+- title/description/category text is used as verifier evidence, not as a source of new generated labels;
+- zero-shot classification is multi-label, with a conservative minimum score and at most four retained topics;
+- an empty verified label set is an intentional abstention and must **not** fall back to raw keyword topics;
+- missing verifier output or a verifier runtime failure may fall back to the #218 metadata path;
+- output is cached by model identity + verifier-pipeline revision + candidate input hash;
+- cache-only embedding-drain passes reuse valid verified labels without starting another verifier batch;
+- verifier-cache validity is independent of graph revision; graph materialization re-reads current evidence/candidate state before reconciliation;
+- model output remains derived/rebuildable and cannot directly create explicit preference state.
+
+The neural sandbox is cooperative rather than concurrently multi-model: embedding requests yield after each inference batch, a waiting verifier request gets priority at the next yield point, and only one neural operation runs on the GPU at a time.
+
+The purpose of this stage is **precision filtering and abstention**, not alias merging. Related verified labels such as `lofi`, `lofi music`, and `lofi hip hop` may still coexist until #214 embedding-assisted canonicalization reconciles them.
+
+## Durable semantic mode architecture (#214 / post-#219)
 
 The post-#217 mode architecture must keep four semantic layers separate.
 

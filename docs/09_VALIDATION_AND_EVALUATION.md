@@ -262,9 +262,9 @@ Required invariants:
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
-12. upgrading from disclosure v4 requires affirmative acceptance of disclosure v5 before observation/ranking resumes;
+12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
-14. the production artifact contains the pinned mxbai model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only those packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, graph state, history, feedback, embeddings, or traces outside the extension;
+14. the production artifact contains the pinned mxbai embedding model and SmolLM2-135M-Instruct concept-extraction model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, extracted concepts, graph state, history, feedback, embeddings, or traces outside the extension;
 15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
@@ -459,3 +459,106 @@ console.table(
 ```
 
 Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
+
+
+## PR #220 local concept verification validation (#219)
+
+PR #218 is merged and remains the authoritative evidence-backed materialization/reconciliation boundary. PR #220 changes how candidate topic labels are **verified**, not that boundary.
+
+### Automated requirements
+
+- the production build contains pinned local nli-deberta-v3-xsmall NLI q8 model/tokenizer assets as well as the existing mxbai embedding assets;
+- installed runtime has `allowRemoteModels = false` and cannot fetch model files from a model host;
+- deterministic verification text + bounded candidate-label construction produces the same input hash for unchanged metadata;
+- generic/malformed/duplicate metadata labels are rejected before inference;
+- zero-shot inference is multi-label, retains at most four labels, and can abstain with an empty verified set;
+- a verified empty set must not silently fall back to raw metadata topics;
+- only candidates with retained clicked/watched/saved/shared interaction evidence enter the verifier queue;
+- cache identity includes verifier model ID/version + verifier-pipeline revision + input hash;
+- unchanged cached inputs do not re-run verification;
+- verified topic labels replace raw keyword topics for that candidate before #218 materialization;
+- missing/failed verifier output may fall back to the #218 metadata path rather than fabricating concepts;
+- passive exposure and search/RSS acquisition alone still cannot materialize preference concepts;
+- concept verification and embedding inference share one mutually exclusive sandbox scheduler; embedding requests yield between batches and queued verifier work starts before the next embedding batch;
+- candidate embedding drain cannot trigger additional verifier runs and must still reuse cached verified concepts instead of rematerializing metadata-only graph state;
+- full local-data deletion removes the concept-verification cache and diagnostics;
+- prior disclosure-v5 acceptance is rejected after disclosure-v6.
+
+### Generative-model rejection
+
+#220 produced two useful negative live results before settling on classification.
+
+**FLAN-T5 Small q8** loaded successfully on local WASM, but the real 64-item cache contained roughly half empty outputs plus generic/prompt-like strings. **SmolLM2-135M-Instruct q8** reached both WASM and WebGPU, but 22 real cached outputs were still dominated by empty/title/prompt fragments, and a two-item WebGPU generation request could exceed five minutes.
+
+The active design therefore does not ask a small model to invent taxonomy. It uses an NLI classifier to verify bounded metadata candidate labels. Embedding-assisted alias/canonical abstraction remains the next #214 slice.
+
+### Direct verifier-path validation
+
+To isolate verification from page-ranking/drain timing, PR #220 exposes a privacy-gated one-shot diagnostic request:
+
+```js
+const result = await chrome.runtime.sendMessage({
+  type: 'REFRESH_CONCEPT_EXTRACTION'
+});
+console.log(result);
+
+const cached = await chrome.runtime.sendMessage({
+  type: 'REFRESH_CONCEPT_EXTRACTION',
+  payload: { generate: false }
+});
+console.log(cached);
+```
+
+The first request runs one bounded verifier batch against the persisted candidate reservoir and immediately returns materialization, verifier diagnostics, and model status. The second request reuses only valid cached verified labels. This command is intended for validation/debugging, not routine UI use.
+
+`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Cache-only embedding-drain passes do not overwrite it.
+
+A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
+
+Graph revision changes during verifier inference must not invalidate an otherwise input-valid result. Cache validity is candidate input + verifier model/pipeline identity. After inference completes, the materializer re-reads current evidence and candidate state before graph reconciliation.
+
+### Neural scheduler fairness
+
+A direct verifier request issued while the embedding model is in multi-batch WebGPU inference must not wait for the entire embedding request. The current embedding batch may finish, then verifier work gets priority before the next embedding batch. The scheduler never runs the two models concurrently.
+
+Validation signal:
+- embedding status may show `inference · webgpu-sandbox`;
+- a direct verifier refresh transitions from `queued` to `wasm-sandbox` verifier inference before the embedding request fully drains;
+- verifier execution does not time out merely because embeddings have more queued batches;
+- after verifier completion, the embedding request resumes and preserves output count/order.
+
+### Live validation
+
+Enable local neural semantics and trigger normal semantic enrichment. Then inspect:
+
+```js
+const r = await chrome.runtime.sendMessage({ type: 'GET_SEMANTIC_DIAGNOSTICS' });
+console.log(r.conceptExtraction);
+console.log(r.conceptModelStatus);
+console.log(r.conceptMaterialization);
+console.log(r.diagnostics);
+```
+
+Healthy first-run signals include:
+- `conceptExtraction.interactionSupportedCandidateCount > 0`;
+- `conceptExtraction.extracted` is bounded by the per-refresh verifier slice;
+- `conceptExtraction.pending` decreases over later refreshes;
+- `conceptModelStatus.backend` is `wasm-sandbox`;
+- `conceptExtraction.fallbackReason === null`;
+- materialized verified topic nodes include `model_topic` in `sourceKinds`;
+- a verifier-abstained candidate can cache `concepts: []` without raw keyword fallback.
+
+Repeat the same semantic refresh after the cache warms. `cacheHits` should increase and unchanged candidates should not be reclassified.
+
+### Quality comparison
+
+Compare #218 metadata-only vs #220 verifier output on a fixed labelled/local-reviewed sample. Measure:
+- verified-label precision/recall/F1;
+- generic/noisy label rate;
+- abstention rate;
+- duplicate/fragmentation rate before canonicalization;
+- verifier latency and WebGPU→WASM fallback rate;
+- package-size and long-session memory impact.
+
+The verifier is expected to improve precision and abstention, not solve aliases. Evaluate canonicalization separately in the next #214 slice.
+

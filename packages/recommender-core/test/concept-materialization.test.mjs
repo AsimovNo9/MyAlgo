@@ -235,3 +235,75 @@ test('diagnostics expose qualification pressure before the materialization cap',
   assert.equal(result.diagnostics.qualifiedProposalCount, 2);
   assert.equal(result.diagnostics.droppedByCap, 1);
 });
+
+
+test('model topics replace raw metadata topics when extraction is available', () => {
+  const inputState = state([
+    interactionRecord('e1', 'v1', 'Silent Hill Townfall Full Gameplay Ending'),
+    interactionRecord('e2', 'v2', 'Silent Hill Townfall boss ending'),
+  ]);
+
+  const result = buildSemanticConceptMaterialization(inputState, [
+    {
+      external_id: 'v1',
+      topics: ['Silent Hill Townfall Full Gameplay', 'review'],
+      model_topics: ['Silent Hill', 'survival horror'],
+      content_type: 'Gaming',
+    },
+    {
+      external_id: 'v2',
+      topics: ['Silent Hill Townfall Ending', 'guide'],
+      model_topics: ['Silent Hill', 'survival horror'],
+      content_type: 'Gaming',
+    },
+  ]);
+
+  assert.equal(
+    result.proposals.some((proposal) => proposal.label === 'Silent Hill'),
+    true,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.label === 'survival horror'),
+    true,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.label.includes('Full Gameplay')),
+    false,
+  );
+  assert.equal(
+    result.proposals.find((proposal) => proposal.label === 'Silent Hill')?.sourceKinds.includes('model_topic'),
+    true,
+  );
+});
+
+
+test('verified empty model topics abstain instead of falling back to raw metadata', () => {
+  const inputState = state([
+    interactionRecord('e1', 'v1', 'Generic review one'),
+    interactionRecord('e2', 'v2', 'Generic review two'),
+  ]);
+
+  const result = buildSemanticConceptMaterialization(inputState, [
+    {
+      external_id: 'v1',
+      topics: ['review', 'gameplay'],
+      model_topics: [],
+      content_type: 'Gaming',
+    },
+    {
+      external_id: 'v2',
+      topics: ['review', 'gameplay'],
+      model_topics: [],
+      content_type: 'Gaming',
+    },
+  ]);
+
+  assert.equal(
+    result.proposals.some((proposal) => ['review', 'gameplay'].includes(proposal.label.toLowerCase())),
+    false,
+  );
+  assert.equal(
+    result.proposals.some((proposal) => proposal.kind === 'concept' && proposal.label === 'Gaming'),
+    true,
+  );
+});
