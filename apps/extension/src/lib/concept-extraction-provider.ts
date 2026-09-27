@@ -17,7 +17,7 @@ type ConceptExtractionResponse = {
 export type LocalConceptExtractionProvider = {
   readonly modelId: string;
   readonly modelVersion: string;
-  readonly execution: 'offscreen_sandbox_text2text';
+  readonly execution: 'offscreen_sandbox_text_generation';
   extract(prompts: readonly string[]): Promise<{
     concepts: string[][];
     backend: string;
@@ -28,7 +28,7 @@ export function createLocalConceptExtractionProvider(): LocalConceptExtractionPr
   return {
     modelId: CONCEPT_EXTRACTION_MODEL_ID,
     modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
-    execution: 'offscreen_sandbox_text2text',
+    execution: 'offscreen_sandbox_text_generation',
 
     async extract(prompts) {
       if (prompts.length === 0) return { concepts: [], backend: 'none' };
