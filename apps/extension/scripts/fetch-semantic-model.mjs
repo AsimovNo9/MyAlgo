@@ -40,7 +40,7 @@ const MODELS = [
       { remote: 'special_tokens_map.json', local: 'special_tokens_map.json', minBytes: 500 },
       { remote: 'merges.txt', local: 'merges.txt', minBytes: 400_000 },
       { remote: 'vocab.json', local: 'vocab.json', minBytes: 700_000 },
-      { remote: 'onnx/model_q4f16.onnx', local: 'onnx/model_q4f16.onnx', minBytes: 110_000_000 },
+      { remote: 'onnx/model_quantized.onnx', local: 'onnx/model_quantized.onnx', minBytes: 130_000_000 },
     ],
   },
 ];
