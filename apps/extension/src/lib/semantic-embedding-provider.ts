@@ -5,7 +5,7 @@ import { ensureWorkerOffscreenDocument } from './offscreen-worker.ts';
 export type SemanticModelMode = 'hash' | 'neural';
 
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
-const NEURAL_MODEL_VERSION = 'transformersjs-webgpu-q8-v1';
+const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
 const NEURAL_DIMENSIONS = 384;
 
 type SemanticEmbeddingResponse = {
@@ -49,7 +49,7 @@ export function createOffscreenEmbeddingProvider(
     ...identity,
     mode,
     execution: mode === 'neural'
-      ? 'offscreen_worker_webgpu'
+      ? 'offscreen_sandbox_neural'
       : 'offscreen_worker_with_hash_fallback',
 
     async embed(texts) {
