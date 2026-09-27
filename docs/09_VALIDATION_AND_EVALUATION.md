@@ -461,36 +461,40 @@ console.table(
 Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
 
 
-## PR #220 local concept extraction validation (#219)
+## PR #220 local concept verification validation (#219)
 
-PR #218 is merged and remains the authoritative evidence-backed materialization/reconciliation boundary. PR #220 changes the preferred source of topic labels, not that boundary.
+PR #218 is merged and remains the authoritative evidence-backed materialization/reconciliation boundary. PR #220 changes how candidate topic labels are **verified**, not that boundary.
 
 ### Automated requirements
 
-- the production build contains pinned local SmolLM2-135M-Instruct q8 model/tokenizer assets as well as the existing mxbai embedding assets;
+- the production build contains pinned local DeBERTa-v3-xsmall NLI q8 model/tokenizer assets as well as the existing mxbai embedding assets;
 - installed runtime has `allowRemoteModels = false` and cannot fetch model files from a model host;
-- deterministic prompt construction produces the same input hash for unchanged metadata;
-- parser returns at most four short concepts and rejects generic, malformed, repeated and prompt-echo outputs;
-- only candidates with retained clicked/watched/saved/shared interaction evidence enter the model queue;
-- cache identity includes concept model ID/version + input hash;
-- unchanged cached inputs do not regenerate;
-- a model-backed concept list replaces raw keyword topics for that candidate before #218 materialization;
-- missing/failed model output falls back to the #218 metadata path rather than fabricating concepts;
+- deterministic verification text + bounded candidate-label construction produces the same input hash for unchanged metadata;
+- generic/malformed/duplicate metadata labels are rejected before inference;
+- zero-shot inference is multi-label, retains at most four labels, and can abstain with an empty verified set;
+- a verified empty set must not silently fall back to raw metadata topics;
+- only candidates with retained clicked/watched/saved/shared interaction evidence enter the verifier queue;
+- cache identity includes verifier model ID/version + verifier-pipeline revision + input hash;
+- unchanged cached inputs do not re-run verification;
+- verified topic labels replace raw keyword topics for that candidate before #218 materialization;
+- missing/failed verifier output may fall back to the #218 metadata path rather than fabricating concepts;
 - passive exposure and search/RSS acquisition alone still cannot materialize preference concepts;
-- concept and embedding inference share one mutually exclusive sandbox scheduler; embedding requests yield between batches and queued concept work must start before the next embedding batch;
-- candidate embedding drain cannot trigger additional concept generations and must still reuse cached model concepts instead of rematerializing metadata-only graph state;
-- full local-data deletion removes the concept extraction cache and diagnostics;
+- concept verification and embedding inference share one mutually exclusive sandbox scheduler; embedding requests yield between batches and queued verifier work starts before the next embedding batch;
+- candidate embedding drain cannot trigger additional verifier runs and must still reuse cached verified concepts instead of rematerializing metadata-only graph state;
+- full local-data deletion removes the concept-verification cache and diagnostics;
 - prior disclosure-v5 acceptance is rejected after disclosure-v6.
 
-### FLAN-T5 live rejection
+### Generative-model rejection
 
-The first live concept-model run used FLAN-T5 Small q8. It successfully loaded and generated locally on WASM, proving the two-model runtime path, but the 64 cached outputs were not adequate: approximately half were empty and several accepted outputs were generic/prompt-like. The model is therefore replaced in the same PR by SmolLM2-135M-Instruct q8. This is a model-quality rejection, not a runtime failure.
+#220 produced two useful negative live results before settling on classification.
 
-The same run also exposed a drain-path bug: cache-only semantic passes reported generation disabled and discarded cached concept inputs, allowing metadata-only materialization to overwrite the model-backed projection. Regression behavior now requires `cache_only` passes to reuse valid cached concepts while starting no new generations.
+**FLAN-T5 Small q8** loaded successfully on local WASM, but the real 64-item cache contained roughly half empty outputs plus generic/prompt-like strings. **SmolLM2-135M-Instruct q8** reached both WASM and WebGPU, but 22 real cached outputs were still dominated by empty/title/prompt fragments, and a two-item WebGPU generation request could exceed five minutes.
 
-### Direct model-path validation
+The active design therefore does not ask a small model to invent taxonomy. It uses an NLI classifier to verify bounded metadata candidate labels. Embedding-assisted alias/canonical abstraction remains the next #214 slice.
 
-To isolate concept generation from page-ranking/drain timing, PR #220 exposes a privacy-gated one-shot diagnostic request:
+### Direct verifier-path validation
+
+To isolate verification from page-ranking/drain timing, PR #220 exposes a privacy-gated one-shot diagnostic request:
 
 ```js
 const result = await chrome.runtime.sendMessage({
@@ -498,7 +502,6 @@ const result = await chrome.runtime.sendMessage({
 });
 console.log(result);
 
-// Validate cache-only reuse without starting another generation batch.
 const cached = await chrome.runtime.sendMessage({
   type: 'REFRESH_CONCEPT_EXTRACTION',
   payload: { generate: false }
@@ -506,25 +509,23 @@ const cached = await chrome.runtime.sendMessage({
 console.log(cached);
 ```
 
-The first request runs one bounded concept-generation batch against the persisted candidate reservoir and immediately returns materialization, last-generation diagnostics, and concept-model status. The second request reuses only valid cached concepts, which is useful for checking that the embedding-drain path cannot rematerialize metadata-only graph state or increment the graph revision when the projection is unchanged. This command is intended for validation/debugging, not routine UI use.
+The first request runs one bounded verifier batch against the persisted candidate reservoir and immediately returns materialization, verifier diagnostics, and model status. The second request reuses only valid cached verified labels. This command is intended for validation/debugging, not routine UI use.
 
-`CONCEPT_EXTRACTION_DIAGNOSTICS` records the last actual generation attempt. Cache-only embedding-drain passes no longer overwrite it. Cache-only usage is still visible through materializer diagnostics as `modelExtractionStatus: "cache_only"`.
+`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Cache-only embedding-drain passes do not overwrite it.
 
 A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
 
-Graph revision changes during a long concept-generation request must **not** invalidate that request. Concept proposals are keyed by candidate input + model/pipeline identity, not graph revision. Only privacy/local-data reset or semantic-model boundary changes cancel in-flight concept generation. Validation should allow ordinary graph updates while SmolLM2 is running and still observe the completed batch in the concept cache.
-
-After generation completes, the materializer must re-read current evidence and the current candidate pool before graph reconciliation. A concept result whose candidate input changed while generation was running is rejected by its input hash; unchanged generated concepts remain reusable. This prevents preserving model work at the cost of reconciling an obsolete graph snapshot.
+Graph revision changes during verifier inference must not invalidate an otherwise input-valid result. Cache validity is candidate input + verifier model/pipeline identity. After inference completes, the materializer re-reads current evidence and candidate state before graph reconciliation.
 
 ### Neural scheduler fairness
 
-A direct concept request issued while the embedding model is in multi-batch WebGPU inference must not wait for the entire embedding request. The currently running embedding batch may finish, then the concept request gets priority before the next embedding batch. The scheduler must never run the two models concurrently.
+A direct verifier request issued while the embedding model is in multi-batch WebGPU inference must not wait for the entire embedding request. The current embedding batch may finish, then verifier work gets priority before the next embedding batch. The scheduler never runs the two models concurrently.
 
 Validation signal:
 - embedding status may show `inference · webgpu-sandbox`;
-- a direct concept refresh should transition from `queued` to concept model loading/inference before the embedding request fully drains;
-- the concept provider must not hit its sandbox timeout solely because embeddings have more queued batches;
-- after concept completion, the embedding request resumes and preserves output count/order.
+- a direct verifier refresh transitions from `queued` to verifier inference before the embedding request fully drains;
+- verifier execution does not time out merely because embeddings have more queued batches;
+- after verifier completion, the embedding request resumes and preserves output count/order.
 
 ### Live validation
 
@@ -540,26 +541,24 @@ console.log(r.diagnostics);
 
 Healthy first-run signals include:
 - `conceptExtraction.interactionSupportedCandidateCount > 0`;
-- `conceptExtraction.extracted` between 0 and 4 on one top-level refresh;
+- `conceptExtraction.extracted` is bounded by the per-refresh verifier slice;
 - `conceptExtraction.pending` decreases over later refreshes;
 - `conceptModelStatus.backend` is `webgpu-sandbox` or `wasm-sandbox`;
 - `conceptExtraction.fallbackReason === null`;
-- later materialized topic nodes include `sourceKinds: ['model_topic', ...]`.
+- materialized verified topic nodes include `model_topic` in `sourceKinds`;
+- a verifier-abstained candidate can cache `concepts: []` without raw keyword fallback.
 
-Repeat the same semantic refresh after the cache warms. `cacheHits` should increase and unchanged candidates should not regenerate.
-
-Disable neural semantics and verify the materializer returns to metadata-derived topics without deleting canonical evidence. Re-enable neural semantics and confirm valid cached concept outputs can be reused.
+Repeat the same semantic refresh after the cache warms. `cacheHits` should increase and unchanged candidates should not be reclassified.
 
 ### Quality comparison
 
-Compare #218 metadata-only vs #220 model-proposal output on a fixed labelled/local-reviewed sample. Measure:
-- concept precision/recall/F1;
+Compare #218 metadata-only vs #220 verifier output on a fixed labelled/local-reviewed sample. Measure:
+- verified-label precision/recall/F1;
 - generic/noisy label rate;
-- normalized duplicate rate;
-- fragmentation (multiple labels representing one intended concept);
-- abstention/empty-output rate;
-- extraction latency and WebGPU→WASM fallback rate;
+- abstention rate;
+- duplicate/fragmentation rate before canonicalization;
+- verifier latency and WebGPU→WASM fallback rate;
 - package-size and long-session memory impact.
 
-Do not promote concept generation merely because labels look cleaner in one feed. Use #162 evaluation metrics plus live examples.
+The verifier is expected to improve precision and abstention, not solve aliases. Evaluate canonicalization separately in the next #214 slice.
 
