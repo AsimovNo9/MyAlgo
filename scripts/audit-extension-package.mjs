@@ -13,9 +13,9 @@ const secretPatterns = [
 
 const requiredLocalModelFiles = [
   'models/mxbai-embed-xsmall-v1/onnx/model_quantized.onnx',
-  'models/deberta-v3-xsmall-concept-verifier/onnx/model_quantized.onnx',
-  'models/deberta-v3-xsmall-concept-verifier/tokenizer.json',
-  'models/deberta-v3-xsmall-concept-verifier/spm.model',
+  'models/nli-deberta-v3-xsmall-concept-verifier/onnx/model_quantized.onnx',
+  'models/nli-deberta-v3-xsmall-concept-verifier/tokenizer.json',
+  'models/nli-deberta-v3-xsmall-concept-verifier/spm.model',
 ];
 
 async function walk(directory) {
