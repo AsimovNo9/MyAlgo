@@ -144,10 +144,11 @@ export function Options() {
         <p>
           When enabled, MyAlgo uses the mixedbread-ai/mxbai-embed-xsmall-v1 model packaged with this
           extension build. Candidate text, graph state, embeddings, and inference stay local. The installed
-          extension does not download model files at runtime. WebGPU is required for this first neural
-          implementation. If loading or inference fails, MyAlgo falls back to the deterministic local baseline.
+          extension does not download model files at runtime. MyAlgo prefers WebGPU and falls back to local
+          WebAssembly CPU inference when no usable GPU adapter is available. If neural loading or inference still
+          fails, MyAlgo falls back to the deterministic local baseline.
         </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural WebGPU' : 'Deterministic baseline'}</p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU/WASM)' : 'Deterministic baseline'}</p>
         {semanticModelStatus ? (
           <p role="status">
             <strong>Model status:</strong> {semanticModelStatus.status ?? 'unknown'}
