@@ -208,7 +208,6 @@ const extractLocalCandidateFeaturesWithCanonical = (
   state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
   featureNodes: PersonalAlgorithmState['graph']['nodes'],
-  canonicalConcepts: readonly CanonicalSemanticConcept[],
   canonicalByNodeId: ReadonlyMap<string, CanonicalSemanticConcept>,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
   const text = normalizeFeatureText([
@@ -476,7 +475,6 @@ export function extractLocalCandidateFeatures(
     state,
     candidate,
     featureNodes,
-    canonical.concepts,
     canonicalByNodeIdFromConcepts(canonical.concepts),
   );
 }
@@ -602,7 +600,6 @@ const candidateContext = (
     state,
     candidate,
     index.featureNodes,
-    index.canonicalConcepts,
     index.canonicalByNodeId,
   );
   const classification = classifyCandidateContent(candidate);
