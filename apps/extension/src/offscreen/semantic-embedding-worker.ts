@@ -12,7 +12,9 @@ const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-webgpu-q8-v1';
 const NEURAL_DIMENSIONS = 384;
 
-type FeatureExtractionPipeline = Awaited<ReturnType<typeof pipeline>>;
+type FeatureExtractionPipeline = {
+  (texts: string[], options: { pooling: 'mean'; normalize: true }): Promise<{ tolist(): unknown }>;
+};
 let neuralPipeline: Promise<FeatureExtractionPipeline> | null = null;
 
 env.allowRemoteModels = true;
@@ -32,7 +34,7 @@ async function getNeuralPipeline(): Promise<FeatureExtractionPipeline> {
         device: 'webgpu',
         dtype: 'q8',
       },
-    );
+    ) as Promise<FeatureExtractionPipeline>;
     neuralPipeline.catch(() => {
       neuralPipeline = null;
     });
