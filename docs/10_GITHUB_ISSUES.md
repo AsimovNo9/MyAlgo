@@ -4,16 +4,17 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #216/#162 replay evaluation and PR #218/#217 graph materialization are merged.
+PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/#219 local topic verification are merged.
 
-1. **P0 — #219 / PR #220 local concept verification.** Use a packaged local zero-shot NLI classifier to score/retain multiple metadata topic candidates for retained interaction-supported candidates. Cache verified labels and route them through the existing evidence-backed materializer; raw metadata remains fallback only when no verifier result exists.
-2. **P0 — #214 durable mode architecture.** Apply embedding-assisted canonicalization to extracted/materialized concepts, cluster them into stable modes, retain multi-label affinity, ground mode score contributions in exact graph members, and implement mode-aware retrieval/supply behavior against #162 metrics.
-3. **P1 — #153 + #170 trust UX.**
-4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
-6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P0 — #214 canonical concepts + bounded semantic scoring.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods and ensure aliases/subtopics/broad categories cannot stack as independent positive score terms.
+2. **P0 — #214 durable inferred modes.** Build stable local mode IDs/revisions over canonical concept neighbourhoods, retain multi-label candidate affinity, and persist modes independently of feed-cache churn.
+3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
+4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
+5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+6. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, graph editing, and counterfactual replay.**
+7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-#219 does not make classifier output authoritative preference state. Retained interaction evidence remains the gate; verified topic labels are cached derived inputs to #218's deterministic graph projection. Passive exposure/search acquisition alone still cannot produce preference concepts.
+#219/#220 is now a completed upstream boundary. Zero-shot verifier output remains rebuildable derived content understanding; retained interaction evidence is still the preference gate and #218 remains the deterministic graph-materialization authority.
 
 
 ## P0 — Validate the data boundary
