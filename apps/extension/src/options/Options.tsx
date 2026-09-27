@@ -194,10 +194,10 @@ export function Options() {
         </label>
         <p>
           When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
-          for semantic similarity and SmolLM2-135M-Instruct for bounded concept extraction. Candidate text, extracted
+          for semantic similarity and DeBERTa-v3-xsmall NLI for bounded zero-shot concept verification. Candidate text, extracted
           concepts, graph state, embeddings, and inference stay local. The installed extension does not download
           model files at runtime. MyAlgo prefers WebGPU and falls back to local WebAssembly CPU inference when needed.
-          Concept extraction remains asynchronous and falls back to the existing metadata materializer if it fails.
+          Concept verification remains asynchronous and falls back to the existing metadata materializer if it fails.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (embeddings + concept extraction)' : 'Deterministic baseline'}</p>
         <div style={{ marginTop: 16 }}>
