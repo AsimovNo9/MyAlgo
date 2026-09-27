@@ -44,3 +44,33 @@ test('buildInferredModeOptions uses inferred categories instead of a fixed taxon
     ['Default', 'Distributed systems', 'Legacy Work'],
   );
 });
+
+
+test('summarizeFeed discovers recurring mode categories from soft semantic scores without forcing badges', () => {
+  const summary = summarizeFeed([
+    {
+      id: '1', external_id: '1', title: 'A', score: 80, visible: true,
+      semantic_category: null, semantic_category_confidence: 0,
+      semantic_category_scores: { 'AI tooling': 0.44, 'Web development': 0.31 },
+    },
+    {
+      id: '2', external_id: '2', title: 'B', score: 78, visible: true,
+      semantic_category: null, semantic_category_confidence: 0,
+      semantic_category_scores: { 'AI tooling': 0.49, 'Personal finance': 0.28 },
+    },
+    {
+      id: '3', external_id: '3', title: 'C', score: 74, visible: true,
+      semantic_category: null, semantic_category_confidence: 0,
+      semantic_category_scores: { 'Personal finance': 0.45, 'AI tooling': 0.26 },
+    },
+  ]);
+
+  assert.deepEqual(summary.categories, [
+    { category: 'AI tooling', count: 3 },
+    { category: 'Personal finance', count: 2 },
+  ]);
+  assert.deepEqual(
+    buildInferredModeOptions('Default', summary.categories),
+    ['Default', 'AI tooling', 'Personal finance'],
+  );
+});
