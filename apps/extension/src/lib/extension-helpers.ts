@@ -1,4 +1,4 @@
-import type { FeedItem, FeedResponse, SemanticCategoryId } from '@repo/shared-types';
+import type { DurableSemanticModeCatalog, FeedItem, FeedResponse, SemanticCategoryId } from '@repo/shared-types';
 
 export function normalizeFeed(feed: FeedResponse): FeedItem[] {
   return (feed.items ?? []).map((item) => ({
@@ -107,26 +107,65 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
 }
 
 
-export function buildInferredModeOptions(
-  currentMode: string,
-  categories: FeedSummary['categories'],
-  limit = 5,
-): string[] {
-  const result = ['Default'];
-  const seen = new Set(['default']);
+export type DurableModeOption = {
+  id: string;
+  label: string;
+  revision: number | null;
+  active: boolean;
+};
 
-  for (const entry of categories) {
-    if (result.length > limit) break;
-    const category = entry.category.trim();
-    const key = category.toLowerCase();
-    if (!category || seen.has(key) || entry.count <= 0) continue;
-    result.push(category);
-    seen.add(key);
+export function buildDurableModeOptions(
+  currentModeId: string,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+  currentModeLabel = 'Default',
+  limit = 5,
+): DurableModeOption[] {
+  const result: DurableModeOption[] = [{
+    id: 'default',
+    label: 'All',
+    revision: null,
+    active: true,
+  }];
+  const seen = new Set(['default']);
+  const modes = [...(catalog?.modes ?? [])]
+    .sort((left, right) => (
+      Number(right.active) - Number(left.active)
+      || Number(right.pinned) - Number(left.pinned)
+      || right.lastSupportedAt.localeCompare(left.lastSupportedAt)
+      || left.id.localeCompare(right.id)
+    ));
+
+  for (const mode of modes) {
+    if (!mode.active || result.length > limit) continue;
+    if (!mode.id.trim() || seen.has(mode.id)) continue;
+    result.push({
+      id: mode.id,
+      label: mode.label,
+      revision: mode.revision,
+      active: true,
+    });
+    seen.add(mode.id);
   }
 
-  const current = currentMode.trim();
-  const currentKey = current.toLowerCase();
-  if (current && !seen.has(currentKey)) result.push(current);
+  const currentId = currentModeId.trim() || 'default';
+  if (!seen.has(currentId)) {
+    const current = modes.find((mode) => mode.id === currentId);
+    if (current) {
+      result.push({
+        id: current.id,
+        label: current.label,
+        revision: current.revision,
+        active: current.active,
+      });
+    } else if (currentId !== 'default') {
+      result.push({
+        id: currentId,
+        label: currentModeLabel.trim() || currentId,
+        revision: null,
+        active: false,
+      });
+    }
+  }
 
   return result;
 }
