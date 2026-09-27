@@ -87,7 +87,7 @@ export function Options() {
     const nextMode = enabled ? 'neural' : 'hash';
     setSemanticModelStatus(null);
     setStatus(enabled
-      ? 'Neural semantic model enabled. Model weights will download automatically on first semantic pass.'
+      ? 'Neural semantic model enabled. The packaged local model will be used on the next semantic pass.'
       : 'Using the lightweight deterministic semantic baseline.');
     const response = await chrome.runtime.sendMessage({
       type: 'SET_SEMANTIC_MODEL_MODE',
@@ -142,10 +142,9 @@ export function Options() {
           Use the neural semantic encoder
         </label>
         <p>
-          When enabled, MyAlgo automatically downloads the public mixedbread-ai/mxbai-embed-xsmall-v1
-          model weights on the first semantic pass. Candidate and graph text stay local; only the public model
-          files are downloaded. The sandboxed WebGPU runtime keeps the loaded model in memory while active;
-          a full extension reload can require downloading the model files again. WebGPU is required for this first neural
+          When enabled, MyAlgo uses the mixedbread-ai/mxbai-embed-xsmall-v1 model packaged with this
+          extension build. Candidate text, graph state, embeddings, and inference stay local. The installed
+          extension does not download model files at runtime. WebGPU is required for this first neural
           implementation. If loading or inference fails, MyAlgo falls back to the deterministic local baseline.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural WebGPU' : 'Deterministic baseline'}</p>
