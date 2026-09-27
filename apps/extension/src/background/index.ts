@@ -123,7 +123,7 @@ const MAX_DEFAULT_ALGORITHM_EVIDENCE = 3000;
 const MAX_HISTORY_ITEMS_PER_OBSERVATION = 500;
 const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
-const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 4;
+const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
@@ -848,8 +848,33 @@ async function runConceptExtractionCacheRefresh(
     }
     try {
       const provider = createLocalConceptExtractionProvider();
+      const modelStartedAt = performance.now();
+      if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
+        await setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, {
+          status: 'queued',
+          modelId: CONCEPT_EXTRACTION_MODEL_ID,
+          modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+          pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
+          inputCount: batch.length,
+          backend: null,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       const result = await provider.extract(batch.map(buildConceptExtractionPrompt));
       backend = result.backend;
+      if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
+        await setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, {
+          status: 'ready',
+          modelId: CONCEPT_EXTRACTION_MODEL_ID,
+          modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+          pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
+          inputCount: batch.length,
+          completedItems: batch.length,
+          backend: result.backend,
+          elapsedMs: Math.round(performance.now() - modelStartedAt),
+          updatedAt: new Date().toISOString(),
+        });
+      }
       const generatedAt = new Date().toISOString();
 
       batch.forEach((candidate, index) => {
@@ -877,6 +902,18 @@ async function runConceptExtractionCacheRefresh(
       }
     } catch (error) {
       fallbackReason = error instanceof Error ? error.message : 'Local concept extraction failed.';
+      if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
+        await setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, {
+          status: 'error',
+          modelId: CONCEPT_EXTRACTION_MODEL_ID,
+          modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+          pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
+          inputCount: batch.length,
+          backend,
+          error: fallbackReason,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       console.warn('[MyAlgo] local concept extraction unavailable; retaining metadata concepts', error);
     }
   }
