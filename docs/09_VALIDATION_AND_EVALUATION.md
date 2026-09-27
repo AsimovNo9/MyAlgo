@@ -512,6 +512,8 @@ The first request runs one bounded concept-generation batch against the persiste
 
 A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
 
+Graph revision changes during a long concept-generation request must **not** invalidate that request. Concept proposals are keyed by candidate input + model/pipeline identity, not graph revision. Only privacy/local-data reset or semantic-model boundary changes cancel in-flight concept generation. Validation should allow ordinary graph updates while SmolLM2 is running and still observe the completed batch in the concept cache.
+
 ### Live validation
 
 Enable local neural semantics and trigger normal semantic enrichment. Then inspect:
