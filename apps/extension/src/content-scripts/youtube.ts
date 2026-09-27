@@ -128,11 +128,23 @@ const showStatus = (message: string, error = false, paused = false) => {
 
 const normalizeText = (value: string) => youtubeConnector.normalizeText(value).toLowerCase();
 
-const clearExtensionPresentation = (showPaused = true) => {
+const clearExtensionPresentation = (
+  showPaused = true,
+  preserveReplacements = false,
+) => {
   document.querySelector('[data-personal-algorithm-shelf]')?.remove();
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
-  ).forEach((element) => element.remove());
+  ).forEach((element) => {
+    if (
+      preserveReplacements
+      && (
+        element.matches('[data-personal-algorithm-replacement]')
+        || element.closest('[data-personal-algorithm-replacement]')
+      )
+    ) return;
+    element.remove();
+  });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
@@ -846,8 +858,11 @@ const renderReplacementSlots = (generation: number) => {
   nativeElements.map(getVideoId).forEach((id) => {
     if (id && !id.startsWith('title:')) blockedIds.add(id);
   });
+  // Shelf candidates are separate visible placements and cannot be reused as
+  // replacements. Existing replacement candidates are handled through bound
+  // assignments below so their own source slot can retain them across reranks.
   document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id], [data-personal-algorithm-replacement] [data-personal-algorithm-video-id]',
+    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id]',
   ).forEach((element) => {
     const id = element.dataset.personalAlgorithmVideoId;
     if (id) blockedIds.add(id);
@@ -1073,10 +1088,11 @@ const rankCurrentPage = async (requestGeneration: number) => {
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
 
-      // A generation is rendered from a clean MyAlgo presentation surface.
-      // This restores native cards first, then applies only this generation's
-      // decisions without reordering YouTube-owned renderers.
-      clearExtensionPresentation(false);
+      // Preserve valid replacement nodes through ordinary reranks so the
+      // source→candidate binding can be reused instead of visually torn down.
+      // Hard lifecycle/policy changes remove replacements before reaching this
+      // response path.
+      clearExtensionPresentation(false, true);
       applyRankedFeed();
       clearLegacyRecommendationShelf();
       renderReplacementSlots(requestGeneration);
