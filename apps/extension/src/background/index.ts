@@ -859,11 +859,11 @@ async function runConceptExtractionCacheRefresh(
   }
 
   const diagnostics = {
-    status: fallbackReason ? 'fallback' : (enabled ? 'completed' : 'disabled'),
+    status: fallbackReason ? 'fallback' : (enabled ? 'completed' : 'cache_only'),
     modelId: CONCEPT_EXTRACTION_MODEL_ID,
     modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
     pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
-    enabled,
+    generationEnabled: enabled,
     interactionSupportedCandidateCount: supportedCandidates.length,
     cacheHits,
     extracted,
@@ -878,7 +878,10 @@ async function runConceptExtractionCacheRefresh(
   }
 
   return {
-    conceptsByExternalId: enabled ? validByExternalId : new Map(),
+    // "enabled" controls new generation only. Cached concepts must remain
+    // authoritative inputs during the embedding drain; otherwise a cache-only
+    // pass would rematerialize the older metadata taxonomy and churn revisions.
+    conceptsByExternalId: validByExternalId,
     diagnostics,
   };
 }
