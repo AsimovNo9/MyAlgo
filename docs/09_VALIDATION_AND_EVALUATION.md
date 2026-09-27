@@ -467,7 +467,7 @@ PR #218 is merged and remains the authoritative evidence-backed materialization/
 
 ### Automated requirements
 
-- the production build contains pinned local DeBERTa-v3-xsmall NLI q8 model/tokenizer assets as well as the existing mxbai embedding assets;
+- the production build contains pinned local nli-deberta-v3-xsmall NLI q8 model/tokenizer assets as well as the existing mxbai embedding assets;
 - installed runtime has `allowRemoteModels = false` and cannot fetch model files from a model host;
 - deterministic verification text + bounded candidate-label construction produces the same input hash for unchanged metadata;
 - generic/malformed/duplicate metadata labels are rejected before inference;
@@ -523,7 +523,7 @@ A direct verifier request issued while the embedding model is in multi-batch Web
 
 Validation signal:
 - embedding status may show `inference · webgpu-sandbox`;
-- a direct verifier refresh transitions from `queued` to verifier inference before the embedding request fully drains;
+- a direct verifier refresh transitions from `queued` to `wasm-sandbox` verifier inference before the embedding request fully drains;
 - verifier execution does not time out merely because embeddings have more queued batches;
 - after verifier completion, the embedding request resumes and preserves output count/order.
 
@@ -543,7 +543,7 @@ Healthy first-run signals include:
 - `conceptExtraction.interactionSupportedCandidateCount > 0`;
 - `conceptExtraction.extracted` is bounded by the per-refresh verifier slice;
 - `conceptExtraction.pending` decreases over later refreshes;
-- `conceptModelStatus.backend` is `webgpu-sandbox` or `wasm-sandbox`;
+- `conceptModelStatus.backend` is `wasm-sandbox`;
 - `conceptExtraction.fallbackReason === null`;
 - materialized verified topic nodes include `model_topic` in `sourceKinds`;
 - a verifier-abstained candidate can cache `concepts: []` without raw keyword fallback.
