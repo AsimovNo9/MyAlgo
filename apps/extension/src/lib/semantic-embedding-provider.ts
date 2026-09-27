@@ -41,6 +41,7 @@ export const semanticProviderIdentity = (mode: SemanticModelMode): {
 
 export function createOffscreenEmbeddingProvider(
   mode: SemanticModelMode = 'hash',
+  options: { neuralBatchSize?: number } = {},
 ): OffscreenEmbeddingProvider {
   const fallback = createLocalHashEmbeddingProvider(192);
   const identity = semanticProviderIdentity(mode);
@@ -54,6 +55,10 @@ export function createOffscreenEmbeddingProvider(
 
     async embed(texts) {
       if (texts.length === 0) return [];
+      const neuralBatchSize = Math.max(
+        1,
+        Math.min(16, Math.floor(Number(options.neuralBatchSize ?? 1))),
+      );
 
       try {
         const ready = await ensureWorkerOffscreenDocument(
@@ -70,6 +75,7 @@ export function createOffscreenEmbeddingProvider(
             target: 'semantic-embedding-offscreen',
             type: 'EMBED_TEXTS',
             provider: mode,
+            batchSize: mode === 'neural' ? neuralBatchSize : undefined,
             texts: [...texts],
           }) as Promise<SemanticEmbeddingResponse>,
           new Promise<SemanticEmbeddingResponse>((_, reject) => {

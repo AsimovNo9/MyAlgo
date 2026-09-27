@@ -128,7 +128,7 @@ test('semantic reranking derives graph and mode similarities and reuses cached e
   const first = await enrichCandidatesWithSemanticReranking(
     state,
     candidates,
-    'Work',
+    'CRDTs and local-first software',
     provider,
     cache,
   );
@@ -154,7 +154,7 @@ test('semantic reranking derives graph and mode similarities and reuses cached e
   const second = await enrichCandidatesWithSemanticReranking(
     state,
     candidates,
-    'Work',
+    'CRDTs and local-first software',
     provider,
     cache,
   );
@@ -176,27 +176,38 @@ test('embedding phases identify the graph, mode seed, and candidate workload in 
   );
   assert.deepEqual(phases, [
     ['graph_embeddings', 3],
-    ['mode_seed', 5],
+    ['mode_seed', 1],
     ['candidate_embeddings', 1],
   ]);
 });
 
-test('candidate category comes from its vector regardless of the selected mode', async () => {
-  const local = createLocalHashEmbeddingProvider(192);
-  const cache = createMemoryEmbeddingCache();
+test('candidate category comes from graph-derived semantic matches regardless of selected mode', async () => {
   const candidates = [
-    { external_id: 'game', title: 'Video games gameplay walkthrough esports' },
-    { external_id: 'french', title: 'French language français vocabulary grammar' },
+    { external_id: 'systems', title: 'CRDT local-first software implementation' },
+    { external_id: 'ambient', title: 'Ambient music for a calm evening' },
   ];
-  const work = await enrichCandidatesWithSemanticReranking(state, candidates, 'Work', local, cache);
-  const learning = await enrichCandidatesWithSemanticReranking(state, candidates, 'Learning', local, cache);
-  assert.equal(work.candidates[0].semantic_category, 'gaming');
-  assert.equal(work.candidates[1].semantic_category, 'french');
-  assert.deepEqual(
-    work.candidates.map((candidate) => candidate.semantic_category_scores),
-    learning.candidates.map((candidate) => candidate.semantic_category_scores),
+  const systemsMode = await enrichCandidatesWithSemanticReranking(
+    state, candidates, 'CRDTs and local-first software', provider, createMemoryEmbeddingCache(),
   );
-  assert.equal(classifySemanticCategory({ learning: 0.1 }).category, null);
+  const ambientMode = await enrichCandidatesWithSemanticReranking(
+    state, candidates, 'Ambient music', provider, createMemoryEmbeddingCache(),
+  );
+
+  assert.equal(systemsMode.candidates[0].semantic_category, 'CRDTs and local-first software');
+  assert.equal(systemsMode.candidates[1].semantic_category, 'Ambient music');
+  assert.deepEqual(
+    systemsMode.candidates.map((candidate) => candidate.semantic_category_scores),
+    ambientMode.candidates.map((candidate) => candidate.semantic_category_scores),
+  );
+  assert.equal(classifySemanticCategory({ 'Distributed systems': 0.34 }).category, null);
+  assert.equal(classifySemanticCategory({
+    'Distributed systems': 0.7,
+    'Local-first software': 0.68,
+  }).category, null);
+  assert.equal(classifySemanticCategory({
+    'Distributed systems': 0.7,
+    'Ambient music': 0.4,
+  }).category, 'Distributed systems');
 });
 
 test('changing mode changes semantic mode alignment without changing graph similarity', async () => {
@@ -207,8 +218,12 @@ test('changing mode changes semantic mode alignment without changing graph simil
     description: 'Relaxing soundscape',
   }];
 
-  const work = await enrichCandidatesWithSemanticReranking(state, candidates, 'Work', provider, cache);
-  const relax = await enrichCandidatesWithSemanticReranking(state, candidates, 'Relax', provider, cache);
+  const work = await enrichCandidatesWithSemanticReranking(
+    state, candidates, 'CRDTs and local-first software', provider, cache,
+  );
+  const relax = await enrichCandidatesWithSemanticReranking(
+    state, candidates, 'Ambient music', provider, cache,
+  );
 
   assert.equal(
     work.candidates[0].semantic_graph_similarity,
@@ -261,8 +276,12 @@ test('local hash baseline provides mode-seed separation without claiming graph s
       nodes: [],
     },
   };
-  const work = await enrichCandidatesWithSemanticReranking(seedOnlyState, candidates, 'Work', local, cache);
-  const relax = await enrichCandidatesWithSemanticReranking(seedOnlyState, candidates, 'Relax', local, cache);
+  const work = await enrichCandidatesWithSemanticReranking(
+    seedOnlyState, candidates, 'distributed systems implementation', local, cache,
+  );
+  const relax = await enrichCandidatesWithSemanticReranking(
+    seedOnlyState, candidates, 'ambient music relax', local, cache,
+  );
 
   const workById = Object.fromEntries(work.candidates.map((candidate) => [candidate.external_id, candidate]));
   const relaxById = Object.fromEntries(relax.candidates.map((candidate) => [candidate.external_id, candidate]));

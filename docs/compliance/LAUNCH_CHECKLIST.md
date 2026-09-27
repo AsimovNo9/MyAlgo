@@ -19,7 +19,11 @@
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
 - [ ] Modes operate over one graph
-- [ ] PR #213 semantic reranking live-validated: first paint unaffected, semantic follow-up rerank stable, mode-dependent changes observed, caches bounded
+- [ ] PR #215 semantic-mode architecture validated (#214/#162): canonical concept aliases are replayable, candidate affinities are multi-label, mode clusters have stable local identity, and primary badges abstain when ambiguous
+- [ ] Every active-mode score contribution resolves to the stable mode revision and exact contributing graph node/member in the deterministic trace
+- [ ] Mode selection affects retrieval planning as well as reranking; short native-mode supply is measured against the current Home replacement quota and may be filled only through the existing acquired reservoir
+- [ ] Mode-supply shortfall status/banner uses the same eligibility/membership contract as ranking and records bounded local diagnostics
+- [ ] Valid Home source→replacement assignments and unchanged replacement DOM remain stable across ordinary reranks
 
 ## P2 — Privacy/compliance
 
@@ -38,10 +42,10 @@
 ## P3 — Quality
 
 - [x] RSS/YouTube-search acquisition foundation merged (#206/#212); retain as regression coverage
-- [ ] PR #213 semantic diagnostics captured for hash, WebGPU-neural, WASM-neural, and cached runs
+- [ ] Semantic diagnostics captured for hash, WebGPU-neural, WASM-neural, and cached runs
 - [ ] Candidate coverage measured
 - [ ] Empty-feed rate measured
-- [ ] Replacement success measured
+- [ ] Replacement success and source→replacement stability measured
 - [ ] Explanation usefulness tested
 - [ ] D7/D14 retention measured
 - [ ] User corrections measured

@@ -157,11 +157,13 @@ active mode seed ──────────→ semantic mode lens over graph
                      calibrated reranking
 ```
 
-Modes remain one graph with different semantic emphasis. Work, Learning, Relax, Gaming, and French have fixed text anchors in the local model. Each candidate embedding is compared with all five anchors, independently of the selected mode; the highest qualifying cosine similarity gives the category badge. This affinity is a relative signal, not a calibrated probability or evidence that the model has trained on the user's feed. A mode profile also selects/weights graph objective/topic/concept nodes according to embedding similarity. Graph-derived or user-created modes remain future work under #161.
+PR #213 initially bootstrapped candidate labels from five fixed intent anchors. Post-merge live review showed that nearest-anchor similarity is too coarse to serve as the authoritative content taxonomy: broad anchors can become the least-wrong label for unrelated content. #214 replaces that bootstrap rule with **graph-derived category inference**.
 
-Selecting a mode applies a bounded, traceable category-affinity contribution alongside the existing graph and mode semantic contributions. It also shapes optional search intent. A candidate can retain its inferred badge while a different mode is selected. If local neural inference fails, the existing hash fallback remains available and diagnostics identify the effective backend; inferred categories are recomputable derived features.
+Candidate category vocabulary comes from eligible Personal Algorithm Graph topic/concept labels. A candidate vector is compared with those symbolic graph-node vectors, the strongest bounded scores are retained as rebuildable features, and a visible category is emitted only when the winner clears both an absolute similarity floor and a runner-up margin. Ambiguous candidates remain uncategorized. This is still embedding inference, not model training, and similarity alone never creates a preference edge.
 
-On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
+Modes remain semantic lenses over one graph, but the mode surface is no longer a fixed Work/Learning/Relax/Gaming/French list. Available modes are populated from categories actually inferred in local state plus a neutral All/Default state. Selecting an inferred mode adds that category as bounded retrieval/semantic intent and applies exact traceable mode/category-affinity contributions. Known PR #213 bootstrap modes are migrated to All/Default on extension update; an arbitrary custom mode string is preserved so user-owned configuration is not silently discarded.
+
+On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. #214 also makes a valid source-card → replacement assignment stable across ordinary mutation, metadata, and semantic reranks; generation changes and a short wall-clock timer must not rotate content by themselves. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
 
 ### Local embedding layer (#209)
 
@@ -316,7 +318,7 @@ Examples:
 - Gaming mode adds gaming/gameplay intent and prefers gameplay/review/guide forms.
 - French mode adds French-language/francophone intent and prefers language practice and French video forms.
 
-The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own highest qualifying anchor similarity, independent of the active mode; the conservative metadata-based Learning badge remains a fallback. A video can therefore be scored while Learning mode is active without being labeled Learning.
+The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own unambiguous graph-derived category match, independent of the active mode; the conservative metadata-based Learning badge remains only a fallback when semantic enrichment is unavailable. A candidate with no clear semantic winner should show no category badge.
 
 ### Web search adapter
 
@@ -329,7 +331,7 @@ Search result snippets are discovery metadata, not recommendation evidence and n
 
 PR #212 is merged and #206 is closed. Live acquisition diagnostics established the search → reservoir path; its connector-owned acquisition, offscreen search worker, bounded retention, and retrieved-discovery exploration are now foundation behavior rather than the active implementation slice.
 
-PR #213 is the active #209/#210 branch. Live validation should focus on semantic first-paint isolation, semantic follow-up reranking, mode-dependent score/rank changes, cache bounds, replacement stability, and deletion/re-disclosure behavior.
+PR #213 is merged. #214 is the active post-merge refinement: graph-derived category/mode inference, explicit ambiguity handling, and deterministic replacement stability. Replay-backed category quality evaluation belongs with #162 before any decision to fine-tune or replace the embedding encoder.
 
 ### Retrieved-discovery exploration
 
@@ -342,3 +344,80 @@ To prevent qualified retrieved candidates from being permanently crowded out of 
 - score at least as high as the native target it would replace.
 
 All remaining opportunistic replacements retain the stricter normal uplift requirement. This changes presentation opportunity, not candidate score.
+
+
+## Durable semantic mode architecture (#214 / PR #215)
+
+PR #215 must keep four semantic layers separate.
+
+### 1. Canonical graph concepts
+
+The Personal Algorithm Graph remains authoritative. Topic/concept nodes should not be promoted directly to UI modes without normalization. Introduce a deterministic canonicalization/alias step for near-duplicate labels and semantically equivalent variants while preserving provenance to every source node/evidence record.
+
+Canonicalization must be replayable. It may propose that multiple labels belong to one concept identity, but similarity alone must not delete user-authored distinctions or silently rewrite explicit edits.
+
+### 2. Semantic neighbourhoods and mode clusters
+
+A user-facing mode is a **durable cluster over canonical graph nodes**, not a one-node label and not a transient list extracted from the current feed cache.
+
+A mode cluster should contain:
+- stable local ID;
+- display label;
+- member canonical graph node IDs;
+- member weights;
+- creation/promotion provenance;
+- version/revision;
+- last-supported timestamp;
+- optional pinned/user-edited state.
+
+Derived clusters can be recomputed, but once exposed as a control they need stable identity. A promoted/pinned mode must not disappear because the current feed lacks matching candidates.
+
+### 3. Multi-label candidate affinity
+
+Candidates may qualify for multiple graph regions/modes simultaneously. Preserve a bounded list/map of qualified affinities rather than collapsing all semantic state to one winning label.
+
+The UI may still show one conservative primary badge when the leading label clears the badge confidence/margin rule. That badge is presentation only. Scoring, retrieval and evaluation consume the multi-label affinity set.
+
+### 4. Graph-grounded mode scoring
+
+Do not implement mode behavior as an opaque parallel `mode_adjustment` detached from graph structure.
+
+For an active mode:
+- resolve the mode to its member graph nodes;
+- compute candidate↔member affinities;
+- convert qualified affinities into bounded contributions whose trace entries identify the exact graph node/mode membership responsible;
+- aggregate those exact contributions into the final score;
+- expose the mode ID/revision and contributing graph node IDs in trace/debug provenance.
+
+The user-facing explanation should be able to say:
+
+`Mode: Local AI work → graph node: local LLM tooling → candidate match +X`
+
+rather than only:
+
+`mode similarity +X`.
+
+### Mode-aware retrieval and supply shortfall
+
+Mode selection changes both **reranking and retrieval planning**.
+
+The retrieval planner should consume the active mode's bounded member-node labels/semantic terms and use the existing acquisition mechanisms. It must not create a separate ungoverned "mode pool."
+
+The Home replacement slider continues to define requested presentation replacement percentage. For an active non-All mode:
+
+```text
+requestedModeSlots = replacementQuota(sliderPercent, eligibleNativeSlots)
+nativeModeSupply   = eligible current-Home candidates matching active mode
+poolModeSupply     = eligible acquired reservoir candidates matching active mode
+```
+
+If `nativeModeSupply < requestedModeSlots`, MyAlgo may surface a local banner/status such as "Not enough native <mode> supply — filling from MyAlgo's candidate pool." The trigger must use the same mode-membership and eligibility checks as scoring, so the status cannot disagree with actual feed behavior.
+
+Pool-sourced candidates still pass through:
+`hard exclusion → eligibility → additive score → ordering → trace → stable replacement presentation`.
+
+Record shortfall count, requested slots, native matching supply, acquired matching supply, and fulfilled slots as bounded local diagnostics for #162.
+
+### Evaluation-first rule
+
+Threshold changes, clustering heuristics, model replacement, and any future fine-tuning must be evaluated on fixed labelled replay fixtures first. Live feed review remains a validation surface, not the sole quality metric.

@@ -1,16 +1,4 @@
-import type { PersonalAlgorithmState, SemanticCategoryId, SemanticModeProfile } from '@repo/shared-types';
-
-export const SEMANTIC_CATEGORIES: readonly SemanticCategoryId[] = [
-  'work', 'learning', 'relax', 'gaming', 'french',
-];
-
-export const SEMANTIC_CATEGORY_SEEDS: Record<SemanticCategoryId, string> = {
-  work: 'focused practical implementation build solve engineering productivity professional execution',
-  learning: 'learn understand study explain concepts tutorials lectures courses deep understanding',
-  relax: 'relax unwind enjoy entertaining calm music stories documentary leisure',
-  gaming: 'video games gameplay game reviews gaming streams walkthroughs esports',
-  french: 'French language français francophone videos speaking French and learning French vocabulary grammar',
-};
+import type { PersonalAlgorithmState, SemanticModeProfile } from '@repo/shared-types';
 
 export function cosineSimilarity(
   left: readonly number[],
@@ -60,9 +48,8 @@ export function weightedEmbeddingCentroid(
 }
 
 export function semanticModeSeed(mode: string): string {
-  const normalized = mode.trim().toLowerCase();
-  if (normalized in SEMANTIC_CATEGORY_SEEDS) return SEMANTIC_CATEGORY_SEEDS[normalized as SemanticCategoryId];
-  return mode.trim();
+  const value = mode.trim();
+  return value && value.toLowerCase() !== 'default' ? value : 'personal interests';
 }
 
 export function buildSemanticModeProfile(

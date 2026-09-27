@@ -4,6 +4,7 @@ type SearchJob = {
   query?: string;
   limit?: number;
   provider?: 'hash' | 'neural';
+  batchSize?: number;
   texts?: string[];
 };
 
@@ -165,7 +166,10 @@ const embedHashInWorker = (texts: string[]): Promise<SemanticResult> => {
   });
 };
 
-const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
+const embedNeuralInSandbox = (
+  texts: string[],
+  requestedBatchSize = 1,
+): Promise<SemanticResult> => {
   const id = `neural-sandbox-${++sequence}`;
   const frame = ensureNeuralSandbox();
 
@@ -189,6 +193,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
         source: 'myalgo-neural-host',
         id,
         type: 'EMBED_TEXTS',
+        batchSize: Math.max(1, Math.min(16, Math.floor(requestedBatchSize))),
         texts,
       }, '*');
     };
@@ -311,9 +316,10 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
 const embedSemantics = (
   texts: string[],
   provider: 'hash' | 'neural',
+  batchSize = 1,
 ): Promise<SemanticResult> => (
   provider === 'neural'
-    ? embedNeuralInSandbox(texts)
+    ? embedNeuralInSandbox(texts, batchSize)
     : embedHashInWorker(texts)
 );
 
@@ -323,7 +329,11 @@ chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse)
       const texts = Array.isArray(message.texts)
         ? message.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
         : [];
-      const result = await embedSemantics(texts, message.provider === 'neural' ? 'neural' : 'hash');
+      const result = await embedSemantics(
+        texts,
+        message.provider === 'neural' ? 'neural' : 'hash',
+        Number(message.batchSize ?? 1),
+      );
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
       sendResponse({

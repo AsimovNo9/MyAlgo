@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -23,7 +23,7 @@ const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
 let cachedFeed: RankedFeedItem[] = [];
 let rankingInFlight = false;
-let activeMode = 'Work';
+let activeMode = 'Default';
 let rankGeneration = 0;
 let rankTimer: number | undefined;
 let mutationRankTimer: number | undefined;
@@ -43,12 +43,10 @@ let pendingWatchExposure: { videoId: string; exposureId: string | null; observed
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
-const REPLACEMENT_STABILITY_MS = 45_000;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
   routeKey: string;
-  expiresAt: number;
 }>();
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -130,11 +128,23 @@ const showStatus = (message: string, error = false, paused = false) => {
 
 const normalizeText = (value: string) => youtubeConnector.normalizeText(value).toLowerCase();
 
-const clearExtensionPresentation = (showPaused = true) => {
+const clearExtensionPresentation = (
+  showPaused = true,
+  preserveReplacements = false,
+) => {
   document.querySelector('[data-personal-algorithm-shelf]')?.remove();
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
-  ).forEach((element) => element.remove());
+  ).forEach((element) => {
+    if (
+      preserveReplacements
+      && (
+        element.matches('[data-personal-algorithm-replacement]')
+        || element.closest('[data-personal-algorithm-replacement]')
+      )
+    ) return;
+    element.remove();
+  });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
@@ -683,19 +693,21 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const routeKey = getRouteKey();
-    const now = Date.now();
     const nativeIds = new Set(
       nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
     );
     const usedCandidateIds = new Set<string>();
+    for (const sourceId of stableReplacementBySourceId.keys()) {
+      if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
+    }
 
-    // Keep a recently rendered replacement stable across ordinary YouTube DOM
+    // Keep a rendered replacement stable across ordinary YouTube DOM
     // churn while it remains eligible under the current feed mix.
     for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
       const { element, id } = nativeCards[nativeIndex];
       const sticky = stableReplacementBySourceId.get(id);
       if (!sticky) continue;
-      if (sticky.routeKey !== routeKey || sticky.expiresAt <= now) {
+      if (sticky.routeKey !== routeKey) {
         stableReplacementBySourceId.delete(id);
         continue;
       }
@@ -738,7 +750,7 @@ const applyRankedFeed = () => {
     }
 
     if (remainingReplacementCapacity > 0) {
-      const replacementSelectionSeed = `${rankGeneration}|${routeKey}`;
+      const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
       // Retrieved candidates receive no provenance bonus. The slider relaxes
       // the native-score uplift as it approaches full replacement.
       const replacementCandidates = getReplacementCandidates(
@@ -821,8 +833,13 @@ const applyRankedFeed = () => {
 };
 
 const renderReplacementSlots = (generation: number) => {
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
-  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
+  const existingReplacements = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]'),
+  );
+  if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) {
+    existingReplacements.forEach((element) => element.remove());
+    return;
+  }
 
   const nativeElements = getVideoElements();
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
@@ -841,8 +858,11 @@ const renderReplacementSlots = (generation: number) => {
   nativeElements.map(getVideoId).forEach((id) => {
     if (id && !id.startsWith('title:')) blockedIds.add(id);
   });
+  // Shelf candidates are separate visible placements and cannot be reused as
+  // replacements. Existing replacement candidates are handled through bound
+  // assignments below so their own source slot can retain them across reranks.
   document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id], [data-personal-algorithm-replacement] [data-personal-algorithm-video-id]',
+    '[data-personal-algorithm-shelf] [data-personal-algorithm-video-id]',
   ).forEach((element) => {
     const id = element.dataset.personalAlgorithmVideoId;
     if (id) blockedIds.add(id);
@@ -892,13 +912,20 @@ const renderReplacementSlots = (generation: number) => {
     slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
     [...blockedIds, ...boundCandidateIds],
     replacementMinimumScore,
-    `${generation}|${getRouteKey()}`,
+    createReplacementSelectionSeed(getRouteKey()),
   );
   const assignments = [...boundAssignments, ...fallbackAssignments]
     .slice(0, isYouTubeHomePage(location.pathname)
       ? replacementQuota(feedReplacementPercent, nativeElements.length)
       : 0);
+  const existingBySourceId = new Map<string, HTMLElement>();
+  for (const replacement of existingReplacements) {
+    const sourceId = replacement.dataset.personalAlgorithmReplacementSourceVideoId?.trim();
+    if (sourceId && !existingBySourceId.has(sourceId)) existingBySourceId.set(sourceId, replacement);
+  }
+  const retainedReplacements = new Set<HTMLElement>();
   let filled = 0;
+  let reused = 0;
 
   for (const assignment of assignments) {
     const target = targetBySlot.get(assignment.slot.slotId);
@@ -911,27 +938,56 @@ const renderReplacementSlots = (generation: number) => {
     ) {
       continue;
     }
-    const replacement = createReplacementCard(
-      assignment.item,
-      target,
-      assignment.slot.slotId,
-      assignment.slot.sourceVideoId,
-      generation,
-    );
-    target.parentElement.insertBefore(replacement, target);
+
+    const existing = existingBySourceId.get(assignment.slot.sourceVideoId);
+    const replacementVideoId = assignment.item.external_id ?? '';
+    const replacementScore = String(assignment.item.score ?? 0);
+    const replacementTraceId = assignment.item.traceId ?? '';
+    if (
+      existing
+      && existing.isConnected
+      && existing.dataset.personalAlgorithmVideoId === replacementVideoId
+      && existing.dataset.personalAlgorithmTraceId === replacementTraceId
+      && existing.dataset.personalAlgorithmReplacementScore === replacementScore
+    ) {
+      existing.dataset.personalAlgorithmReplacementSlot = assignment.slot.slotId;
+      existing.dataset.personalAlgorithmReplacementGeneration = String(generation);
+      if (existing.parentElement !== target.parentElement || target.previousElementSibling !== existing) {
+        target.parentElement.insertBefore(existing, target);
+      }
+      retainedReplacements.add(existing);
+      reused += 1;
+      filled += 1;
+    } else {
+      existing?.remove();
+      const replacement = createReplacementCard(
+        assignment.item,
+        target,
+        assignment.slot.slotId,
+        assignment.slot.sourceVideoId,
+        generation,
+      );
+      target.parentElement.insertBefore(replacement, target);
+      retainedReplacements.add(replacement);
+      filled += 1;
+    }
+
     stableReplacementBySourceId.set(assignment.slot.sourceVideoId, {
-      candidateId: assignment.item.external_id ?? '',
+      candidateId: replacementVideoId,
       item: assignment.item,
       routeKey: getRouteKey(),
-      expiresAt: Date.now() + REPLACEMENT_STABILITY_MS,
     });
-    filled += 1;
+  }
+
+  for (const replacement of existingReplacements) {
+    if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
   console.info('[MyAlgo] replacement slots', {
     generation,
     eligibleSlots: slots.length,
     filled,
+    reused,
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
@@ -1032,10 +1088,11 @@ const rankCurrentPage = async (requestGeneration: number) => {
       lastCandidateSignature = candidateSignature;
       lastRankMode = requestMode;
 
-      // A generation is rendered from a clean MyAlgo presentation surface.
-      // This restores native cards first, then applies only this generation's
-      // decisions without reordering YouTube-owned renderers.
-      clearExtensionPresentation(false);
+      // Preserve valid replacement nodes through ordinary reranks so the
+      // source→candidate binding can be reused instead of visually torn down.
+      // Hard lifecycle/policy changes remove replacements before reaching this
+      // response path.
+      clearExtensionPresentation(false, true);
       applyRankedFeed();
       clearLegacyRecommendationShelf();
       renderReplacementSlots(requestGeneration);

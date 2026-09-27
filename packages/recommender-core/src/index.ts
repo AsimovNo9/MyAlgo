@@ -1007,55 +1007,26 @@ export function buildGraphRetrievalProfile(
 
 export function applyModeToRetrievalProfile(
   profile: RecommendationProfile,
-  mode: 'Work' | 'Learning' | 'Relax' | string,
+  mode: string,
 ): RecommendationProfile {
-  const normalizedMode = mode.trim().toLowerCase();
-  const modifiers = normalizedMode === 'learning'
-    ? {
-        goalSuffix: 'learn understand',
-        preferredFormats: ['tutorial', 'lecture', 'course', 'explainer'],
-        intents: ['learn', 'understand', 'study'],
-      }
-    : normalizedMode === 'work'
-      ? {
-          goalSuffix: 'practical implementation',
-          preferredFormats: ['guide', 'tutorial', 'case study'],
-          intents: ['implement', 'build', 'solve'],
-        }
-      : normalizedMode === 'relax'
-        ? {
-            goalSuffix: 'relax enjoyable',
-            preferredFormats: ['documentary', 'podcast', 'music'],
-            intents: ['relax', 'enjoy'],
-          }
-        : normalizedMode === 'gaming'
-          ? {
-              goalSuffix: 'video games gameplay',
-              preferredFormats: ['gameplay', 'review', 'walkthrough'],
-              intents: ['gaming', 'video games', 'gameplay'],
-            }
-          : normalizedMode === 'french'
-            ? {
-                goalSuffix: 'French language français',
-                preferredFormats: ['lesson', 'conversation', 'video'],
-                intents: ['French', 'français', 'learn French'],
-              }
-        : {
-            goalSuffix: '',
-            preferredFormats: profile.preferredFormats,
-            intents: [],
-          };
+  const modeTerm = mode.trim();
+  const activeModeTerm = modeTerm && modeTerm.toLowerCase() !== 'default'
+    ? modeTerm
+    : '';
 
-  const goal = [profile.goal.trim(), modifiers.goalSuffix].filter(Boolean).join(' ');
+  const goal = [profile.goal.trim(), activeModeTerm].filter(Boolean).join(' ');
   return {
     ...profile,
     goal,
-    intents: [...new Set([...profile.intents, ...modifiers.intents])],
-    semanticTerms: [...new Set([...profile.semanticTerms, ...modifiers.intents])],
-    preferredFormats: [...new Set([
-      ...modifiers.preferredFormats,
-      ...profile.preferredFormats,
-    ])].slice(0, 4),
+    intents: [...new Set([
+      ...profile.intents,
+      ...(activeModeTerm ? [activeModeTerm] : []),
+    ])],
+    semanticTerms: [...new Set([
+      ...profile.semanticTerms,
+      ...(activeModeTerm ? [activeModeTerm] : []),
+    ])],
+    preferredFormats: [...profile.preferredFormats],
   };
 }
 

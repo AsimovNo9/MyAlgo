@@ -4,30 +4,25 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #212 is merged. The acquisition layer is no longer the main product bottleneck; semantic classification and reranking are.
+PR #213 is merged. Draft PR #215 is the active branch and now owns the complete post-#213 mode loop rather than only threshold/replacement fixes.
 
-1. **#209 + #210 — semantic mode reranking**: add a compact local text-embedding encoder, candidate↔graph semantic similarity, candidate↔mode semantic similarity, and deterministic traceable reranking. Modes become semantic lenses over one Personal Algorithm Graph rather than fixed presentation labels.
-2. **#170 + #153 — graph provenance and full Why-this UX**: expose the semantic/symbolic path and exact contributions behind each decision.
-3. **#162 — replay/evaluation baseline**: establish reproducible ranking fixtures and metrics for semantic model/scorer changes.
-4. **#154 + #155 + #178 — correction, Forget/provenance, and history-cluster controls**.
-5. **#169 + #161 + #158 + #159 — remaining runtime validation, mode editing, graph editing, and counterfactual replay**.
-6. **#163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector**.
+1. **P0 — #162 evaluation baseline inside #215.** Add 50–100 labelled replay examples with multi-label categories, ambiguous cases, canonicalization aliases, mode qualification, native-vs-acquired supply, and replacement expectations.
+2. **P0 — #214 graph/category/mode architecture.** Canonicalize near-duplicate graph nodes; cluster canonical concepts into a small durable mode layer; preserve multi-label candidate affinities; make mode scoring exact and graph-grounded.
+3. **P0 — #214 mode-aware retrieval and feed stability.** Mode selection changes retrieval planning as well as reranking. The Home replacement slider defines requested replacement demand; if current-Home mode supply is insufficient, expose a deterministic shortfall status and fill from the existing RSS/search reservoir through the same policy/scorer/trace path. Keep source→replacement identity stable across ordinary reranks.
+4. **P1 — #153 + #170 trust UX.** Resolve every mode-driven boost to exact mode/member graph nodes, evidence/provenance, and scorer contributions.
+5. **P1 — #154 + #155 + #178 correction/provenance/history-cluster controls.**
+6. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
+7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-Multimodal inference remains deferred. Text embeddings are the next model layer because the observed failure is insufficient semantic ranking resolution, not missing thumbnail/video understanding.
+The critical distinction for #215 is:
 
+- **canonical graph node:** fine-grained inspectable concept identity;
+- **mode cluster:** durable user-facing grouping over multiple canonical nodes;
+- **candidate affinity:** bounded **multi-label** candidate↔node/mode feature set;
+- **primary badge:** optional conservative presentation label, separate from the multi-label feature set.
 
-### Current handoff state
+Do not tune thresholds or fine-tune the encoder by live impression alone. #162 is now part of the PR #215 merge gate, not deferred follow-up.
 
-PR #212 is merged and #206 is closed as the acquisition foundation. Live diagnostics established that YouTube search acquisition works; the active product gap is semantic understanding and reranking.
-
-PR #213 is now the active implementation branch for #209 + #210. It introduces a replaceable local embedding-provider contract, graph-derived semantic mode profiles, bounded embedding/similarity caches, explicit graph/mode semantic score contributions, and asynchronous semantic enrichment that does not block first-paint ranking. The dependency-free local hash/subword provider is the integration baseline; it is not the final neural encoder.
-
-Next validation should focus on whether the same candidate set changes rank meaningfully across Work/Learning/Relax, whether semantic traces remain exact, and whether first-rank/cached latency stays within the long-session performance envelope.
-
-
-#152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
-
-#168 is the completed compliance boundary immediately preceding this sequence.
 
 ## P0 — Validate the data boundary
 

@@ -224,25 +224,63 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #212 is merged. The next product risk is ranking quality rather than candidate acquisition.
+PR #213 is merged. Draft PR #215 is now the active **mode architecture + feed stability** branch. Do not treat #215 as only a threshold/replacement patch; it owns the remaining structure required for a durable mode-filter loop.
 
-1. **#209 + #210** — local text embeddings and semantic reranking against the Personal Algorithm Graph and active semantic mode.
-2. **#170 + #153** — graph/provenance visualization and complete per-item explanation.
-3. **#162** — replay/evaluation baseline for semantic ranking changes.
-4. **#154 + #155 + #178** — direct correction/Forget/history-cluster controls.
-5. **#169 + #161 + #158 + #159** — remaining runtime, mode editing, graph editing, and counterfactual work.
-6. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and second connector.
+1. **P0 — #162 evaluation baseline inside #215.** Build a small labelled replay set from real local candidate/graph snapshots before further semantic threshold tuning. Measure multi-label category precision/recall, mode coverage, node fragmentation, native/pool supply, replacement stability, and model/backend latency.
+2. **P0 — #214 semantic mode architecture.** Add graph-node canonicalization, semantic neighbourhood clustering, multi-label candidate affinity, durable mode clusters, graph-grounded mode scoring, and explicit mode-supply diagnostics/banner behavior.
+3. **P0 — #214 replacement stability.** Preserve valid source→replacement identity and replacement DOM across ordinary mutation/metadata/semantic reranks; only meaningful invalidations may reseat content.
+4. **P1 — #153 + #170 trust UX.** Explanations must resolve mode/category boosts to exact contributing graph nodes/edges and acquisition provenance rather than a free-floating `mode_adjustment`.
+5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+6. **P2 — #169 + remaining #161 + #158 + #159 editable modes, graph editing, and counterfactual work beyond the #215 inferred-mode slice.**
+7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-The first semantic model is text-only. Candidate title/description/keywords/category/creator are embedded locally and compared against graph objective/topic/concept embeddings. Each mode is represented as a semantic lens over weighted graph regions plus an intent seed. Similarity becomes an explicit scorer contribution; it does not rewrite graph truth or override explicit feedback/hard policy.
+### Required semantic layers
 
-PR #213 now also compares candidate vectors with five stable category anchors (Work, Learning, Relax, Gaming, French), retains their local similarity features, displays candidate-owned category badges and a feed category summary, and exposes these five modes in the popup and Settings. A Home feed slider targets 0–100% trace-backed replacements from the local candidate reservoir; it leaves an eligible native card when no qualifying replacement exists. These changes await live validation before #209/#210 or the broader #161/#169 acceptance criteria can be closed.
+Do not collapse these into one "category" concept:
 
+```text
+canonical evidence
+    ↓
+Personal Algorithm Graph
+    ↓
+canonicalized topic/concept nodes
+    ↓
+semantic neighbourhoods / clusters
+    ↓
+durable mode definitions
+    ↓
+multi-label candidate↔node / candidate↔mode affinities
+    ↓
+graph-grounded additive scorer contributions
+    ↓
+mode-aware retrieval + pool fallback
+    ↓
+stable feed presentation + exact Why-this trace
+```
 
-#160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
+**Canonical graph nodes** remain fine-grained and inspectable. Near-duplicate labels must be normalized/merged or represented as aliases so "Elden Ring", "elden ring pvp", and "Elden Ring builds" do not fragment one semantic region accidentally.
 
-#152 and #171 are completed via PR #204. Live validation covered native order, degraded pass-through, stale render rejection, infinite-scroll DOM recycling, badge cleanup, mode consistency, pause/reactivation, graph rebuild invalidation, and explicit feedback reranking.
+**Mode clusters** are a separate derived layer. A user-facing mode should represent a stable cluster of multiple related graph nodes, not whichever individual node labels happen to appear in the current feed cache. A mode therefore survives ordinary feed churn and can be promoted/persisted locally.
 
-#168 is now a completed launch-boundary audit: the current runtime has no YouTube Data API integration and CI guards against accidental introduction.
+**Candidate classification is multi-label.** Candidate→graph similarities should retain multiple qualified affinities. A conservative primary badge may still display one label or none, but scoring/retrieval must not discard legitimate secondary matches.
+
+### Mode supply and the Home replacement slider
+
+The existing Home slider controls **how much of the Home presentation MyAlgo attempts to replace**, not classification confidence.
+
+For an active non-All mode:
+
+1. compute the requested replacement demand from the same quota function used by presentation;
+2. count eligible **current-Home/native** candidates that qualify for the active mode;
+3. if native mode supply cannot satisfy the requested demand, expose a deterministic "not enough native <mode> supply" state;
+4. use the existing source-neutral acquisition reservoir (RSS + zero-config YouTube search-page acquisition) to fill the shortfall;
+5. acquired candidates go through the same hard exclusion → eligibility → additive score → ordering → trace pipeline as every other candidate;
+6. never create a side-door score or untraced "pool boost."
+
+The banner condition must be derived from the same eligibility/mode-membership contract used by ranking. Its trigger should scale with the user's replacement slider rather than a fixed global count. Record every shortfall event as local diagnostics for #162 evaluation.
+
+Do not fine-tune the embedding encoder simply because live examples look wrong. #162 must first show which errors are caused by graph fragmentation, clustering, multi-label coverage, taxonomy, metadata, thresholds, or the embedding model itself.
+
 
 ## Phase 1 scope discipline
 

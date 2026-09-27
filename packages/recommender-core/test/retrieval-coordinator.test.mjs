@@ -143,7 +143,7 @@ test('buildGraphRetrievalRevision changes when retrieval-relevant graph state ch
 });
 
 
-test('mode changes retrieval intent without replacing the graph goal', () => {
+test('inferred mode changes retrieval intent without replacing the graph goal', () => {
   const base = {
     goal: 'Distributed systems',
     language: null,
@@ -157,14 +157,15 @@ test('mode changes retrieval intent without replacing the graph goal', () => {
     creatorTerms: [],
   };
 
-  const learning = applyModeToRetrievalProfile(base, 'Learning');
-  const work = applyModeToRetrievalProfile(base, 'Work');
+  const localFirst = applyModeToRetrievalProfile(base, 'Local-first software');
+  const neutral = applyModeToRetrievalProfile(base, 'Default');
 
-  assert.match(learning.goal, /^Distributed systems /);
-  assert.match(learning.goal, /learn understand/);
-  assert.equal(learning.preferredFormats[0], 'tutorial');
-  assert.match(work.goal, /practical implementation/);
-  assert.equal(work.preferredFormats[0], 'guide');
+  assert.equal(localFirst.goal, 'Distributed systems Local-first software');
+  assert.deepEqual(localFirst.intents, ['Local-first software']);
+  assert.equal(localFirst.semanticTerms.includes('Local-first software'), true);
+  assert.deepEqual(localFirst.preferredFormats, ['talk']);
+  assert.equal(neutral.goal, 'Distributed systems');
+  assert.deepEqual(neutral.intents, []);
   assert.equal(base.goal, 'Distributed systems');
 });
 
@@ -186,7 +187,7 @@ test('semantic mode profile selects graph nodes from embedding similarities', ()
     },
   };
 
-  const profile = buildSemanticModeProfile(semanticState, 'Work', {
+  const profile = buildSemanticModeProfile(semanticState, 'Distributed systems', {
     'objective:ship': 0.92,
     'topic:systems': 0.81,
     'concept:music': 0.05,
@@ -197,7 +198,7 @@ test('semantic mode profile selects graph nodes from embedding similarities', ()
   assert.equal(profile.semantic_terms.includes('Distributed systems'), true);
   assert.equal(profile.semantic_terms.includes('Ambient music'), false);
   assert.equal(profile.node_weights['objective:ship'], 1);
-  assert.match(profile.seed_text, /practical implementation/);
+  assert.equal(profile.seed_text, 'Distributed systems');
 });
 
 test('embedding helpers normalize centroid and cosine similarity', () => {
@@ -208,5 +209,5 @@ test('embedding helpers normalize centroid and cosine similarity', () => {
   assert.ok(Math.abs(Math.hypot(...centroid) - 1) < 1e-9);
   assert.ok(cosineSimilarity(centroid, [1, 0]) > cosineSimilarity(centroid, [0, 1]));
   assert.equal(cosineSimilarity([1, 0], [1, 0]), 1);
-  assert.match(semanticModeSeed('Learning'), /understand/);
+  assert.equal(semanticModeSeed('Local-first software'), 'Local-first software');
 });

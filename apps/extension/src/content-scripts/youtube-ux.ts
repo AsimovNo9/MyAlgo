@@ -10,6 +10,7 @@ export type VideoCandidate = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -44,6 +45,7 @@ export type RankedFeedItem = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -56,14 +58,19 @@ export type RankedFeedItem = {
 
 export function getContentPresentationLabel(
   item: RankedFeedItem,
-  minimumConfidence = 0.75,
+  minimumConfidence = 0.35,
 ): string | null {
   const semanticConfidence = Number(item.semantic_category_confidence ?? 0);
-  if (item.semantic_category && semanticConfidence >= 0.25) {
-    return item.semantic_category[0].toUpperCase() + item.semantic_category.slice(1);
+  if (item.semantic_category && semanticConfidence >= minimumConfidence) {
+    return item.semantic_category.trim();
   }
+  // Once a semantic pass has run, an empty/weak category is a deliberate
+  // ambiguous result. Do not overwrite that decision with the older lexical
+  // Learning heuristic.
+  if (item.semantic_model_version) return null;
+
   const confidence = Number(item.content_label_confidence ?? 0);
-  if (item.content_label !== 'learning' || confidence < minimumConfidence) return null;
+  if (item.content_label !== 'learning' || confidence < 0.75) return null;
   return 'Learning';
 }
 
@@ -165,6 +172,10 @@ export function getShelfCandidates(
     seen.add(id);
     return true;
   }).slice(0, limit);
+}
+
+export function createReplacementSelectionSeed(routeKey: string): string {
+  return routeKey.trim();
 }
 
 function seededCandidateOrder(seed: string, id: string): number {

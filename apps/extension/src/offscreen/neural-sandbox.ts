@@ -17,6 +17,7 @@ type NeuralSandboxRequest = {
   source?: 'myalgo-neural-host';
   id?: string;
   type?: 'EMBED_TEXTS';
+  batchSize?: number;
   texts?: string[];
 };
 
@@ -144,8 +145,13 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   const runRequest = async () => {
     activeRequestId = id;
     const { extractor, backend } = await getExtractor();
-    // One text per WebGPU call while diagnosing Pascal-era GPU stalls.
-    const batchSize = backend === 'wasm-sandbox' ? 16 : 1;
+    const requestedBatchSize = Math.max(
+      1,
+      Math.min(16, Math.floor(Number(request.batchSize ?? 1))),
+    );
+    // WASM keeps its proven CPU batch. WebGPU is user-tunable now that the
+    // single-item diagnostic path is stable.
+    const batchSize = backend === 'wasm-sandbox' ? 16 : requestedBatchSize;
     const inferenceBatchCount = Math.ceil(texts.length / batchSize);
     const startedAt = performance.now();
     const embeddings: number[][] = [];

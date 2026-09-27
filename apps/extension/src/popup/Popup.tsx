@@ -1,5 +1,5 @@
 import React from 'react';
-import { summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
+import { buildInferredModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
 import type { FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
@@ -40,7 +40,7 @@ const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [], categories: [] };
 
 export function Popup() {
-  const [mode, setMode] = React.useState('Work');
+  const [mode, setMode] = React.useState('Default');
   const [feedReplacementPercent, setFeedReplacementPercent] = React.useState(0);
   const [feedCount, setFeedCount] = React.useState(0);
   const [lastError, setLastError] = React.useState<string | null>(null);
@@ -54,7 +54,7 @@ export function Popup() {
 
   React.useEffect(() => {
     chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
-      setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
+      setMode((result['personal-algorithm-mode'] as string) ?? 'Default');
       const storedPercent = Number(result['personal-algorithm-feed-replacement-percent'] ?? 0);
       setFeedReplacementPercent(Number.isFinite(storedPercent) ? Math.max(0, Math.min(100, storedPercent)) : 0);
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
@@ -188,7 +188,7 @@ export function Popup() {
     }
   };
 
-  const modeOptions = ['Work', 'Learning', 'Relax', 'Gaming', 'French'];
+  const modeOptions = buildInferredModeOptions(mode, feedSummary.categories);
 
   if (!disclosureAccepted) {
     return (
@@ -224,7 +224,7 @@ export function Popup() {
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: enabled ? '#22c55e' : '#9ca3af', display: 'inline-block' }} />
         {enabled ? 'Enabled' : 'Paused'}
       </div>
-      <p>Current mode: <strong>{mode}</strong></p>
+      <p>Current mode: <strong>{mode === 'Default' ? 'All' : mode}</strong></p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
       <p>Feed mix: <strong>{feedSummary.subscribedCount} subscribed</strong> · <strong>{feedSummary.discoveredCount} discovered</strong></p>
@@ -309,7 +309,7 @@ export function Popup() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {modeOptions.map((option) => (
           <button key={option} onClick={() => void handleSetMode(option)}>
-            {option}
+            {option === 'Default' ? 'All' : option}
           </button>
         ))}
       </div>

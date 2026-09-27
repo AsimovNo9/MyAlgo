@@ -248,12 +248,12 @@ A healthy search run can fetch candidates without producing replacements when no
 
 ## Semantic mode reranking validation
 
-Validate #209/#210 on the same stored candidate set under multiple modes.
+PR #213 is merged. Preserve its semantic execution/privacy invariants while #214 refines classification and presentation stability.
 
 Required invariants:
 1. the first rank response does not wait for missing embeddings;
 2. semantic enrichment triggers at most one follow-up rerank when cached values actually change;
-3. changing Work/Learning/Relax changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
+3. changing an inferred semantic mode changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
 4. semantic mode similarity replaces, rather than double-counts, the legacy heuristic mode boost;
 5. hard exclusions and explicit negative feedback remain authoritative;
 6. embedding cache hits produce the same vectors/similarities as the original computation;
@@ -268,3 +268,112 @@ Required invariants:
 15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
+
+
+## Post-#213 category/mode and Home-stability validation (#214)
+
+Live review after PR #213 exposed two distinct failure classes that must be evaluated separately.
+
+### Category and mode inference
+
+Use a fixed local candidate/graph fixture plus representative live examples.
+
+Required checks:
+
+1. candidate category vocabulary comes from eligible symbolic graph topic/concept labels rather than a fixed five-anchor taxonomy;
+2. the strongest category must clear both the configured absolute similarity floor and the runner-up margin;
+3. near-ties produce **no category badge** rather than forcing the least-wrong label;
+4. changing the active mode does not change the candidate's category score map when candidate/graph inputs are unchanged;
+5. the popup/Settings mode list contains All/Default plus categories actually inferred in local feed state; it must not synthesize Work/Learning/Relax/Gaming/French merely because those labels existed in PR #213;
+6. selecting a dynamic category mode still produces exact traceable mode/category-affinity contributions and bounded retrieval intent;
+7. migration converts the known PR #213 fixed bootstrap modes to All/Default while preserving an arbitrary custom mode value; neither path may recreate the old fixed taxonomy.
+
+Record labelled examples of obvious correct, obvious incorrect, and ambiguous cases. Do not fine-tune the embedding encoder until the replay set is large enough to show a systematic residual error after taxonomy choice, metadata enrichment, thresholds/margins, and candidate model choice have been tested.
+
+### Home replacement stability
+
+For one unchanged Home route, record source native video ID → replacement video ID mappings across at least:
+
+- ordinary MutationObserver reranks;
+- metadata-enrichment reranks;
+- semantic-enrichment reranks;
+- more than 45 seconds of idle/normal DOM churn.
+
+A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Ordinary rank-generation increments must not rotate equal/near-equal candidates.
+
+Then deliberately trigger meaningful invalidations and confirm reselection is allowed:
+
+- route/navigation change;
+- mode change;
+- graph/feedback/policy change;
+- feed replacement percentage change;
+- source native card removal;
+- replacement candidate becoming ineligible/suppressed.
+
+This distinguishes YouTube DOM recycling from MyAlgo-owned candidate cycling. Diagnostics should report the stable/bound replacement counts without logging private candidate text.
+
+
+## P0: labelled semantic-mode evaluation inside PR #215 (#162)
+
+Do not merge the semantic-mode architecture based only on live screenshots. PR #215 must carry a small reproducible labelled fixture set as a merge gate.
+
+### Initial fixture target
+
+Start with **50–100 real candidate examples** sampled from local MyAlgo state. Store only test-safe/exported fixture data required for replay.
+
+For each candidate, label:
+- zero, one, or multiple expected semantic categories/modes;
+- obvious ambiguous/unknown cases;
+- expected canonical concept aliases where relevant;
+- whether the item should qualify for each tested mode;
+- source class: current-Home/native vs acquired reservoir;
+- expected hard-policy/feedback eligibility.
+
+Include graph fixtures with deliberate near-duplicates such as:
+- broad topic vs subtopic;
+- casing/formatting aliases;
+- game/product/entity plus activity variants;
+- multilingual aliases where relevant.
+
+### Metrics
+
+Report at minimum:
+
+- **multi-label precision / recall / F1** per mode and micro/macro aggregate;
+- primary-badge precision and abstention rate;
+- unknown/ambiguous false-positive rate;
+- canonical-node merge/split errors;
+- cluster purity / fragmentation;
+- mode coverage: fraction of labelled modes represented by at least one durable cluster;
+- mode stability across replayed feed-cache churn;
+- native-mode supply vs requested replacement demand;
+- acquired-pool shortfall fill rate;
+- replacement source→candidate stability;
+- WebGPU batch throughput and failure/fallback rate by configured batch size.
+
+Do not optimize only overall accuracy. False confident category assignment and unstable mode identity are separate failure modes and must have separate measurements.
+
+### Multi-label acceptance
+
+A candidate can have multiple qualified mode affinities. Evaluation should treat labels as a set, not a single winner. A primary badge is scored separately from the multi-label semantic feature set.
+
+### Mode-grounded trace acceptance
+
+For every score change attributable to the active mode:
+- the trace must identify the stable mode ID/revision;
+- at least one exact contributing graph node/member must be present;
+- the displayed contribution must reconcile numerically with scorer output;
+- no untraceable free-floating mode similarity may alter final rank.
+
+### Retrieval/supply acceptance
+
+For each active mode and slider setting:
+1. compute requested replacement slots;
+2. compute eligible current-Home mode supply;
+3. verify the shortfall banner/status fires iff native mode supply is insufficient for the requested quota;
+4. verify existing RSS/search acquisition is invoked/consumed rather than a new side pool;
+5. verify acquired candidates use the same policy/scorer/trace path;
+6. verify light-touch slider settings trigger fewer shortfall states than strict/high-replacement settings on the same fixture.
+
+Every shortfall event should be captured in bounded local diagnostics and replayable from the fixture.
+

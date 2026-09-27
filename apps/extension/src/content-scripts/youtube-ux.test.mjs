@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
+import { createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -272,7 +272,7 @@ test('replacement text metadata always provides visible title and creator fallba
 });
 
 
-test('replacement candidate rotation changes across generation seeds but is stable within one seed', () => {
+test('replacement candidate selection is stable for the same route', () => {
   const items = Array.from({ length: 8 }, (_, index) => ({
     external_id: `candidate-${index}`,
     title: `Candidate ${index}`,
@@ -282,16 +282,17 @@ test('replacement candidate rotation changes across generation seeds but is stab
     policyOutcome: 'eligible',
   }));
 
-  const first = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
-  const firstReplay = getReplacementCandidates(items, [], 3, 55, 'generation-1').map((item) => item.external_id);
-  const second = getReplacementCandidates(items, [], 3, 55, 'generation-2').map((item) => item.external_id);
+  const seed = createReplacementSelectionSeed('/');
+  const first = getReplacementCandidates(items, [], 3, 55, seed).map((item) => item.external_id);
+  const replay = getReplacementCandidates(items, [], 3, 55, seed).map((item) => item.external_id);
 
-  assert.deepEqual(firstReplay, first);
-  assert.notDeepEqual(second, first);
+  assert.deepEqual(replay, first);
+  assert.equal(seed, '/');
+  assert.equal(createReplacementSelectionSeed('/results?search_query=test'), '/results?search_query=test');
 });
 
 
-test('replacement rotation can vary candidates within the same 5-point score band', () => {
+test('replacement tie breaking remains deterministic within one route', () => {
   const items = [
     { external_id: 'a', title: 'A', score: 80, visible: true, traceId: 'ta', policyOutcome: 'eligible' },
     { external_id: 'b', title: 'B', score: 79, visible: true, traceId: 'tb', policyOutcome: 'eligible' },
@@ -300,17 +301,12 @@ test('replacement rotation can vary candidates within the same 5-point score ban
     { external_id: 'e', title: 'E', score: 70, visible: true, traceId: 'te', policyOutcome: 'eligible' },
   ];
 
-  const orders = Array.from({ length: 12 }, (_, index) =>
-    getReplacementCandidates(items, [], 3, 55, `seed-${index}`).map((item) => item.external_id),
-  );
-  const uniqueOrders = new Set(orders.map((order) => order.join('|')));
+  const seed = createReplacementSelectionSeed('/');
+  const first = getReplacementCandidates(items, [], 3, 55, seed).map((item) => item.external_id);
+  const replay = getReplacementCandidates(items, [], 3, 55, seed).map((item) => item.external_id);
 
-  assert.ok(uniqueOrders.size > 1);
-  assert.equal(orders.every((order) => !order.includes('e')), true);
-  assert.deepEqual(
-    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
-    getReplacementCandidates(items, [], 3, 55, 'seed-stable').map((item) => item.external_id),
-  );
+  assert.deepEqual(replay, first);
+  assert.equal(first.includes('e'), false);
 });
 
 
@@ -335,8 +331,19 @@ test('opportunistic replacement assignments bind the selected candidate to its n
 
 
 test('content presentation labels come from candidate classification, not active mode', () => {
-  assert.equal(getContentPresentationLabel({ semantic_category: 'gaming', semantic_category_confidence: 0.7 }), 'Gaming');
-  assert.equal(getContentPresentationLabel({ semantic_category: 'french', semantic_category_confidence: 0.7 }), 'French');
+  assert.equal(getContentPresentationLabel({ semantic_category: 'Gaming', semantic_category_confidence: 0.7 }), 'Gaming');
+  assert.equal(getContentPresentationLabel({ semantic_category: 'French language', semantic_category_confidence: 0.7 }), 'French language');
+  assert.equal(getContentPresentationLabel({ semantic_category: 'Ambiguous', semantic_category_confidence: 0.34 }), null);
+  assert.equal(
+    getContentPresentationLabel({
+      semantic_category: null,
+      semantic_category_confidence: 0,
+      semantic_model_version: 'mxbai@test',
+      content_label: 'learning',
+      content_label_confidence: 0.9,
+    }),
+    null,
+  );
   assert.equal(
     getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.9 }),
     'Learning',

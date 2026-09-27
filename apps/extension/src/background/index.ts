@@ -112,6 +112,14 @@ const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
 const MAX_REPLACEMENT_WORKING_SET = 180;
+const LEGACY_FIXED_MODES = new Set(['work', 'learning', 'relax', 'gaming', 'french']);
+
+const migrateStoredMode = (value: unknown): string => {
+  const mode = typeof value === 'string' ? value.trim() : '';
+  if (!mode || LEGACY_FIXED_MODES.has(mode.toLowerCase())) return 'Default';
+  return mode;
+};
+
 const DEFAULT_RETRIEVAL_SETTINGS: RetrievalSettings = {
   rssEnabled: false,
   webSearchEnabled: false,
@@ -146,10 +154,13 @@ const getSemanticModelMode = async (): Promise<SemanticModelMode> => {
 
 const getSemanticProviderContext = async () => {
   const semanticModelMode = await getSemanticModelMode();
-  const provider = createOffscreenEmbeddingProvider(semanticModelMode);
+  const storedBatchSize = await getStorage<number>(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, 1);
+  const neuralBatchSize = Math.max(1, Math.min(16, Math.floor(Number(storedBatchSize) || 1)));
+  const provider = createOffscreenEmbeddingProvider(semanticModelMode, { neuralBatchSize });
   const identity = semanticProviderIdentity(semanticModelMode);
   return {
     semanticModelMode,
+    neuralBatchSize,
     provider,
     semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
   };
@@ -530,7 +541,7 @@ async function refreshWebSearchCandidates(
   }
 
   const state = await personalAlgorithmStore.exportState();
-  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Work');
+  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
   const baseProfile = buildGraphRetrievalProfile(state);
   const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
   const retrievalRevision = buildGraphRetrievalRevision(state);
@@ -664,7 +675,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
     const firstInstall = details.reason === 'install';
     await chrome.storage.local.set({
-      [STORAGE_KEYS.MODE]: current[STORAGE_KEYS.MODE] ?? 'Work',
+      [STORAGE_KEYS.MODE]: firstInstall ? 'Default' : migrateStoredMode(current[STORAGE_KEYS.MODE]),
       [STORAGE_KEYS.ENABLED]: privacyDisclosureAccepted && current[STORAGE_KEYS.ENABLED] !== false,
       [STORAGE_KEYS.FEED_CACHE]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CACHE] ?? [],
       [STORAGE_KEYS.FEED_CANDIDATE_POOL]: firstInstall ? [] : current[STORAGE_KEYS.FEED_CANDIDATE_POOL] ?? [],
@@ -701,7 +712,7 @@ const semanticFeatureKey = (
   mode: string,
   modelVersion: string,
 ): string => [
-  'categories-v1',
+  'graph-categories-v2',
   modelVersion,
   String(graphRevision),
   mode.trim().toLowerCase(),
@@ -885,6 +896,7 @@ async function refreshSemanticScoreFeatures(
         mode,
         graphRevision: state.graph.currentRevision,
         requestedSemanticModelMode: requestedContext.semanticModelMode,
+        neuralBatchSize: requestedContext.neuralBatchSize,
         semanticModelMode: effectiveContext.semanticModelMode,
         modelVersion: effectiveContext.semanticModelIdentity,
         candidateCount: semanticCandidates.length,
@@ -925,6 +937,7 @@ async function refreshSemanticScoreFeatures(
       const fallbackIdentity = semanticProviderIdentity('hash');
       effectiveContext = {
         semanticModelMode: 'hash',
+        neuralBatchSize: requestedContext.neuralBatchSize,
         provider: fallbackProvider,
         semanticModelIdentity: `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`,
       };
@@ -1214,20 +1227,23 @@ const handleRuntimeMessage = (
       observations?: unknown[];
       metrics?: unknown;
       semanticModelMode?: SemanticModelMode;
+      batchSize?: number;
     };
   };
 
   if (type === 'PERSONAL_ALGORITHM_HEALTH') {
     void Promise.all([
       getStorage(STORAGE_KEYS.ENABLED, false),
-      getStorage(STORAGE_KEYS.MODE, 'Work'),
+      getStorage(STORAGE_KEYS.MODE, 'Default'),
       getStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash'),
-    ]).then(([enabled, mode, semanticModelMode]) => sendResponse({
+      getStorage(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, 1),
+    ]).then(([enabled, mode, semanticModelMode, neuralBatchSize]) => sendResponse({
       ok: true,
       worker: 'ready',
       enabled,
       mode,
       semanticModelMode,
+      neuralBatchSize,
     })).catch((error) => sendResponse({
       ok: false,
       worker: 'error',
@@ -1243,6 +1259,25 @@ const handleRuntimeMessage = (
         ok: false,
         error: error instanceof Error ? error.message : 'Unable to persist semantic model status.',
       }));
+    return true;
+  }
+
+  if (type === 'SET_SEMANTIC_NEURAL_BATCH_SIZE') {
+    void (async () => {
+      const requested = Number(payload?.batchSize ?? 1);
+      const batchSize = Math.max(1, Math.min(16, Math.floor(Number.isFinite(requested) ? requested : 1)));
+      await setStorage(STORAGE_KEYS.SEMANTIC_NEURAL_BATCH_SIZE, batchSize);
+      await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_STATUS, {
+        mode: await getSemanticModelMode(),
+        status: 'configured',
+        batchSize,
+        updatedAt: new Date().toISOString(),
+      });
+      sendResponse({ ok: true, batchSize });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update neural batch size.',
+    }));
     return true;
   }
 
@@ -1310,7 +1345,7 @@ const handleRuntimeMessage = (
       // persisted again by a later mutation in the same worker lifetime.
       await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
-        [STORAGE_KEYS.MODE]: 'Work',
+        [STORAGE_KEYS.MODE]: 'Default',
         [STORAGE_KEYS.FEED_REPLACEMENT_PERCENT]: 0,
         [STORAGE_KEYS.ENABLED]: false,
         [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
@@ -1560,7 +1595,7 @@ const handleRuntimeMessage = (
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
-    const nextMode = payload?.mode ?? 'Work';
+    const nextMode = payload?.mode ?? 'Default';
     void (async () => {
       await setStorage(STORAGE_KEYS.MODE, nextMode);
       const settings = await getStorage<RetrievalSettings>(
@@ -1673,7 +1708,7 @@ const handleRuntimeMessage = (
   if (type === 'GET_RETRIEVAL_PLAN') {
     void Promise.all([
       personalAlgorithmStore.exportState(),
-      getStorage<string>(STORAGE_KEYS.MODE, 'Work'),
+      getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
     ]).then(([state, mode]) => {
       const baseProfile = buildGraphRetrievalProfile(state);
       const profile = applyModeToRetrievalProfile(baseProfile, mode);
