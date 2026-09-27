@@ -243,6 +243,10 @@ export interface SemanticGraphMatch {
   node_label: string;
   similarity: number;
   weight: number;
+  canonical_id?: string;
+  source_node_ids?: string[];
+  taxonomy_only?: boolean;
+  pipeline_id?: string;
 }
 
 export interface CandidateSemanticFeatures {
