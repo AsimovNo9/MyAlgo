@@ -226,7 +226,7 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 PR #216/#162 established replay/evaluation, PR #218/#217 established evidence-backed semantic graph materialization, and PR #220/#219 established local zero-shot topic verification.
 
-1. **P0 — #214 canonical concepts + bounded semantic scoring.** Deterministically reconcile near-duplicate verified/materialized labels into canonical neighbourhoods while retaining source-node/evidence provenance. Candidate scoring must award a bounded contribution per semantic neighbourhood rather than independently stacking aliases/subtopics and broad content-type concepts.
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring.** Deterministically reconcile near-duplicate verified/materialized labels into canonical neighbourhoods while retaining source-node/evidence provenance. Candidate scoring must award a bounded contribution per semantic neighbourhood rather than independently stacking aliases/subtopics and broad content-type concepts.
 2. **P0 — #214 durable inferred modes.** Cluster canonical concepts into stable local mode IDs/revisions, retain multi-label candidate↔mode affinity, and persist mode identity independently of current feed-cache churn.
 3. **P0 — #214 graph-grounded mode retrieval/supply.** Resolve active-mode score changes to exact member nodes, derive bounded retrieval terms from cluster members, compute slider-relative native supply, and fill only eligible shortfalls from the existing acquired reservoir.
 4. **P1 — #210 + #153 + #170 trust/calibration UX.** Recalibrate 0–100 display scores only after duplicate semantic evidence is removed, then expose exact graph/provenance paths and trace contributions.
