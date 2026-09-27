@@ -50,6 +50,7 @@ type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
   lastAcquiredAt?: string;
+  semantic_mode_affinities?: CandidateModeAffinity[];
 };
 
 type SemanticFeatureRecord = {
@@ -1231,7 +1232,12 @@ async function refreshSemanticScoreFeatures(
         mode,
         requestedContext.semanticModelIdentity,
       );
-      return existing[key] === undefined;
+      const cached = existing[key];
+      // PR #224 adds durable candidate↔mode affinity to semantic feature records.
+      // Records created by prior builds use the same semantic key but do not
+      // contain that field, so force a one-time refresh instead of silently
+      // hydrating an empty affinity list forever.
+      return cached === undefined || !Array.isArray(cached.modeAffinities);
     });
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
       ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
