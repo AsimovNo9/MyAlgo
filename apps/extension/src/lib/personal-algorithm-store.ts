@@ -22,6 +22,20 @@ export type EvidenceInput = {
   expiresAt?: string | null;
 };
 
+export type DerivedGraphProjectionInput = {
+  marker: string;
+  nodes: Array<Omit<GraphNode, 'createdAt' | 'updatedAt'>>;
+  edges: Array<Omit<GraphEdge, 'createdAt' | 'updatedAt'>>;
+};
+
+export type DerivedGraphProjectionResult = {
+  changed: boolean;
+  graphRevision: number;
+  nodeCount: number;
+  edgeCount: number;
+  preservedReferencedNodeCount: number;
+};
+
 export type GraphReview = {
   schemaVersion: number;
   evidenceCount: number;
@@ -549,6 +563,175 @@ export class LocalPersonalAlgorithmStore {
       evidenceBackedEdgeCount: state.graph.edges.filter((edge) => edge.evidenceIds.length > 0).length,
       unsupportedEdgeIds,
     };
+  }
+
+  async reconcileDerivedGraphProjection(
+    input: DerivedGraphProjectionInput,
+  ): Promise<DerivedGraphProjectionResult> {
+    return this.mutate((state) => {
+      const marker = input.marker.trim();
+      if (!marker) throw new Error('Derived graph projection marker is required');
+
+      const ownedNode = (node: GraphNode) => (
+        node.provenance === 'inferred' && node.attributes?.derivedBy === marker
+      );
+      const ownedEdge = (edge: GraphEdge) => (
+        edge.provenance === 'inferred' && edge.attributes?.derivedBy === marker
+      );
+
+      const evidenceIds = new Set(state.evidence.map((record) => record.id));
+      const proposedNodeIds = new Set(input.nodes.map((node) => node.id));
+      const existingNonOwnedNodes = state.graph.nodes.filter((node) => !ownedNode(node));
+      const availableNodeIds = new Set([
+        ...existingNonOwnedNodes.map((node) => node.id),
+        ...proposedNodeIds,
+      ]);
+
+      for (const edge of input.edges) {
+        const normalizedEvidenceIds = [...new Set(edge.evidenceIds)];
+        const missingEvidence = normalizedEvidenceIds.filter((id) => !evidenceIds.has(id));
+        if (
+          edge.provenance !== 'inferred'
+          || normalizedEvidenceIds.length === 0
+          || missingEvidence.length > 0
+        ) {
+          throw new Error(`Derived graph edge ${edge.id} must reference retained evidence`);
+        }
+        if (!availableNodeIds.has(edge.sourceNodeId) || !availableNodeIds.has(edge.targetNodeId)) {
+          throw new Error(`Derived graph edge ${edge.id} references a missing graph node`);
+        }
+      }
+
+      const referencedByNonOwnedEdge = new Set(
+        state.graph.edges
+          .filter((edge) => !ownedEdge(edge))
+          .flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+      );
+      const preservedReferencedNodes = state.graph.nodes.filter((node) => (
+        ownedNode(node)
+        && !proposedNodeIds.has(node.id)
+        && referencedByNonOwnedEdge.has(node.id)
+      ));
+
+      const timestamp = nowIso();
+      const existingNodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+      const existingEdgeById = new Map(state.graph.edges.map((edge) => [edge.id, edge]));
+
+      const nextOwnedNodes: GraphNode[] = [
+        ...input.nodes.map((node) => {
+          const previous = existingNodeById.get(node.id);
+          const previousComparable = previous ? {
+            id: previous.id,
+            kind: previous.kind,
+            label: previous.label,
+            content: previous.content ?? null,
+            provenance: previous.provenance,
+            confidence: previous.confidence,
+            attributes: previous.attributes,
+          } : null;
+          const nextComparable = { ...node, content: node.content ?? null };
+          const unchanged = previousComparable != null
+            && JSON.stringify(previousComparable) === JSON.stringify(nextComparable);
+          return {
+            ...node,
+            confidence: node.confidence == null ? null : clampConfidence(node.confidence),
+            createdAt: previous?.createdAt ?? timestamp,
+            updatedAt: unchanged ? previous.updatedAt : timestamp,
+          };
+        }),
+        ...preservedReferencedNodes,
+      ].sort((left, right) => left.id.localeCompare(right.id));
+
+      const nextOwnedEdges: GraphEdge[] = input.edges
+        .map((edge) => {
+          const evidenceIdsForEdge = [...new Set(edge.evidenceIds)].sort();
+          const previous = existingEdgeById.get(edge.id);
+          const previousComparable = previous ? {
+            id: previous.id,
+            sourceNodeId: previous.sourceNodeId,
+            targetNodeId: previous.targetNodeId,
+            relation: previous.relation,
+            provenance: previous.provenance,
+            confidence: previous.confidence,
+            evidenceIds: [...new Set(previous.evidenceIds)].sort(),
+            attributes: previous.attributes,
+          } : null;
+          const nextComparable = { ...edge, evidenceIds: evidenceIdsForEdge };
+          const unchanged = previousComparable != null
+            && JSON.stringify(previousComparable) === JSON.stringify(nextComparable);
+          return {
+            ...edge,
+            evidenceIds: evidenceIdsForEdge,
+            confidence: edge.confidence == null ? null : clampConfidence(edge.confidence),
+            createdAt: previous?.createdAt ?? timestamp,
+            updatedAt: unchanged ? previous.updatedAt : timestamp,
+          };
+        })
+        .sort((left, right) => left.id.localeCompare(right.id));
+
+      const projectionSignature = (nodes: GraphNode[], edges: GraphEdge[]) => JSON.stringify({
+        nodes: nodes
+          .map((node) => ({
+            id: node.id,
+            kind: node.kind,
+            label: node.label,
+            content: node.content ?? null,
+            provenance: node.provenance,
+            confidence: node.confidence,
+            attributes: node.attributes,
+          }))
+          .sort((left, right) => left.id.localeCompare(right.id)),
+        edges: edges
+          .map((edge) => ({
+            id: edge.id,
+            sourceNodeId: edge.sourceNodeId,
+            targetNodeId: edge.targetNodeId,
+            relation: edge.relation,
+            provenance: edge.provenance,
+            confidence: edge.confidence,
+            evidenceIds: [...new Set(edge.evidenceIds)].sort(),
+            attributes: edge.attributes,
+          }))
+          .sort((left, right) => left.id.localeCompare(right.id)),
+      });
+
+      const currentOwnedNodes = state.graph.nodes.filter(ownedNode);
+      const currentOwnedEdges = state.graph.edges.filter(ownedEdge);
+      const changed = projectionSignature(currentOwnedNodes, currentOwnedEdges)
+        !== projectionSignature(nextOwnedNodes, nextOwnedEdges);
+
+      if (!changed) {
+        return {
+          changed: false,
+          graphRevision: state.graph.currentRevision,
+          nodeCount: currentOwnedNodes.length,
+          edgeCount: currentOwnedEdges.length,
+          preservedReferencedNodeCount: preservedReferencedNodes.length,
+        };
+      }
+
+      state.graph.nodes = [...existingNonOwnedNodes, ...nextOwnedNodes];
+      state.graph.edges = [
+        ...state.graph.edges.filter((edge) => !ownedEdge(edge)),
+        ...nextOwnedEdges,
+      ];
+
+      state.graph.currentRevision += 1;
+      state.graph.revisions.push({
+        id: makeId('revision'),
+        revision: state.graph.currentRevision,
+        reason: `derived_graph_reconcile:${marker}`,
+        createdAt: timestamp,
+      });
+
+      return {
+        changed: true,
+        graphRevision: state.graph.currentRevision,
+        nodeCount: nextOwnedNodes.length,
+        edgeCount: nextOwnedEdges.length,
+        preservedReferencedNodeCount: preservedReferencedNodes.length,
+      };
+    });
   }
 
   async rebuildGraphFromEvidence(): Promise<PersonalAlgorithmGraph> {
