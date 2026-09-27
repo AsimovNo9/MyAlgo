@@ -81,3 +81,43 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
   }));
   assert.equal((await secondResult).ok, true);
 });
+
+
+test('concept extraction reuses the local neural sandbox and returns model output', async () => {
+  hostMessages.length = 0;
+  frame.contentDocument = null;
+
+  const result = new Promise((resolve) => {
+    assert.equal(runtimeListener({
+      target: 'semantic-embedding-offscreen',
+      type: 'EXTRACT_CONCEPTS',
+      prompts: ['extract topics from fixture metadata'],
+    }, {}, resolve), true);
+  });
+
+  assert.equal(hostMessages.length, 1);
+  assert.equal(hostMessages[0].type, 'EXTRACT_CONCEPTS');
+  assert.deepEqual(hostMessages[0].prompts, ['extract topics from fixture metadata']);
+
+  window.dispatchEvent(Object.assign(new Event('message'), {
+    source: frame.contentWindow,
+    data: {
+      source: 'myalgo-neural-sandbox',
+      id: hostMessages[0].id,
+      modelKind: 'concept',
+      ok: true,
+      outputs: ['distributed systems, CRDTs'],
+      modelId: 'Xenova/flan-t5-small',
+      modelVersion: 'transformersjs-local-q8-v1',
+      backend: 'webgpu-sandbox',
+    },
+  }));
+
+  assert.deepEqual(await result, {
+    ok: true,
+    outputs: ['distributed systems, CRDTs'],
+    modelId: 'Xenova/flan-t5-small',
+    modelVersion: 'transformersjs-local-q8-v1',
+    backend: 'webgpu-sandbox',
+  });
+});
