@@ -19,6 +19,9 @@ candidate acquisition (observed DOM / optional RSS / optional YouTube search)
           ↓
 local candidate reservoir
           ↓
+optional public model-file download from Hugging Face
+(no candidate/graph/history/feedback payload)
+          ↓
 rebuildable local semantic enrichment
   embedding cache + graph/mode similarity cache
           ↓
@@ -107,7 +110,7 @@ When RSS discovery is explicitly enabled:
 - candidate/feed caches;
 - score/trace metadata;
 - retrieval settings and privacy-safe retrieval diagnostics;
-- rebuildable semantic embeddings, graph/mode similarities, and semantic diagnostics.
+- rebuildable semantic embeddings, graph/mode similarities, semantic diagnostics, and local model download/readiness status.
 
 Purpose: ranking, explanation, replay/debugging, semantic matching, and enforcement. Semantic derived state is model/version/input keyed, bounded, locally stored, and non-canonical.
 
