@@ -8,6 +8,9 @@ type SearchJob = {
 const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url), {
   type: 'module',
 });
+const semanticWorker = new Worker(new URL('./semantic-embedding-worker.ts', import.meta.url), {
+  type: 'module',
+});
 
 let sequence = 0;
 const pending = new Map<string, {
@@ -38,7 +41,58 @@ const parseInWorker = (html: string, limit: number): Promise<unknown[]> => {
   });
 };
 
-chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
+const embedInWorker = (texts: string[]): Promise<{
+  embeddings: number[][];
+  modelId: string;
+  modelVersion: string;
+  dimensions: number;
+}> => {
+  const id = `semantic-embedding-${++sequence}`;
+  return new Promise((resolve, reject) => {
+    const onMessage = (event: MessageEvent<{
+      id: string;
+      ok: boolean;
+      embeddings?: number[][];
+      modelId?: string;
+      modelVersion?: string;
+      dimensions?: number;
+      error?: string;
+    }>) => {
+      if (event.data.id !== id) return;
+      semanticWorker.removeEventListener('message', onMessage);
+      if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
+        reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
+        return;
+      }
+      resolve({
+        embeddings: event.data.embeddings,
+        modelId: event.data.modelId,
+        modelVersion: event.data.modelVersion,
+        dimensions: event.data.dimensions,
+      });
+    };
+    semanticWorker.addEventListener('message', onMessage);
+    semanticWorker.postMessage({ id, texts });
+  });
+};
+
+chrome.runtime.onMessage.addListener((message: SearchJob & { texts?: string[] }, _sender, sendResponse) => {
+  if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EMBED_TEXTS') {
+    void (async () => {
+      const texts = Array.isArray(message.texts)
+        ? message.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
+        : [];
+      const result = await embedInWorker(texts);
+      sendResponse({ ok: true, ...result });
+    })().catch((error) => {
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Semantic embedding failed.',
+      });
+    });
+    return true;
+  }
+
   if (message?.target !== 'youtube-search-offscreen' || message.type !== 'SEARCH_YOUTUBE_PAGE') {
     return false;
   }
