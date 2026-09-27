@@ -82,7 +82,8 @@ const FEATURE_WEIGHTS = {
 const SEMANTIC_NEIGHBOURHOOD_CONTRIBUTION_CAP = 18;
 const TAXONOMY_ONLY_MAX_CONTRIBUTION = 3;
 const TAXONOMY_ONLY_WEIGHT_MULTIPLIER = 0.25;
-const SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY = 0.3;
+const SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY = 0.35;
+const SEMANTIC_MATCH_MINIMUM_RUNNER_UP_MARGIN = 0.04;
 const SEMANTIC_MATCH_MINIMUM_SIMILARITY = 0.24;
 const SEMANTIC_MATCH_RELATIVE_TO_BEST = 0.7;
 
@@ -113,6 +114,13 @@ const lexicalMatch = (label: string, candidateText: string): number => {
   if (labelTokens.length === 0) return 0;
   const candidateTokens = new Set(featureTokens(candidateText));
   const overlap = labelTokens.filter((token) => candidateTokens.has(token)).length;
+  if (labelTokens.length === 1) return overlap === 1 ? 1 : 0;
+
+  // Multi-token semantic labels need at least two grounded tokens. The previous
+  // 50% rule let generic single tokens create false positives for two-token
+  // concepts (for example "couple" -> "Homeless Couple" and
+  // "daily" -> "GRM Daily").
+  if (overlap < 2) return 0;
   const ratio = overlap / labelTokens.length;
   return ratio >= 0.5 ? ratio : 0;
 };
@@ -464,10 +472,23 @@ const extractLocalCandidateFeaturesWithCanonical = (
   if (Number.isFinite(graphSimilarity) && graphSimilarity >= 0.2) {
     const rawSemanticMatches = (candidate.semantic_graph_matches ?? [])
       .filter((match) => Number.isFinite(match.similarity) && match.similarity > 0);
-    const bestSemanticSimilarity = Math.max(
-      0,
-      ...rawSemanticMatches.map((match) => match.similarity),
-    );
+    const rankedSemanticMatches = [...rawSemanticMatches]
+      .sort((left, right) => right.similarity - left.similarity || left.node_label.localeCompare(right.node_label));
+    const bestSemanticMatch = rankedSemanticMatches[0];
+    const bestSemanticSimilarity = bestSemanticMatch?.similarity ?? 0;
+    const independentRunnerUp = bestSemanticMatch
+      ? rankedSemanticMatches.slice(1).find((match) => !semanticLabelsShareScoringRegion(
+        bestSemanticMatch.node_label,
+        match.node_label,
+        false,
+      ))
+      : undefined;
+    const independentRunnerUpSimilarity = independentRunnerUp?.similarity ?? 0;
+    const embeddingProfileQualified = bestSemanticSimilarity >= SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY
+      && (
+        bestSemanticSimilarity - independentRunnerUpSimilarity
+        >= SEMANTIC_MATCH_MINIMUM_RUNNER_UP_MARGIN
+      );
     const groupedMatches = new Map<string, {
       id: string;
       label: string;
@@ -486,7 +507,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
           lexicalMatch(featureNodeById.get(nodeId)?.label ?? '', text) > 0
         ));
       if (!hasLexicalSupport && (
-        bestSemanticSimilarity < SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY
+        !embeddingProfileQualified
         || match.similarity < SEMANTIC_MATCH_MINIMUM_SIMILARITY
         || match.similarity < bestSemanticSimilarity * SEMANTIC_MATCH_RELATIVE_TO_BEST
       )) continue;
@@ -836,7 +857,7 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p4',
+    revision: 'local-mvp-p5',
     baseScore: 0,
     nodeWeights,
     edgeRelationWeights: {
