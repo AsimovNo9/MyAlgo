@@ -5,8 +5,12 @@ import { readFileSync } from 'node:fs';
 import {
   compareReplayStates,
   evaluateCanonicalAssignments,
+  evaluateModeClusterAssignments,
+  evaluateModeStability,
   evaluateModeSupply,
+  evaluateModeTraceGrounding,
   evaluateReplacementStability,
+  evaluateRetrievalModeChanges,
   evaluateSemanticPredictions,
   projectReplayState,
   reviewReplayState,
@@ -180,4 +184,84 @@ test('inference summary compares throughput and fallback by batch size', () => {
   assert.equal(summary.fallbackRate, 1 / 3);
   assert.equal(summary.byBatchSize['1'].inputsPerSecond, 10);
   assert.equal(summary.byBatchSize['4'].inputs, 24);
+});
+
+
+test('mode cluster metrics expose purity and fragmentation independently', () => {
+  const metrics = evaluateModeClusterAssignments([
+    { conceptId: 'elden-ring', expectedModeId: 'gaming', predictedModeId: 'gaming' },
+    { conceptId: 'elden-ring-pvp', expectedModeId: 'gaming', predictedModeId: 'gaming' },
+    { conceptId: 'elden-ring-builds', expectedModeId: 'gaming', predictedModeId: 'gaming-builds' },
+    { conceptId: 'crdts', expectedModeId: 'systems', predictedModeId: 'systems' },
+    { conceptId: 'replication', expectedModeId: 'systems', predictedModeId: null },
+  ]);
+  assert.equal(metrics.assignmentCount, 5);
+  assert.equal(metrics.assignedCount, 4);
+  assert.equal(metrics.assignmentAccuracy, 3 / 5);
+  assert.equal(metrics.averageClusterPurity, 1);
+  assert.equal(metrics.averageExpectedModeFragmentation, 1.5);
+  assert.deepEqual(metrics.unassignedConceptIds, ['replication']);
+});
+
+test('durable mode stability measures identity and membership churn', () => {
+  const metrics = evaluateModeStability(
+    {
+      gaming: { label: 'Gaming', memberNodeIds: ['a', 'b', 'c'], revision: 1 },
+      systems: { label: 'Systems', memberNodeIds: ['d', 'e'], revision: 1 },
+    },
+    {
+      gaming: { label: 'Gaming', memberNodeIds: ['a', 'b', 'c'], revision: 2 },
+      systems: { label: 'Distributed systems', memberNodeIds: ['d', 'e', 'f'], revision: 2 },
+      finance: { label: 'Finance', memberNodeIds: ['g'], revision: 1 },
+    },
+  );
+  assert.equal(metrics.commonModeCount, 2);
+  assert.deepEqual(metrics.addedModeIds, ['finance']);
+  assert.deepEqual(metrics.removedModeIds, []);
+  assert.deepEqual(metrics.changedLabelIds, ['systems']);
+  assert.equal(metrics.averageMemberJaccard, (1 + (2 / 3)) / 2);
+});
+
+test('mode trace grounding requires graph members and exact reconciliation', () => {
+  const metrics = evaluateModeTraceGrounding([
+    {
+      traceId: 'good',
+      modeContribution: 3,
+      modeId: 'mode:systems',
+      modeRevision: 2,
+      contributingNodeIds: ['topic:crdts', 'topic:replication'],
+      memberContributions: [1.25, 1.75],
+    },
+    {
+      traceId: 'bad',
+      modeContribution: 2,
+      modeId: null,
+      modeRevision: null,
+      contributingNodeIds: [],
+      memberContributions: [1],
+    },
+  ]);
+  assert.equal(metrics.groundingRate, 0.5);
+  assert.equal(metrics.reconciliationRate, 0.5);
+  assert.equal(metrics.errors.length, 2);
+});
+
+test('retrieval mode evaluation detects whether query plans actually change', () => {
+  const metrics = evaluateRetrievalModeChanges([
+    {
+      id: 'all',
+      baselineQueries: ['distributed systems tutorial'],
+      modeQueries: ['distributed systems tutorial'],
+      expectedChange: false,
+    },
+    {
+      id: 'work',
+      baselineQueries: ['distributed systems tutorial'],
+      modeQueries: ['distributed systems tutorial', 'crdt implementation'],
+      expectedChange: true,
+    },
+  ]);
+  assert.equal(metrics.accuracy, 1);
+  assert.equal(metrics.observedChangeCount, 1);
+  assert.deepEqual(metrics.mismatches, []);
 });
