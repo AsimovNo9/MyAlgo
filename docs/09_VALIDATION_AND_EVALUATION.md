@@ -568,7 +568,7 @@ The merged verifier path completed a two-candidate q8 WASM batch in approximatel
 
 A subsequent cache-only observation showed `changed: false` while the externally sampled graph revision had advanced between measurements. Code review confirmed that `reconcileDerivedGraphProjection()` does not increment graph revision on its own `changed: false` branch; background verifier/materialization work can legitimately advance the revision between two console samples. Future stability tests should therefore capture the revision immediately before and after one isolated cache-only request rather than compare against an older asynchronous generation result.
 
-Live replacement traces also exposed semantic score overcount. Multiple related graph labels can each add independent topic/concept feature contributions, and broad concepts can stack with specific ones. The next #214 replay gate must therefore measure:
+Live replacement traces also exposed semantic score overcount. Multiple related graph labels can each add independent topic/concept feature contributions, and broad concepts can stack with specific ones. The next #221/#214 replay gate must therefore measure:
 - canonical neighbourhood assignment accuracy;
 - number of raw source-node matches per canonical neighbourhood;
 - bounded neighbourhood contribution count/value;
