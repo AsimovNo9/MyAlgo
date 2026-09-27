@@ -204,7 +204,16 @@ It compares expected vs predicted `topic`/`concept` labels and reports:
 
 The initial #217 materializer intentionally favors precision over coverage:
 - candidate topics/content types require support from at least two interacted-with content items;
-- title-only keyphrases require support from at least three interacted-with content items;
+- title-only keyphrases are not eligible to create taxonomy nodes after live validation showed they dominated the vocabulary with noisy n-grams; title phrases may only reinforce existing metadata-derived topics;
 - proposals are bounded to 64 nodes and 24 evidence-backed content edges per node by default.
 
 These are bootstrap safeguards, not final taxonomy thresholds. Canonicalization and clustering remain downstream #214 work and should be measured against this evaluation boundary rather than tuned only from live screenshots.
+
+
+### Live precision correction
+
+Initial live materialization saturated the 64-node cap with 35 title-only nodes and 15 mixed candidate-topic/title nodes. Several top labels were generic or title-fragment artifacts such as `cut rope`, `all time`, and `most disturbing`.
+
+The materializer therefore treats enriched candidate topics/content types as the taxonomy source. Title phrases are supporting evidence only. It also suppresses a candidate topic when the same normalized label already exists as a content-type concept, preventing duplicate `Music`/ `Entertainment` topic+concept pairs.
+
+Diagnostics expose `qualifiedBeforeCap` and `droppedByCap` so cap saturation is measurable rather than hidden.
