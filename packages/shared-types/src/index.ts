@@ -1,4 +1,4 @@
-export type AlgorithmMode = 'Work' | 'Learning' | 'Relax';
+export type AlgorithmMode = 'Work' | 'Learning' | 'Relax' | 'Gaming' | 'French';
 
 export type RuleType = 'always_show' | 'never_show' | 'priority';
 
@@ -49,6 +49,8 @@ export interface FeedItem {
   }>;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   lane?: 'matched' | 'discovery' | 'explore';
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
 }
 
 export interface FeedResponse {
@@ -308,9 +310,14 @@ export interface RecommendationCandidate {
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   semantic_graph_matches?: SemanticGraphMatch[];
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
 }
+
+export type SemanticCategoryId = 'work' | 'learning' | 'relax' | 'gaming' | 'french';
 
 export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
 

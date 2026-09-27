@@ -157,7 +157,11 @@ active mode seed ──────────→ semantic mode lens over graph
                      calibrated reranking
 ```
 
-Modes remain one graph with different semantic emphasis. The initial Work/Learning/Relax seeds are defaults, not hard-coded classifiers. A mode profile selects/weights graph objective/topic/concept nodes according to embedding similarity and can later support graph-derived or user-created modes.
+Modes remain one graph with different semantic emphasis. Work, Learning, Relax, Gaming, and French have fixed text anchors in the local model. Each candidate embedding is compared with all five anchors, independently of the selected mode; the highest qualifying cosine similarity gives the category badge. This affinity is a relative signal, not a calibrated probability or evidence that the model has trained on the user's feed. A mode profile also selects/weights graph objective/topic/concept nodes according to embedding similarity. Graph-derived or user-created modes remain future work under #161.
+
+Selecting a mode applies a bounded, traceable category-affinity contribution alongside the existing graph and mode semantic contributions. It also shapes optional search intent. A candidate can retain its inferred badge while a different mode is selected. If local neural inference fails, the existing hash fallback remains available and diagnostics identify the effective backend; inferred categories are recomputable derived features.
+
+On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
 
 ### Local embedding layer (#209)
 
@@ -309,8 +313,10 @@ Examples:
 - Learning mode expands the graph goal toward learn/understand/study and prefers tutorial/lecture/course/explainer query forms.
 - Work mode adds practical implementation/build/solve intent and prefers guides/tutorials/case studies.
 - Relax mode adds relax/enjoy intent and prefers documentary/podcast/music-style query forms.
+- Gaming mode adds gaming/gameplay intent and prefers gameplay/review/guide forms.
+- French mode adds French-language/francophone intent and prefers language practice and French video forms.
 
-The active mode must not be rendered as a label on every video. A visible `Learning`, `Work`, or `Relax` label is derived from candidate metadata and shown only above a classification confidence threshold. A video can therefore be scored while Learning mode is active without being labeled Learning.
+The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own highest qualifying anchor similarity, independent of the active mode; the conservative metadata-based Learning badge remains a fallback. A video can therefore be scored while Learning mode is active without being labeled Learning.
 
 ### Web search adapter
 

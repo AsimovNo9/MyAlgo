@@ -235,6 +235,8 @@ PR #212 is merged. The next product risk is ranking quality rather than candidat
 
 The first semantic model is text-only. Candidate title/description/keywords/category/creator are embedded locally and compared against graph objective/topic/concept embeddings. Each mode is represented as a semantic lens over weighted graph regions plus an intent seed. Similarity becomes an explicit scorer contribution; it does not rewrite graph truth or override explicit feedback/hard policy.
 
+PR #213 now also compares candidate vectors with five stable category anchors (Work, Learning, Relax, Gaming, French), retains their local similarity features, displays candidate-owned category badges and a feed category summary, and exposes these five modes in the popup and Settings. A Home feed slider targets 0–100% trace-backed replacements from the local candidate reservoir; it leaves an eligible native card when no qualifying replacement exists. These changes await live validation before #209/#210 or the broader #161/#169 acceptance criteria can be closed.
+
 
 #160 is completed via PR #205. Live validation established real trace-backed replacement insertion, candidate-reservoir preservation, terminal source-filter semantics, first-batch Home shaping, Playables filtering, stable native-grid layout, and visible MyAlgo mode/score badges.
 

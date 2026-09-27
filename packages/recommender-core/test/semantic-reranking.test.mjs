@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildCandidateEmbeddingText,
   buildGraphNodeEmbeddingText,
+  classifySemanticCategory,
   createLocalHashEmbeddingProvider,
   createMemoryEmbeddingCache,
   embeddingCacheKey,
@@ -175,9 +176,27 @@ test('embedding phases identify the graph, mode seed, and candidate workload in 
   );
   assert.deepEqual(phases, [
     ['graph_embeddings', 3],
-    ['mode_seed', 1],
+    ['mode_seed', 5],
     ['candidate_embeddings', 1],
   ]);
+});
+
+test('candidate category comes from its vector regardless of the selected mode', async () => {
+  const local = createLocalHashEmbeddingProvider(192);
+  const cache = createMemoryEmbeddingCache();
+  const candidates = [
+    { external_id: 'game', title: 'Video games gameplay walkthrough esports' },
+    { external_id: 'french', title: 'French language français vocabulary grammar' },
+  ];
+  const work = await enrichCandidatesWithSemanticReranking(state, candidates, 'Work', local, cache);
+  const learning = await enrichCandidatesWithSemanticReranking(state, candidates, 'Learning', local, cache);
+  assert.equal(work.candidates[0].semantic_category, 'gaming');
+  assert.equal(work.candidates[1].semantic_category, 'french');
+  assert.deepEqual(
+    work.candidates.map((candidate) => candidate.semantic_category_scores),
+    learning.candidates.map((candidate) => candidate.semantic_category_scores),
+  );
+  assert.equal(classifySemanticCategory({ learning: 0.1 }).category, null);
 });
 
 test('changing mode changes semantic mode alignment without changing graph similarity', async () => {

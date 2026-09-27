@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -59,6 +59,9 @@ type SemanticFeatureRecord = {
   modelVersion: string;
   graphSimilarity: number;
   modeSimilarity: number;
+  category: SemanticCategoryId | null;
+  categoryConfidence: number;
+  categoryScores: Partial<Record<SemanticCategoryId, number>>;
   graphMatches: Array<{
     node_id: string;
     node_label: string;
@@ -644,6 +647,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       STORAGE_KEYS.VIDEO_STORE,
       STORAGE_KEYS.LAST_SYNC,
       STORAGE_KEYS.SOURCE_FILTERS,
+      STORAGE_KEYS.FEED_REPLACEMENT_PERCENT,
       STORAGE_KEYS.RETRIEVAL_SETTINGS,
       STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
       STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
@@ -674,6 +678,7 @@ chrome.runtime.onInstalled.addListener((details) => {
         includePlayables: true,
       },
       [STORAGE_KEYS.RETRIEVAL_SETTINGS]: current[STORAGE_KEYS.RETRIEVAL_SETTINGS] ?? DEFAULT_RETRIEVAL_SETTINGS,
+      [STORAGE_KEYS.FEED_REPLACEMENT_PERCENT]: current[STORAGE_KEYS.FEED_REPLACEMENT_PERCENT] ?? 0,
       [STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS]: current[STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS] ?? EMPTY_RETRIEVAL_DIAGNOSTICS,
       [STORAGE_KEYS.SEMANTIC_MODEL_MODE]: current[STORAGE_KEYS.SEMANTIC_MODEL_MODE] ?? 'hash',
       // User-owned/local observational state must survive extension updates.
@@ -696,6 +701,7 @@ const semanticFeatureKey = (
   mode: string,
   modelVersion: string,
 ): string => [
+  'categories-v1',
   modelVersion,
   String(graphRevision),
   mode.trim().toLowerCase(),
@@ -731,6 +737,9 @@ async function hydrateSemanticScoreFeatures(
       semantic_mode_similarity: record.modeSimilarity,
       semantic_model_version: record.modelVersion,
       semantic_graph_matches: record.graphMatches,
+      semantic_category: record.category,
+      semantic_category_confidence: record.categoryConfidence,
+      semantic_category_scores: record.categoryScores,
     };
   });
 }
@@ -967,6 +976,9 @@ async function refreshSemanticScoreFeatures(
         modelVersion: effectiveContext.semanticModelIdentity,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
+        category: candidate.semantic_category ?? null,
+        categoryConfidence: Number(candidate.semantic_category_confidence ?? 0),
+        categoryScores: candidate.semantic_category_scores ?? {},
         graphMatches: (candidate.semantic_graph_matches ?? []).slice(0, 3),
         generatedAt,
       };
@@ -1056,22 +1068,23 @@ async function drainPendingSemanticCandidates(
   candidates: CandidatePoolItem[],
   mode: string,
   firstDiagnostics: Record<string, unknown> | null,
-  onChanged: (changed: number, diagnostics: Record<string, unknown> | null) => Promise<void>,
-): Promise<void> {
+): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   let diagnostics = firstDiagnostics;
   let pending = Number(diagnostics?.pendingCandidateCount ?? 0);
+  let changed = 0;
   while (
     diagnostics?.status === 'completed'
     && diagnostics.semanticModelMode === 'neural'
     && pending > 0
   ) {
     const next = await refreshSemanticScoreFeatures(candidates, mode);
-    if (next.changed > 0) await onChanged(next.changed, next.diagnostics);
+    changed += next.changed;
     diagnostics = next.diagnostics;
     const nextPending = Number(diagnostics?.pendingCandidateCount ?? 0);
     if (nextPending >= pending) break;
     pending = nextPending;
   }
+  return { changed, diagnostics };
 }
 
 async function rankLocalCandidates(
@@ -1195,6 +1208,7 @@ const handleRuntimeMessage = (
       externalId?: string;
       eventType?: string;
       sourceFilters?: FeedSourceFilters;
+      feedReplacementPercent?: number;
       retrievalSettings?: RetrievalSettings;
       evidence?: unknown[];
       observations?: unknown[];
@@ -1297,6 +1311,7 @@ const handleRuntimeMessage = (
       await personalAlgorithmStore.reset();
       await chrome.storage.local.set({
         [STORAGE_KEYS.MODE]: 'Work',
+        [STORAGE_KEYS.FEED_REPLACEMENT_PERCENT]: 0,
         [STORAGE_KEYS.ENABLED]: false,
         [STORAGE_KEYS.HISTORY_EVIDENCE]: [],
         [STORAGE_KEYS.HOME_OBSERVATION_ENABLED]: false,
@@ -1398,11 +1413,12 @@ const handleRuntimeMessage = (
         diagnostics: semanticRefresh.diagnostics,
       });
       const senderTabId = _sender.tab?.id;
-      void drainPendingSemanticCandidates(hydrated, mode, semanticRefresh.diagnostics, async (changed, diagnostics) => {
-        if (!senderTabId) return;
+      void drainPendingSemanticCandidates(hydrated, mode, semanticRefresh.diagnostics).then(async (drained) => {
+        const changed = semanticRefresh.changed + drained.changed;
+        if (!senderTabId || changed <= 0) return;
         await chrome.tabs.sendMessage(senderTabId, {
           type: 'YOUTUBE_SEMANTICS_ENRICHED',
-          payload: { count: changed, modelVersion: diagnostics?.modelVersion ?? null },
+          payload: { count: changed, modelVersion: drained.diagnostics?.modelVersion ?? null },
         }).catch(() => undefined);
       }).catch((error) => console.warn('[MyAlgo] semantic candidate drain failed', error));
     })().catch((error) => sendResponse({
@@ -1457,7 +1473,7 @@ const handleRuntimeMessage = (
         // presentation response.
         const replacementInventory = ranked
           .filter((item) => !currentPageIds.has(item.external_id))
-          .slice(0, MAX_FEED_CACHE_SIZE);
+          .slice(0, MAX_RANK_WORKING_SET);
         const searchCandidatesScored = ranked.filter((item) => (
           !currentPageIds.has(item.external_id)
           && candidateHasAcquisitionMechanism(item, 'web_search')
@@ -1511,10 +1527,10 @@ const handleRuntimeMessage = (
               },
             }).catch(() => undefined);
           };
-          await notifyChanged(semanticRefresh.changed, semanticRefresh.diagnostics);
-          await drainPendingSemanticCandidates(
-            hydratedWorkingPool, activeRankMode, semanticRefresh.diagnostics, notifyChanged,
+          const drained = await drainPendingSemanticCandidates(
+            hydratedWorkingPool, activeRankMode, semanticRefresh.diagnostics,
           );
+          await notifyChanged(semanticRefresh.changed + drained.changed, drained.diagnostics);
         }).catch((error) => {
           console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
         });
@@ -1725,6 +1741,26 @@ const handleRuntimeMessage = (
         : undefined));
       sendResponse({ ok: true });
     })();
+    return true;
+  }
+
+  if (type === 'SET_FEED_REPLACEMENT_PERCENT') {
+    void (async () => {
+      const raw = Number(payload?.feedReplacementPercent);
+      const percent = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : 0;
+      await setStorage(STORAGE_KEYS.FEED_REPLACEMENT_PERCENT, percent);
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'FEED_REPLACEMENT_CHANGED',
+          payload: { percent },
+        }).catch(() => undefined)
+        : undefined));
+      sendResponse({ ok: true, percent });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to change feed replacement.',
+    }));
     return true;
   }
 

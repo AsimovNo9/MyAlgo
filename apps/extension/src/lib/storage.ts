@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   VIDEO_STORE: 'personal-algorithm-video-store',
   LAST_SYNC: 'personal-algorithm-last-sync',
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
+  FEED_REPLACEMENT_PERCENT: 'personal-algorithm-feed-replacement-percent',
   RETRIEVAL_SETTINGS: 'personal-algorithm-retrieval-settings',
   RETRIEVAL_DIAGNOSTICS: 'personal-algorithm-retrieval-diagnostics',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',

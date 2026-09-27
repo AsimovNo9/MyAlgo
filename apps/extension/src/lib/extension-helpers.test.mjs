@@ -5,9 +5,9 @@ import { summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
-    { id: '1', external_id: '1', title: 'A', score: 90, visible: true, source_kind: 'subscription', matched_topics: ['AI', 'Engineering'] },
-    { id: '2', external_id: '2', title: 'B', score: 80, visible: true, source_kind: 'discovery', matched_topics: ['AI'] },
-    { id: '3', external_id: '3', title: 'C', score: 70, visible: true, source_kind: 'discovery', matched_topics: ['Gaming'] },
+    { id: '1', external_id: '1', title: 'A', score: 90, visible: true, source_kind: 'subscription', matched_topics: ['AI', 'Engineering'], semantic_category: 'learning', semantic_category_confidence: 0.7 },
+    { id: '2', external_id: '2', title: 'B', score: 80, visible: true, source_kind: 'discovery', matched_topics: ['AI'], semantic_category: 'learning', semantic_category_confidence: 0.6 },
+    { id: '3', external_id: '3', title: 'C', score: 70, visible: true, source_kind: 'discovery', matched_topics: ['Gaming'], semantic_category: 'gaming', semantic_category_confidence: 0.4 },
     { id: '4', external_id: '4', title: 'D', score: 10, visible: false, source_kind: 'discovery', matched_topics: ['Gossip'] },
   ]);
 
@@ -18,6 +18,7 @@ test('summarizeFeed counts sources and ranks topics for visible items only', () 
     { topic: 'Engineering', count: 1 },
     { topic: 'Gaming', count: 1 },
   ]);
+  assert.deepEqual(summary.categories, [{ category: 'learning', count: 2 }, { category: 'gaming', count: 1 }]);
 });
 
 test('summarizeFeed handles an empty feed', () => {
@@ -26,4 +27,5 @@ test('summarizeFeed handles an empty feed', () => {
   assert.equal(summary.subscribedCount, 0);
   assert.equal(summary.discoveredCount, 0);
   assert.deepEqual(summary.topTopics, []);
+  assert.deepEqual(summary.categories, []);
 });

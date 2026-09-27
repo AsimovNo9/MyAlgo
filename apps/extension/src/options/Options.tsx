@@ -121,7 +121,7 @@ export function Options() {
       <section style={{ marginBottom: 24 }}>
         <h2>Mode</h2>
         <select value={mode} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
-          {['Work', 'Learning', 'Relax'].map((option) => <option key={option} value={option}>{option}</option>)}
+          {['Work', 'Learning', 'Relax', 'Gaming', 'French'].map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
       </section>
 

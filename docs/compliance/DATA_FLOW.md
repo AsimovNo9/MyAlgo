@@ -23,11 +23,11 @@ packaged local neural model/runtime assets (no runtime model-host request)
 (no candidate/graph/history/feedback payload)
           ↓
 rebuildable local semantic enrichment
-  embedding cache + graph/mode similarity cache
+  embedding cache + graph/mode/category similarity cache
           ↓
 deterministic scoring / exact trace
           ↓
-feed enforcement
+mode-aware scoring + category badges + Home feed mix
 ```
 
 Until the current disclosure version is accepted, the content script remains paused and the background rejects observation/ranking messages.

@@ -61,7 +61,7 @@ Do not introduce queues, workers, Redis, or microservices solely because they ar
 
 ## Extension package size
 
-Do not bundle large foundation models initially.
+The optional small quantized text encoder in PR #213 is packaged with the extension and runs locally in a sandboxed offscreen page. Do not bundle large foundation models initially.
 
 Heavy models belong behind an optional inference boundary.
 
@@ -84,6 +84,8 @@ Treat it as a later privacy mode, not an MVP assumption.
 Long YouTube sessions are treated as an infinite-scroll workload. Current safety bounds are an 800-item candidate reservoir, 500-item metadata cache, 750 retained selection/watch events, 2,000 unique History evidence items, 300 retained Home exposures, 3,000 default Personal Algorithm evidence records, 60 persisted trace summaries, and at most 320 candidates in a live scoring pass with at most 180 off-page replacement candidates.
 
 DOM mutation ranking is coalesced, repeated native observations are persistence-coalesced for 30 seconds when metadata is unchanged, and watch-page enrichment runs two requests at a time in the extension worker. These limits are operational safeguards rather than recommendation semantics and should only be raised after measured rank latency, worker heap, renderer memory, and storage-serialization costs justify it.
+
+The Home replacement slider can request every eligible slot, but available trace-backed, nonduplicate candidates and the 320-item live scoring pass limit actual coverage. At zero, no optional native slot is swapped. The popup's top-80 cache is separate from the bounded live replacement inventory.
 
 Do not introduce another worker/thread merely to move an oversized workload. Search is an exception because large YouTube result-page parsing was measured to interfere with rank/UI responsiveness; production search is therefore isolated in an MV3 offscreen document with a dedicated Worker. A separate scoring Worker is still warranted only if profiling shows residual CPU saturation after working-set reduction, graph indexing, revision reuse, and incremental caching.
 

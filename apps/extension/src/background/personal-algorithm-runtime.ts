@@ -1,4 +1,4 @@
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState, SemanticCategoryId } from '@repo/shared-types';
 import {
   buildPersonalScoringRevisionContext,
   isScoreTraceConsistent,
@@ -32,6 +32,9 @@ export type LocalRuntimeCandidate = {
   semantic_graph_similarity?: number | null;
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
   semantic_graph_matches?: Array<{
     node_id: string;
     node_label: string;
@@ -253,6 +256,7 @@ export function classifyCandidateContent(
 
 const semanticAlignmentFeatures = (
   candidate: LocalRuntimeCandidate,
+  mode: string,
 ): ScoreFeatureSignal[] => {
   const features: ScoreFeatureSignal[] = [];
   const graphSimilarity = Number(candidate.semantic_graph_similarity ?? 0);
@@ -304,6 +308,27 @@ const semanticAlignmentFeatures = (
     });
   }
 
+  // Relative affinity resolves otherwise similar cosine scores. This remains
+  // an exact, bounded score contribution subject to hard policy and feedback.
+  const scores = candidate.semantic_category_scores;
+  const activeMode = mode.trim().toLowerCase();
+  if (scores && activeMode && activeMode in scores) {
+    const active = Number(scores[activeMode as SemanticCategoryId] ?? 0);
+    const strongestOther = Math.max(0, ...Object.entries(scores)
+      .filter(([category]) => category !== activeMode)
+      .map(([, similarity]) => Number(similarity ?? 0)));
+    if (active >= 0.25 && active > strongestOther) {
+      features.push({
+        id: 'semantic:category:active',
+        label: `semantic category: ${activeMode}`,
+        value: Number((24 * Math.min(1, (active - strongestOther) / 0.12)).toFixed(2)),
+        sourceId: candidate.semantic_model_version
+          ? `embedding:${candidate.semantic_model_version}`
+          : 'embedding',
+      });
+    }
+  }
+
   return features;
 };
 
@@ -346,7 +371,7 @@ const candidateContext = (
     ? modeAlignmentFeature(mode, classification)
     : null;
   if (modeFeature) extracted.features.push(modeFeature);
-  extracted.features.push(...semanticAlignmentFeatures(candidate));
+  extracted.features.push(...semanticAlignmentFeatures(candidate, mode));
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;

@@ -322,6 +322,19 @@ test('semantic graph and mode similarities become explicit trace contributions',
   assert.equal(modeFeature?.sourceId, 'embedding:mxbai-xsmall:test');
 });
 
+test('active semantic category reranks candidates with an exact contribution', () => {
+  const candidates = [
+    { external_id: 'study', title: 'Untitled A', semantic_category_scores: { learning: 0.8, gaming: 0.4 } },
+    { external_id: 'game', title: 'Untitled B', semantic_category_scores: { learning: 0.4, gaming: 0.8 } },
+  ];
+  const learning = scoreLocalCandidates(state, candidates, 'Learning');
+  const gaming = scoreLocalCandidates(state, candidates, 'Gaming');
+  assert.equal(learning[0].external_id, 'study');
+  assert.equal(gaming[0].external_id, 'game');
+  assert.ok(learning[0].trace.featureContributions.some((item) => item.label === 'semantic category: learning'));
+  assert.ok(gaming[0].trace.featureContributions.some((item) => item.label === 'semantic category: gaming'));
+});
+
 test('semantic similarities below threshold do not affect ranking', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'weak-semantic-video',
