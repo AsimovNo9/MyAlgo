@@ -60,9 +60,12 @@ const buildExtractor = async (
 ) as Promise<FeatureExtractionPipeline>;
 
 async function hasUsableWebGpuAdapter(): Promise<boolean> {
-  if (!('gpu' in navigator) || !navigator.gpu) return false;
+  const gpu = (navigator as Navigator & {
+    gpu?: { requestAdapter(): Promise<unknown | null> };
+  }).gpu;
+  if (!gpu) return false;
   try {
-    return (await navigator.gpu.requestAdapter()) !== null;
+    return (await gpu.requestAdapter()) !== null;
   } catch {
     return false;
   }
