@@ -774,7 +774,6 @@ async function refreshSemanticConceptGraph(): Promise<{
     })),
     {
       minimumContentSupport: 2,
-      minimumTitlePhraseSupport: 3,
       maxProposals: 64,
       maxSupportEdgesPerProposal: 24,
       maxCandidateTopics: 16,
