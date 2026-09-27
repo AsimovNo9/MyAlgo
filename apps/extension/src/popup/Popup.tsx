@@ -1,6 +1,6 @@
 import React from 'react';
-import { buildInferredModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
-import type { FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
+import { buildDurableModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
+import type { DurableSemanticModeCatalog, FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
 const defaultSourceFilters: FeedSourceFilters = {
@@ -41,6 +41,8 @@ const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, 
 
 export function Popup() {
   const [mode, setMode] = React.useState('Default');
+  const [activeModeId, setActiveModeId] = React.useState('default');
+  const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [feedReplacementPercent, setFeedReplacementPercent] = React.useState(0);
   const [feedCount, setFeedCount] = React.useState(0);
   const [lastError, setLastError] = React.useState<string | null>(null);
@@ -53,8 +55,15 @@ export function Popup() {
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
-      setMode((result['personal-algorithm-mode'] as string) ?? 'Default');
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-active-mode-id', 'personal-algorithm-durable-mode-catalog', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+      const storedMode = (result['personal-algorithm-mode'] as string) ?? 'Default';
+      const catalog = (result['personal-algorithm-durable-mode-catalog'] as DurableSemanticModeCatalog | undefined) ?? null;
+      const storedModeId = (result['personal-algorithm-active-mode-id'] as string | undefined)
+        ?? catalog?.modes.find((entry) => entry.label.toLowerCase() === storedMode.toLowerCase())?.id
+        ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+      setMode(storedMode);
+      setActiveModeId(storedModeId);
+      setDurableModeCatalog(catalog);
       const storedPercent = Number(result['personal-algorithm-feed-replacement-percent'] ?? 0);
       setFeedReplacementPercent(Number.isFinite(storedPercent) ? Math.max(0, Math.min(100, storedPercent)) : 0);
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
@@ -70,17 +79,27 @@ export function Popup() {
     });
   }, []);
 
-  const handleSetMode = async (nextMode: string) => {
-    setMode(nextMode);
-    const response = await chrome.runtime.sendMessage({ type: 'SET_MODE', payload: { mode: nextMode } }) as { ok?: boolean; error?: string };
+  const handleSetMode = async (nextModeId: string) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_MODE',
+      payload: { modeId: nextModeId },
+    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string };
     if (!response?.ok) {
       setLastError(response?.error ?? 'Unable to change mode.');
       return;
     }
-    const result = await chrome.storage.local.get(['personal-algorithm-feed-cache']);
+    setActiveModeId(response.modeId ?? nextModeId);
+    setMode(response.mode ?? 'Default');
+    const result = await chrome.storage.local.get([
+      'personal-algorithm-feed-cache',
+      'personal-algorithm-durable-mode-catalog',
+    ]);
     const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
     setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
     setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
+    setDurableModeCatalog(
+      (result['personal-algorithm-durable-mode-catalog'] as DurableSemanticModeCatalog | undefined) ?? null,
+    );
   };
 
   const handleAcceptDisclosure = async () => {
@@ -188,7 +207,7 @@ export function Popup() {
     }
   };
 
-  const modeOptions = buildInferredModeOptions(mode, feedSummary.categories);
+  const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
 
   if (!disclosureAccepted) {
     return (
@@ -225,6 +244,9 @@ export function Popup() {
         {enabled ? 'Enabled' : 'Paused'}
       </div>
       <p>Current mode: <strong>{mode === 'Default' ? 'All' : mode}</strong></p>
+      <p style={{ marginTop: -6, fontSize: 12 }}>
+        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} durable inferred modes · graph revision {durableModeCatalog?.graphRevision ?? '—'}
+      </p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
       <p>Feed mix: <strong>{feedSummary.subscribedCount} subscribed</strong> · <strong>{feedSummary.discoveredCount} discovered</strong></p>
@@ -308,8 +330,12 @@ export function Popup() {
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {modeOptions.map((option) => (
-          <button key={option} onClick={() => void handleSetMode(option)}>
-            {option === 'Default' ? 'All' : option}
+          <button
+            key={option.id}
+            onClick={() => void handleSetMode(option.id)}
+            aria-pressed={option.id === activeModeId}
+          >
+            {option.label}{option.active ? '' : ' (dormant)'}
           </button>
         ))}
       </div>
