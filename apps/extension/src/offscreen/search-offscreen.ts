@@ -3,6 +3,8 @@ type SearchJob = {
   type?: string;
   query?: string;
   limit?: number;
+  provider?: 'hash' | 'neural';
+  texts?: string[];
 };
 
 const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url), {
@@ -41,7 +43,7 @@ const parseInWorker = (html: string, limit: number): Promise<unknown[]> => {
   });
 };
 
-const embedInWorker = (texts: string[]): Promise<{
+const embedInWorker = (texts: string[], provider: 'hash' | 'neural'): Promise<{
   embeddings: number[][];
   modelId: string;
   modelVersion: string;
@@ -72,17 +74,17 @@ const embedInWorker = (texts: string[]): Promise<{
       });
     };
     semanticWorker.addEventListener('message', onMessage);
-    semanticWorker.postMessage({ id, texts });
+    semanticWorker.postMessage({ id, texts, provider });
   });
 };
 
-chrome.runtime.onMessage.addListener((message: SearchJob & { texts?: string[] }, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
   if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EMBED_TEXTS') {
     void (async () => {
       const texts = Array.isArray(message.texts)
         ? message.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
         : [];
-      const result = await embedInWorker(texts);
+      const result = await embedInWorker(texts, message.provider === 'neural' ? 'neural' : 'hash');
       sendResponse({ ok: true, ...result });
     })().catch((error) => {
       sendResponse({
