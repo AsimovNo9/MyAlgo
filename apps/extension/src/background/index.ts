@@ -1217,7 +1217,9 @@ const handleRuntimeMessage = (
             type: 'YOUTUBE_SEMANTICS_ENRICHED',
             payload: {
               count: semanticRefresh.changed,
-              modelVersion: semanticModelIdentity,
+              modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+                ? semanticRefresh.diagnostics.modelVersion
+                : null,
             },
           }).catch(() => undefined);
         }).catch((error) => {
