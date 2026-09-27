@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   compareReplayStates,
   evaluateCanonicalAssignments,
+  evaluateCanonicalSemanticAggregation,
   evaluateModeClusterAssignments,
   evaluateModeStability,
   evaluateModeSupply,
@@ -142,6 +143,44 @@ test('canonical assignment evaluation reports exact alias mismatches', () => {
   assert.equal(result.correct, 1);
   assert.equal(result.accuracy, 0.5);
   assert.deepEqual(result.mismatches.map((item) => item.alias), ['elden ring pvp']);
+});
+
+test('canonical aggregation metrics expose duplicate score mass and display saturation reduction', () => {
+  const metrics = evaluateCanonicalSemanticAggregation([
+    {
+      id: 'grok',
+      sourceNodeMatchCount: 4,
+      canonicalNeighbourhoodMatchCount: 1,
+      lexicalContributionMass: 45.92,
+      embeddingContributionMass: 16.2,
+      reconciledContributionMass: 16.2,
+      rawScoreBefore: 62.12,
+      rawScoreAfter: 16.2,
+      displayScoreBefore: 98,
+      displayScoreAfter: 75,
+    },
+    {
+      id: 'specific-plus-taxonomy',
+      sourceNodeMatchCount: 2,
+      canonicalNeighbourhoodMatchCount: 1,
+      lexicalContributionMass: 18.68,
+      embeddingContributionMass: 0,
+      reconciledContributionMass: 11.48,
+      rawScoreBefore: 18.68,
+      rawScoreAfter: 11.48,
+      displayScoreBefore: 78,
+      displayScoreAfter: 68,
+    },
+  ]);
+
+  assert.equal(metrics.sampleCount, 2);
+  assert.equal(metrics.sourceNodeMatchCount, 6);
+  assert.equal(metrics.canonicalNeighbourhoodMatchCount, 2);
+  assert.equal(metrics.matchCompressionRatio, 1 / 3);
+  assert.equal(metrics.lexicalEmbeddingOverlapCount, 1);
+  assert.ok(metrics.semanticContributionMassReduction > 0);
+  assert.equal(metrics.displaySaturationBeforeRate, 0.5);
+  assert.equal(metrics.displaySaturationAfterRate, 0);
 });
 
 test('mode supply metrics tie banner firing to requested slot shortfall', () => {
