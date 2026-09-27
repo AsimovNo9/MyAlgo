@@ -26,6 +26,7 @@ test('MV3 manifest requests only storage, offscreen worker support, and YouTube 
     "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
   );
   assert.match(manifest.content_security_policy?.sandbox ?? '', /script-src 'self' blob:/);
+  assert.equal((manifest.content_security_policy?.sandbox ?? '').includes('connect-src https:'), false);
   assert.equal((manifest.content_security_policy?.extension_pages ?? '').includes('blob:'), false);
   assert.equal(manifest.content_scripts[0].matches.includes('https://*.youtube.com/*'), true);
   assert.deepEqual(manifest.web_accessible_resources, [{
