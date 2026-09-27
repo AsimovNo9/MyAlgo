@@ -384,52 +384,55 @@ Derived nodes/edges:
 
 This slice does **not** solve canonicalization. Multiple related concepts may still exist after materialization; #214 canonicalization and durable clustering are the next measured stages.
 
-## Local semantic concept extraction (#219 / PR #220)
+## Local semantic concept verification (#219 / PR #220)
 
-PR #218 proved the graph projection boundary but also showed that repeated YouTube keywords are not equivalent to conceptual abstraction. The next stage separates **concept proposal** from **graph materialization**.
+PR #218 proved the graph projection boundary but also showed that repeated YouTube keywords are too literal/noisy to be accepted directly as semantic graph topics. Live #220 testing also rejected two small generative models for this job. The active design therefore separates **candidate generation**, **topic verification**, and later **canonicalization**.
 
 ```text
 interaction-supported candidate
         ↓
-title + description + raw keywords + category
+title + description + metadata keywords
         ↓
-packaged local concept proposer
+deterministic bounded candidate labels
         ↓
-bounded cached concept labels
+local zero-shot NLI verifier
+        ↓
+0–4 verified multi-label topics
         ↓
 #218 evidence-backed materializer
         ↓
 derived graph nodes
         ↓
-mxbai embedding/canonicalization layer
+mxbai embedding canonicalization (#214 next)
 ```
 
-The active proposer is pinned `onnx-community/SmolLM2-135M-Instruct-ONNX-MHA` q8 (base model `HuggingFaceTB/SmolLM2-135M-Instruct`), executed through the same sandboxed Transformers.js/ONNX surface as the embedding model. Requests are serialized with embedding work so two neural models do not compete for the GPU simultaneously.
+The active verifier is pinned `Xenova/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model.
 
-### Live FLAN-T5 rejection
+### Generative-model rejection
 
-The first live #220 implementation used FLAN-T5 Small q8. It loaded successfully on the local WASM backend, but the real 64-item cache showed roughly half empty outputs plus generic/prompt-like labels such as `YouTube video - wikipedia`, `video video`, `seconds`, and instruction echoes. That is not sufficient concept quality for graph taxonomy.
+Two live generative attempts were useful negative results:
 
-The PR therefore replaces FLAN-T5 Small rather than growing an open-ended stopword/parser patch set. SmolLM2-135M-Instruct is still browser-small, is explicitly instruction-tuned, and supports Transformers.js text generation. The cached output contract is revisioned so the model/parser replacement invalidates the FLAN cache automatically.
+- **FLAN-T5 Small q8** loaded locally, but the 64-item cache contained roughly half empty outputs plus prompt-like/generic strings such as `YouTube video - wikipedia`, `video video`, `seconds`, and instruction echoes.
+- **SmolLM2-135M-Instruct q8** reached both WASM and WebGPU execution, but 22 real cached outputs were still dominated by empties/title fragments/prompt fragments, and a two-item WebGPU generation batch could exceed five minutes.
 
-A single serialized neural surface remains important for GPU stability, but whole-request serialization is too coarse. Large embedding refreshes can contain many batches, so the sandbox schedules them cooperatively: one embedding batch executes, control returns to the browser task queue, and a waiting concept request may run before the next embedding batch. This prevents concept-provider timeouts without concurrent GPU inference.
+The failure mode was structural: a tiny generative model was being asked to invent clean taxonomy labels. PR #220 now does the narrower task a classifier is strong at: decide which bounded metadata labels are actually entailed by the video text. Alias/abstraction work remains an embedding-canonicalization problem rather than a text-generation problem.
 
-Concept extraction constraints:
+### Verification constraints
+
 - only retained interaction-supported candidates are eligible;
-- generation is deterministic (`do_sample: false`, one beam);
-- each item yields at most four short parsed concepts;
-- malformed/generic/prompt-echo outputs are rejected;
-- output is cached by model identity + prompt/input hash;
-- diagnostics preserve the last actual generation attempt; cache-only drain passes cannot overwrite generation failure/success state;
-- concept-generation validity is independent of graph revision: cached/generated proposals are invalidated by candidate input hash or concept model/pipeline identity, while in-flight generation is cancelled only by privacy reset/model-boundary changes;
-- after a long generation request completes, graph materialization re-reads the latest evidence/candidate state and revalidates cached concepts against current candidate input hashes before reconciliation;
-- only a small bounded extraction slice runs per top-level semantic refresh;
-- the embedding drain cannot trigger more generation, but must continue using valid cached model concepts;
-- when a valid model concept list exists, it replaces raw keyword topics for that candidate;
-- an empty/failed/missing model result leaves the existing metadata materializer available;
-- model output remains derived/rebuildable and does not directly create explicit preference state.
+- deterministic candidate labels come from enriched metadata topics, after generic/malformed/duplicate filtering;
+- title/description/category text is used as verifier evidence, not as a source of new generated labels;
+- zero-shot classification is multi-label, with a conservative minimum score and at most four retained topics;
+- an empty verified label set is an intentional abstention and must **not** fall back to raw keyword topics;
+- missing verifier output or a verifier runtime failure may fall back to the #218 metadata path;
+- output is cached by model identity + verifier-pipeline revision + candidate input hash;
+- cache-only embedding-drain passes reuse valid verified labels without starting another verifier batch;
+- verifier-cache validity is independent of graph revision; graph materialization re-reads current evidence/candidate state before reconciliation;
+- model output remains derived/rebuildable and cannot directly create explicit preference state.
 
-The purpose of this stage is to improve abstraction quality, not to solve alias merging. `lofi`, `lo-fi music`, and `chillhop` may still require embedding-assisted canonicalization after extraction.
+The neural sandbox is cooperative rather than concurrently multi-model: embedding requests yield after each inference batch, a waiting verifier request gets priority at the next yield point, and only one neural operation runs on the GPU at a time.
+
+The purpose of this stage is **precision filtering and abstention**, not alias merging. Related verified labels such as `lofi`, `lofi music`, and `lofi hip hop` may still coexist until #214 embedding-assisted canonicalization reconciles them.
 
 ## Durable semantic mode architecture (#214 / post-#219)
 
