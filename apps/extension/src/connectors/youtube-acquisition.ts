@@ -10,6 +10,7 @@ import type {
   WebSearchProvider,
   WebSearchRequest,
 } from './types';
+import { ensureWorkerOffscreenDocument } from '../lib/offscreen-worker.ts';
 
 export const MAX_RSS_CHANNELS_PER_REFRESH = 6;
 export const MAX_RSS_ITEMS_PER_CHANNEL = 8;
@@ -251,43 +252,13 @@ const toCandidate = (
   };
 };
 
-const OFFSCREEN_SEARCH_URL = 'offscreen-search.html';
-let offscreenCreatePromise: Promise<void> | null = null;
-
-async function ensureSearchOffscreenDocument(): Promise<boolean> {
-  if (
-    typeof chrome === 'undefined'
-    || !chrome.offscreen
-    || !chrome.runtime?.getContexts
-  ) {
-    return false;
-  }
-
-  const documentUrl = chrome.runtime.getURL(OFFSCREEN_SEARCH_URL);
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [documentUrl],
-  });
-  if (contexts.length > 0) return true;
-
-  if (!offscreenCreatePromise) {
-    offscreenCreatePromise = chrome.offscreen.createDocument({
-      url: OFFSCREEN_SEARCH_URL,
-      reasons: ['WORKERS'],
-      justification: 'Run YouTube search-page parsing in a dedicated worker so ranking UI remains responsive.',
-    }).finally(() => {
-      offscreenCreatePromise = null;
-    });
-  }
-  await offscreenCreatePromise;
-  return true;
-}
-
 async function searchYoutubePageOffThread(
   request: WebSearchRequest,
 ): Promise<ParsedSearchResult[] | null> {
   try {
-    const ready = await ensureSearchOffscreenDocument();
+    const ready = await ensureWorkerOffscreenDocument(
+      'Run YouTube search-page parsing in a dedicated worker so ranking UI remains responsive.',
+    );
     if (!ready) return null;
     const response = await chrome.runtime.sendMessage({
       target: 'youtube-search-offscreen',
@@ -360,6 +331,7 @@ const fetchWithTimeout = async (
       method: 'GET',
       credentials: 'omit',
       cache: 'no-store',
+      redirect: 'manual',
       signal: controller.signal,
     });
   } finally {

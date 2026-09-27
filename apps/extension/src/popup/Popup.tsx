@@ -37,10 +37,11 @@ const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
   lastError: null,
 };
 
-const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [] };
+const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [], categories: [] };
 
 export function Popup() {
   const [mode, setMode] = React.useState('Work');
+  const [feedReplacementPercent, setFeedReplacementPercent] = React.useState(0);
   const [feedCount, setFeedCount] = React.useState(0);
   const [lastError, setLastError] = React.useState<string | null>(null);
   const [enabled, setEnabled] = React.useState(false);
@@ -52,8 +53,10 @@ export function Popup() {
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
       setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
+      const storedPercent = Number(result['personal-algorithm-feed-replacement-percent'] ?? 0);
+      setFeedReplacementPercent(Number.isFinite(storedPercent) ? Math.max(0, Math.min(100, storedPercent)) : 0);
       const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
       setFeedCount(Array.isArray(cachedFeed) ? cachedFeed.length : 0);
       setFeedSummary(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed) : emptyFeedSummary);
@@ -110,6 +113,15 @@ export function Popup() {
     } else {
       setLastError(null);
     }
+  };
+
+  const handleReplacementChange = async (percent: number) => {
+    setFeedReplacementPercent(percent);
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_FEED_REPLACEMENT_PERCENT',
+      payload: { feedReplacementPercent: percent },
+    }) as { ok?: boolean; error?: string };
+    if (!response?.ok) setLastError(response?.error ?? 'Unable to update the feed mix.');
   };
 
   const updateRetrievalSettings = async (nextSettings: RetrievalSettings) => {
@@ -176,7 +188,7 @@ export function Popup() {
     }
   };
 
-  const modeOptions = ['Work', 'Learning', 'Relax'];
+  const modeOptions = ['Work', 'Learning', 'Relax', 'Gaming', 'French'];
 
   if (!disclosureAccepted) {
     return (
@@ -219,8 +231,28 @@ export function Popup() {
       {feedSummary.topTopics.length > 0 ? (
         <p>Top topics: {feedSummary.topTopics.map((entry) => `${entry.topic} (${entry.count})`).join(', ')}</p>
       ) : null}
+      {feedSummary.categories.length > 0 ? (
+        <p>Inferred video categories: {feedSummary.categories.map((entry) => `${entry.category} (${entry.count})`).join(', ')}</p>
+      ) : null}
       <fieldset>
         <legend>Feed controls</legend>
+        <label htmlFor="feed-replacement-percent">MyAlgo feed replacement: <strong>{feedReplacementPercent}%</strong></label>
+        <input
+          id="feed-replacement-percent"
+          type="range"
+          min="0"
+          max="100"
+          step="10"
+          value={feedReplacementPercent}
+          style={{ display: 'block', width: '100%' }}
+          onChange={(event) => setFeedReplacementPercent(Number(event.target.value))}
+          onPointerUp={(event) => void handleReplacementChange(Number(event.currentTarget.value))}
+          onKeyUp={(event) => void handleReplacementChange(Number(event.currentTarget.value))}
+          onBlur={(event) => void handleReplacementChange(Number(event.currentTarget.value))}
+        />
+        <p style={{ margin: '4px 0 10px', fontSize: 12 }}>
+          0 keeps native recommendations; 100 tries to fill every safe Home slot from MyAlgo's scored pool. Unfilled slots keep their native card.
+        </p>
         <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>
         <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>

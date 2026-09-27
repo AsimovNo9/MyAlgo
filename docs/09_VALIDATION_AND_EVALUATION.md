@@ -167,7 +167,7 @@ For #210/#208 scoring validation, also verify:
 5. replacement cards visibly retain title and creator/channel even when thumbnail metadata is null;
 6. the compact `Why this?` view reports the same contribution values as the trace;
 7. RSS/web-search acquisition mechanism does not itself add preference weight;
-8. web-search execution is not claimed as validated until a real provider adapter exists and is live-tested.
+8. YouTube search-page acquisition remains score-neutral and is distinguished from downstream scoring/presentation success.
 
 
 ## Long-session performance validation (#211)
@@ -233,7 +233,7 @@ searchCandidatesInPool: 35
 error: null
 ```
 
-Interpretation: acquisition is working; the active validation target is downstream scoring/presentation. The next live run must capture the promotion diagnostics below and confirm at least one qualified search-origin candidate can reach a replacement without destabilizing the overlay.
+Interpretation: acquisition is working and PR #212 is merged. These diagnostics remain a regression baseline; PR #213 live testing should confirm semantic reranking does not regress downstream search-origin scoring/presentation or overlay responsiveness.
 
 ### Search-to-feed promotion diagnostics
 
@@ -244,3 +244,27 @@ Live rank diagnostics expose:
 - `maxSearchCandidateScore`.
 
 A healthy search run can fetch candidates without producing replacements when none clear the score/native-quality gates. Validation should distinguish acquisition failure from ranking/presentation rejection. Retrieved-discovery exploration may fill at most two replacement opportunities and must never replace a higher-scoring native target.
+
+
+## Semantic mode reranking validation
+
+Validate #209/#210 on the same stored candidate set under multiple modes.
+
+Required invariants:
+1. the first rank response does not wait for missing embeddings;
+2. semantic enrichment triggers at most one follow-up rerank when cached values actually change;
+3. changing Work/Learning/Relax changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
+4. semantic mode similarity replaces, rather than double-counts, the legacy heuristic mode boost;
+5. hard exclusions and explicit negative feedback remain authoritative;
+6. embedding cache hits produce the same vectors/similarities as the original computation;
+7. changing model version or candidate/node input invalidates the relevant cache entry without changing canonical graph/evidence;
+8. the same model/version/input yields deterministic semantic features;
+9. ranking traces expose semantic graph/mode contributions exactly;
+10. no candidate gains preference weight merely because it came from search or RSS.
+11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
+12. upgrading from disclosure v4 requires affirmative acceptance of disclosure v5 before observation/ranking resumes;
+13. semantic embedding requests execute through the offscreen semantic Worker in production;
+14. the production artifact contains the pinned mxbai model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only those packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, graph state, history, feedback, embeddings, or traces outside the extension;
+15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
+
+Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.

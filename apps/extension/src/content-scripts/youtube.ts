@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectRetrievedDiscoveryAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
 import type { RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -36,6 +36,7 @@ let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
+let feedReplacementPercent = 0;
 let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
 const WATCH_SELECTION_INTENT_MAX_AGE_MS = 15_000;
 let pendingWatchExposure: { videoId: string; exposureId: string | null; observedAt: number } | null = null;
@@ -588,6 +589,11 @@ const applyRankedFeed = () => {
     title: getVideoTitle(element),
     flags: getVideoSourceFlags(element),
   }));
+  const replacementLimit = isYouTubeHomePage(location.pathname)
+    ? replacementQuota(feedReplacementPercent, nativeCards.length)
+    : 0;
+  const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
+    * (1 - feedReplacementPercent / 100);
 
   nativeCards.forEach(({ element, id, title, flags }, nativeIndex) => {
     element.style.removeProperty('display');
@@ -602,14 +608,16 @@ const applyRankedFeed = () => {
     const item = feedById.get(id) ?? feedByTitle.get(title);
     const decision = getNativeCardDecision(item, {
       sourceFiltered: shouldHideForSourceFilters(flags, sourceFilters),
-      minimumVisibleScore: youtubeConnector.presentation.minimumVisibleScore,
+      // Keep an eligible native card until a specific replacement is ready.
+      minimumVisibleScore: Number.NEGATIVE_INFINITY,
     });
 
     if (decision.action === 'hide') {
       const sourceVideoId = id;
       const slotWidth = element.getBoundingClientRect().width;
       if (
-        isReplacementEligibleNativeDecision(decision)
+        replacementLimit > 0
+        && isReplacementEligibleNativeDecision(decision)
         && !sourceVideoId.startsWith('title:')
         && slotWidth >= 120
         && element.parentElement
@@ -656,17 +664,15 @@ const applyRankedFeed = () => {
       : `MyAlgo · ${score}`;
   });
 
-  // If policy/score filtering did not naturally create enough replacement
-  // slots, allow a bounded swap only when a distinct reservoir candidate scores
-  // higher than a currently visible native card. Never hide a card unless an
-  // actual replacement candidate is already available.
+  // Swap eligible native cards only when a distinct, scored reservoir candidate
+  // is already available. At 100%, fill as many safe Home slots as the pool can.
   const existingReplacementSlots = knownElements.filter((element) => Boolean(
     element.dataset.personalAlgorithmSlotId
     && element.style.getPropertyValue('display') === 'none',
   )).length;
   let remainingReplacementCapacity = Math.max(
     0,
-    youtubeConnector.presentation.replacementLimit - existingReplacementSlots,
+    replacementLimit - existingReplacementSlots,
   );
 
   let stableReplacementAssignments = 0;
@@ -684,9 +690,7 @@ const applyRankedFeed = () => {
     const usedCandidateIds = new Set<string>();
 
     // Keep a recently rendered replacement stable across ordinary YouTube DOM
-    // churn. The hold is invalidated if the route changes, the candidate becomes
-    // ineligible, the native target disappears, or the candidate actually drops
-    // below the native card's score.
+    // churn while it remains eligible under the current feed mix.
     for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
       const { element, id } = nativeCards[nativeIndex];
       const sticky = stableReplacementBySourceId.get(id);
@@ -705,9 +709,9 @@ const applyRankedFeed = () => {
         && item.visible !== false
         && item.suppressed !== true
         && (item.policyOutcome == null || item.policyOutcome === 'eligible')
-        && candidateScore >= youtubeConnector.presentation.replacementMinimumScore
+        && candidateScore >= replacementMinimumScore
         && Number.isFinite(nativeScore)
-        && candidateScore >= nativeScore
+        && (feedReplacementPercent === 100 || candidateScore >= nativeScore)
         && element.parentElement
         && element.style.getPropertyValue('display') !== 'none'
       );
@@ -735,16 +739,13 @@ const applyRankedFeed = () => {
 
     if (remainingReplacementCapacity > 0) {
       const replacementSelectionSeed = `${rankGeneration}|${routeKey}`;
-      // Score remains the authority. Retrieved candidates do not receive a
-      // provenance bonus, but reserve up to two exploration opportunities so a
-      // qualified RSS/search candidate is not permanently crowded out by the
-      // global off-page ranking. Exploration still requires the normal minimum
-      // score and must be at least as strong as the native target.
+      // Retrieved candidates receive no provenance bonus. The slider relaxes
+      // the native-score uplift as it approaches full replacement.
       const replacementCandidates = getReplacementCandidates(
         cachedFeed,
         [...nativeIds, ...usedCandidateIds],
         Math.max(24, remainingReplacementCapacity * 6),
-        youtubeConnector.presentation.replacementMinimumScore,
+        replacementMinimumScore,
         replacementSelectionSeed,
       );
       const nativeTargets = nativeCards.flatMap(({ element, id }, nativeIndex) => {
@@ -754,29 +755,18 @@ const applyRankedFeed = () => {
         return [{ externalId: id, score, nativeIndex }];
       });
 
-      const explorationAssignments = selectRetrievedDiscoveryAssignments(
+      const selectedAssignments = selectFeedMixAssignments(
         nativeTargets,
         replacementCandidates,
-        Math.min(2, remainingReplacementCapacity),
-      );
-      const exploredCandidateIds = new Set(
-        explorationAssignments.map((assignment) => assignment.item.external_id ?? ''),
-      );
-      const exploredTargetIds = new Set(
-        explorationAssignments.map((assignment) => assignment.target.externalId),
-      );
-      const strictAssignments = selectOpportunisticReplacementAssignments(
-        nativeTargets.filter((target) => !exploredTargetIds.has(target.externalId)),
-        replacementCandidates.filter((item) => !exploredCandidateIds.has(item.external_id ?? '')),
-        Math.max(0, remainingReplacementCapacity - explorationAssignments.length),
+        remainingReplacementCapacity,
+        feedReplacementPercent,
         youtubeConnector.presentation.replacementMinimumUplift,
       );
-      const selectedAssignments = [...explorationAssignments, ...strictAssignments];
 
       opportunisticReplacementCandidates = replacementCandidates.length;
       opportunisticNativeTargets = nativeTargets.length;
       opportunisticSelectedTargets = selectedAssignments.length;
-      opportunisticUpliftQualified = strictAssignments.length;
+      opportunisticUpliftQualified = selectedAssignments.length;
 
       for (const assignment of selectedAssignments) {
         const selected = assignment.target;
@@ -822,10 +812,9 @@ const applyRankedFeed = () => {
     opportunisticReplacementCandidates,
     opportunisticNativeTargets,
     opportunisticSelectedTargets,
-    retrievedDiscoveryExplorationAssignments: Math.max(
-      0,
-      opportunisticSelectedTargets - opportunisticUpliftQualified,
-    ),
+    retrievedDiscoveryExplorationAssignments: 0,
+    feedReplacementPercent,
+    replacementLimit,
     opportunisticUpliftQualified,
     replacementMinimumUplift: youtubeConnector.presentation.replacementMinimumUplift,
   });
@@ -836,6 +825,8 @@ const renderReplacementSlots = (generation: number) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
   const nativeElements = getVideoElements();
+  const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
+    * (1 - feedReplacementPercent / 100);
   const targets = nativeElements.filter((element) => (
     Boolean(element.dataset.personalAlgorithmSlotId)
     && element.style.getPropertyValue('display') === 'none'
@@ -866,7 +857,7 @@ const renderReplacementSlots = (generation: number) => {
       && (item.policyOutcome == null || item.policyOutcome === 'eligible')
     )).length,
     positiveScore: cachedFeed.filter((item) => (
-      (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+      (item.score ?? 0) >= replacementMinimumScore
     )).length,
   };
   const replacementQualifiedBeforeBlocking = cachedFeed.filter((item) => (
@@ -874,7 +865,7 @@ const renderReplacementSlots = (generation: number) => {
     && item.visible !== false
     && item.suppressed !== true
     && (item.policyOutcome == null || item.policyOutcome === 'eligible')
-    && (item.score ?? 0) >= youtubeConnector.presentation.replacementMinimumScore
+    && (item.score ?? 0) >= replacementMinimumScore
   )).length;
   const targetBySlot = new Map(targets.map((element) => [element.dataset.personalAlgorithmSlotId ?? '', element]));
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
@@ -888,7 +879,7 @@ const renderReplacementSlots = (generation: number) => {
       || item.visible === false
       || item.suppressed === true
       || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
-      || (item.score ?? 0) < youtubeConnector.presentation.replacementMinimumScore
+      || (item.score ?? 0) < replacementMinimumScore
     ) {
       return [];
     }
@@ -900,11 +891,13 @@ const renderReplacementSlots = (generation: number) => {
     cachedFeed,
     slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
     [...blockedIds, ...boundCandidateIds],
-    youtubeConnector.presentation.replacementMinimumScore,
+    replacementMinimumScore,
     `${generation}|${getRouteKey()}`,
   );
   const assignments = [...boundAssignments, ...fallbackAssignments]
-    .slice(0, youtubeConnector.presentation.replacementLimit);
+    .slice(0, isYouTubeHomePage(location.pathname)
+      ? replacementQuota(feedReplacementPercent, nativeElements.length)
+      : 0);
   let filled = 0;
 
   for (const assignment of assignments) {
@@ -996,6 +989,14 @@ const rankCurrentPage = async (requestGeneration: number) => {
 
   const candidateSignature = candidates.map((candidate) => candidate.external_id).sort().join('|');
   if (candidateSignature === lastCandidateSignature && activeMode === lastRankMode && cachedFeed.length > 0) {
+    // Reuse the already-scored feed for presentation, but do not skip semantic
+    // enrichment. A warm feed cache can outlive semantic caches (for example
+    // after a model-mode switch or extension update), and previously this early
+    // return meant no semantic pass/diagnostics would ever be produced.
+    safeSendMessage({
+      type: 'REFRESH_SEMANTICS',
+      payload: { mode: requestMode, candidates },
+    });
     rankingInFlight = false;
     applyRankedFeed();
     clearLegacyRecommendationShelf();
@@ -1055,18 +1056,18 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'metadata' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: 'navigation' | 'mutation' | 'metadata' | 'semantic' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation' && reason !== 'metadata') {
+  if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
     if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
       clearStableReplacements();
     }
     document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
   }
 
-  if (reason === 'metadata') {
+  if (reason === 'metadata' || reason === 'semantic') {
     // Force a new score pass because cached watch metadata changed, but keep
     // stable replacement assignments until the new scores actually render.
     lastCandidateSignature = '';
@@ -1078,7 +1079,7 @@ const triggerRank = (
     // otherwise a continuously mutating YouTube Home page can starve MyAlgo
     // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
     // changes still invalidate the active generation.
-    if (reason !== 'mutation' && reason !== 'metadata') {
+    if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
       rankGeneration += 1;
     }
     return;
@@ -1087,7 +1088,7 @@ const triggerRank = (
   const generation = ++rankGeneration;
   const delayMs = reason === 'mutation'
     ? 320
-    : reason === 'metadata'
+    : reason === 'metadata' || reason === 'semantic'
       ? 120
       : 60;
   scheduleRankGeneration(generation, delayMs);
@@ -1109,10 +1110,14 @@ safeStorageGet([
   STORAGE_KEYS.MODE,
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.SOURCE_FILTERS,
+  STORAGE_KEYS.FEED_REPLACEMENT_PERCENT,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
+  const storedPercent = Number(result[STORAGE_KEYS.FEED_REPLACEMENT_PERCENT] ?? 0);
+  feedReplacementPercent = Number.isFinite(storedPercent)
+    ? Math.max(0, Math.min(100, storedPercent)) : 0;
   const disclosureAccepted = isPrivacyDisclosureAccepted(
     result[STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION],
   );
@@ -1170,6 +1175,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (extensionEnabled) triggerRank('metadata');
     return;
   }
+  if (message?.type === 'YOUTUBE_SEMANTICS_ENRICHED') {
+    if (extensionEnabled) triggerRank('semantic');
+    return;
+  }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
     rankGeneration += 1;
@@ -1209,6 +1218,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       );
       clearLegacyRecommendationShelf();
     });
+    return;
+  }
+  if (message?.type === 'FEED_REPLACEMENT_CHANGED') {
+    const next = Number(message.payload?.percent);
+    if (!Number.isFinite(next) || next === feedReplacementPercent) return;
+    feedReplacementPercent = Math.max(0, Math.min(100, next));
+    clearStableReplacements();
+    rankGeneration += 1;
+    clearExtensionPresentation(false);
+    applyRankedFeed();
+    renderReplacementSlots(rankGeneration);
+    triggerRank('manual');
     return;
   }
   if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {

@@ -43,14 +43,14 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. finish live validation of PR #212 / #206 / #211: search → enrichment → scoring → bounded exploration replacement, overlay responsiveness, and retention caps;
-2. finish #210 deterministic candidate-quality/replacement hardening;
-3. build graph provenance visualization and complete per-item explanation paths (#170, #153);
-4. establish replay/evaluation baselines (#162);
-5. add rebuildable **text embeddings** for semantic retrieval/scoring (#209), with multimodal enrichment deferred until measured need;
-6. add correction/Forget/history-selection controls (#154, #155, #178), then broader graph editing/counterfactual work.
+1. implement and validate semantic mode reranking (#209 + #210): local candidate/graph embeddings, graph-derived mode lenses, exact trace contributions, and measurable rank changes;
+2. build graph provenance visualization and complete per-item explanation paths (#170, #153);
+3. establish replay/evaluation baselines for semantic model/scorer comparisons (#162);
+4. add correction/Forget/history-selection controls (#154, #155, #178);
+5. continue broader mode editing, graph editing, counterfactuals, portability, sync, and additional connectors after the semantic/trust loop is stable.
 
-PR #212 currently keeps retrieval provenance score-neutral while reserving at most two bounded exploration opportunities for qualified RSS/search candidates that clear the normal replacement score and do not score below the native target. Search work is isolated from ranking in an MV3 offscreen Worker path.
+PR #212 is merged and #206 is closed as the acquisition foundation. PR #213 is the active semantic-reranking branch. It ships a dependency-free local vector baseline behind a replaceable embedding-provider contract so the full graph/mode/cache/scorer path can be validated before selecting a compact neural encoder.
+
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 

@@ -1,6 +1,6 @@
 # MyAlgo Privacy Policy
 
-**Effective date:** 2026-09-26  
+**Effective date:** 2026-09-27  
 **Applies to:** the MyAlgo / Personal Algorithm Chrome extension local-only MVP
 
 MyAlgo is a browser extension that builds a user-controlled Personal Algorithm Graph from activity that is observable on YouTube pages. This policy describes the data handling implemented by the local-only MVP. It does not describe hypothetical future sync, cloud enrichment, or additional connectors.
@@ -15,7 +15,7 @@ When the current in-product privacy disclosure has been accepted and MyAlgo is e
 - playback-derived watch evidence, including bounded playback metrics used to determine a watched observation;
 - selections and explicit feedback such as Not interested / More like this;
 - derived local Personal Algorithm Graph nodes and relationships;
-- local scoring results, compact trace metadata, settings, and feed-control state;
+- local scoring results, compact trace metadata, rebuildable semantic embeddings/similarity features, settings, and feed-control state;
 - when the user enables RSS discovery, recently observed YouTube channel IDs and the resulting bounded YouTube RSS candidate metadata/provenance;
 - when the user enables web discovery, bounded query terms derived from graph goals/topics and the active mode, plus resulting YouTube video IDs/titles/snippets parsed from YouTube search pages.
 
@@ -29,15 +29,17 @@ A YouTube item being surfaced is contextual evidence; it is not automatically tr
 
 ## Storage and retention
 
-The MVP stores its Personal Algorithm state in `chrome.storage.local`, which is extension-specific browser storage. Some operational compatibility stores are bounded (for example candidate, metadata, event, and trace caches). Evidence and graph state may persist locally until the user deletes it, resets MyAlgo, or a future version applies an explicitly documented retention rule.
+The MVP stores its Personal Algorithm state in `chrome.storage.local`, which is extension-specific browser storage. Operational stores are bounded, including candidate/metadata/event/trace caches and derived semantic embedding/similarity caches. Embeddings are recomputable derived data keyed by model/version/input identity; they are not canonical graph/evidence truth. Evidence and graph state may persist locally until the user deletes it, resets MyAlgo, or a future version applies an explicitly documented retention rule.
 
 Because Chrome extension storage can persist independently of ordinary browser cache/history clearing, users should use MyAlgo's **Delete all local MyAlgo data** control when they want the extension's retained state removed.
 
 ## Data sharing and transfer
 
-The local-only MVP does **not** send observed YouTube activity, evidence records, Personal Algorithm Graph state, feedback records, or scoring traces to a MyAlgo-operated backend or to advertising/data-broker services.
+The local-only MVP does **not** send observed YouTube activity, evidence records, Personal Algorithm Graph state, derived embedding vectors/similarity features, feedback records, or scoring traces to a MyAlgo-operated backend or to advertising/data-broker services.
 
 The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. When the user explicitly enables RSS discovery, MyAlgo also requests bounded YouTube channel RSS feeds using channel IDs already observed from YouTube metadata. RSS requests do not contain the Personal Algorithm Graph, raw watch-history rows, feedback records, or scoring traces.
+
+When the user explicitly enables the neural semantic encoder, MyAlgo uses the `mixedbread-ai/mxbai-embed-xsmall-v1` model files packaged into the extension artifact at build time from a pinned public upstream revision. The installed extension does not contact Hugging Face or another model host to load the neural model. Candidate text, Personal Algorithm Graph state, history, feedback, embeddings, and scoring traces remain local, and inference runs in a sandboxed extension page.
 
 When the user explicitly enables web discovery, MyAlgo sends a bounded set of normalized graph-derived goal/topic queries plus active mode intent to YouTube's normal search-page endpoint. It does not send raw watch-history rows, the full graph, explicit feedback records, scoring traces, or browser cookies with those extension-initiated search requests. Search-page results are treated only as candidate-discovery metadata; canonical YouTube watch-page enrichment remains the source of richer candidate metadata before local scoring.
 
@@ -67,7 +69,7 @@ The project audits the built extension package for common secret/token patterns.
 
 ## Changes to data practices
 
-The privacy disclosure is versioned. A material change to what MyAlgo observes, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
+The privacy disclosure is versioned. Disclosure v5 remains the current disclosure floor for PR #213. The neural implementation was subsequently tightened so model/runtime assets are packaged with the extension and the installed extension no longer has a model-host download boundary. Disclosure v4 covered local semantic embedding/similarity processing before the neural provider was introduced. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
 
 Optional sync, cloud enrichment, or a new connector is therefore not covered by the current acceptance.
 

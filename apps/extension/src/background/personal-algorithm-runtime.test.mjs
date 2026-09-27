@@ -300,3 +300,95 @@ test('matching mode adds a traceable alignment feature without relabeling unrela
     false,
   );
 });
+
+
+test('semantic graph and mode similarities become explicit trace contributions', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-video',
+    title: 'A semantically relevant candidate',
+    semantic_graph_similarity: 0.75,
+    semantic_mode_similarity: 0.6,
+    semantic_model_version: 'mxbai-xsmall:test',
+  }], 'Learning')[0];
+
+  const graphFeature = ranked.trace.featureContributions
+    .find((item) => item.label === 'semantic match: personal graph');
+  const modeFeature = ranked.trace.featureContributions
+    .find((item) => item.label === 'semantic match: active mode');
+
+  assert.equal(graphFeature?.value, 13.5);
+  assert.equal(modeFeature?.value, 8.4);
+  assert.equal(graphFeature?.sourceId, 'embedding:mxbai-xsmall:test');
+  assert.equal(modeFeature?.sourceId, 'embedding:mxbai-xsmall:test');
+});
+
+test('active semantic category reranks candidates with an exact contribution', () => {
+  const candidates = [
+    { external_id: 'study', title: 'Untitled A', semantic_category_scores: { learning: 0.8, gaming: 0.4 } },
+    { external_id: 'game', title: 'Untitled B', semantic_category_scores: { learning: 0.4, gaming: 0.8 } },
+  ];
+  const learning = scoreLocalCandidates(state, candidates, 'Learning');
+  const gaming = scoreLocalCandidates(state, candidates, 'Gaming');
+  assert.equal(learning[0].external_id, 'study');
+  assert.equal(gaming[0].external_id, 'game');
+  assert.ok(learning[0].trace.featureContributions.some((item) => item.label === 'semantic category: learning'));
+  assert.ok(gaming[0].trace.featureContributions.some((item) => item.label === 'semantic category: gaming'));
+});
+
+test('semantic similarities below threshold do not affect ranking', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'weak-semantic-video',
+    title: 'Weak semantic candidate',
+    semantic_graph_similarity: 0.19,
+    semantic_mode_similarity: 0.1,
+    semantic_model_version: 'mxbai-xsmall:test',
+  }], 'Work')[0];
+
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.id.startsWith('semantic:')),
+    false,
+  );
+});
+
+
+test('semantic mode similarity replaces the legacy heuristic mode boost instead of double-counting mode intent', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-learning',
+    title: 'Learn Rust with a complete tutorial',
+    semantic_mode_similarity: 0.8,
+    semantic_graph_similarity: 0.4,
+    semantic_model_version: 'fixture-v1',
+  }], 'Learning')[0];
+
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.label === 'mode alignment: learning'),
+    false,
+  );
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.label === 'semantic match: active mode'),
+    true,
+  );
+});
+
+
+test('semantic graph matches are split into symbolic trace contributions without changing total graph weight', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'semantic-symbolic',
+    title: 'Distributed systems design',
+    semantic_graph_similarity: 0.75,
+    semantic_mode_similarity: 0,
+    semantic_model_version: 'fixture-model@v1',
+    semantic_graph_matches: [
+      { node_id: 'objective:systems', node_label: 'Distributed systems', similarity: 0.8 },
+      { node_id: 'topic:local-first', node_label: 'Local-first software', similarity: 0.4 },
+    ],
+  }], 'Work')[0];
+
+  const graphFeatures = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic:graph:'));
+  assert.equal(graphFeatures.length, 2);
+  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Distributed systems'), true);
+  assert.equal(graphFeatures.some((item) => item.label === 'semantic match: Local-first software'), true);
+  const total = graphFeatures.reduce((sum, item) => sum + item.value, 0);
+  assert.ok(Math.abs(total - 13.5) <= 0.01);
+});

@@ -4,22 +4,25 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-This is the authoritative near-term order after PR #212. Historical P-labels in issue titles are retained for continuity.
+PR #212 is merged. The acquisition layer is no longer the main product bottleneck; semantic classification and reranking are.
 
-1. **Finish and live-validate PR #212 / #206 / #211** — confirm search-origin candidates survive search isolation, enrichment, scoring, and bounded exploration into the native feed; confirm badges/replacements remain responsive during search and long-session retention caps hold.
-2. **#210 — finish deterministic candidate quality and replacement presentation** — close remaining score-resolution/presentation gaps exposed by live search promotion, without giving acquisition provenance preference weight.
-3. **#170 + #153 — graph provenance visualization and complete per-item “Why this?”** — make exact graph paths, evidence provenance, and trace contributions inspectable/actionable.
-4. **#162 — replay/evaluation baseline** — establish reproducible quality/performance fixtures before adding semantic models.
-5. **#209 — local text embeddings** — add rebuildable semantic candidate↔goal/topic matching and bounded retrieval expansion; keep multimodal inference deferred until measured text-only ambiguity justifies it.
-6. **#154 + #155 + #178 — correction/Forget/history-cluster controls** — give users direct control over what evidence and graph regions influence ranking.
-7. **#169 + #161 + #158 + #159** — finish offline/signed-out runtime validation, mode semantics, explicit graph creation/editing, and counterfactual replay.
-8. **#163/#164/#165/#166** — portability, optional sync, paid-value validation, and a second connector.
+1. **#209 + #210 — semantic mode reranking**: add a compact local text-embedding encoder, candidate↔graph semantic similarity, candidate↔mode semantic similarity, and deterministic traceable reranking. Modes become semantic lenses over one Personal Algorithm Graph rather than fixed presentation labels.
+2. **#170 + #153 — graph provenance and full Why-this UX**: expose the semantic/symbolic path and exact contributions behind each decision.
+3. **#162 — replay/evaluation baseline**: establish reproducible ranking fixtures and metrics for semantic model/scorer changes.
+4. **#154 + #155 + #178 — correction, Forget/provenance, and history-cluster controls**.
+5. **#169 + #161 + #158 + #159 — remaining runtime validation, mode editing, graph editing, and counterfactual replay**.
+6. **#163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector**.
+
+Multimodal inference remains deferred. Text embeddings are the next model layer because the observed failure is insufficient semantic ranking resolution, not missing thumbnail/video understanding.
+
 
 ### Current handoff state
 
-PR #212 is functionally implemented and CI-green. Live diagnostics already confirm YouTube search acquisition is working: 4/4 plans succeeded, 32 candidates were fetched in the observed run, 35 search-origin candidates were retained, and no retrieval error was reported. The remaining validation is downstream promotion and long-session responsiveness: verify `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `retrievedDiscoveryExplorationAssignments`, badge stability during search, and bounded local storage under sustained use.
+PR #212 is merged and #206 is closed as the acquisition foundation. Live diagnostics established that YouTube search acquisition works; the active product gap is semantic understanding and reranking.
 
-Do not start #209 multimodal work next. The next task after #212/#206/#211 validation is #210, then the trust/explanation path (#170/#153), then replay/evaluation (#162), then text embeddings (#209).
+PR #213 is now the active implementation branch for #209 + #210. It introduces a replaceable local embedding-provider contract, graph-derived semantic mode profiles, bounded embedding/similarity caches, explicit graph/mode semantic score contributions, and asynchronous semantic enrichment that does not block first-paint ranking. The dependency-free local hash/subword provider is the integration baseline; it is not the final neural encoder.
+
+Next validation should focus on whether the same candidate set changes rank meaningfully across Work/Learning/Relax, whether semantic traces remain exact, and whether first-rank/cached latency stays within the long-session performance envelope.
 
 
 #152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
@@ -249,11 +252,12 @@ Replay stored candidates against hypothetical graph versions.
 
 ## P6 — Enrichment
 
-Only after measured gaps:
+The first enrichment slice is active in PR #213: rebuildable local text embeddings support semantic graph/mode matching while remaining derived, bounded, and subordinate to deterministic policy.
+
+Still deferred until measured gaps justify them:
 
 - transcripts
-- rebuildable local embeddings
-- thumbnail vision
+- thumbnail/video vision
 - bounded comment analysis
 - optional local LLM resolver / explanation synthesis
 
@@ -272,7 +276,7 @@ Treat embeddings as replaceable derived enrichment around the canonical Personal
 
 ## Repository/documentation hygiene
 
-### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **RSS merged in PR #208; YouTube search-page discovery implemented in PR #212; final live promotion validation remains**
+### [#206](https://github.com/AsimovNo9/MyAlgo/issues/206): Implement source-neutral retrieval lanes for RSS and graph-derived web search — **completed: RSS in PR #208; zero-config YouTube search discovery in merged PR #212**
 
 Reuse the existing deterministic retrieval coordinator and recommendation-query planner to acquire candidates outside the currently rendered DOM. RSS and opt-in web search expand the local candidate reservoir; retrieval itself must not become preference evidence. Acquired candidates flow through the existing local scorer and safe replacement path.
 
@@ -292,7 +296,7 @@ Repository audit result: the current launch runtime contains no YouTube Data API
 
 ### [#167](https://github.com/AsimovNo9/MyAlgo/issues/167): Chrome Web Store data-use disclosure and local data-flow privacy review
 
-Implementation and clean-profile browser validation are complete in PR #199. Remaining work is Store-dashboard publication/reconciliation plus #168.
+The original local privacy gate was implemented and clean-profile validated in PR #199; #168 is complete. PR #213 introduces disclosure v4 for derived local semantic embeddings/similarities, so clean-profile v4 revalidation plus Store-dashboard publication/reconciliation remain.
 
 
 ### [#211](https://github.com/AsimovNo9/MyAlgo/issues/211): Performance and memory hardening for long YouTube sessions

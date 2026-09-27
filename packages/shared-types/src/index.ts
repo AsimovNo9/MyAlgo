@@ -1,4 +1,4 @@
-export type AlgorithmMode = 'Work' | 'Learning' | 'Relax';
+export type AlgorithmMode = 'Work' | 'Learning' | 'Relax' | 'Gaming' | 'French';
 
 export type RuleType = 'always_show' | 'never_show' | 'priority';
 
@@ -49,6 +49,8 @@ export interface FeedItem {
   }>;
   source_kind?: 'subscription' | 'discovery' | 'liked' | null;
   lane?: 'matched' | 'discovery' | 'explore';
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
 }
 
 export interface FeedResponse {
@@ -214,12 +216,40 @@ export interface SemanticProfile {
 }
 
 export interface EmbeddingRecord {
-  owner_type: 'concept' | 'content' | 'user_profile';
+  owner_type: 'concept' | 'graph_node' | 'content' | 'user_profile' | 'mode';
   owner_id: string;
+  model_id?: string;
   model_version: string;
+  input_hash?: string;
   dimensions: number;
   embedding: number[];
   generated_at: string;
+}
+
+export interface SemanticModeProfile {
+  id: string;
+  label: string;
+  seed_text: string;
+  graph_revision: number;
+  node_weights: Record<string, number>;
+  semantic_terms: string[];
+  model_version?: string | null;
+  embedding?: number[] | null;
+}
+
+export interface SemanticGraphMatch {
+  node_id: string;
+  node_label: string;
+  similarity: number;
+  weight: number;
+}
+
+export interface CandidateSemanticFeatures {
+  model_version: string;
+  graph_similarity: number;
+  mode_similarity: number;
+  matched_node_ids: string[];
+  graph_matches?: SemanticGraphMatch[];
 }
 
 /** @deprecated Use CandidateAcquisitionProvenance. */
@@ -276,9 +306,18 @@ export interface RecommendationCandidate {
   candidate_relevance?: 'matched' | 'unmatched';
   base_score?: number;
   semantic_similarity?: number | null;
+  semantic_graph_similarity?: number | null;
+  semantic_mode_similarity?: number | null;
+  semantic_model_version?: string | null;
+  semantic_graph_matches?: SemanticGraphMatch[];
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
 }
+
+export type SemanticCategoryId = 'work' | 'learning' | 'relax' | 'gaming' | 'french';
 
 export type RecommendationQueryLane = 'goal' | 'topic' | 'alias' | 'format' | 'intent' | 'creator' | 'freshness';
 

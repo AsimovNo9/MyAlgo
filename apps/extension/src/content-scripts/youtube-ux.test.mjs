@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
+import { createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -335,6 +335,8 @@ test('opportunistic replacement assignments bind the selected candidate to its n
 
 
 test('content presentation labels come from candidate classification, not active mode', () => {
+  assert.equal(getContentPresentationLabel({ semantic_category: 'gaming', semantic_category_confidence: 0.7 }), 'Gaming');
+  assert.equal(getContentPresentationLabel({ semantic_category: 'french', semantic_category_confidence: 0.7 }), 'French');
   assert.equal(
     getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.9 }),
     'Learning',
@@ -347,6 +349,25 @@ test('content presentation labels come from candidate classification, not active
     getContentPresentationLabel({ score: 80 }),
     null,
   );
+});
+
+test('feed mix quota targets a bounded fraction and fills only qualified slots', () => {
+  assert.equal(replacementQuota(0, 10), 0);
+  assert.equal(replacementQuota(50, 10), 5);
+  assert.equal(replacementQuota(100, 10), 10);
+  assert.equal(replacementQuota(150, 10), 10);
+  const targets = [
+    { externalId: 'native-a', score: 70, nativeIndex: 0 },
+    { externalId: 'native-b', score: 40, nativeIndex: 1 },
+  ];
+  const candidates = [
+    { external_id: 'new-a', title: 'A', score: 60, visible: true, traceId: 'a', policyOutcome: 'eligible' },
+    { external_id: 'new-b', title: 'B', score: 30, visible: true, traceId: 'b', policyOutcome: 'eligible' },
+    { external_id: 'excluded', title: 'X', score: 99, visible: false, traceId: 'x', policyOutcome: 'excluded' },
+  ];
+  assert.deepEqual(selectFeedMixAssignments(targets, candidates, 0, 0, 5), []);
+  assert.equal(selectFeedMixAssignments(targets, candidates, 2, 50, 5).length, 1);
+  assert.equal(selectFeedMixAssignments(targets, candidates, 2, 100, 5).length, 2);
 });
 
 

@@ -343,3 +343,7 @@ Generic retrieval/background orchestration owns only:
 - cache/concurrency policy.
 
 The generic retrieval module must not import or encode provider renderer names, provider URL paths, provider-specific ID formats, or provider-specific HTML parsing.
+
+## Downstream semantic-enrichment boundary
+
+PR #213 does not extend the connector contract with embedding concepts. Connectors continue to normalize identity, evidence, and candidate metadata. Rebuildable embeddings and graph/mode similarities are downstream derived features over normalized candidate metadata and Personal Algorithm Graph nodes. They remain model/version/input keyed, score through explicit deterministic trace contributions, and must not create evidence or durable graph preference relationships merely because two vectors are similar.

@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   VIDEO_STORE: 'personal-algorithm-video-store',
   LAST_SYNC: 'personal-algorithm-last-sync',
   SOURCE_FILTERS: 'personal-algorithm-source-filters',
+  FEED_REPLACEMENT_PERCENT: 'personal-algorithm-feed-replacement-percent',
   RETRIEVAL_SETTINGS: 'personal-algorithm-retrieval-settings',
   RETRIEVAL_DIAGNOSTICS: 'personal-algorithm-retrieval-diagnostics',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
@@ -17,6 +18,11 @@ export const STORAGE_KEYS = {
   SELECTION_EVENTS: 'personal-algorithm-selection-events',
   PERSONAL_ALGORITHM_STATE: 'personal-algorithm-state',
   PERSONAL_ALGORITHM_LOCAL_TRACES: 'personal-algorithm-local-traces',
+  SEMANTIC_EMBEDDING_CACHE: 'personal-algorithm-semantic-embedding-cache',
+  SEMANTIC_DIAGNOSTICS: 'personal-algorithm-semantic-diagnostics',
+  SEMANTIC_FEATURE_CACHE: 'personal-algorithm-semantic-feature-cache',
+  SEMANTIC_MODEL_MODE: 'personal-algorithm-semantic-model-mode',
+  SEMANTIC_MODEL_STATUS: 'personal-algorithm-semantic-model-status',
   PRIVACY_DISCLOSURE_ACCEPTED_VERSION: 'personal-algorithm-privacy-disclosure-accepted-version',
 } as const;
 

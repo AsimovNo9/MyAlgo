@@ -37,10 +37,16 @@ Foundation-model outputs are evidence/features with provenance; they are not the
 Keep three concepts distinct:
 
 ```text
-content model → content features/evidence → Personal Algorithm Graph → recommendation policy
+observed/user evidence ───────────────→ Personal Algorithm Graph
+                                            │
+content model → rebuildable semantic features ─┤
+                                            ↓
+                                recommendation policy / scorer
 ```
 
 A content model describes or represents content. The Personal Algorithm Graph is the durable user model. Recommendation policy/scoring decides how graph state and explicit policy inputs affect a candidate. A model output must not silently become a user preference or graph relationship.
+
+Candidate embeddings and similarity features may flow directly into the deterministic scorer as rebuildable derived inputs. They do not need to become graph state first, and similarity alone must never create a durable preference edge. Model/version/input changes invalidate derived semantic caches rather than canonical evidence or graph edits.
 
 Use **training** only for changing model parameters from a training dataset. Use **personalization** for updating user-specific evidence, graph state, or preference state. An explicit action such as `not_interested` is personalization/feedback, not model training. The local scorer consumes these signals without updating model weights.
 

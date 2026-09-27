@@ -15,13 +15,19 @@ normalized local evidence
           ↓
 Personal Algorithm Graph
           ↓
-candidate acquisition (optional YouTube RSS)
+candidate acquisition (observed DOM / optional RSS / optional YouTube search)
           ↓
 local candidate reservoir
           ↓
-scoring / trace
+packaged local neural model/runtime assets (no runtime model-host request)
+(no candidate/graph/history/feedback payload)
           ↓
-feed enforcement
+rebuildable local semantic enrichment
+  embedding cache + graph/mode/category similarity cache
+          ↓
+deterministic scoring / exact trace
+          ↓
+mode-aware scoring + category badges + Home feed mix
 ```
 
 Until the current disclosure version is accepted, the content script remains paused and the background rejects observation/ranking messages.
@@ -38,10 +44,12 @@ YouTube page
    │          ├── graph
    │          ├── candidate/metadata caches
    │          ├── feedback/events
+   │          ├── bounded semantic embedding/similarity caches
    │          └── compact traces/settings
    │
    └── YouTube-owned HTTPS requests used by page operation/metadata enrichment
-       └── optional bounded channel RSS requests when RSS discovery is enabled
+       ├── optional bounded channel RSS requests when RSS discovery is enabled
+       └── optional bounded graph-derived queries to YouTube search pages when web discovery is enabled
 
 MyAlgo backend / analytics / ad network
    X  no launch transfer of observed activity, graph, feedback, or traces
@@ -101,9 +109,10 @@ When RSS discovery is explicitly enabled:
 - graph revisions;
 - candidate/feed caches;
 - score/trace metadata;
-- retrieval settings and privacy-safe retrieval diagnostics.
+- retrieval settings and privacy-safe retrieval diagnostics;
+- rebuildable semantic embeddings, graph/mode similarities, semantic diagnostics, and local model download/readiness status.
 
-Purpose: ranking, explanation, replay/debugging, and enforcement.
+Purpose: ranking, explanation, replay/debugging, semantic matching, and enforcement. Semantic derived state is model/version/input keyed, bounded, locally stored, and non-canonical.
 
 ### API account facts
 
@@ -115,7 +124,7 @@ Some operational stores have explicit size caps. Evidence and graph state can pe
 
 - Pause: stop new observation/enforcement; retained data remains.
 - Feature toggles: stop the associated optional observation path; retained data remains.
-- Delete all local MyAlgo data: clear extension-local state and disclosure acceptance; observation remains off until acceptance is renewed.
+- Delete all local MyAlgo data: clear extension-local state, including persisted and in-memory semantic caches, plus disclosure acceptance; observation remains off until acceptance is renewed.
 
 ## Future enrichment or cloud processing
 

@@ -6,6 +6,9 @@ import manifest from './src/manifest.json';
 export default defineConfig(() => {
   return {
   plugins: [react(), crx({ manifest })],
+  worker: {
+    format: 'es' as const,
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -16,6 +19,7 @@ export default defineConfig(() => {
         popup: 'index.html',
         options: 'options.html',
         offscreenSearch: 'offscreen-search.html',
+        neuralSandbox: 'neural-sandbox.html',
       },
     },
   },

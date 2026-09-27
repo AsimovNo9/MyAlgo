@@ -1,3 +1,5 @@
+import type { SemanticCategoryId } from '@repo/shared-types';
+
 export type VideoCandidate = {
   external_id?: string;
   title?: string | null;
@@ -6,6 +8,8 @@ export type VideoCandidate = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -38,6 +42,8 @@ export type RankedFeedItem = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
   provenance?: {
     mechanism?: string | null;
     acquired_at?: string | null;
@@ -52,6 +58,10 @@ export function getContentPresentationLabel(
   item: RankedFeedItem,
   minimumConfidence = 0.75,
 ): string | null {
+  const semanticConfidence = Number(item.semantic_category_confidence ?? 0);
+  if (item.semantic_category && semanticConfidence >= 0.25) {
+    return item.semantic_category[0].toUpperCase() + item.semantic_category.slice(1);
+  }
   const confidence = Number(item.content_label_confidence ?? 0);
   if (item.content_label !== 'learning' || confidence < minimumConfidence) return null;
   return 'Learning';
@@ -212,6 +222,38 @@ export type OpportunisticReplacementAssignment = {
   target: OpportunisticReplacementTarget;
   item: RankedFeedItem;
 };
+
+export function replacementQuota(percent: number, nativeCount: number): number {
+  if (!Number.isFinite(percent) || !Number.isFinite(nativeCount)) return 0;
+  const value = Math.max(0, Math.min(100, percent));
+  return Math.ceil(Math.max(0, Math.floor(nativeCount)) * value / 100);
+}
+
+export function selectFeedMixAssignments(
+  nativeTargets: OpportunisticReplacementTarget[],
+  replacementCandidates: RankedFeedItem[],
+  limit: number,
+  percent: number,
+  minimumUplift: number,
+): OpportunisticReplacementAssignment[] {
+  const targets = [...nativeTargets]
+    .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
+    .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
+  const candidates = replacementCandidates.filter((item) => (
+    Boolean(item.external_id && item.title && item.traceId)
+    && item.visible !== false && item.suppressed !== true
+    && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+  ));
+  const count = Math.min(Math.max(0, Math.floor(limit)), targets.length, candidates.length);
+  const assignments: OpportunisticReplacementAssignment[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const target = targets[index];
+    const item = candidates[index];
+    if (percent < 100 && (item.score ?? 0) < target.score + Math.max(0, minimumUplift) * (1 - percent / 100)) break;
+    assignments.push({ target, item });
+  }
+  return assignments;
+}
 export function isRetrievedDiscoveryCandidate(item: RankedFeedItem): boolean {
   const mechanisms = [
     item.provenance?.mechanism,

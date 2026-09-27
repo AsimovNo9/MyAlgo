@@ -61,7 +61,7 @@ Do not introduce queues, workers, Redis, or microservices solely because they ar
 
 ## Extension package size
 
-Do not bundle large foundation models initially.
+The optional small quantized text encoder in PR #213 is packaged with the extension and runs locally in a sandboxed offscreen page. Do not bundle large foundation models initially.
 
 Heavy models belong behind an optional inference boundary.
 
@@ -84,6 +84,8 @@ Treat it as a later privacy mode, not an MVP assumption.
 Long YouTube sessions are treated as an infinite-scroll workload. Current safety bounds are an 800-item candidate reservoir, 500-item metadata cache, 750 retained selection/watch events, 2,000 unique History evidence items, 300 retained Home exposures, 3,000 default Personal Algorithm evidence records, 60 persisted trace summaries, and at most 320 candidates in a live scoring pass with at most 180 off-page replacement candidates.
 
 DOM mutation ranking is coalesced, repeated native observations are persistence-coalesced for 30 seconds when metadata is unchanged, and watch-page enrichment runs two requests at a time in the extension worker. These limits are operational safeguards rather than recommendation semantics and should only be raised after measured rank latency, worker heap, renderer memory, and storage-serialization costs justify it.
+
+The Home replacement slider can request every eligible slot, but available trace-backed, nonduplicate candidates and the 320-item live scoring pass limit actual coverage. At zero, no optional native slot is swapped. The popup's top-80 cache is separate from the bounded live replacement inventory.
 
 Do not introduce another worker/thread merely to move an oversized workload. Search is an exception because large YouTube result-page parsing was measured to interfere with rank/UI responsiveness; production search is therefore isolated in an MV3 offscreen document with a dedicated Worker. A separate scoring Worker is still warranted only if profiling shows residual CPU saturation after working-set reduction, graph indexing, revision reuse, and incremental caching.
 
@@ -111,3 +113,23 @@ Current safety budgets:
 - live ranking working set: 320, including at most 180 off-page replacement candidates.
 
 Home exposure evidence is reconciled to the retained 300-observation window rather than accumulating every historical feed impression indefinitely. Evidence compaction removes the oldest default-retention records, expired records, unsupported inferred edges/creator nodes, and unreferenced auto-created content nodes while preserving indefinite/user-supported graph data.
+
+
+## Semantic inference performance envelope
+
+Semantic inference is not part of overlay first paint.
+
+PR #213 live-test bounds:
+- at most 64 objective/topic/concept graph nodes are embedded for a semantic pass;
+- at most the existing 320-candidate live ranking working set participates;
+- persistent embedding cache: 600 records;
+- persistent graph/mode candidate similarity cache: 600 records;
+- cache identity includes model/version/input hash, graph revision, and mode where appropriate.
+
+The dependency-free hash embedding baseline runs locally and is primarily an integration/fallback benchmark. A compact neural encoder must be benchmarked against it for first-run latency, cached latency, memory, extension/package impact, multilingual quality, and long-session stability before becoming the default provider.
+
+The current hash baseline is cheap enough to validate the complete browser-local pipeline, but it is not the target semantic-quality model. PR #213 now routes embedding generation through the shared offscreen document into a dedicated semantic Worker, with a deterministic in-process hash fallback only when the offscreen path is unavailable. The scorer/service worker consumes cached semantic values and never runs the embedding workload on first paint.
+
+PR #213 now packages Transformers.js/ONNX execution code plus the pinned q8 `mixedbread-ai/mxbai-embed-xsmall-v1` model into the extension artifact at build time. Neural inference runs in a sandboxed extension page because ONNX Runtime's WebGPU bootstrap requires a blob-backed module that normal MV3 extension pages cannot execute. Runtime remote-model loading is disabled; the installed extension resolves only packaged model/runtime assets. Neural execution prefers WebGPU, falls back to the packaged ONNX WebAssembly CPU backend when no usable GPU adapter is available, and only then falls back to the deterministic hash provider. None of these paths block first paint.
+
+The production build contains the local ONNX JavaScript/WASM runtime plus the pinned quantized model/tokenizer/configuration assets. There is no runtime model-host or CDN executable-code dependency. Model readiness is surfaced separately from ranking. Full local-data deletion clears MyAlgo's derived semantic caches; packaged model/runtime files are immutable extension assets removed only when the extension itself is removed or replaced.

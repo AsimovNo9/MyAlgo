@@ -176,19 +176,17 @@ Possible enrichment later:
 The Personal Algorithm Graph remains the authoritative, inspectable user model. Embeddings are **rebuildable derived data**, not canonical preference state.
 
 ```text
-evidence + explicit edits
-        ↓
-Personal Algorithm Graph (authoritative)
-        │
-        ├── symbolic nodes / edges / provenance
-        │
-        └── local embeddings (recomputable)
-                  ↓
-          semantic neighbourhoods
-                  ↓
-retrieval expansion / candidate matching / score features
-                  ↓
-deterministic scorer + trace
+observed/user evidence ─────────→ Personal Algorithm Graph (authoritative)
+                                      │
+                                      ├── symbolic nodes / edges / provenance
+                                      │
+candidate + graph text ─→ rebuildable embeddings / semantic features
+                                      │
+                                      ├── semantic neighbourhoods
+                                      ├── retrieval expansion
+                                      └── candidate/graph + mode similarity
+                                                   ↓
+                                      deterministic scorer + exact trace
 ```
 
 Embeddings may propose semantically related graph concepts, expand retrieval intents, cluster user-interest regions, and produce candidate similarity features. Similarity alone must not silently create permanent preference edges or override explicit feedback/hard policy.
@@ -311,7 +309,7 @@ YouTube is the first connector.
 
 ## 6.1 Candidate acquisition boundary
 
-PR #205 completes the native presentation boundary: MyAlgo can score, hide, annotate, and safely replace native cards using its local reservoir. The next expansion (#206) broadens that reservoir without changing the preference model.
+PR #205 completed the native presentation boundary, and PR #212 completed the first source-neutral acquisition expansion (#202/#206) through observed DOM, opt-in RSS, and opt-in YouTube search-page discovery. Acquisition remains upstream of scoring and does not change the preference model. PR #213 now adds rebuildable semantic matching over the normalized candidate reservoir and Personal Algorithm Graph.
 
 Candidate acquisition is upstream of scoring:
 
@@ -331,7 +329,7 @@ native feed presentation
 
 Acquisition provenance and graph/evidence provenance are separate. A candidate retrieved through RSS or web search does **not** become preference evidence merely because it was retrieved. Only separately defined user/observation events may affect the graph.
 
-Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. The current graph state is authoritative: an explicit deterministic graph-to-retrieval-intent adapter should feed the query planner rather than reconstructing a separate legacy preference object. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter must remain provider-neutral even if an initial implementation targets a Google-compatible search service.
+Web-search queries should be derived from normalized concepts, explicit goals, allowed graph relations, preferred formats, creator concepts, and bounded freshness lanes. The current graph state is authoritative: an explicit deterministic graph-to-retrieval-intent adapter should feed the query planner rather than reconstructing a separate legacy preference object. Raw watch-history rows, raw titles, private notes, or full graph dumps must not be sent to a search provider. The acquisition adapter remains provider-neutral; the launch implementation uses YouTube search pages behind that connector-owned boundary.
 
 The launch YouTube Data API boundary remains unchanged: #206 must not add YouTube Data API search.
 
@@ -469,3 +467,34 @@ This preserves three performance domains:
 - YouTube renderer/content script: DOM observation and presentation only;
 - extension service worker: ranking, storage coordination, graph/retrieval scheduling;
 - search worker: search-page network payload and CPU-heavy result parsing.
+
+
+## Semantic reranking runtime
+
+Semantic reranking is a derived layer around the canonical Personal Algorithm Graph.
+
+```text
+canonical evidence + graph
+        │
+        ├── objective/topic/concept text ──→ embedding cache
+        │                                      │
+active mode seed ──────────────────────────────┤
+                                               ↓
+                                     semantic mode lens
+                                               │
+enriched candidate text ───────────→ embedding cache
+                                               │
+                     graph similarity + mode similarity
+                                               ↓
+                                deterministic scorer/trace
+```
+
+The model-facing contract is `LocalEmbeddingProvider`. It is replaceable and exposes only model ID/version, dimensions, and batched text embedding. Embedding records are keyed by stable owner identity + model/version + input hash and are safe to delete/rebuild.
+
+PR #213 includes a dependency-free hashed word/phrase/subword vector provider as the end-to-end baseline. It is **not** treated as equivalent to a pretrained neural encoder; its purpose is to validate cache invalidation, mode construction, ranking integration, fallback behavior, and trace semantics before adopting model weights.
+
+The ranking critical path never waits for new embedding computation. A rank uses semantic feature records already cached for the exact model + graph revision + mode + candidate input hash. Missing semantic features fall back to the existing deterministic lexical/classifier path. After first paint, semantic enrichment computes in the background, persists bounded derived features, and triggers one follow-up rerank only when the semantic values changed.
+
+When semantic mode similarity exists, it replaces the older heuristic mode score rather than stacking with it. Candidate classification remains separate and may still drive descriptive UI labels such as Learning.
+
+A future neural provider should run in an off-main-rank worker/offscreen inference context with WebGPU when available and a bounded CPU/WASM fallback. Switching provider/model versions invalidates only derived caches; it never rewrites graph/evidence truth.

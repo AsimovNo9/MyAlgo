@@ -70,7 +70,7 @@ update.
 
 ## Candidate acquisition
 
-The current runtime primarily acquires candidates by observing rendered YouTube pages. After PR #205, presentation/replacement can consume a broader local reservoir, so #206 adds independent acquisition without adding a second scorer.
+The runtime acquires candidates through rendered YouTube pages plus the merged #206/#212 acquisition foundation: opt-in RSS and opt-in YouTube search-page discovery behind connector-owned adapters. All acquisition mechanisms feed the same bounded local reservoir and deterministic scorer.
 
 The repository already contains deterministic planning primitives:
 
@@ -78,12 +78,12 @@ The repository already contains deterministic planning primitives:
 - `buildRecommendationProfile()` for goal/topic/format/creator intent;
 - `buildRecommendationQueries()` and `buildRecommendationQueryPlans()` for inspectable goal/topic/alias/format/intent/creator/freshness queries.
 
-Those helpers still lean on the legacy `Algorithm` contract. #206 must bridge the current `PersonalAlgorithmState`/graph into a retrieval-intent profile deterministically; it must not revive the legacy algorithm object as a second preference model.
+The merged #206 implementation bridges current `PersonalAlgorithmState` graph state into retrieval intent deterministically; the legacy `Algorithm` object is not revived as a second preference model.
 
-The first implemented acquisition mechanisms should be:
+The implemented acquisition mechanisms are:
 
 1. **RSS** — bounded source/channel update discovery;
-2. **web search** — opt-in queries derived from normalized graph concepts, explicit goals, and retained history-derived concepts rather than raw history rows.
+2. **YouTube search-page discovery** — opt-in queries derived from normalized graph concepts, explicit goals, and active mode intent rather than raw history rows.
 
 Retrieval expands the candidate set only. It must not directly update preference weights or create graph evidence. Each acquired candidate carries source-neutral acquisition provenance and then flows through the same local deterministic scorer and policy as browser-observed candidates.
 
@@ -132,6 +132,36 @@ Prefer a layered approach:
 5. local generative disambiguation/explanation synthesis only where deterministic methods are insufficient.
 
 No model is allowed to silently become the user's preference model.
+
+### Semantic mode reranking after PR #212
+
+PR #212 established that acquisition can populate the candidate reservoir, but live use showed that lexical classification and deterministic metadata features do not yet reshape the feed strongly enough.
+
+The next ranking architecture is:
+
+```text
+candidate enriched text ──→ local embedding
+                              │
+Personal Algorithm Graph ──→ graph node embeddings
+                              │
+active mode seed ──────────→ semantic mode lens over graph nodes
+                              │
+                              ▼
+                    explicit similarities
+                 graph match + mode alignment
+                              │
+                              ▼
+                 deterministic scorer / trace
+                              │
+                              ▼
+                     calibrated reranking
+```
+
+Modes remain one graph with different semantic emphasis. Work, Learning, Relax, Gaming, and French have fixed text anchors in the local model. Each candidate embedding is compared with all five anchors, independently of the selected mode; the highest qualifying cosine similarity gives the category badge. This affinity is a relative signal, not a calibrated probability or evidence that the model has trained on the user's feed. A mode profile also selects/weights graph objective/topic/concept nodes according to embedding similarity. Graph-derived or user-created modes remain future work under #161.
+
+Selecting a mode applies a bounded, traceable category-affinity contribution alongside the existing graph and mode semantic contributions. It also shapes optional search intent. A candidate can retain its inferred badge while a different mode is selected. If local neural inference fails, the existing hash fallback remains available and diagnostics identify the effective backend; inferred categories are recomputable derived features.
+
+On YouTube Home, the feed replacement slider sets a target fraction of native video slots: 0 keeps eligible native cards, and 100 attempts to fill all safe slots from the scored candidate pool. Intermediate values favor replacements that improve on the native score, with a smaller uplift requirement nearer 100. Only distinct, eligible, trace-backed pool candidates can replace native cards. Insufficient pool coverage leaves native cards in place; explicit source filters and hard policy remain authoritative. This changes presentation, not the underlying evidence graph.
 
 ### Local embedding layer (#209)
 
@@ -283,8 +313,10 @@ Examples:
 - Learning mode expands the graph goal toward learn/understand/study and prefers tutorial/lecture/course/explainer query forms.
 - Work mode adds practical implementation/build/solve intent and prefers guides/tutorials/case studies.
 - Relax mode adds relax/enjoy intent and prefers documentary/podcast/music-style query forms.
+- Gaming mode adds gaming/gameplay intent and prefers gameplay/review/guide forms.
+- French mode adds French-language/francophone intent and prefers language practice and French video forms.
 
-The active mode must not be rendered as a label on every video. A visible `Learning`, `Work`, or `Relax` label is derived from candidate metadata and shown only above a classification confidence threshold. A video can therefore be scored while Learning mode is active without being labeled Learning.
+The active mode must not be rendered as a label on every video. A visible category badge reflects the candidate's own highest qualifying anchor similarity, independent of the active mode; the conservative metadata-based Learning badge remains a fallback. A video can therefore be scored while Learning mode is active without being labeled Learning.
 
 ### Web search adapter
 
@@ -293,13 +325,11 @@ The first concrete provider is YouTube search-page discovery. The `WebSearchProv
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
 
 
-### Current PR #212 status
+### PR #212 handoff
 
-The current implementation has passed acquisition-level live validation and CI. One observed browser run reported 4/4 search plans succeeded, 32 candidates fetched, 3 newly added, 29 deduplicated, 35 search-origin candidates retained in the reservoir, and no retrieval error. This establishes the search → reservoir path.
+PR #212 is merged and #206 is closed. Live acquisition diagnostics established the search → reservoir path; its connector-owned acquisition, offscreen search worker, bounded retention, and retrieved-discovery exploration are now foundation behavior rather than the active implementation slice.
 
-The remaining live gate is search → scoring → replacement promotion after the bounded retrieved-discovery exploration change. Validate the new rank diagnostics (`searchCandidatesScored`, `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `maxSearchCandidateScore`) together with `retrievedDiscoveryExplorationAssignments` and confirm search activity no longer disrupts badges/replacements.
-
-CI #662 passes 25/25 recommender-core tests and 122/122 extension tests, plus typecheck, lint, build, YouTube API-boundary audit, secret scan, and artifact upload.
+PR #213 is the active #209/#210 branch. Live validation should focus on semantic first-paint isolation, semantic follow-up reranking, mode-dependent score/rank changes, cache bounds, replacement stability, and deletion/re-disclosure behavior.
 
 ### Retrieved-discovery exploration
 

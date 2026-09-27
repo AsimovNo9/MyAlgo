@@ -13,12 +13,17 @@ export type PersonalScoreResult = { score:number; trace:PersonalScoreTrace };
 export type PersonalScoringRevisionContext = { evidenceRevision:string; feedbackRevision:string };
 const SCORER_REVISION='2';
 const finite=(v:number|undefined|null,f=0)=>Number.isFinite(v)?Number(v):f;
+const SCORE_DECIMALS=6;
+const normalizedScore=(v:number)=>Number(finite(v).toFixed(SCORE_DECIMALS));
+const contributionTotal=(base:number,groups:ScoreContribution[][])=>normalizedScore(
+  normalizedScore(base)+groups.flat().reduce((sum,item)=>sum+normalizedScore(item.value),0)
+);
 const sorted=(v:string[])=>[...new Set(v.filter(Boolean))].sort();
 function hash(v:unknown){const s=JSON.stringify(v);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16).padStart(8,'0')}
 function evidenceRevision(e:EvidenceRecord[]){return hash(e.map(r=>({id:r.id,observedAt:r.evidence.observedAt,kind:r.evidence.kind,content:r.evidence.content,provenance:r.evidence.provenance})).sort((a,b)=>a.id.localeCompare(b.id)))}
 function ids(c:ScoreCandidate){return sorted([...(c.nodeIds??[]),...(c.creatorNodeId?[c.creatorNodeId]:[])])}
 function edges(g:PersonalAlgorithmGraph,ns:Set<string>){return g.edges.filter(e=>ns.has(e.sourceNodeId)&&ns.has(e.targetNodeId)).sort((a,b)=>a.id.localeCompare(b.id))}
-function contrib(id:string,kind:ScoreContributionKind,label:string,value:number,sourceId?:string,evidenceIds:string[]=[]):ScoreContribution{return {id,kind,label,value:finite(value),...(sourceId?{sourceId}:{}),evidenceIds:sorted(evidenceIds)}}
+function contrib(id:string,kind:ScoreContributionKind,label:string,value:number,sourceId?:string,evidenceIds:string[]=[]):ScoreContribution{return {id,kind,label,value:normalizedScore(value),...(sourceId?{sourceId}:{}),evidenceIds:sorted(evidenceIds)}}
 function paths(c:ScoreCandidate,ns:GraphNode[],es:GraphEdge[]):ScoreMatchedPath[]{if(es.length)return es.map(e=>({nodeIds:sorted([e.sourceNodeId,e.targetNodeId]),edgeIds:[e.id],evidenceIds:sorted(e.evidenceIds)}));return [{nodeIds:ids(c),edgeIds:[],evidenceIds:[]}]}
 function feedbackMatch(s:ScoreFeedbackSignal,c:ScoreCandidate,n:Set<string>){return (s.contentId!=null&&(s.contentId===c.content.externalId||s.contentId===`${c.content.source}:${c.content.externalId}`))||(s.nodeId!=null&&n.has(s.nodeId))}
 export function buildPersonalScoringRevisionContext(
@@ -43,12 +48,12 @@ export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:Sc
  for(const e of es){const v=finite(policy.edgeRelationWeights?.[e.relation]);if(v)ec.push(contrib(`edge:${e.id}`,'edge',e.relation,v,e.id,e.evidenceIds));const mv=finite(mp.edgeRelationWeights?.[e.relation]);if(mv)mc.push(contrib(`mode-edge:${e.id}`,'mode',`${mode}:${e.relation}`,mv,e.id,e.evidenceIds))}
  for(const s of [...(candidate.features??[])].sort((a,b)=>a.id.localeCompare(b.id)))if(finite(s.value)!==0)xc.push(contrib(`feature:${s.id}`,'feature',s.label,s.value,s.sourceId??s.id,s.evidenceIds??[]));
  for(const s of [...feedbackSignals].sort((a,b)=>a.id.localeCompare(b.id)))if(feedbackMatch(s,candidate,ns))fc.push(contrib(`feedback:${s.id}`,'feedback',s.label??s.id,s.value,s.id,s.evidenceIds??[]));
- const base=finite(policy.baseScore); let score=base+nc.reduce((a,x)=>a+x.value,0)+ec.reduce((a,x)=>a+x.value,0)+xc.reduce((a,x)=>a+x.value,0)+fc.reduce((a,x)=>a+x.value,0)+mc.reduce((a,x)=>a+x.value,0);
+ const base=normalizedScore(finite(policy.baseScore)); let score=contributionTotal(base,[nc,ec,xc,fc,mc]);
  const reasons:string[]=[];if(mp.suppressNodeIds?.some(id=>ns.has(id)))reasons.push('mode_node');if(mp.suppressRelations?.some(r=>rels.has(r)))reasons.push('mode_relation');if(policy.suppression?.nodeIds?.some(id=>ns.has(id)))reasons.push('node');if(policy.suppression?.relations?.some(r=>rels.has(r)))reasons.push('relation');if(policy.suppression?.belowScore!=null&&score<policy.suppression.belowScore)reasons.push('below_score');
  if(reasons.length){sc.push(contrib(`suppression:${hash(reasons.sort())}`,'suppression',reasons.join(','),-score));score=0}
  const trace:PersonalScoreTrace={id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible:true,suppressed:reasons.length>0,policyOutcome:reasons.length?'suppressed':'eligible',finalScore:score,baseScore:base,nodeContributions:nc,edgeContributions:ec,featureContributions:xc,feedbackContributions:fc,modeContributions:mc,suppressionContributions:sc,matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()};
  return {score,trace};
 }
 export function replayPersonalAlgorithmScore(state:PersonalAlgorithmState,candidate:ScoreCandidate,policy:PersonalScoringPolicy,mode='default',feedbackSignals:ScoreFeedbackSignal[]=policy.feedback??[]){return scorePersonalAlgorithm(state,candidate,policy,mode,feedbackSignals)}
-export function traceContributionTotal(t:PersonalScoreTrace){return [t.baseScore,...t.nodeContributions,...t.edgeContributions,...t.featureContributions,...t.feedbackContributions,...t.modeContributions,...t.suppressionContributions].reduce<number>((s,x)=>s+(typeof x==='number'?x:x.value),0)}
-export function isScoreTraceConsistent(t:PersonalScoreTrace){return traceContributionTotal(t)===t.finalScore}
+export function traceContributionTotal(t:PersonalScoreTrace){return contributionTotal(t.baseScore,[t.nodeContributions,t.edgeContributions,t.featureContributions,t.feedbackContributions,t.modeContributions,t.suppressionContributions])}
+export function isScoreTraceConsistent(t:PersonalScoreTrace){return traceContributionTotal(t)===normalizedScore(t.finalScore)}

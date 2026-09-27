@@ -1,4 +1,4 @@
-import type { FeedItem, FeedResponse } from '@repo/shared-types';
+import type { FeedItem, FeedResponse, SemanticCategoryId } from '@repo/shared-types';
 
 export function normalizeFeed(feed: FeedResponse): FeedItem[] {
   return (feed.items ?? []).map((item) => ({
@@ -18,6 +18,7 @@ export type FeedSummary = {
   subscribedCount: number;
   discoveredCount: number;
   topTopics: Array<{ topic: string; count: number }>;
+  categories: Array<{ category: SemanticCategoryId; count: number }>;
 };
 
 // Summarizes which sources and topics are actually driving the visible feed,
@@ -26,6 +27,7 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
   let subscribedCount = 0;
   let discoveredCount = 0;
   const topicCounts = new Map<string, number>();
+  const categoryCounts = new Map<SemanticCategoryId, number>();
 
   for (const item of items) {
     if (item.visible === false) continue;
@@ -39,6 +41,9 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
     for (const topic of item.matched_topics ?? []) {
       topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
     }
+    if (item.semantic_category && Number(item.semantic_category_confidence ?? 0) >= 0.25) {
+      categoryCounts.set(item.semantic_category, (categoryCounts.get(item.semantic_category) ?? 0) + 1);
+    }
   }
 
   const topTopics = [...topicCounts.entries()]
@@ -46,5 +51,8 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
     .slice(0, 5)
     .map(([topic, count]) => ({ topic, count }));
 
-  return { subscribedCount, discoveredCount, topTopics };
+  const categories = [...categoryCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([category, count]) => ({ category, count }));
+  return { subscribedCount, discoveredCount, topTopics, categories };
 }

@@ -3,11 +3,19 @@ type SearchJob = {
   type?: string;
   query?: string;
   limit?: number;
+  provider?: 'hash' | 'neural';
+  texts?: string[];
 };
 
 const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url), {
   type: 'module',
 });
+const semanticWorker = new Worker(new URL('./semantic-embedding-worker.ts', import.meta.url), {
+  type: 'module',
+});
+// Sandbox pages have an opaque origin, so contentDocument is null even after
+// load. Remember readiness for later requests to the same iframe.
+const readyNeuralFrames = new WeakSet<HTMLIFrameElement>();
 
 let sequence = 0;
 const pending = new Map<string, {
@@ -38,7 +46,294 @@ const parseInWorker = (html: string, limit: number): Promise<unknown[]> => {
   });
 };
 
+const ensureNeuralSandbox = (): HTMLIFrameElement => {
+  let frame = document.querySelector<HTMLIFrameElement>('[data-myalgo-neural-sandbox]');
+  if (frame) return frame;
+
+  frame = document.createElement('iframe');
+  frame.dataset.myalgoNeuralSandbox = 'true';
+  frame.src = chrome.runtime.getURL('neural-sandbox.html');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.display = 'none';
+  document.body.append(frame);
+  return frame;
+};
+
+type SemanticResult = {
+  embeddings: number[][];
+  modelId: string;
+  modelVersion: string;
+  dimensions: number;
+};
+
+const persistSemanticStatus = (
+  provider: 'hash' | 'neural',
+  data: {
+    modelId?: string;
+    status?: string;
+    progress?: number | null;
+    loaded?: number | null;
+    total?: number | null;
+    file?: string | null;
+    backend?: string;
+    inferenceBatch?: number | null;
+    inferenceBatchCount?: number | null;
+    completedBatches?: number | null;
+    batchSize?: number | null;
+    inputCount?: number | null;
+    tokenMaxLength?: number | null;
+    elapsedMs?: number | null;
+  },
+) => {
+  void chrome.runtime.sendMessage({
+    type: 'SEMANTIC_MODEL_STATUS',
+    payload: {
+      mode: provider,
+      modelId: data.modelId ?? (
+        provider === 'neural'
+          ? 'mixedbread-ai/mxbai-embed-xsmall-v1'
+          : 'myalgo-local-hash-embedding'
+      ),
+      backend: data.backend ?? (provider === 'neural' ? 'webgpu-sandbox' : 'hash'),
+      status: data.status ?? 'loading',
+      progress: data.progress ?? null,
+      loaded: data.loaded ?? null,
+      total: data.total ?? null,
+      file: data.file ?? null,
+      inferenceBatch: data.inferenceBatch ?? null,
+      inferenceBatchCount: data.inferenceBatchCount ?? null,
+      completedBatches: data.completedBatches ?? null,
+      batchSize: data.batchSize ?? null,
+      inputCount: data.inputCount ?? null,
+      tokenMaxLength: data.tokenMaxLength ?? null,
+      elapsedMs: data.elapsedMs ?? null,
+      updatedAt: new Date().toISOString(),
+    },
+  }).catch(() => undefined);
+};
+
+const embedHashInWorker = (texts: string[]): Promise<SemanticResult> => {
+  const id = `semantic-embedding-${++sequence}`;
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      semanticWorker.removeEventListener('message', onMessage);
+      semanticWorker.removeEventListener('error', onError);
+      reject(new Error('Semantic embedding worker timed out.'));
+    }, 15_000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      semanticWorker.removeEventListener('message', onMessage);
+      semanticWorker.removeEventListener('error', onError);
+    };
+    const onError = (event: ErrorEvent) => {
+      cleanup();
+      reject(new Error(event.message || 'Semantic embedding worker crashed.'));
+    };
+    const onMessage = (event: MessageEvent<{
+      id: string;
+      ok?: boolean;
+      embeddings?: number[][];
+      modelId?: string;
+      modelVersion?: string;
+      dimensions?: number;
+      error?: string;
+    }>) => {
+      if (event.data.id !== id) return;
+      cleanup();
+      if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
+        reject(new Error(event.data.error ?? 'Semantic embedding worker failed.'));
+        return;
+      }
+      persistSemanticStatus('hash', {
+        modelId: event.data.modelId,
+        backend: 'hash',
+        status: 'ready',
+        progress: 100,
+      });
+      resolve({
+        embeddings: event.data.embeddings,
+        modelId: event.data.modelId,
+        modelVersion: event.data.modelVersion,
+        dimensions: event.data.dimensions,
+      });
+    };
+
+    semanticWorker.addEventListener('message', onMessage);
+    semanticWorker.addEventListener('error', onError);
+    semanticWorker.postMessage({ id, texts });
+  });
+};
+
+const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
+  const id = `neural-sandbox-${++sequence}`;
+  const frame = ensureNeuralSandbox();
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Neural semantic sandbox timed out.'));
+    }, 300_000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+      frame.removeEventListener('load', onLoad);
+    };
+
+    let requestSent = false;
+    const postRequest = () => {
+      if (requestSent || !frame.contentWindow) return;
+      requestSent = true;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'EMBED_TEXTS',
+        texts,
+      }, '*');
+    };
+    const onLoad = () => {
+      readyNeuralFrames.add(frame);
+      postRequest();
+    };
+
+    const onMessage = (event: MessageEvent<{
+      source?: string;
+      id?: string | null;
+      type?: 'ready' | 'progress' | 'inference' | 'backend-fallback';
+      backend?: string;
+      from?: string;
+      to?: string;
+      reason?: string;
+      progress?: {
+        status?: string;
+        progress?: number;
+        loaded?: number;
+        total?: number;
+        file?: string;
+      };
+      inferenceBatch?: number;
+      inferenceBatchCount?: number;
+      completedBatches?: number;
+      batchSize?: number;
+      inputCount?: number;
+      tokenMaxLength?: number;
+      elapsedMs?: number;
+      ok?: boolean;
+      embeddings?: number[][];
+      modelId?: string;
+      modelVersion?: string;
+      dimensions?: number;
+      error?: string;
+    }>) => {
+      if (
+        event.source !== frame.contentWindow
+        || event.data?.source !== 'myalgo-neural-sandbox'
+      ) {
+        return;
+      }
+
+      if (event.data.type === 'ready') {
+        readyNeuralFrames.add(frame);
+        postRequest();
+        return;
+      }
+      if (event.data.id !== id) return;
+
+      if (event.data.type === 'backend-fallback') {
+        persistSemanticStatus('neural', {
+          status: 'loading',
+          progress: null,
+          backend: event.data.to ?? 'wasm-sandbox',
+        });
+        return;
+      }
+
+      if (event.data.type === 'progress') {
+        const progress = event.data.progress ?? {};
+        persistSemanticStatus('neural', {
+          status: progress.status ?? 'loading',
+          progress: typeof progress.progress === 'number' ? progress.progress : null,
+          loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
+          total: typeof progress.total === 'number' ? progress.total : null,
+          file: progress.file ?? null,
+          backend: event.data.backend ?? 'webgpu-sandbox',
+        });
+        return;
+      }
+
+      if (event.data.type === 'inference') {
+        persistSemanticStatus('neural', {
+          status: 'inference',
+          backend: event.data.backend ?? 'webgpu-sandbox',
+          inferenceBatch: event.data.inferenceBatch,
+          inferenceBatchCount: event.data.inferenceBatchCount,
+          completedBatches: event.data.completedBatches,
+          batchSize: event.data.batchSize,
+          inputCount: event.data.inputCount,
+          tokenMaxLength: event.data.tokenMaxLength,
+          elapsedMs: event.data.elapsedMs,
+        });
+        return;
+      }
+
+      cleanup();
+      if (!event.data.ok || !event.data.embeddings || !event.data.modelId || !event.data.modelVersion || !event.data.dimensions) {
+        reject(new Error(event.data.error ?? 'Neural semantic sandbox failed.'));
+        return;
+      }
+
+      persistSemanticStatus('neural', {
+        modelId: event.data.modelId,
+        status: 'ready',
+        progress: 100,
+        backend: event.data.backend ?? 'webgpu-sandbox',
+      });
+      resolve({
+        embeddings: event.data.embeddings,
+        modelId: event.data.modelId,
+        modelVersion: event.data.modelVersion,
+        dimensions: event.data.dimensions,
+      });
+    };
+
+    window.addEventListener('message', onMessage);
+
+    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
+      readyNeuralFrames.add(frame);
+      postRequest();
+    } else {
+      frame.addEventListener('load', onLoad, { once: true });
+    }
+  });
+};
+
+const embedSemantics = (
+  texts: string[],
+  provider: 'hash' | 'neural',
+): Promise<SemanticResult> => (
+  provider === 'neural'
+    ? embedNeuralInSandbox(texts)
+    : embedHashInWorker(texts)
+);
+
 chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
+  if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EMBED_TEXTS') {
+    void (async () => {
+      const texts = Array.isArray(message.texts)
+        ? message.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
+        : [];
+      const result = await embedSemantics(texts, message.provider === 'neural' ? 'neural' : 'hash');
+      sendResponse({ ok: true, ...result });
+    })().catch((error) => {
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Semantic embedding failed.',
+      });
+    });
+    return true;
+  }
+
   if (message?.target !== 'youtube-search-offscreen' || message.type !== 'SEARCH_YOUTUBE_PAGE') {
     return false;
   }

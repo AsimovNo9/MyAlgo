@@ -1,4 +1,4 @@
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState, SemanticCategoryId } from '@repo/shared-types';
 import {
   buildPersonalScoringRevisionContext,
   isScoreTraceConsistent,
@@ -29,6 +29,18 @@ export type LocalRuntimeCandidate = {
   is_live?: boolean;
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
+  semantic_graph_similarity?: number | null;
+  semantic_mode_similarity?: number | null;
+  semantic_model_version?: string | null;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_graph_matches?: Array<{
+    node_id: string;
+    node_label: string;
+    similarity: number;
+    weight: number;
+  }>;
   provenance?: CandidateAcquisitionProvenance;
   acquisition_history?: CandidateAcquisitionProvenance[];
 };
@@ -242,6 +254,84 @@ export function classifyCandidateContent(
   return { label: null, confidence: 0 };
 }
 
+const semanticAlignmentFeatures = (
+  candidate: LocalRuntimeCandidate,
+  mode: string,
+): ScoreFeatureSignal[] => {
+  const features: ScoreFeatureSignal[] = [];
+  const graphSimilarity = Number(candidate.semantic_graph_similarity ?? 0);
+  const modeSimilarity = Number(candidate.semantic_mode_similarity ?? 0);
+
+  if (Number.isFinite(graphSimilarity) && graphSimilarity >= 0.2) {
+    const matches = (candidate.semantic_graph_matches ?? [])
+      .filter((match) => Number.isFinite(match.similarity) && match.similarity > 0)
+      .slice(0, 3);
+    const semanticValue = 18 * Math.min(1, graphSimilarity);
+    const totalWeight = matches.reduce((sum, match) => (
+      sum + (Number.isFinite(match.weight) && match.weight > 0 ? match.weight : match.similarity)
+    ), 0);
+
+    if (matches.length > 0 && totalWeight > 0) {
+      for (const match of matches) {
+        features.push({
+          id: `semantic:graph:${match.node_id}`,
+          label: `semantic match: ${match.node_label}`,
+          value: Number((semanticValue * (
+            (Number.isFinite(match.weight) && match.weight > 0 ? match.weight : match.similarity)
+            / totalWeight
+          )).toFixed(2)),
+          sourceId: candidate.semantic_model_version
+            ? `embedding:${candidate.semantic_model_version}`
+            : 'embedding',
+        });
+      }
+    } else {
+      features.push({
+        id: 'semantic:graph',
+        label: 'semantic match: personal graph',
+        value: Number(semanticValue.toFixed(2)),
+        sourceId: candidate.semantic_model_version
+          ? `embedding:${candidate.semantic_model_version}`
+          : 'embedding',
+      });
+    }
+  }
+
+  if (Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
+    features.push({
+      id: 'semantic:mode',
+      label: 'semantic match: active mode',
+      value: Number((14 * Math.min(1, modeSimilarity)).toFixed(2)),
+      sourceId: candidate.semantic_model_version
+        ? `embedding:${candidate.semantic_model_version}`
+        : 'embedding',
+    });
+  }
+
+  // Relative affinity resolves otherwise similar cosine scores. This remains
+  // an exact, bounded score contribution subject to hard policy and feedback.
+  const scores = candidate.semantic_category_scores;
+  const activeMode = mode.trim().toLowerCase();
+  if (scores && activeMode && activeMode in scores) {
+    const active = Number(scores[activeMode as SemanticCategoryId] ?? 0);
+    const strongestOther = Math.max(0, ...Object.entries(scores)
+      .filter(([category]) => category !== activeMode)
+      .map(([, similarity]) => Number(similarity ?? 0)));
+    if (active >= 0.25 && active > strongestOther) {
+      features.push({
+        id: 'semantic:category:active',
+        label: `semantic category: ${activeMode}`,
+        value: Number((24 * Math.min(1, (active - strongestOther) / 0.12)).toFixed(2)),
+        sourceId: candidate.semantic_model_version
+          ? `embedding:${candidate.semantic_model_version}`
+          : 'embedding',
+      });
+    }
+  }
+
+  return features;
+};
+
 const modeAlignmentFeature = (
   mode: string,
   classification: ReturnType<typeof classifyCandidateContent>,
@@ -274,8 +364,14 @@ const candidateContext = (
   const contentNode = index.contentNodes.get(contentId);
   const extracted = extractLocalCandidateFeatures(state, candidate, index.featureNodes);
   const classification = classifyCandidateContent(candidate);
-  const modeFeature = modeAlignmentFeature(mode, classification);
+  // Once semantic mode similarity exists, it becomes the mode-ranking signal.
+  // The deterministic classifier remains useful for UI labels/fallbacks, but
+  // must not double-count the same active-mode intent.
+  const modeFeature = candidate.semantic_mode_similarity == null
+    ? modeAlignmentFeature(mode, classification)
+    : null;
   if (modeFeature) extracted.features.push(modeFeature);
+  extracted.features.push(...semanticAlignmentFeatures(candidate, mode));
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;

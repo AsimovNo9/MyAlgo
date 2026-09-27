@@ -1028,6 +1028,18 @@ export function applyModeToRetrievalProfile(
             preferredFormats: ['documentary', 'podcast', 'music'],
             intents: ['relax', 'enjoy'],
           }
+        : normalizedMode === 'gaming'
+          ? {
+              goalSuffix: 'video games gameplay',
+              preferredFormats: ['gameplay', 'review', 'walkthrough'],
+              intents: ['gaming', 'video games', 'gameplay'],
+            }
+          : normalizedMode === 'french'
+            ? {
+                goalSuffix: 'French language français',
+                preferredFormats: ['lesson', 'conversation', 'video'],
+                intents: ['French', 'français', 'learn French'],
+              }
         : {
             goalSuffix: '',
             preferredFormats: profile.preferredFormats,
@@ -1238,3 +1250,6 @@ export function buildStoredOrDerivedAlgorithmIntentProfile(
 
 
 export * from './personal-algorithm-scorer.ts';
+
+export * from './semantic-primitives.ts';
+export * from './semantic-reranking.ts';
