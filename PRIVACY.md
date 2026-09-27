@@ -39,7 +39,7 @@ The local-only MVP does **not** send observed YouTube activity, evidence records
 
 The extension runs on YouTube and may make requests to YouTube-owned origins as part of normal page operation and metadata enrichment. When the user explicitly enables RSS discovery, MyAlgo also requests bounded YouTube channel RSS feeds using channel IDs already observed from YouTube metadata. RSS requests do not contain the Personal Algorithm Graph, raw watch-history rows, feedback records, or scoring traces.
 
-When the user explicitly enables the neural semantic encoder, MyAlgo downloads public model/configuration files for `mixedbread-ai/mxbai-embed-xsmall-v1` from the Hugging Face model host. Those requests download the model only: MyAlgo does not send candidate text, Personal Algorithm Graph state, history, feedback, embeddings, or scoring traces to Hugging Face for inference. Inference remains local in a sandboxed extension page. Chrome disables CacheStorage for this sandboxed opaque-origin page, so the current implementation reuses the loaded model in memory while the sandbox remains active but may download the public model files again after a full extension reload.
+When the user explicitly enables the neural semantic encoder, MyAlgo uses the `mixedbread-ai/mxbai-embed-xsmall-v1` model files packaged into the extension artifact at build time from a pinned public upstream revision. The installed extension does not contact Hugging Face or another model host to load the neural model. Candidate text, Personal Algorithm Graph state, history, feedback, embeddings, and scoring traces remain local, and inference runs in a sandboxed extension page.
 
 When the user explicitly enables web discovery, MyAlgo sends a bounded set of normalized graph-derived goal/topic queries plus active mode intent to YouTube's normal search-page endpoint. It does not send raw watch-history rows, the full graph, explicit feedback records, scoring traces, or browser cookies with those extension-initiated search requests. Search-page results are treated only as candidate-discovery metadata; canonical YouTube watch-page enrichment remains the source of richer candidate metadata before local scoring.
 
@@ -69,7 +69,7 @@ The project audits the built extension package for common secret/token patterns.
 
 ## Changes to data practices
 
-The privacy disclosure is versioned. Disclosure v5 covers the optional Hugging Face model-file download used by the local neural semantic encoder in PR #213. Disclosure v4 covered local semantic embedding/similarity processing before that external model-download boundary was introduced. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
+The privacy disclosure is versioned. Disclosure v5 remains the current disclosure floor for PR #213. The neural implementation was subsequently tightened so model/runtime assets are packaged with the extension and the installed extension no longer has a model-host download boundary. Disclosure v4 covered local semantic embedding/similarity processing before the neural provider was introduced. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
 
 Optional sync, cloud enrichment, or a new connector is therefore not covered by the current acceptance.
 
