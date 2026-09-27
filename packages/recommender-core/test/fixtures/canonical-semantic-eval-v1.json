@@ -166,9 +166,136 @@
           "attributes": {},
           "createdAt": "2026-09-27T00:00:00.000Z",
           "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "content:youtube:bodybuilding-shared",
+          "kind": "content",
+          "label": "Bodybuilding shared support",
+          "provenance": "inferred",
+          "confidence": 1,
+          "attributes": {},
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:arms",
+          "kind": "topic",
+          "label": "Arms",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:back",
+          "kind": "topic",
+          "label": "Back",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:chest",
+          "kind": "topic",
+          "label": "Chest",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "topic:bodybuilding",
+          "kind": "topic",
+          "label": "Bodybuilding",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1",
+            "sourceKinds": [
+              "model_topic"
+            ]
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
         }
       ],
-      "edges": [],
+      "edges": [
+        {
+          "id": "edge:bodybuilding:topic:arms",
+          "sourceNodeId": "topic:arms",
+          "targetNodeId": "content:youtube:bodybuilding-shared",
+          "relation": "about",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "evidenceIds": [],
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1"
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "edge:bodybuilding:topic:back",
+          "sourceNodeId": "topic:back",
+          "targetNodeId": "content:youtube:bodybuilding-shared",
+          "relation": "about",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "evidenceIds": [],
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1"
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "edge:bodybuilding:topic:chest",
+          "sourceNodeId": "topic:chest",
+          "targetNodeId": "content:youtube:bodybuilding-shared",
+          "relation": "about",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "evidenceIds": [],
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1"
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        },
+        {
+          "id": "edge:bodybuilding:topic:bodybuilding",
+          "sourceNodeId": "topic:bodybuilding",
+          "targetNodeId": "content:youtube:bodybuilding-shared",
+          "relation": "about",
+          "provenance": "inferred",
+          "confidence": 0.8,
+          "evidenceIds": [],
+          "attributes": {
+            "derivedBy": "semantic-concept-materializer-v1"
+          },
+          "createdAt": "2026-09-27T00:00:00.000Z",
+          "updatedAt": "2026-09-27T00:00:00.000Z"
+        }
+      ],
       "userEdits": [],
       "revisions": [],
       "currentRevision": 1
@@ -187,6 +314,30 @@
     ],
     "topic:explicit-ai-workflows": [
       1,
+      0,
+      0
+    ],
+    "topic:arms": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "topic:back": [
+      0.999,
+      0.01,
+      0,
+      0
+    ],
+    "topic:chest": [
+      0.998,
+      0.02,
+      0,
+      0
+    ],
+    "topic:bodybuilding": [
+      0.997,
+      0.03,
       0,
       0
     ]
@@ -236,6 +387,22 @@
     {
       "alias": "topic:explicit-ai-workflows",
       "expectedCanonicalId": "canonical:semantic:v1:explicit%3Atopic%3Aexplicit-ai-workflows"
+    },
+    {
+      "alias": "topic:arms",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Aarms"
+    },
+    {
+      "alias": "topic:back",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Aarms"
+    },
+    {
+      "alias": "topic:chest",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Aarms"
+    },
+    {
+      "alias": "topic:bodybuilding",
+      "expectedCanonicalId": "canonical:semantic:v1:specific%3Aarms"
     }
   ],
   "aggregationSamples": [
@@ -262,6 +429,18 @@
       "rawScoreAfter": 11.48,
       "displayScoreBefore": 78,
       "displayScoreAfter": 68
+    },
+    {
+      "id": "bodybuilding-shared-support",
+      "sourceNodeMatchCount": 4,
+      "canonicalNeighbourhoodMatchCount": 1,
+      "lexicalContributionMass": 44.8,
+      "embeddingContributionMass": 15,
+      "reconciledContributionMass": 15,
+      "rawScoreBefore": 59.8,
+      "rawScoreAfter": 15,
+      "displayScoreBefore": 98,
+      "displayScoreAfter": 73
     }
   ]
 }
