@@ -9,7 +9,6 @@ import type {
 import {
   buildSemanticModeProfile,
   cosineSimilarity,
-  SEMANTIC_CATEGORIES,
   semanticModeSeed,
   weightedEmbeddingCentroid,
 } from './semantic-primitives.ts';
@@ -283,14 +282,23 @@ const positiveSimilarity = (left: readonly number[], right: readonly number[]): 
 
 export function classifySemanticCategory(
   scores: Partial<Record<SemanticCategoryId, number>>,
+  options: { minimumScore?: number; minimumMargin?: number } = {},
 ): { category: SemanticCategoryId | null; confidence: number } {
-  const ranked = SEMANTIC_CATEGORIES
-    .map((category) => ({ category, score: Math.max(0, Math.min(1, Number(scores[category] ?? 0))) }))
-    .sort((left, right) => right.score - left.score);
+  const minimumScore = Math.max(0, Math.min(1, options.minimumScore ?? 0.35));
+  const minimumMargin = Math.max(0, Math.min(1, options.minimumMargin ?? 0.04));
+  const ranked = Object.entries(scores)
+    .filter(([category]) => category.trim().length > 0)
+    .map(([category, score]) => ({
+      category,
+      score: Math.max(0, Math.min(1, Number(score ?? 0))),
+    }))
+    .sort((left, right) => right.score - left.score || left.category.localeCompare(right.category));
   const best = ranked[0];
-  return best && best.score >= 0.25
-    ? { category: best.category, confidence: Number(best.score.toFixed(4)) }
-    : { category: null, confidence: 0 };
+  const runnerUp = ranked[1]?.score ?? 0;
+  if (!best || best.score < minimumScore || best.score - runnerUp < minimumMargin) {
+    return { category: null, confidence: 0 };
+  }
+  return { category: best.category, confidence: Number(best.score.toFixed(4)) };
 }
 
 export async function enrichCandidatesWithSemanticReranking<T extends RecommendationCandidate>(
@@ -330,20 +338,15 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     eligibleGraphNodes.map((node, index) => [node.id, graphEmbeddings.records[index]?.embedding ?? []]),
   );
 
-  // These are fixed intent anchors. Candidate categories are inferred from
-  // their own vectors and remain independent of the currently selected mode.
-  const normalizedMode = mode.trim().toLowerCase();
-  const seedModes = SEMANTIC_CATEGORIES.includes(normalizedMode as SemanticCategoryId)
-    ? [...SEMANTIC_CATEGORIES]
-    : [...SEMANTIC_CATEGORIES, normalizedMode || 'default'];
-  const seedInputs = seedModes.map((seedMode) => ({
+  const normalizedMode = mode.trim().toLowerCase() || 'default';
+  const seedInputs = [{
     ownerType: 'mode' as const,
-    ownerId: `mode-seed:${seedMode}`,
-    text: semanticModeSeed(seedMode),
-  }));
+    ownerId: `mode-seed:${normalizedMode}`,
+    text: semanticModeSeed(mode),
+  }];
   await options.onEmbeddingPhase?.('mode_seed', seedInputs.length);
   const modeSeed = await embedWithCache(provider, cache, seedInputs);
-  const seedEmbedding = modeSeed.records[seedModes.indexOf(normalizedMode || 'default')]?.embedding ?? [];
+  const seedEmbedding = modeSeed.records[0]?.embedding ?? [];
 
   const nodeSimilarities = Object.fromEntries(eligibleGraphNodes.map((node) => [
     node.id,
@@ -381,14 +384,30 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   await options.onEmbeddingPhase?.('candidate_embeddings', candidateInputs.length);
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
 
+  const categoryNodes = eligibleGraphNodes.filter((node) => (
+    node.kind === 'topic' || node.kind === 'concept'
+  ));
+  const categorySourceNodes = categoryNodes.length > 0 ? categoryNodes : eligibleGraphNodes;
+
   const enriched = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
-    const categoryScores = Object.fromEntries(SEMANTIC_CATEGORIES.map((category) => [
-      category,
-      Number(positiveSimilarity(
-        embedding,
-        modeSeed.records[seedModes.indexOf(category)]?.embedding ?? [],
-      ).toFixed(4)),
+    const rankedCategories = categorySourceNodes
+      .map((node) => ({
+        category: node.label.trim(),
+        similarity: positiveSimilarity(
+          embedding,
+          nodeEmbeddingById.get(node.id) ?? [],
+        ),
+      }))
+      .filter((entry) => entry.category && entry.similarity > 0)
+      .sort((left, right) => (
+        right.similarity - left.similarity
+        || left.category.localeCompare(right.category)
+      ))
+      .slice(0, 8);
+    const categoryScores = Object.fromEntries(rankedCategories.map((entry) => [
+      entry.category,
+      Number(entry.similarity.toFixed(4)),
     ])) as Record<SemanticCategoryId, number>;
     const category = classifySemanticCategory(categoryScores);
     const graphMatches = eligibleGraphNodes
