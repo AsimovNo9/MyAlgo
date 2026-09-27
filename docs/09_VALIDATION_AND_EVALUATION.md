@@ -248,12 +248,12 @@ A healthy search run can fetch candidates without producing replacements when no
 
 ## Semantic mode reranking validation
 
-Validate #209/#210 on the same stored candidate set under multiple modes.
+PR #213 is merged. Preserve its semantic execution/privacy invariants while #214 refines classification and presentation stability.
 
 Required invariants:
 1. the first rank response does not wait for missing embeddings;
 2. semantic enrichment triggers at most one follow-up rerank when cached values actually change;
-3. changing Work/Learning/Relax changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
+3. changing an inferred semantic mode changes mode similarity while graph similarity for unchanged candidate/graph text stays stable;
 4. semantic mode similarity replaces, rather than double-counts, the legacy heuristic mode boost;
 5. hard exclusions and explicit negative feedback remain authoritative;
 6. embedding cache hits produce the same vectors/similarities as the original computation;
@@ -268,3 +268,46 @@ Required invariants:
 15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
+
+
+## Post-#213 category/mode and Home-stability validation (#214)
+
+Live review after PR #213 exposed two distinct failure classes that must be evaluated separately.
+
+### Category and mode inference
+
+Use a fixed local candidate/graph fixture plus representative live examples.
+
+Required checks:
+
+1. candidate category vocabulary comes from eligible symbolic graph topic/concept labels rather than a fixed five-anchor taxonomy;
+2. the strongest category must clear both the configured absolute similarity floor and the runner-up margin;
+3. near-ties produce **no category badge** rather than forcing the least-wrong label;
+4. changing the active mode does not change the candidate's category score map when candidate/graph inputs are unchanged;
+5. the popup/Settings mode list contains All/Default plus categories actually inferred in local feed state; it must not synthesize Work/Learning/Relax/Gaming/French merely because those labels existed in PR #213;
+6. selecting a dynamic category mode still produces exact traceable mode/category-affinity contributions and bounded retrieval intent;
+7. migration preserves a stored legacy/custom mode long enough for the user to change it, without making that value part of the new inferred taxonomy.
+
+Record labelled examples of obvious correct, obvious incorrect, and ambiguous cases. Do not fine-tune the embedding encoder until the replay set is large enough to show a systematic residual error after taxonomy choice, metadata enrichment, thresholds/margins, and candidate model choice have been tested.
+
+### Home replacement stability
+
+For one unchanged Home route, record source native video ID → replacement video ID mappings across at least:
+
+- ordinary MutationObserver reranks;
+- metadata-enrichment reranks;
+- semantic-enrichment reranks;
+- more than 45 seconds of idle/normal DOM churn.
+
+A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Ordinary rank-generation increments must not rotate equal/near-equal candidates.
+
+Then deliberately trigger meaningful invalidations and confirm reselection is allowed:
+
+- route/navigation change;
+- mode change;
+- graph/feedback/policy change;
+- feed replacement percentage change;
+- source native card removal;
+- replacement candidate becoming ineligible/suppressed.
+
+This distinguishes YouTube DOM recycling from MyAlgo-owned candidate cycling. Diagnostics should report the stable/bound replacement counts without logging private candidate text.
