@@ -335,6 +335,16 @@ test('content presentation labels come from candidate classification, not active
   assert.equal(getContentPresentationLabel({ semantic_category: 'French language', semantic_category_confidence: 0.7 }), 'French language');
   assert.equal(getContentPresentationLabel({ semantic_category: 'Ambiguous', semantic_category_confidence: 0.34 }), null);
   assert.equal(
+    getContentPresentationLabel({
+      semantic_category: null,
+      semantic_category_confidence: 0,
+      semantic_model_version: 'mxbai@test',
+      content_label: 'learning',
+      content_label_confidence: 0.9,
+    }),
+    null,
+  );
+  assert.equal(
     getContentPresentationLabel({ content_label: 'learning', content_label_confidence: 0.9 }),
     'Learning',
   );
