@@ -11,7 +11,7 @@ PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/
 3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
 4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
 5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-6. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, graph editing, and counterfactual replay.**
+6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
 7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
 #219/#220 is now a completed upstream boundary. Zero-shot verifier output remains rebuildable derived content understanding; retained interaction evidence is still the preference gate and #218 remains the deterministic graph-materialization authority.
@@ -174,7 +174,7 @@ This is maintenance hardening of #148's graph invariant, not new preference-infe
 
 PR #191 also resolves a runtime persistence failure found during browser validation: the extension's install/update initialization was clearing the compatibility History store while the new graph reconciliation was starting, and legacy History records used collector observation time as their identity. The implementation now preserves persisted History across install/update, gates normalized evidence writes behind startup reconciliation, and atomically replaces legacy History evidence with canonical `interaction:watched:<videoId>:history` records. Regression tests cover legacy replacement, preservation of unrelated evidence, repeated reconciliation, metadata refresh, and removal of inferred edges that lose their evidence support.
 
-### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Move the MVP scoring path into the extension local runtime — **runtime scoring slice completed in PR #195**
+### [#169](https://github.com/AsimovNo9/MyAlgo/issues/169): Finish offline/signed-out local-runtime validation — **runtime scoring/enforcement foundation complete**
 
 PR #195 completes the first runtime integration slice of #169 and has passed CI plus real-browser validation.
 
@@ -249,7 +249,7 @@ Still deferred until measured gaps justify them:
 - bounded comment analysis
 - optional local LLM resolver / explanation synthesis
 
-### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Add rebuildable local semantic embeddings for graph, retrieval, scoring, and explanations
+### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Complete remaining local semantic-embedding enrichment uses
 
 The embedding infrastructure is implemented and now supports #221/#214. Remaining #209 work is bounded semantic-neighbour retrieval expansion, cluster output, broader benchmark coverage, and symbolic semantic paths for #153. Embeddings remain rebuildable derived enrichment and never authoritative preference state.
 
