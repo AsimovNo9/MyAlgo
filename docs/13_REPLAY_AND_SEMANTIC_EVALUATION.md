@@ -219,16 +219,16 @@ The materializer therefore treats enriched candidate topics/content types as the
 Diagnostics expose `qualifiedBeforeCap` and `droppedByCap` so cap saturation is measurable rather than hidden.
 
 
-## Local concept extraction comparison (#219)
+## Local concept verification comparison (#219)
 
-PR #220 introduces a model-proposal stage before #218's deterministic materializer. Evaluation should compare two proposal sources under the same retained evidence fixture:
+PR #220 introduces a model-verification stage before #218's deterministic materializer. Evaluation should compare raw metadata topics against zero-shot-verified metadata topics under the same retained evidence fixture:
 
 ```text
 A: enriched YouTube keyword/category metadata → #218 materializer
-B: local concept model output               → #218 materializer
+B: zero-shot-verified metadata topics          → #218 materializer
 ```
 
-The graph projection, evidence gate, support thresholds and concept-materialization metrics remain the same. This isolates whether the concept model improves abstraction quality instead of crediting unrelated pipeline changes.
+The graph projection, evidence gate, support thresholds and concept-materialization metrics remain the same. This isolates whether the verifier improves topic precision/abstention without crediting unrelated pipeline changes. Alias abstraction remains the next embedding-canonicalization slice.
 
 For labelled/reviewed examples, compare:
 - concept precision, recall and F1;
