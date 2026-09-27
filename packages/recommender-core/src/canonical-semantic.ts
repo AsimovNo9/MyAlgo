@@ -209,30 +209,31 @@ export function buildCanonicalSemanticConcepts(
   const nodes = semanticNodes(state);
   const unionFind = new UnionFind(nodes.map((node) => node.id));
 
-  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
-    const left = nodes[leftIndex]!;
-    if (left.kind === 'objective') continue;
-    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
-      const right = nodes[rightIndex]!;
-      if (right.kind === 'objective') continue;
-      if (isTaxonomyOnlyNode(left) !== isTaxonomyOnlyNode(right)) continue;
-
-      const leftNormalized = normalizeSemanticLabel(left.label);
-      const rightNormalized = normalizeSemanticLabel(right.label);
-      if (leftNormalized === rightNormalized) {
-        unionFind.union(left.id, right.id);
-        continue;
-      }
-
-      if (
-        left.provenance !== 'explicit'
-        && right.provenance !== 'explicit'
-        && aliasNormalizationKey(left.label) === aliasNormalizationKey(right.label)
-      ) {
-        unionFind.union(left.id, right.id);
-      }
+  const unionBucket = (bucket: readonly GraphNode[]) => {
+    const first = bucket[0];
+    if (!first) return;
+    for (let index = 1; index < bucket.length; index += 1) {
+      unionFind.union(first.id, bucket[index]!.id);
+    }
+  };
+  const exactBuckets = new Map<string, GraphNode[]>();
+  const inferredAliasBuckets = new Map<string, GraphNode[]>();
+  for (const node of nodes) {
+    if (node.kind === 'objective') continue;
+    const taxonomy = isTaxonomyOnlyNode(node) ? 'taxonomy' : 'specific';
+    const exactKey = `${taxonomy}:${normalizeSemanticLabel(node.label)}`;
+    const exact = exactBuckets.get(exactKey) ?? [];
+    exact.push(node);
+    exactBuckets.set(exactKey, exact);
+    if (node.provenance !== 'explicit') {
+      const aliasKey = `${taxonomy}:${aliasNormalizationKey(node.label)}`;
+      const aliases = inferredAliasBuckets.get(aliasKey) ?? [];
+      aliases.push(node);
+      inferredAliasBuckets.set(aliasKey, aliases);
     }
   }
+  for (const bucket of exactBuckets.values()) unionBucket(bucket);
+  for (const bucket of inferredAliasBuckets.values()) unionBucket(bucket);
 
   const threshold = Math.max(0, Math.min(1, options.embeddingSimilarityThreshold ?? 0.94));
   let embeddingComparisonCount = 0;
@@ -242,15 +243,17 @@ export function buildCanonicalSemanticConcepts(
   const supportByNodeId = supportKeysByNodeId(state, new Set(nodes.map((node) => node.id)));
 
   if (embeddings) {
-    for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
-      const left = nodes[leftIndex]!;
-      if (left.kind === 'objective' || isTaxonomyOnlyNode(left)) continue;
-      const leftEmbedding = embeddings.get(left.id);
-      if (!leftEmbedding?.length) continue;
+    const embeddedNodes = nodes.filter((node) => (
+      node.kind !== 'objective'
+      && !isTaxonomyOnlyNode(node)
+      && Boolean(embeddings.get(node.id)?.length)
+    ));
+    for (let leftIndex = 0; leftIndex < embeddedNodes.length; leftIndex += 1) {
+      const left = embeddedNodes[leftIndex]!;
+      const leftEmbedding = embeddings.get(left.id)!;
 
-      for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
-        const right = nodes[rightIndex]!;
-        if (right.kind === 'objective' || isTaxonomyOnlyNode(right)) continue;
+      for (let rightIndex = leftIndex + 1; rightIndex < embeddedNodes.length; rightIndex += 1) {
+        const right = embeddedNodes[rightIndex]!;
         if (unionFind.find(left.id) === unionFind.find(right.id)) continue;
 
         const rightEmbedding = embeddings.get(right.id);
