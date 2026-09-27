@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildConceptExtractionPrompt, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildConceptExtractionPrompt, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -783,7 +783,7 @@ async function runConceptExtractionCacheRefresh(
     STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE,
     {},
   );
-  const modelVersion = `${CONCEPT_EXTRACTION_MODEL_ID}@${CONCEPT_EXTRACTION_MODEL_VERSION}`;
+  const modelVersion = `${CONCEPT_EXTRACTION_MODEL_ID}@${CONCEPT_EXTRACTION_MODEL_VERSION}@${CONCEPT_EXTRACTION_PIPELINE_VERSION}`;
   const interactionSupportedIds = new Set(
     state.evidence
       .filter((record) => (
@@ -862,6 +862,7 @@ async function runConceptExtractionCacheRefresh(
     status: fallbackReason ? 'fallback' : (enabled ? 'completed' : 'disabled'),
     modelId: CONCEPT_EXTRACTION_MODEL_ID,
     modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+    pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
     enabled,
     interactionSupportedCandidateCount: supportedCandidates.length,
     cacheHits,
