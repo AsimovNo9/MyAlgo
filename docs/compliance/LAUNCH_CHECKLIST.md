@@ -19,8 +19,8 @@
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
 - [ ] Modes operate over one graph
-- [ ] #214 canonical semantic architecture validated against #162: canonical neighbourhood assignments are replayable, redundant source-node matches do not stack as independent score evidence, candidate affinities are multi-label, and durable mode clusters have stable local identity
-- [ ] Every active-mode score contribution resolves to the stable mode revision and exact contributing graph node/member in the deterministic trace
+- [ ] #221 / PR #223 canonical semantic scoring passes CI plus live validation: canonical neighbourhood assignments are replayable, redundant lexical/embedding source-node matches do not stack as independent score evidence, broad taxonomy remains distinguishable, and exact source-node provenance survives in traces
+- [ ] #214 durable mode architecture validated against #162: candidate affinities are multi-label, durable mode clusters have stable local identity, and every active-mode score contribution resolves to the stable mode revision and exact canonical/source graph member in the deterministic trace
 - [ ] Mode selection affects retrieval planning as well as reranking; short native-mode supply is measured against the current Home replacement quota and may be filled only through the existing acquired reservoir
 - [ ] Mode-supply shortfall status/banner uses the same eligibility/membership contract as ranking and records bounded local diagnostics
 - [ ] Valid Home source→replacement assignments and unchanged replacement DOM remain stable across ordinary reranks
