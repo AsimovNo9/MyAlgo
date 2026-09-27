@@ -30,7 +30,6 @@ export type SemanticConceptProposal = {
 
 export type SemanticConceptMaterializationOptions = {
   minimumContentSupport?: number;
-  minimumTitlePhraseSupport?: number;
   maxProposals?: number;
   maxSupportEdgesPerProposal?: number;
   maxCandidateTopics?: number;
@@ -46,6 +45,8 @@ export type SemanticConceptMaterializationResult = {
     candidateCount: number;
     candidateWithInteractionSupportCount: number;
     rawLabelCount: number;
+    qualifiedBeforeCap: number;
+    droppedByCap: number;
     qualifiedProposalCount: number;
     materializedNodeCount: number;
     materializedEdgeCount: number;
@@ -169,10 +170,6 @@ export function buildSemanticConceptMaterialization(
   options: SemanticConceptMaterializationOptions = {},
 ): SemanticConceptMaterializationResult {
   const minimumContentSupport = Math.max(2, Math.floor(options.minimumContentSupport ?? 2));
-  const minimumTitlePhraseSupport = Math.max(
-    minimumContentSupport,
-    Math.floor(options.minimumTitlePhraseSupport ?? 3),
-  );
   const maxProposals = Math.max(1, Math.floor(options.maxProposals ?? 64));
   const maxSupportEdgesPerProposal = Math.max(
     1,
@@ -220,13 +217,16 @@ export function buildSemanticConceptMaterialization(
     labelValue: string,
     sourceKind: SourceKind,
     support: SupportEntry,
+    allowCreate = true,
   ) => {
     const label = sanitizeDisplayLabel(labelValue);
     if (!usableLabel(label)) return;
     const normalizedLabel = normalizeLabelKey(label);
     if (!normalizedLabel) return;
     const key = `${kind}:${normalizedLabel}`;
-    const accumulator = accumulators.get(key) ?? {
+    const existing = accumulators.get(key);
+    if (!existing && !allowCreate) return;
+    const accumulator = existing ?? {
       kind,
       normalizedLabel,
       labels: new Map<string, number>(),
@@ -241,6 +241,7 @@ export function buildSemanticConceptMaterialization(
   };
 
   let candidateWithInteractionSupportCount = 0;
+  const supportedContentTypeLabels = new Set<string>();
   const sortedCandidates = [...candidates]
     .filter((candidate) => candidate.external_id?.trim())
     .sort((left, right) => (
@@ -253,8 +254,18 @@ export function buildSemanticConceptMaterialization(
     const support = interactionsByContent.get(contentKey(source, candidate.external_id));
     if (!support) continue;
     candidateWithInteractionSupportCount += 1;
+    if (candidate.content_type?.trim()) {
+      supportedContentTypeLabels.add(normalizeLabelKey(candidate.content_type));
+    }
+  }
+
+  for (const candidate of sortedCandidates) {
+    const source = candidate.source?.trim() || 'youtube';
+    const support = interactionsByContent.get(contentKey(source, candidate.external_id));
+    if (!support) continue;
 
     for (const topic of (candidate.topics ?? []).slice(0, maxCandidateTopics)) {
+      if (supportedContentTypeLabels.has(normalizeLabelKey(topic))) continue;
       addLabel('topic', topic, 'candidate_topic', support);
     }
     if (candidate.content_type?.trim()) {
@@ -275,19 +286,13 @@ export function buildSemanticConceptMaterialization(
     ));
     if (!support) continue;
     for (const phrase of titlePhrases(title)) {
-      addLabel('topic', phrase, 'title_phrase', support);
+      addLabel('topic', phrase, 'title_phrase', support, false);
     }
   }
 
   let skippedExplicitLabelCount = 0;
-  const qualified = [...accumulators.values()]
-    .filter((accumulator) => {
-      const requiredSupport = accumulator.sourceKinds.size === 1
-        && accumulator.sourceKinds.has('title_phrase')
-        ? minimumTitlePhraseSupport
-        : minimumContentSupport;
-      return accumulator.supportByContent.size >= requiredSupport;
-    })
+  const qualifiedBeforeCap = [...accumulators.values()]
+    .filter((accumulator) => accumulator.supportByContent.size >= minimumContentSupport)
     .filter((accumulator) => {
       const blocked = explicitSemanticLabels.has(
         `${accumulator.kind}:${accumulator.normalizedLabel}`,
@@ -325,8 +330,8 @@ export function buildSemanticConceptMaterialization(
       || right.proposal.evidenceCount - left.proposal.evidenceCount
       || left.proposal.label.localeCompare(right.proposal.label)
       || left.proposal.id.localeCompare(right.proposal.id)
-    ))
-    .slice(0, maxProposals);
+    ));
+  const qualified = qualifiedBeforeCap.slice(0, maxProposals);
 
   const nodes: DerivedGraphNodeSpec[] = [];
   const edges: DerivedGraphEdgeSpec[] = [];
@@ -383,6 +388,8 @@ export function buildSemanticConceptMaterialization(
       candidateCount: sortedCandidates.length,
       candidateWithInteractionSupportCount,
       rawLabelCount: accumulators.size,
+      qualifiedBeforeCap: qualifiedBeforeCap.length,
+      droppedByCap: Math.max(0, qualifiedBeforeCap.length - qualified.length),
       qualifiedProposalCount: qualified.length,
       materializedNodeCount: nodes.length,
       materializedEdgeCount: edges.length,
