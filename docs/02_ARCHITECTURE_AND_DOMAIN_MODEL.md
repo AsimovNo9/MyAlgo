@@ -431,7 +431,7 @@ The launch semantic stack now has two distinct local model roles:
 
 Neither model output is canonical preference state. Verified labels still pass through the evidence-backed #218 materializer, while embeddings remain derived enrichment.
 
-The next semantic layer is deterministic canonicalization over the materialized topic/concept graph. Near-duplicate labels and subtopic variants may share one derived canonical neighbourhood while their original graph nodes/evidence remain inspectable. Scoring should consume a bounded neighbourhood-level semantic contribution rather than independently adding every matching alias/subtopic/broad category. Only after that layer is replayable should durable mode clusters be built over canonical concepts.
+PR #223/#221 implements the derived canonicalization layer over the materialized topic/concept graph. Deterministic aliases are reconciled first; the existing local embeddings may then group high-similarity inferred nodes only when lexical compatibility or shared graph support grounds the assignment. Original graph nodes/evidence remain inspectable, explicit/user-authored distinctions are protected from similarity-only merging, and broad `content_type` taxonomy stays distinguishable from specific interests. Scoring consumes one bounded contribution per canonical neighbourhood and reconciles lexical plus embedding evidence instead of independently adding duplicate paths. Durable mode clusters remain downstream #214 work over these canonical concepts.
 
 Multimodal thumbnail/video classification remains deferred until measured ambiguity demonstrates that text metadata is insufficient. Any multimodal model must remain asynchronous, cacheable, rebuildable, and outside overlay first-paint latency.
 
