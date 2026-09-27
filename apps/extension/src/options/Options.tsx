@@ -22,6 +22,7 @@ export function Options() {
     file?: string | null;
     item?: number | null;
     itemCount?: number | null;
+    error?: string | null;
   } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
@@ -119,7 +120,7 @@ export function Options() {
     setSemanticModelStatus(null);
     setConceptModelStatus(null);
     setStatus(enabled
-      ? 'Local neural semantics enabled. The packaged embedding and concept-extraction models will run on upcoming semantic passes.'
+      ? 'Local neural semantics enabled. The packaged embedding model and concept verifier will run on upcoming semantic passes.'
       : 'Using the lightweight deterministic semantic baseline.');
     const response = await chrome.runtime.sendMessage({
       type: 'SET_SEMANTIC_MODEL_MODE',
@@ -194,12 +195,13 @@ export function Options() {
         </label>
         <p>
           When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
-          for semantic similarity and DeBERTa-v3-xsmall NLI for bounded zero-shot concept verification. Candidate text, extracted
+          for semantic similarity and DeBERTa-v3-xsmall NLI for bounded zero-shot concept verification. Candidate text, verified
           concepts, graph state, embeddings, and inference stay local. The installed extension does not download
-          model files at runtime. MyAlgo prefers WebGPU and falls back to local WebAssembly CPU inference when needed.
-          Concept verification remains asynchronous and falls back to the existing metadata materializer if it fails.
+          model files at runtime. Embeddings prefer WebGPU and fall back to local WebAssembly CPU inference when needed.
+          The concept verifier deliberately uses q8 WebAssembly CPU inference, which is independent of the embedding batch slider.
+          Concept verification remains asynchronous and falls back to the existing metadata materializer only when verification fails.
         </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (embeddings + concept extraction)' : 'Deterministic baseline'}</p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + WASM concept verification)' : 'Deterministic baseline'}</p>
         <div style={{ marginTop: 16 }}>
           <label htmlFor="semantic-neural-batch-size">
             WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
@@ -218,7 +220,7 @@ export function Options() {
           <p style={{ marginTop: 6 }}>
             Higher values process more embedding texts per WebGPU inference call and can drain embedding work faster,
             but use more GPU memory. Start at 2–4 on older GPUs and increase only while inference remains stable.
-            This slider does not change concept extraction, which uses its own small serialized queue. WASM keeps its separate CPU batch.
+            This slider does not change concept verification. The DeBERTa verifier runs on its own bounded q8 WASM CPU path.
           </p>
         </div>
 
@@ -239,6 +241,7 @@ export function Options() {
             {typeof conceptModelStatus.item === 'number' && typeof conceptModelStatus.itemCount === 'number'
               ? ` · item ${conceptModelStatus.item}/${conceptModelStatus.itemCount}`
               : ''}
+            {conceptModelStatus.error ? ` · ${conceptModelStatus.error}` : ''}
           </p>
         ) : null}
       </section>
