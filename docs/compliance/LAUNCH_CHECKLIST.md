@@ -28,7 +28,7 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Revalidate clean-profile disclosure v5: prior v4 acceptance is rejected; neural model download occurs only after explicit neural enablement; no candidate/graph/history/feedback payload is sent with the model request; deletion disables observation/retrieval and clears MyAlgo semantic caches
+- [ ] Revalidate clean-profile disclosure v5: prior v4 acceptance is rejected; production artifact contains the pinned neural model/runtime assets; enabling neural mode performs no model-host/CDN request; deletion disables observation/retrieval and clears MyAlgo semantic caches
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
