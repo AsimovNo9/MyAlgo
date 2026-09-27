@@ -156,7 +156,7 @@ const embedNeuralInSandbox = (texts: string[]): Promise<SemanticResult> => {
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', onMessage);
       reject(new Error('Neural semantic sandbox timed out.'));
-    }, 120_000);
+    }, 300_000);
 
     const cleanup = () => {
       window.clearTimeout(timeout);
