@@ -6,7 +6,7 @@ type CacheState = Record<string, EmbeddingRecord>;
 
 export function createChromeEmbeddingCache(
   maxRecords = 600,
-): EmbeddingCache & { size(): Promise<number> } {
+): EmbeddingCache & { size(): Promise<number>; clear(): Promise<void> } {
   const limit = Math.max(32, Math.floor(maxRecords));
   let loaded: Promise<Map<string, EmbeddingRecord>> | null = null;
   let dirty = false;
@@ -55,6 +55,12 @@ export function createChromeEmbeddingCache(
 
     async size() {
       return (await load()).size;
+    },
+
+    async clear() {
+      loaded = Promise.resolve(new Map<string, EmbeddingRecord>());
+      dirty = false;
+      await chrome.storage.local.remove([STORAGE_KEYS.SEMANTIC_EMBEDDING_CACHE]);
     },
   };
 }
