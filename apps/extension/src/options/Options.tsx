@@ -143,8 +143,9 @@ export function Options() {
         </label>
         <p>
           When enabled, MyAlgo automatically downloads the public mixedbread-ai/mxbai-embed-xsmall-v1
-          model weights on the first semantic pass and caches them in this browser. Candidate and graph text
-          stay local; only the public model files are downloaded. WebGPU is required for this first neural
+          model weights on the first semantic pass. Candidate and graph text stay local; only the public model
+          files are downloaded. The sandboxed WebGPU runtime keeps the loaded model in memory while active;
+          a full extension reload can require downloading the model files again. WebGPU is required for this first neural
           implementation. If loading or inference fails, MyAlgo falls back to the deterministic local baseline.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural WebGPU' : 'Deterministic baseline'}</p>
