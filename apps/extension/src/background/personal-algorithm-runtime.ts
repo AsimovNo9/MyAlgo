@@ -106,23 +106,50 @@ const featureTokens = (value: string | null | undefined): string[] =>
     .split(' ')
     .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
 
-const lexicalMatch = (label: string, candidateText: string): number => {
+const containsTokenSequence = (
+  fieldTokens: readonly string[],
+  labelTokens: readonly string[],
+): boolean => {
+  if (labelTokens.length === 0 || fieldTokens.length < labelTokens.length) return false;
+  for (let start = 0; start <= fieldTokens.length - labelTokens.length; start += 1) {
+    let matches = true;
+    for (let offset = 0; offset < labelTokens.length; offset += 1) {
+      if (fieldTokens[start + offset] !== labelTokens[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+};
+
+const candidateLexicalFields = (candidate: LocalRuntimeCandidate): string[] => [
+  candidate.title,
+  candidate.channel_name ?? '',
+  ...(candidate.topics ?? []),
+].map(normalizeFeatureText).filter(Boolean);
+
+const lexicalMatch = (label: string, candidateFields: readonly string[]): number => {
   const normalizedLabel = normalizeFeatureText(label);
-  if (!normalizedLabel || !candidateText) return 0;
-  if (candidateText.includes(normalizedLabel)) return 1;
+  if (!normalizedLabel || candidateFields.length === 0) return 0;
   const labelTokens = featureTokens(normalizedLabel);
   if (labelTokens.length === 0) return 0;
-  const candidateTokens = new Set(featureTokens(candidateText));
-  const overlap = labelTokens.filter((token) => candidateTokens.has(token)).length;
-  if (labelTokens.length === 1) return overlap === 1 ? 1 : 0;
 
-  // Multi-token semantic labels need at least two grounded tokens. The previous
-  // 50% rule let generic single tokens create false positives for two-token
-  // concepts (for example "couple" -> "Homeless Couple" and
-  // "daily" -> "GRM Daily").
-  if (overlap < 2) return 0;
-  const ratio = overlap / labelTokens.length;
-  return ratio >= 0.5 ? ratio : 0;
+  for (const field of candidateFields) {
+    if (field.includes(normalizedLabel)) return 1;
+    const fieldTokens = featureTokens(field);
+    if (labelTokens.length === 1) {
+      if (fieldTokens.includes(labelTokens[0]!)) return 1;
+      continue;
+    }
+
+    // Multi-token concepts must be grounded as one contiguous semantic phrase
+    // inside one trusted field. Do not construct a match by combining words
+    // scattered across title/description/channel/tags.
+    if (containsTokenSequence(fieldTokens, labelTokens)) return 1;
+  }
+  return 0;
 };
 
 type LocalScoringIndex = {
@@ -351,12 +378,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
   canonicalByNodeId: ReadonlyMap<string, CanonicalSemanticConcept>,
   evidenceIdsByNodeId: ReadonlyMap<string, readonly string[]>,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
-  const text = normalizeFeatureText([
-    candidate.title,
-    candidate.description ?? '',
-    candidate.channel_name ?? '',
-    ...(candidate.topics ?? []),
-  ].join(' '));
+  const lexicalFields = candidateLexicalFields(candidate);
   const nodeIds: string[] = [];
   const features: ScoreFeatureSignal[] = [];
 
@@ -428,7 +450,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
 
   for (const node of featureNodes) {
     if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
-    const similarity = lexicalMatch(node.label, text);
+    const similarity = lexicalMatch(node.label, lexicalFields);
     if (similarity <= 0) continue;
     const confidence = Math.min(
       1,
@@ -502,9 +524,9 @@ const extractLocalCandidateFeaturesWithCanonical = (
       const sourceNodeIdsForSupport = match.source_node_ids?.length
         ? match.source_node_ids
         : [match.node_id];
-      const hasLexicalSupport = lexicalMatch(match.node_label, text) > 0
+      const hasLexicalSupport = lexicalMatch(match.node_label, lexicalFields) > 0
         || sourceNodeIdsForSupport.some((nodeId) => (
-          lexicalMatch(featureNodeById.get(nodeId)?.label ?? '', text) > 0
+          lexicalMatch(featureNodeById.get(nodeId)?.label ?? '', lexicalFields) > 0
         ));
       if (!hasLexicalSupport && (
         !embeddingProfileQualified
@@ -857,7 +879,7 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p5',
+    revision: 'local-mvp-p6',
     baseScore: 0,
     nodeWeights,
     edgeRelationWeights: {
