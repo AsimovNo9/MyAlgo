@@ -581,9 +581,30 @@ export class LocalPersonalAlgorithmStore {
 
       const evidenceIds = new Set(state.evidence.map((record) => record.id));
       const proposedNodeIds = new Set(input.nodes.map((node) => node.id));
+      const proposedEdgeIds = new Set(input.edges.map((edge) => edge.id));
+      if (proposedNodeIds.size !== input.nodes.length) {
+        throw new Error('Derived graph projection contains duplicate node IDs');
+      }
+      if (proposedEdgeIds.size !== input.edges.length) {
+        throw new Error('Derived graph projection contains duplicate edge IDs');
+      }
+
       const existingNonOwnedNodes = state.graph.nodes.filter((node) => !ownedNode(node));
+      const existingNonOwnedEdges = state.graph.edges.filter((edge) => !ownedEdge(edge));
+      const nonOwnedNodeIds = new Set(existingNonOwnedNodes.map((node) => node.id));
+      const nonOwnedEdgeIds = new Set(existingNonOwnedEdges.map((edge) => edge.id));
+
+      for (const node of input.nodes) {
+        if (node.provenance !== 'inferred' || node.attributes?.derivedBy !== marker) {
+          throw new Error(`Derived graph node ${node.id} must be owned by ${marker}`);
+        }
+        if (nonOwnedNodeIds.has(node.id)) {
+          throw new Error(`Derived graph node ${node.id} conflicts with non-derived graph state`);
+        }
+      }
+
       const availableNodeIds = new Set([
-        ...existingNonOwnedNodes.map((node) => node.id),
+        ...nonOwnedNodeIds,
         ...proposedNodeIds,
       ]);
 
@@ -592,10 +613,14 @@ export class LocalPersonalAlgorithmStore {
         const missingEvidence = normalizedEvidenceIds.filter((id) => !evidenceIds.has(id));
         if (
           edge.provenance !== 'inferred'
+          || edge.attributes?.derivedBy !== marker
           || normalizedEvidenceIds.length === 0
           || missingEvidence.length > 0
         ) {
-          throw new Error(`Derived graph edge ${edge.id} must reference retained evidence`);
+          throw new Error(`Derived graph edge ${edge.id} must be owned by ${marker} and reference retained evidence`);
+        }
+        if (nonOwnedEdgeIds.has(edge.id)) {
+          throw new Error(`Derived graph edge ${edge.id} conflicts with non-derived graph state`);
         }
         if (!availableNodeIds.has(edge.sourceNodeId) || !availableNodeIds.has(edge.targetNodeId)) {
           throw new Error(`Derived graph edge ${edge.id} references a missing graph node`);
@@ -712,7 +737,7 @@ export class LocalPersonalAlgorithmStore {
 
       state.graph.nodes = [...existingNonOwnedNodes, ...nextOwnedNodes];
       state.graph.edges = [
-        ...state.graph.edges.filter((edge) => !ownedEdge(edge)),
+        ...existingNonOwnedEdges,
         ...nextOwnedEdges,
       ];
 
