@@ -238,7 +238,7 @@ Live #218 validation showed the remaining distinction clearly: materialization m
 ```text
 retained interaction evidence + enriched candidate metadata
     ↓
-local FLAN-T5 concept proposals (#219)
+local SmolLM2 concept proposals (#219)
     ↓
 evidence-backed derived graph projection (#218)
     ↓
