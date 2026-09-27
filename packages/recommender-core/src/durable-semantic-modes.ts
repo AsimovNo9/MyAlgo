@@ -360,7 +360,7 @@ export function reconcileDurableSemanticModes(
       pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
       graphRevision,
       createdAt: prior?.createdAt ?? generatedAt,
-      lastSupportedAt: generatedAt,
+      lastSupportedAt: prior && !semanticChanged ? prior.lastSupportedAt : generatedAt,
       active: true,
       pinned: prior?.pinned ?? false,
     };
