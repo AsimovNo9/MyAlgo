@@ -488,6 +488,23 @@ The first live concept-model run used FLAN-T5 Small q8. It successfully loaded a
 
 The same run also exposed a drain-path bug: cache-only semantic passes reported generation disabled and discarded cached concept inputs, allowing metadata-only materialization to overwrite the model-backed projection. Regression behavior now requires `cache_only` passes to reuse valid cached concepts while starting no new generations.
 
+### Direct model-path validation
+
+To isolate concept generation from page-ranking/drain timing, PR #220 exposes a privacy-gated one-shot diagnostic request:
+
+```js
+const result = await chrome.runtime.sendMessage({
+  type: 'REFRESH_CONCEPT_EXTRACTION'
+});
+console.log(result);
+```
+
+This runs one bounded concept-generation batch against the persisted candidate reservoir and immediately returns materialization, last-generation diagnostics, and concept-model status. It is intended for validation/debugging, not routine UI use.
+
+`CONCEPT_EXTRACTION_DIAGNOSTICS` records the last actual generation attempt. Cache-only embedding-drain passes no longer overwrite it. Cache-only usage is still visible through materializer diagnostics as `modelExtractionStatus: "cache_only"`.
+
+A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
+
 ### Live validation
 
 Enable local neural semantics and trigger normal semantic enrichment. Then inspect:
