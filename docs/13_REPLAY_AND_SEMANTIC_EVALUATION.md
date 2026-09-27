@@ -101,6 +101,8 @@ The evaluator now runs the fixed `packages/recommender-core/test/fixtures/canoni
 
 Canonical assignment compares expected source-node/alias → canonical-ID pairs with predicted assignments and reports exact accuracy plus mismatches. The same fixture reports source-node matches vs canonical-neighbourhood matches, lexical/embedding overlap, semantic contribution mass before/after reconciliation, average raw scores, and the fraction of supplied display scores saturating at 97–100. The fixture is synthetic/test-safe and is a regression gate, not a production-distribution claim.
 
+Browser validation adds a second, deliberately different regression layer: canonical identity may remain split while the scorer still has to reconcile nested concepts into one candidate-specific score region. Runtime tests therefore cover the live-style `chill lofi` / `chill lofi beats` / `lofi beats` case, weak relative embedding-neighbour rejection, and a single collective taxonomy fallback. This avoids weakening canonical identity merely to fix additive score overcount.
+
 ## Mode supply metrics
 
 Mode-supply evaluation consumes:
