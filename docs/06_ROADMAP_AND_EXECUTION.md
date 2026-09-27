@@ -224,25 +224,25 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #215 is merged. The immediate risk is no longer whether local semantic inference runs; it is whether semantic/category/mode changes can be measured reproducibly.
+PR #216 is merged and #162 now provides the deterministic replay/evaluation contract.
 
-1. **P0 — #162 / PR #216 replay and evaluation.** Add an order-independent exported-state replay projection, graph consistency reviewer, fixed labelled semantic fixture, multi-label/badge metrics, mode-supply metrics, replacement-stability metrics, and inference-throughput summaries. Keep real personal exports local unless intentionally anonymized.
-2. **P0 — #214 durable mode architecture.** Use #162 metrics to evaluate graph-node canonicalization, semantic neighbourhood clustering, durable mode IDs, multi-label candidate affinity, graph-grounded mode scoring, mode-aware retrieval, and slider-relative native-supply shortfall handling.
+1. **P0 — #217 semantic concept materialization.** Derive bounded topic/concept proposals from retained interaction evidence plus existing enriched candidate metadata, materialize evidence-backed rebuildable graph nodes/edges, and make semantic reranking see non-zero graph vocabulary.
+2. **P0 — #214 canonicalization + durable modes.** Once semantic nodes exist, measure and reduce duplicate/fragmented concepts, cluster canonical concepts into stable mode IDs, preserve multi-label affinity, ground mode scoring in exact graph members, and implement mode-aware supply handling against #162 metrics.
 3. **P1 — #153 + #170 trust UX.** Resolve every mode/category contribution to exact graph members, evidence/provenance, and trace values.
 4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
 5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
 6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-PR #216's committed fixture is a test-safe bootstrap, not a claim of representative production quality. Its purpose is to make future semantic changes comparable and CI-gated. Real labelled local evaluation can use the same fixture schema without committing personal feed/history data.
+Live validation established the missing dependency: the real graph contained 2,124 content nodes and 1,091 creator nodes but zero topic/concept/objective nodes. #217 therefore precedes canonicalization and clustering.
 
-The semantic architecture remains:
+The semantic sequence is now:
 
 ```text
-canonical evidence
+retained interaction evidence + enriched local candidate metadata
     ↓
-Personal Algorithm Graph
+evidence-backed derived topic/concept nodes (#217)
     ↓
-canonicalized topic/concept nodes
+canonicalization / aliases (#214)
     ↓
 semantic neighbourhoods / durable modes
     ↓
@@ -250,12 +250,10 @@ multi-label candidate affinities
     ↓
 graph-grounded scorer contributions
     ↓
-mode-aware retrieval + existing reservoir
-    ↓
-stable feed presentation + exact Why-this trace
+mode-aware retrieval + stable presentation
 ```
 
-Do not fine-tune the encoder until #162 separates model error from graph fragmentation, clustering, metadata and threshold effects.
+Passive Home exposure or search/RSS acquisition alone must not create positive preference concepts. Derived semantic structure is rebuildable and distinct from explicit user edits.
 
 
 ## Phase 1 scope discipline
