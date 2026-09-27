@@ -6,7 +6,7 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/#219 local topic verification are merged.
 
-1. **P0 — #214 canonical concepts + bounded semantic scoring.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods and ensure aliases/subtopics/broad categories cannot stack as independent positive score terms.
+1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods and ensure aliases/subtopics/broad categories cannot stack as independent positive score terms.
 2. **P0 — #214 durable inferred modes.** Build stable local mode IDs/revisions over canonical concept neighbourhoods, retain multi-label candidate affinity, and persist modes independently of feed-cache churn.
 3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
 4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
