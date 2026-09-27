@@ -286,7 +286,7 @@ Required checks:
 4. changing the active mode does not change the candidate's category score map when candidate/graph inputs are unchanged;
 5. the popup/Settings mode list contains All/Default plus categories actually inferred in local feed state; it must not synthesize Work/Learning/Relax/Gaming/French merely because those labels existed in PR #213;
 6. selecting a dynamic category mode still produces exact traceable mode/category-affinity contributions and bounded retrieval intent;
-7. migration preserves a stored legacy/custom mode long enough for the user to change it, without making that value part of the new inferred taxonomy.
+7. migration converts the known PR #213 fixed bootstrap modes to All/Default while preserving an arbitrary custom mode value; neither path may recreate the old fixed taxonomy.
 
 Record labelled examples of obvious correct, obvious incorrect, and ambiguous cases. Do not fine-tune the embedding encoder until the replay set is large enough to show a systematic residual error after taxonomy choice, metadata enrichment, thresholds/margins, and candidate model choice have been tested.
 
