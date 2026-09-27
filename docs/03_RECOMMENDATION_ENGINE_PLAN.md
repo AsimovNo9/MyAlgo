@@ -418,8 +418,9 @@ Concept extraction constraints:
 - each item yields at most four short parsed concepts;
 - malformed/generic/prompt-echo outputs are rejected;
 - output is cached by model identity + prompt/input hash;
+- diagnostics preserve the last actual generation attempt; cache-only drain passes cannot overwrite generation failure/success state;
 - only a small bounded extraction slice runs per top-level semantic refresh;
-- the embedding drain cannot trigger more generation;
+- the embedding drain cannot trigger more generation, but must continue using valid cached model concepts;
 - when a valid model concept list exists, it replaces raw keyword topics for that candidate;
 - an empty/failed/missing model result leaves the existing metadata materializer available;
 - model output remains derived/rebuildable and does not directly create explicit preference state.
