@@ -6,12 +6,13 @@
 |---|---|---|---|
 | Rendered history | Browser | Graph evidence | Local |
 | Rendered feed candidates | Browser | Candidate/evidence | Local |
-| RSS-acquired candidate metadata | YouTube public RSS, opt-in | Candidate acquisition only; **not preference evidence** | Local bounded candidate reservoir/provenance |
+| RSS/search-acquired candidate metadata | YouTube public RSS/search pages, opt-in | Candidate acquisition only; **not preference evidence** | Local bounded candidate reservoir/provenance |
 | User interactions | Browser/user | Graph evidence | Local |
 | User-created graph | User | Personal model | Local |
 | YouTube API account facts | API | **Not currently integrated**; future display/account-fact use only after review | No launch store |
 | Raw API responses | YouTube API | **Not currently integrated**; never a graph/scoring input by default | No launch store; future use must define policy-compliant refresh/deletion |
-| Foundation-model output | Model | Content evidence | Only if enrichment is introduced |
+| Local semantic embeddings/similarities | Local model/provider | Rebuildable candidate/graph/mode features; **not canonical preference state** | Bounded local derived caches; delete/recompute safely |
+| Foundation-model output | Model | Content evidence | Only if later enrichment is introduced |
 | Graph | Derived | Ranking/explanation | User-controlled |
 
 ## Separation requirement
@@ -63,11 +64,11 @@ the reset/delete controls must remove retained evidence before launch.
 
 The local-only MVP uses a versioned in-product privacy disclosure. Observation and ranking remain disabled until the current version is affirmatively accepted. A material data-flow change requires a disclosure-version increment and renewed acceptance before changed collection begins.
 
-A full local-data deletion clears disclosure acceptance as well as retained extension state, so observation cannot silently restart after reset.
+A full local-data deletion clears disclosure acceptance, persisted semantic caches, and their service-worker in-memory cache state as well as retained extension state, so observation or derived semantic processing cannot silently restart from deleted state after reset.
 
-### RSS candidate retention
+### Candidate acquisition retention
 
-RSS discovery is disabled by default. When enabled, MyAlgo sends bounded channel-feed requests to YouTube-owned HTTPS endpoints using channel IDs already observed from YouTube metadata. RSS results enter the existing bounded local candidate reservoir; acquisition history is retained separately from browser-observation evidence and does not itself alter the Personal Algorithm Graph.
+RSS and YouTube search-page discovery are disabled by default. When enabled, MyAlgo sends bounded requests only to YouTube-owned HTTPS endpoints using normalized channel IDs or graph-derived goal/topic + mode query terms. Results enter the existing bounded local candidate reservoir; acquisition history is retained separately from browser-observation evidence and does not itself alter the Personal Algorithm Graph.
 
 ## Cloud processing
 
