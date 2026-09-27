@@ -404,7 +404,13 @@ derived graph nodes
 mxbai embedding/canonicalization layer
 ```
 
-The initial proposer is pinned `Xenova/flan-t5-small` q8, executed through the same sandboxed Transformers.js/ONNX surface as the embedding model. Requests are serialized with embedding work so two neural models do not compete for the GPU simultaneously.
+The active proposer is pinned `onnx-community/SmolLM2-135M-Instruct-ONNX-MHA` q8 (base model `HuggingFaceTB/SmolLM2-135M-Instruct`), executed through the same sandboxed Transformers.js/ONNX surface as the embedding model. Requests are serialized with embedding work so two neural models do not compete for the GPU simultaneously.
+
+### Live FLAN-T5 rejection
+
+The first live #220 implementation used FLAN-T5 Small q8. It loaded successfully on the local WASM backend, but the real 64-item cache showed roughly half empty outputs plus generic/prompt-like labels such as `YouTube video - wikipedia`, `video video`, `seconds`, and instruction echoes. That is not sufficient concept quality for graph taxonomy.
+
+The PR therefore replaces FLAN-T5 Small rather than growing an open-ended stopword/parser patch set. SmolLM2-135M-Instruct is still browser-small, is explicitly instruction-tuned, and supports Transformers.js text generation. The cached output contract is revisioned so the model/parser replacement invalidates the FLAN cache automatically.
 
 Concept extraction constraints:
 - only retained interaction-supported candidates are eligible;
