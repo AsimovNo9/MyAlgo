@@ -264,7 +264,7 @@ Required invariants:
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
 12. upgrading from disclosure v4 requires affirmative acceptance of disclosure v5 before observation/ranking resumes;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
-14. neural mode automatically downloads/caches the public mxbai model, reports loading/readiness status, and never sends candidate text, graph state, history, feedback, embeddings, or traces to the model host;
+14. neural mode automatically downloads the public mxbai model, reports loading/readiness status, reuses the loaded model while the sandbox remains active, tolerates re-download after a full extension reload, and never sends candidate text, graph state, history, feedback, embeddings, or traces to the model host;
 15. WebGPU/model failure degrades to the deterministic hash baseline without blocking first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 WebGPU provider using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
