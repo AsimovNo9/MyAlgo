@@ -1,0 +1,1386 @@
+{
+  "fixtureVersion": 1,
+  "name": "semantic-mode-bootstrap-v1",
+  "description": "Test-safe synthetic bootstrap fixture for #162. It contains no user history or private data; augment with anonymized real exported labels during live evaluation.",
+  "state": {
+    "schemaVersion": 2,
+    "evidence": [],
+    "graph": {
+      "nodes": [
+        {
+          "id": "objective:balanced-feed",
+          "kind": "objective",
+          "label": "Build a balanced recommendation feed",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Balance learning, practical interests and leisure without hidden preference state."
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:local-ai",
+          "kind": "topic",
+          "label": "Local AI tooling",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Local LLM tools, AI agents, on-device models, inference runtimes and developer workflows",
+            "aliases": [
+              "local LLM",
+              "AI agents",
+              "on-device AI",
+              "AI tooling"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:distributed-systems",
+          "kind": "topic",
+          "label": "Distributed systems",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Distributed systems, CRDTs, replication, consensus, local-first and offline-first architecture",
+            "aliases": [
+              "CRDTs",
+              "local-first software",
+              "replication",
+              "consensus"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:personal-finance",
+          "kind": "topic",
+          "label": "Personal finance",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Personal finance, budgeting, saving, investing, pensions and long-term money management",
+            "aliases": [
+              "budgeting",
+              "investing",
+              "money management",
+              "saving"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:gaming-strategy",
+          "kind": "topic",
+          "label": "Gaming strategy",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Gaming strategy, builds, tactics, walkthroughs, boss guides and competitive gameplay",
+            "aliases": [
+              "game builds",
+              "boss guide",
+              "walkthrough",
+              "game tactics"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:ambient-music",
+          "kind": "topic",
+          "label": "Ambient music",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Ambient music, lo-fi, chill soundscapes, instrumental focus music and relaxing audio",
+            "aliases": [
+              "lo-fi",
+              "chill music",
+              "soundscapes",
+              "focus music"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:cooking-techniques",
+          "kind": "topic",
+          "label": "Cooking techniques",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Cooking techniques, knife skills, sauces, baking methods, temperature control and kitchen fundamentals",
+            "aliases": [
+              "knife skills",
+              "baking methods",
+              "sauce technique",
+              "kitchen fundamentals"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:french-language",
+          "kind": "topic",
+          "label": "French language",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "French language learning, français conversation, grammar, vocabulary and pronunciation",
+            "aliases": [
+              "français",
+              "French grammar",
+              "French vocabulary",
+              "French pronunciation"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "topic:fitness-training",
+          "kind": "topic",
+          "label": "Fitness training",
+          "provenance": "explicit",
+          "confidence": 1,
+          "attributes": {
+            "description": "Fitness training, strength workouts, mobility, running, recovery and exercise programming",
+            "aliases": [
+              "strength training",
+              "workout",
+              "mobility",
+              "exercise programming"
+            ]
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "edges": [],
+      "userEdits": [],
+      "revisions": [
+        {
+          "id": "revision-fixture-1",
+          "revision": 1,
+          "reason": "fixture",
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "currentRevision": 1
+    }
+  },
+  "examples": [
+    {
+      "id": "semantic-001",
+      "candidate": {
+        "external_id": "fixture-video-2",
+        "title": "Local AI tooling for running an LLM on your laptop",
+        "description": "Build local LLM tools with quantized models and private inference.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-002",
+      "candidate": {
+        "external_id": "fixture-video-3",
+        "title": "Local AI tooling: practical AI agents without a cloud backend",
+        "description": "Agent workflows, tools and local inference for developers.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-003",
+      "candidate": {
+        "external_id": "fixture-video-4",
+        "title": "My Local AI tooling stack for private assistants",
+        "description": "On-device AI models, local LLM runtimes and agent tools.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-004",
+      "candidate": {
+        "external_id": "fixture-video-5",
+        "title": "Local AI tooling benchmark: browser inference and quantization",
+        "description": "Compare local model runtimes, WebGPU inference and quantized LLMs.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-005",
+      "candidate": {
+        "external_id": "fixture-video-6",
+        "title": "Local AI tooling for coding workflows",
+        "description": "Developer tools using local LLM assistants and offline AI agents.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-006",
+      "candidate": {
+        "external_id": "fixture-video-7",
+        "title": "Local AI tooling setup from scratch",
+        "description": "Install an on-device model runtime and build a private AI assistant.",
+        "channel_name": "Local AI tooling Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Local AI tooling"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-007",
+      "candidate": {
+        "external_id": "fixture-video-8",
+        "title": "Distributed systems explained with CRDTs",
+        "description": "Learn replication, CRDT conflict resolution and local-first architecture.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-008",
+      "candidate": {
+        "external_id": "fixture-video-9",
+        "title": "Distributed systems: consensus and replication",
+        "description": "Raft, replicas, consistency and failure handling.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-009",
+      "candidate": {
+        "external_id": "fixture-video-10",
+        "title": "Distributed systems for local-first apps",
+        "description": "Offline-first sync, CRDTs and resilient replication.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-010",
+      "candidate": {
+        "external_id": "fixture-video-11",
+        "title": "Distributed systems debugging in production",
+        "description": "Trace partitions, replication lag and consistency failures.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-011",
+      "candidate": {
+        "external_id": "fixture-video-12",
+        "title": "Distributed systems design interview",
+        "description": "Consensus, sharding, replication and fault tolerance.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-012",
+      "candidate": {
+        "external_id": "fixture-video-13",
+        "title": "Distributed systems from first principles",
+        "description": "Networks, clocks, consistency, consensus and replicated state.",
+        "channel_name": "Distributed systems Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-013",
+      "candidate": {
+        "external_id": "fixture-video-14",
+        "title": "Personal finance basics: build a monthly budget",
+        "description": "Budgeting, saving and emergency funds for long-term money management.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-014",
+      "candidate": {
+        "external_id": "fixture-video-15",
+        "title": "Personal finance investing for beginners",
+        "description": "Index funds, diversification and long-term investing.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-015",
+      "candidate": {
+        "external_id": "fixture-video-16",
+        "title": "Personal finance: how much should you save?",
+        "description": "Savings rates, emergency funds and financial goals.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-016",
+      "candidate": {
+        "external_id": "fixture-video-17",
+        "title": "Personal finance mistakes that cost money",
+        "description": "Debt, fees, spending habits and budgeting.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-017",
+      "candidate": {
+        "external_id": "fixture-video-18",
+        "title": "Personal finance planning for irregular income",
+        "description": "Cash flow, budgeting and savings buffers.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-018",
+      "candidate": {
+        "external_id": "fixture-video-19",
+        "title": "Personal finance: pensions and retirement accounts",
+        "description": "Long-term investing, pension contributions and retirement planning.",
+        "channel_name": "Personal finance Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-019",
+      "candidate": {
+        "external_id": "fixture-video-20",
+        "title": "Gaming strategy: Elden Ring build guide",
+        "description": "A practical Elden Ring build, boss tactics and weapon choices.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-020",
+      "candidate": {
+        "external_id": "fixture-video-21",
+        "title": "Gaming strategy for ranked matches",
+        "description": "Positioning, tactics and decision making for competitive games.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-021",
+      "candidate": {
+        "external_id": "fixture-video-22",
+        "title": "Gaming strategy: boss guide and walkthrough",
+        "description": "Learn attack patterns, build choices and route planning.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-022",
+      "candidate": {
+        "external_id": "fixture-video-23",
+        "title": "Gaming strategy mistakes new players make",
+        "description": "Improve game tactics, resource use and positioning.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-023",
+      "candidate": {
+        "external_id": "fixture-video-24",
+        "title": "Gaming strategy: strongest early-game builds",
+        "description": "Build optimization, weapons and progression routes.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-024",
+      "candidate": {
+        "external_id": "fixture-video-25",
+        "title": "Gaming strategy breakdown of a tournament match",
+        "description": "Competitive gameplay, tactics and team decisions.",
+        "channel_name": "Gaming strategy Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Gaming strategy"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-025",
+      "candidate": {
+        "external_id": "fixture-video-26",
+        "title": "Ambient music for a quiet evening",
+        "description": "Slow soundscapes, soft synths and relaxing instrumental music.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-026",
+      "candidate": {
+        "external_id": "fixture-video-27",
+        "title": "Ambient music and lo-fi focus mix",
+        "description": "Chill instrumental music for reading and concentration.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-027",
+      "candidate": {
+        "external_id": "fixture-video-28",
+        "title": "Ambient music: rainy night soundscape",
+        "description": "Relaxing textures, rain ambience and soft pads.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-028",
+      "candidate": {
+        "external_id": "fixture-video-29",
+        "title": "Ambient music for deep focus",
+        "description": "Minimal instrumental soundscapes without vocals.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-029",
+      "candidate": {
+        "external_id": "fixture-video-30",
+        "title": "Ambient music composition walkthrough",
+        "description": "Create drones, pads and evolving chill textures.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-030",
+      "candidate": {
+        "external_id": "fixture-video-31",
+        "title": "Ambient music mix for sleep and relaxation",
+        "description": "Long-form calm soundscapes and soft instrumental audio.",
+        "channel_name": "Ambient music Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-031",
+      "candidate": {
+        "external_id": "fixture-video-32",
+        "title": "Cooking techniques: five essential knife skills",
+        "description": "Knife control, chopping and kitchen fundamentals.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-032",
+      "candidate": {
+        "external_id": "fixture-video-33",
+        "title": "Cooking techniques for better pan sauces",
+        "description": "Heat control, deglazing and sauce reduction.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-033",
+      "candidate": {
+        "external_id": "fixture-video-34",
+        "title": "Cooking techniques: bread baking fundamentals",
+        "description": "Fermentation, dough handling and oven temperature.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-034",
+      "candidate": {
+        "external_id": "fixture-video-35",
+        "title": "Cooking techniques every home cook should know",
+        "description": "Searing, roasting, seasoning and temperature control.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-035",
+      "candidate": {
+        "external_id": "fixture-video-36",
+        "title": "Cooking techniques for crispy vegetables",
+        "description": "Moisture, heat and browning in the kitchen.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-036",
+      "candidate": {
+        "external_id": "fixture-video-37",
+        "title": "Cooking techniques: emulsions and sauces",
+        "description": "Build stable emulsions, dressings and classic sauces.",
+        "channel_name": "Cooking techniques Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-037",
+      "candidate": {
+        "external_id": "fixture-video-38",
+        "title": "French language conversation for beginners",
+        "description": "Practice français greetings, listening and everyday vocabulary.",
+        "channel_name": "French language Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-038",
+      "candidate": {
+        "external_id": "fixture-video-39",
+        "title": "French language grammar: past tense",
+        "description": "French grammar with examples and pronunciation.",
+        "channel_name": "French language Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-039",
+      "candidate": {
+        "external_id": "fixture-video-40",
+        "title": "French language vocabulary for travel",
+        "description": "Useful French words, phrases and conversation practice.",
+        "channel_name": "French language Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-040",
+      "candidate": {
+        "external_id": "fixture-video-41",
+        "title": "French language pronunciation clinic",
+        "description": "Improve vowels, liaison and spoken français.",
+        "channel_name": "French language Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-041",
+      "candidate": {
+        "external_id": "fixture-video-42",
+        "title": "French language listening practice",
+        "description": "Natural conversation with subtitles and vocabulary notes.",
+        "channel_name": "French language Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-042",
+      "candidate": {
+        "external_id": "fixture-video-43",
+        "title": "French language mistakes English speakers make",
+        "description": "Grammar, pronunciation and common vocabulary errors.",
+        "channel_name": "French language Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-043",
+      "candidate": {
+        "external_id": "fixture-video-44",
+        "title": "Fitness training: a simple strength workout",
+        "description": "Squats, presses, progressive overload and recovery.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-044",
+      "candidate": {
+        "external_id": "fixture-video-45",
+        "title": "Fitness training for better mobility",
+        "description": "Mobility drills, range of motion and joint control.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-045",
+      "candidate": {
+        "external_id": "fixture-video-46",
+        "title": "Fitness training: running without overtraining",
+        "description": "Weekly programming, recovery and aerobic progression.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-046",
+      "candidate": {
+        "external_id": "fixture-video-47",
+        "title": "Fitness training fundamentals for beginners",
+        "description": "Exercise selection, progressive overload and consistency.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-047",
+      "candidate": {
+        "external_id": "fixture-video-48",
+        "title": "Fitness training: full body workout plan",
+        "description": "Strength exercises, sets, reps and recovery.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "discovery",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-048",
+      "candidate": {
+        "external_id": "fixture-video-49",
+        "title": "Fitness training after a long break",
+        "description": "Return to exercise with mobility, strength and gradual progression.",
+        "channel_name": "Fitness training Channel",
+        "source_kind": "subscription",
+        "topics": [
+          "Fitness training"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-049",
+      "candidate": {
+        "external_id": "fixture-video-50",
+        "title": "Local AI tooling for distributed systems",
+        "description": "Run local LLM agents inside an offline-first replicated application using CRDTs.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Local AI tooling",
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling",
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-050",
+      "candidate": {
+        "external_id": "fixture-video-51",
+        "title": "Local AI tooling for personal finance workflows",
+        "description": "Use a private local LLM to categorize budgets and analyze personal finance notes.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Local AI tooling",
+          "Personal finance"
+        ]
+      },
+      "expectedLabels": [
+        "Local AI tooling",
+        "Personal finance"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-051",
+      "candidate": {
+        "external_id": "fixture-video-52",
+        "title": "Gaming strategy in French language commentary",
+        "description": "A boss guide and build walkthrough explained in French with gaming tactics.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Gaming strategy",
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "Gaming strategy",
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-052",
+      "candidate": {
+        "external_id": "fixture-video-53",
+        "title": "French language listening with ambient music",
+        "description": "Relaxed French conversation and vocabulary over soft ambient soundscapes.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Ambient music",
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "Ambient music",
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-053",
+      "candidate": {
+        "external_id": "fixture-video-54",
+        "title": "French language cooking techniques lesson",
+        "description": "Learn French kitchen vocabulary while practicing sauces and knife skills.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Cooking techniques",
+          "French language"
+        ]
+      },
+      "expectedLabels": [
+        "Cooking techniques",
+        "French language"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-054",
+      "candidate": {
+        "external_id": "fixture-video-55",
+        "title": "Fitness training with an ambient music mobility flow",
+        "description": "A slow mobility workout with calm ambient music and recovery breathing.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Fitness training",
+          "Ambient music"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training",
+        "Ambient music"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-055",
+      "candidate": {
+        "external_id": "fixture-video-56",
+        "title": "Distributed systems economics and personal finance analogy",
+        "description": "Explain replication and consensus using budgeting and money ledger examples.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Personal finance",
+          "Distributed systems"
+        ]
+      },
+      "expectedLabels": [
+        "Personal finance",
+        "Distributed systems"
+      ],
+      "ambiguous": false,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-056",
+      "candidate": {
+        "external_id": "fixture-video-57",
+        "title": "Fitness training meal prep and cooking techniques",
+        "description": "Strength workout nutrition plus practical cooking techniques for meal prep.",
+        "channel_name": "Cross-topic Lab",
+        "source_kind": "discovery",
+        "topics": [
+          "Fitness training",
+          "Cooking techniques"
+        ]
+      },
+      "expectedLabels": [
+        "Fitness training",
+        "Cooking techniques"
+      ],
+      "ambiguous": false,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-057",
+      "candidate": {
+        "external_id": "fixture-video-58",
+        "title": "A day walking through a coastal town",
+        "description": "Travel diary with cafés, streets and conversations.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-058",
+      "candidate": {
+        "external_id": "fixture-video-59",
+        "title": "Restoring an old wooden desk",
+        "description": "A quiet workshop restoration with sanding and finishing.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-059",
+      "candidate": {
+        "external_id": "fixture-video-60",
+        "title": "The surprising history of paper",
+        "description": "A documentary about manufacturing, trade and cultural history.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-060",
+      "candidate": {
+        "external_id": "fixture-video-61",
+        "title": "Why cats sit in cardboard boxes",
+        "description": "A light animal behavior explainer and funny pet clips.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-061",
+      "candidate": {
+        "external_id": "fixture-video-62",
+        "title": "Tour of a tiny apartment",
+        "description": "Interior design tour, storage ideas and daily life.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-062",
+      "candidate": {
+        "external_id": "fixture-video-63",
+        "title": "Behind the scenes of a theatre production",
+        "description": "Actors, costumes, lighting and stage management.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "native",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-063",
+      "candidate": {
+        "external_id": "fixture-video-64",
+        "title": "How cameras capture slow motion",
+        "description": "Photography hardware and frame-rate basics.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "acquired",
+      "expectedEligible": true
+    },
+    {
+      "id": "semantic-064",
+      "candidate": {
+        "external_id": "fixture-video-65",
+        "title": "A conversation about modern architecture",
+        "description": "Buildings, cities, materials and design criticism.",
+        "channel_name": "General Interest",
+        "source_kind": "discovery",
+        "topics": []
+      },
+      "expectedLabels": [],
+      "ambiguous": true,
+      "sourceClass": "native",
+      "expectedEligible": true
+    }
+  ],
+  "thresholds": {
+    "multiLabelMinimumScore": 0.22,
+    "maxPredictedLabels": 4
+  }
+}

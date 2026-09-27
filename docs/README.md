@@ -65,6 +65,7 @@ The first product validates five things:
 - [Data Governance & Provider Policy](07_DATA_GOVERNANCE_AND_PROVIDER_POLICY.md)
 - [Deployment & Scaling](08_DEPLOYMENT_AND_SCALING.md)
 - [Validation & Evaluation](09_VALIDATION_AND_EVALUATION.md)
+- [Replay & Semantic Evaluation](13_REPLAY_AND_SEMANTIC_EVALUATION.md)
 - [GitHub Issues](10_GITHUB_ISSUES.md)
 - [Consistency Audit](11_TWO_PASS_CONSISTENCY_AUDIT.md)
 - [YouTube API Compliance](compliance/YOUTUBE_API.md)

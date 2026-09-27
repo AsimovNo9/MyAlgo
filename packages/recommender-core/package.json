@@ -9,7 +9,8 @@
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "eval:semantic": "node --experimental-strip-types scripts/evaluate-semantic-fixture.mjs"
   },
   "dependencies": {
     "@repo/shared-types": "workspace:*"

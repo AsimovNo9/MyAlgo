@@ -43,14 +43,13 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #162 inside draft PR #215:** build a labelled replay/evaluation set before further threshold or model tuning.
-2. **P0 — #214 inside PR #215:** canonicalize near-duplicate graph concepts, cluster canonical nodes into durable user-facing modes, preserve multi-label candidate affinities, and make every mode-driven score contribution resolve to exact graph structure.
-3. **P0 — mode supply + feed stability:** mode selection must affect retrieval as well as reranking; when current-Home mode supply cannot satisfy the user's replacement slider, MyAlgo should explicitly report the shortfall and fill from the existing RSS/search candidate reservoir through the same scorer/policy/trace path. Stable replacements must not churn during ordinary reranks.
-4. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over the exact mode/node/edge contributions.
-5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
-6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+1. **P0 — #162 / PR #216:** establish deterministic graph replay and labelled semantic-mode evaluation before further threshold, clustering, or model tuning.
+2. **P0 — #214:** use the replay baseline to canonicalize near-duplicate graph concepts, cluster canonical nodes into durable modes, preserve multi-label affinities, ground mode score changes in exact graph structure, and measure mode-supply shortfalls.
+3. **P1 — #170 + #153:** graph/provenance visualization and complete per-item explanation over exact mode/node/edge contributions.
+4. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay.
+5. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #213 is merged. Draft PR #215 is no longer just a replacement-stability/threshold patch: it is the active semantic-mode architecture branch.
+PR #215 is merged. PR #216 is the active evaluation branch and creates the measurement contract required for the remaining #214 mode architecture work.
 
 The intended hierarchy is:
 

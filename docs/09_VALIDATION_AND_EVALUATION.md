@@ -377,3 +377,29 @@ For each active mode and slider setting:
 
 Every shortfall event should be captured in bounded local diagnostics and replayable from the fixture.
 
+
+
+## PR #216 replay/evaluation implementation (#162)
+
+PR #215 is merged. PR #216 implements the first reproducible #162 measurement boundary.
+
+Committed CI fixtures:
+
+- `packages/recommender-core/test/fixtures/graph-replay-v2.json` — fixed test-safe exported-state graph fixture;
+- `packages/recommender-core/test/fixtures/semantic-mode-eval-v1.json` — 64 labelled test-safe semantic examples with single-label, multi-label and ambiguous cases.
+
+The replay projection compares semantic state independently of array insertion order and volatile persistence timestamps. The graph reviewer detects duplicate identities/relationships, dangling node references, stale evidence references, unsupported inferred edges, missing expected creator relationships and inferred-edge evidence coverage.
+
+The semantic evaluator reports multi-label micro/macro precision, recall and F1, exact-set match, per-label metrics, primary-badge precision/coverage/abstention, and ambiguous false-confidence rate. Supporting evaluators cover canonical assignment, mode-supply banner/fill behavior, source→replacement stability, and inference throughput/fallback by batch size.
+
+Run:
+
+```bash
+pnpm eval:semantic
+```
+
+The repository fixture is intentionally synthetic/test-safe. It is a deterministic regression baseline, not a claim that production user-distribution quality has been measured. Real labelled exported-state/candidate fixtures should remain local unless intentionally anonymized and reviewed before commit.
+
+The existing extension store tests continue to exercise current-schema persistence, v1→v2 migration, unknown-schema safe reset, deterministic creator-relationship rebuild and incremental evidence consistency. PR #216 adds the source-independent replay comparison/review layer over those exported-state contracts.
+
+See `docs/13_REPLAY_AND_SEMANTIC_EVALUATION.md` for the fixture and metric contract.

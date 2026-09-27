@@ -4,24 +4,22 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #213 is merged. Draft PR #215 is the active branch and now owns the complete post-#213 mode loop rather than only threshold/replacement fixes.
+PR #215 is merged. PR #216 is the active P0 branch.
 
-1. **P0 — #162 evaluation baseline inside #215.** Add 50–100 labelled replay examples with multi-label categories, ambiguous cases, canonicalization aliases, mode qualification, native-vs-acquired supply, and replacement expectations.
-2. **P0 — #214 graph/category/mode architecture.** Canonicalize near-duplicate graph nodes; cluster canonical concepts into a small durable mode layer; preserve multi-label candidate affinities; make mode scoring exact and graph-grounded.
-3. **P0 — #214 mode-aware retrieval and feed stability.** Mode selection changes retrieval planning as well as reranking. The Home replacement slider defines requested replacement demand; if current-Home mode supply is insufficient, expose a deterministic shortfall status and fill from the existing RSS/search reservoir through the same policy/scorer/trace path. Keep source→replacement identity stable across ordinary reranks.
-4. **P1 — #153 + #170 trust UX.** Resolve every mode-driven boost to exact mode/member graph nodes, evidence/provenance, and scorer contributions.
-5. **P1 — #154 + #155 + #178 correction/provenance/history-cluster controls.**
-6. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
-7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P0 — #162 replay/evaluation.** Build the reproducible graph and semantic-mode measurement boundary first: exported-state replay, graph consistency checks, labelled multi-label fixture, badge/abstention metrics, canonical-assignment metrics, mode-supply metrics, replacement stability, and inference throughput.
+2. **P0 — #214 durable mode architecture.** Implement canonical graph concepts, semantic neighbourhood clustering, stable mode IDs/revisions, multi-label affinity, graph-grounded mode scoring, mode-aware retrieval and slider-relative supply shortfall against the #162 fixtures.
+3. **P1 — #153 + #170 trust UX.**
+4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
+5. **P2 — remaining #161 + #169 + #158 + #159 editable/pinned modes, runtime validation, graph editing, and counterfactual replay.**
+6. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
-The critical distinction for #215 is:
-
+The critical distinction remains:
 - **canonical graph node:** fine-grained inspectable concept identity;
 - **mode cluster:** durable user-facing grouping over multiple canonical nodes;
-- **candidate affinity:** bounded **multi-label** candidate↔node/mode feature set;
-- **primary badge:** optional conservative presentation label, separate from the multi-label feature set.
+- **candidate affinity:** bounded multi-label candidate↔node/mode features;
+- **primary badge:** optional conservative presentation label.
 
-Do not tune thresholds or fine-tune the encoder by live impression alone. #162 is now part of the PR #215 merge gate, not deferred follow-up.
+Do not tune thresholds or fine-tune the encoder by live impression alone. PR #216 establishes the CI/replay contract that subsequent #214 changes must satisfy.
 
 
 ## P0 — Validate the data boundary
