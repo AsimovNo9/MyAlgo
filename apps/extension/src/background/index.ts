@@ -192,6 +192,10 @@ const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 const semanticRefreshInFlight = new Set<string>();
 let conceptExtractionRefreshInFlight: Promise<ConceptExtractionRefreshResult> | null = null;
 let semanticEpoch = 0;
+// Concept proposals are keyed by candidate input + model/pipeline identity, not
+// graph revision. Only lifecycle/model-boundary changes invalidate in-flight
+// concept generation.
+let conceptExtractionEpoch = 0;
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -778,7 +782,7 @@ async function runConceptExtractionCacheRefresh(
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
   candidatePool: CandidatePoolItem[],
   enabled: boolean,
-  extractionEpoch: number,
+  conceptEpoch: number,
 ): Promise<ConceptExtractionRefreshResult> {
   const existing = await getStorage<Record<string, ConceptExtractionCacheRecord>>(
     STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE,
@@ -824,6 +828,24 @@ async function runConceptExtractionCacheRefresh(
 
   if (enabled && needingExtraction.length > 0) {
     const batch = needingExtraction.slice(0, MAX_CONCEPT_EXTRACTIONS_PER_REFRESH);
+    if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
+      await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, {
+        status: 'started',
+        modelId: CONCEPT_EXTRACTION_MODEL_ID,
+        modelVersion: CONCEPT_EXTRACTION_MODEL_VERSION,
+        pipelineVersion: CONCEPT_EXTRACTION_PIPELINE_VERSION,
+        generationEnabled: true,
+        interactionSupportedCandidateCount: supportedCandidates.length,
+        cacheHits,
+        extracted: 0,
+        pending: needingExtraction.length,
+        requestedBatchSize: batch.length,
+        cachedConceptCandidateCount: validByExternalId.size,
+        backend: null,
+        fallbackReason: null,
+        generatedAt: new Date().toISOString(),
+      });
+    }
     try {
       const provider = createLocalConceptExtractionProvider();
       const result = await provider.extract(batch.map(buildConceptExtractionPrompt));
@@ -850,7 +872,7 @@ async function runConceptExtractionCacheRefresh(
           .sort(([, left], [, right]) => right.generatedAt.localeCompare(left.generatedAt))
           .slice(0, MAX_CONCEPT_EXTRACTION_CACHE),
       );
-      if (extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
+      if (conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
         await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_CACHE, bounded);
       }
     } catch (error) {
@@ -874,7 +896,7 @@ async function runConceptExtractionCacheRefresh(
     fallbackReason,
     generatedAt: new Date().toISOString(),
   };
-  if (enabled && extractionEpoch === semanticEpoch && privacyDisclosureAccepted) {
+  if (enabled && conceptEpoch === conceptExtractionEpoch && privacyDisclosureAccepted) {
     await setStorage(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, diagnostics);
   }
 
@@ -892,9 +914,9 @@ async function refreshConceptExtractionCache(
   candidatePool: CandidatePoolItem[],
   enabled: boolean,
 ): Promise<ConceptExtractionRefreshResult> {
-  const extractionEpoch = semanticEpoch;
+  const conceptEpoch = conceptExtractionEpoch;
   if (!enabled) {
-    return runConceptExtractionCacheRefresh(state, candidatePool, false, extractionEpoch);
+    return runConceptExtractionCacheRefresh(state, candidatePool, false, conceptEpoch);
   }
   if (conceptExtractionRefreshInFlight) {
     return conceptExtractionRefreshInFlight;
@@ -904,7 +926,7 @@ async function refreshConceptExtractionCache(
     state,
     candidatePool,
     true,
-    extractionEpoch,
+    conceptEpoch,
   );
   conceptExtractionRefreshInFlight = pending;
   try {
@@ -1544,6 +1566,7 @@ const handleRuntimeMessage = (
     void (async () => {
       const semanticModelMode: SemanticModelMode = payload?.semanticModelMode === 'neural' ? 'neural' : 'hash';
       semanticEpoch += 1;
+      conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
       conceptExtractionRefreshInFlight = null;
       await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, semanticModelMode);
@@ -1597,6 +1620,7 @@ const handleRuntimeMessage = (
       privacyDisclosureReady = Promise.resolve(false);
       historyReconciliationReady = null;
       semanticEpoch += 1;
+      conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
       conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
