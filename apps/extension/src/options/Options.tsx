@@ -1,8 +1,10 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
+import { buildInferredModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
+import type { FeedItem } from '@repo/shared-types';
 
 export function Options() {
-  const [mode, setMode] = React.useState('Work');
+  const [mode, setMode] = React.useState('Default');
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
@@ -14,6 +16,7 @@ export function Options() {
   } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
+  const [modeCategories, setModeCategories] = React.useState<FeedSummary['categories']>([]);
 
   React.useEffect(() => {
     chrome.storage.local.get([
@@ -23,19 +26,27 @@ export function Options() {
       'personal-algorithm-semantic-model-mode',
       'personal-algorithm-semantic-model-status',
       'personal-algorithm-privacy-disclosure-accepted-version',
+      'personal-algorithm-feed-cache',
     ]).then((result) => {
-      setMode((result['personal-algorithm-mode'] as string) ?? 'Work');
+      setMode((result['personal-algorithm-mode'] as string) ?? 'Default');
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
       setSemanticModelStatus((result['personal-algorithm-semantic-model-status'] as typeof semanticModelStatus) ?? null);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
+      const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
+      setModeCategories(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed).categories : []);
     });
     const handleStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== 'local') return;
       const change = changes['personal-algorithm-semantic-model-status'];
       if (change) {
         setSemanticModelStatus((change.newValue as typeof semanticModelStatus) ?? null);
+      }
+      const feedChange = changes['personal-algorithm-feed-cache'];
+      if (feedChange) {
+        const nextFeed = feedChange.newValue as FeedItem[] | undefined;
+        setModeCategories(Array.isArray(nextFeed) ? summarizeFeed(nextFeed).categories : []);
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChanged);
@@ -64,7 +75,7 @@ export function Options() {
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
     setSemanticModelStatus(null);
-    setMode('Work');
+    setMode('Default');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
 
@@ -100,6 +111,8 @@ export function Options() {
     setSemanticModelMode(response.semanticModelMode === 'neural' ? 'neural' : 'hash');
   };
 
+  const modeOptions = buildInferredModeOptions(mode, modeCategories);
+
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'sans-serif' }}>
       <h1>Personal Algorithm settings</h1>
@@ -121,7 +134,9 @@ export function Options() {
       <section style={{ marginBottom: 24 }}>
         <h2>Mode</h2>
         <select value={mode} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
-          {['Work', 'Learning', 'Relax', 'Gaming', 'French'].map((option) => <option key={option} value={option}>{option}</option>)}
+          {modeOptions.map((option) => (
+            <option key={option} value={option}>{option === 'Default' ? 'All' : option}</option>
+          ))}
         </select>
       </section>
 
