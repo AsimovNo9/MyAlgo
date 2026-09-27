@@ -22,7 +22,7 @@ globalThis.chrome = {
       if (forceFailure) return { ok: false, error: 'fixture concept failure' };
       return {
         ok: true,
-        modelId: 'Xenova/flan-t5-small',
+        modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
         modelVersion: 'transformersjs-local-q8-v1',
         backend: 'webgpu-sandbox',
         outputs: message.prompts.map((_prompt, index) => (
@@ -48,9 +48,9 @@ test('local concept provider uses offscreen transport and conservative parser', 
   const provider = createLocalConceptExtractionProvider();
   const result = await provider.extract(['first prompt', 'second prompt']);
 
-  assert.equal(provider.modelId, 'Xenova/flan-t5-small');
+  assert.equal(provider.modelId, 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA');
   assert.equal(provider.modelVersion, 'transformersjs-local-q8-v1');
-  assert.equal(provider.execution, 'offscreen_sandbox_text2text');
+  assert.equal(provider.execution, 'offscreen_sandbox_text_generation');
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'EXTRACT_CONCEPTS');
   assert.deepEqual(result.concepts, [
