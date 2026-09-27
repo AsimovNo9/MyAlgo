@@ -64,12 +64,23 @@ export function createOffscreenEmbeddingProvider(
           return fallback.embed(texts);
         }
 
-        const response = await chrome.runtime.sendMessage({
-          target: 'semantic-embedding-offscreen',
-          type: 'EMBED_TEXTS',
-          provider: mode,
-          texts: [...texts],
-        }) as SemanticEmbeddingResponse;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const response = await Promise.race([
+          chrome.runtime.sendMessage({
+            target: 'semantic-embedding-offscreen',
+            type: 'EMBED_TEXTS',
+            provider: mode,
+            texts: [...texts],
+          }) as Promise<SemanticEmbeddingResponse>,
+          new Promise<SemanticEmbeddingResponse>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error('Timed out waiting for semantic offscreen response.')),
+              mode === 'neural' ? 125_000 : 20_000,
+            );
+          }),
+        ]).finally(() => {
+          if (timeout !== undefined) clearTimeout(timeout);
+        });
 
         if (!response?.ok || !Array.isArray(response.embeddings)) {
           throw new Error(response?.error ?? 'Semantic embedding worker failed.');
