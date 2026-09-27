@@ -226,7 +226,7 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 PR #216/#162 established replay/evaluation and PR #218/#217 established evidence-backed semantic graph materialization.
 
-1. **P0 — #219 / PR #220 local concept extraction.** Package a small local instruction model, extract bounded concepts only for interaction-supported candidates, cache outputs by model/version/input hash, and feed them through the existing #218 materializer. Raw YouTube keywords remain fallback only.
+1. **P0 — #219 / PR #220 local concept verification.** Package a small local NLI classifier, verify bounded metadata topic candidates only for interaction-supported candidates, cache outputs by model/version/input hash, and feed verified multi-label topics through the existing #218 materializer. Unverified metadata remains fallback only when no verifier result exists.
 2. **P0 — #214 canonicalization + durable modes.** Use the existing embedding layer to reconcile aliases/near-duplicates from extracted concepts, then cluster canonical concepts into stable mode IDs, preserve multi-label affinity, ground mode scoring in exact graph members, and implement mode-aware supply handling against #162 metrics.
 3. **P1 — #153 + #170 trust UX.** Resolve every mode/category contribution to exact graph members, evidence/provenance, and trace values.
 4. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
@@ -238,7 +238,7 @@ Live #218 validation showed the remaining distinction clearly: materialization m
 ```text
 retained interaction evidence + enriched candidate metadata
     ↓
-local SmolLM2 concept proposals (#219)
+local DeBERTa zero-shot topic verification (#219)
     ↓
 evidence-backed derived graph projection (#218)
     ↓
