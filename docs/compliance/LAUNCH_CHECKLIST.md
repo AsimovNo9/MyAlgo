@@ -38,7 +38,7 @@
 ## P3 — Quality
 
 - [x] RSS/YouTube-search acquisition foundation merged (#206/#212); retain as regression coverage
-- [ ] PR #213 semantic diagnostics captured for cold and cached runs
+- [ ] PR #213 semantic diagnostics captured for hash, WebGPU-neural, WASM-neural, and cached runs
 - [ ] Candidate coverage measured
 - [ ] Empty-feed rate measured
 - [ ] Replacement success measured
