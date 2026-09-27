@@ -105,6 +105,8 @@ export function Options() {
     setConceptModelStatus(null);
     setNeuralBatchSize(1);
     setMode('Default');
+    setActiveModeId('default');
+    setDurableModeCatalog(null);
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
 
