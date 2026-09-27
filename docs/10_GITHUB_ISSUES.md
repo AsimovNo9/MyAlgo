@@ -251,7 +251,15 @@ Still deferred until measured gaps justify them:
 
 ### [#209](https://github.com/AsimovNo9/MyAlgo/issues/209): Add rebuildable local semantic embeddings for graph, retrieval, scoring, and explanations
 
-Treat embeddings as replaceable derived enrichment around the canonical Personal Algorithm Graph. Use them for semantic neighbours, bounded retrieval expansion, explicit semantic score contributions, interest-cluster suggestions, and symbolic Why-this paths. A later local generative model may verbalize exact trace/path data but must not become the preference or ranking authority.
+The embedding infrastructure is implemented and now supports #221/#214. Remaining #209 work is bounded semantic-neighbour retrieval expansion, cluster output, broader benchmark coverage, and symbolic semantic paths for #153. Embeddings remain rebuildable derived enrichment and never authoritative preference state.
+
+### [#221](https://github.com/AsimovNo9/MyAlgo/issues/221): Canonicalize semantic concepts and bound redundant score contributions — **active P0**
+
+Reconcile aliases/near-duplicates into stable derived semantic neighbourhoods, preserve every source graph node/evidence chain, and emit at most one bounded semantic score contribution per neighbourhood. This is the immediate prerequisite for durable inferred modes and final score calibration.
+
+### [#214](https://github.com/AsimovNo9/MyAlgo/issues/214): Build durable inferred modes, graph-grounded scoring, and stable Home replacement — **P0 umbrella**
+
+After #221, cluster canonical neighbourhoods into durable mode IDs/revisions, preserve multi-label candidate affinity, ground every mode contribution in exact graph members, and make retrieval/supply mode-aware.
 
 ### [#162](https://github.com/AsimovNo9/MyAlgo/issues/162): Build local graph replay and evaluation suite
 
