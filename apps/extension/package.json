@@ -8,7 +8,7 @@
     "build": "pnpm run prepare:model && vite build",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/content-scripts/youtube-dom.test.mjs src/content-scripts/youtube-ux.test.mjs src/background/personal-algorithm-runtime.test.mjs src/background/retrieval.test.mjs src/content-scripts/youtube-watch.test.mjs src/content-scripts/youtube-evidence-contract.test.mjs src/content-scripts/evidence-correlation.test.mjs src/manifest.test.mjs src/lib/storage.test.mjs src/lib/semantic-embedding-cache.test.mjs src/lib/semantic-embedding-provider.test.mjs src/offscreen/search-offscreen.test.mjs src/lib/privacy.test.mjs src/lib/personal-algorithm-store.test.mjs src/lib/extension-helpers.test.mjs",
+    "test": "node --experimental-strip-types --test src/content-scripts/youtube-dom.test.mjs src/content-scripts/youtube-ux.test.mjs src/background/personal-algorithm-runtime.test.mjs src/background/retrieval.test.mjs src/content-scripts/youtube-watch.test.mjs src/content-scripts/youtube-evidence-contract.test.mjs src/content-scripts/evidence-correlation.test.mjs src/manifest.test.mjs src/lib/storage.test.mjs src/lib/semantic-embedding-cache.test.mjs src/lib/semantic-embedding-provider.test.mjs src/lib/concept-extraction-provider.test.mjs src/offscreen/search-offscreen.test.mjs src/lib/privacy.test.mjs src/lib/personal-algorithm-store.test.mjs src/lib/extension-helpers.test.mjs",
     "prepare:model": "node scripts/fetch-semantic-model.mjs"
   },
   "dependencies": {
