@@ -107,7 +107,7 @@ test('concept extraction reuses the local neural sandbox and returns model outpu
       modelKind: 'concept',
       ok: true,
       outputs: ['distributed systems, CRDTs'],
-      modelId: 'Xenova/flan-t5-small',
+      modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
       modelVersion: 'transformersjs-local-q8-v1',
       backend: 'webgpu-sandbox',
     },
@@ -116,7 +116,7 @@ test('concept extraction reuses the local neural sandbox and returns model outpu
   assert.deepEqual(await result, {
     ok: true,
     outputs: ['distributed systems, CRDTs'],
-    modelId: 'Xenova/flan-t5-small',
+    modelId: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
     modelVersion: 'transformersjs-local-q8-v1',
     backend: 'webgpu-sandbox',
   });
