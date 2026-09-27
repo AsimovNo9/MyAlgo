@@ -13,6 +13,11 @@ import {
   weightedEmbeddingCentroid,
 } from './semantic-primitives.ts';
 
+import {
+  buildCanonicalSemanticConcepts,
+  CANONICAL_SEMANTIC_PIPELINE_ID,
+} from './canonical-semantic.ts';
+
 export interface LocalEmbeddingProvider {
   readonly modelId: string;
   readonly modelVersion: string;
@@ -36,6 +41,8 @@ export type SemanticRerankingDiagnostics = {
   candidateEmbeddingsFromCache: number;
   candidateCount: number;
   modeNodeCount: number;
+  canonicalConceptCount: number;
+  canonicalMergedNodeCount: number;
 };
 
 export type SemanticRerankingResult<T extends RecommendationCandidate> = {
@@ -52,6 +59,10 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
       node_label: string;
       similarity: number;
       weight: number;
+      canonical_id?: string;
+      source_node_ids?: string[];
+      taxonomy_only?: boolean;
+      pipeline_id?: string;
     }>;
   }>;
   modeProfile: SemanticModeProfile;
@@ -337,6 +348,30 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   const nodeEmbeddingById = new Map(
     eligibleGraphNodes.map((node, index) => [node.id, graphEmbeddings.records[index]?.embedding ?? []]),
   );
+  const nodeById = new Map(eligibleGraphNodes.map((node) => [node.id, node]));
+  const semanticModelVersion = `${provider.modelId}@${provider.modelVersion}`;
+  const canonical = buildCanonicalSemanticConcepts(state, {
+    embeddingsByNodeId: nodeEmbeddingById,
+    embeddingModelVersion: semanticModelVersion,
+  });
+  const canonicalConcepts = canonical.concepts.filter((concept) => (
+    concept.sourceNodeIds.some((nodeId) => nodeEmbeddingById.has(nodeId))
+  ));
+  const canonicalEmbeddingById = new Map(canonicalConcepts.map((concept) => [
+    concept.id,
+    weightedEmbeddingCentroid(concept.sourceNodeIds
+      .map((nodeId) => ({
+        embedding: nodeEmbeddingById.get(nodeId) ?? [],
+        weight: nodeById.has(nodeId) ? graphNodeWeight(nodeById.get(nodeId)!) : 0,
+      }))
+      .filter((item) => item.embedding.length > 0 && item.weight > 0)),
+  ]));
+  const canonicalWeightById = new Map(canonicalConcepts.map((concept) => [
+    concept.id,
+    Math.max(0, ...concept.sourceNodeIds.map((nodeId) => (
+      nodeById.has(nodeId) ? graphNodeWeight(nodeById.get(nodeId)!) : 0
+    ))),
+  ]));
 
   const normalizedMode = mode.trim().toLowerCase() || 'default';
   const seedInputs = [{
@@ -358,13 +393,12 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
     nodeSimilarities,
     { minimumSimilarity: options.minimumModeNodeSimilarity ?? 0.2 },
   );
-  const semanticModelVersion = `${provider.modelId}@${provider.modelVersion}`;
   modeProfile.model_version = semanticModelVersion;
 
   const graphCentroid = weightedEmbeddingCentroid(
-    eligibleGraphNodes.map((node) => ({
-      embedding: nodeEmbeddingById.get(node.id) ?? [],
-      weight: graphNodeWeight(node),
+    canonicalConcepts.map((concept) => ({
+      embedding: canonicalEmbeddingById.get(concept.id) ?? [],
+      weight: canonicalWeightById.get(concept.id) ?? 0,
     })),
   );
   const modeCentroid = weightedEmbeddingCentroid([
@@ -384,24 +418,26 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   await options.onEmbeddingPhase?.('candidate_embeddings', candidateInputs.length);
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
 
-  const categoryNodes = eligibleGraphNodes.filter((node) => (
-    node.kind === 'topic' || node.kind === 'concept'
+  const categoryConcepts = canonicalConcepts.filter((concept) => (
+    concept.kinds.includes('topic') || concept.kinds.includes('concept')
   ));
-  const categorySourceNodes = categoryNodes.length > 0 ? categoryNodes : eligibleGraphNodes;
+  const categorySourceConcepts = categoryConcepts.length > 0 ? categoryConcepts : canonicalConcepts;
 
   const enriched = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
-    const rankedCategories = categorySourceNodes
-      .map((node) => ({
-        category: node.label.trim(),
+    const rankedCategories = categorySourceConcepts
+      .map((concept) => ({
+        category: concept.label.trim(),
         similarity: positiveSimilarity(
           embedding,
-          nodeEmbeddingById.get(node.id) ?? [],
+          canonicalEmbeddingById.get(concept.id) ?? [],
         ),
+        taxonomyOnly: concept.taxonomyOnly,
       }))
       .filter((entry) => entry.category && entry.similarity > 0)
       .sort((left, right) => (
-        right.similarity - left.similarity
+        Number(left.taxonomyOnly) - Number(right.taxonomyOnly)
+        || right.similarity - left.similarity
         || left.category.localeCompare(right.category)
       ))
       .slice(0, 8);
@@ -410,33 +446,39 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       Number(entry.similarity.toFixed(4)),
     ])) as Record<SemanticCategoryId, number>;
     const category = classifySemanticCategory(categoryScores);
-    const graphMatches = eligibleGraphNodes
-      .map((node) => {
+    const graphMatches = canonicalConcepts
+      .map((concept) => {
         const similarity = positiveSimilarity(
           embedding,
-          nodeEmbeddingById.get(node.id) ?? [],
+          canonicalEmbeddingById.get(concept.id) ?? [],
         );
+        const rankingWeight = similarity * (canonicalWeightById.get(concept.id) ?? 0);
+        const representativeNodeId = concept.sourceNodeIds.find((nodeId) => nodeEmbeddingById.has(nodeId))
+          ?? concept.representativeNodeId;
         return {
-          node_id: node.id,
-          node_label: node.label,
+          node_id: representativeNodeId,
+          node_label: concept.label,
+          canonical_id: concept.id,
+          source_node_ids: concept.sourceNodeIds,
+          taxonomy_only: concept.taxonomyOnly,
+          pipeline_id: CANONICAL_SEMANTIC_PIPELINE_ID,
           similarity,
-          rankingWeight: similarity * graphNodeWeight(node),
+          rankingWeight,
+          canonicalWeight: canonicalWeightById.get(concept.id) ?? 0,
         };
       })
-      .filter((match) => match.similarity > 0)
+      .filter((match) => match.similarity > 0 && match.rankingWeight > 0)
       .sort((left, right) => (
-        right.rankingWeight - left.rankingWeight
+        Number(left.taxonomy_only) - Number(right.taxonomy_only)
+        || right.rankingWeight - left.rankingWeight
         || right.similarity - left.similarity
-        || left.node_id.localeCompare(right.node_id)
+        || left.canonical_id.localeCompare(right.canonical_id)
       ))
       .slice(0, 3);
 
     const graphSimilarity = graphMatches.length > 0
       ? graphMatches.reduce((sum, match) => sum + match.rankingWeight, 0)
-        / graphMatches.reduce((sum, match) => {
-          const node = eligibleGraphNodes.find((candidateNode) => candidateNode.id === match.node_id);
-          return sum + (node ? graphNodeWeight(node) : 1);
-        }, 0)
+        / graphMatches.reduce((sum, match) => sum + match.canonicalWeight, 0)
       : positiveSimilarity(embedding, graphCentroid);
 
     return {
@@ -453,6 +495,10 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
         node_label: match.node_label,
         similarity: Number(match.similarity.toFixed(4)),
         weight: Number(match.rankingWeight.toFixed(4)),
+        canonical_id: match.canonical_id,
+        source_node_ids: match.source_node_ids,
+        taxonomy_only: match.taxonomy_only,
+        pipeline_id: match.pipeline_id,
       })),
     };
   });
@@ -470,6 +516,8 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       candidateEmbeddingsFromCache: candidateEmbeddings.fromCache,
       candidateCount: candidates.length,
       modeNodeCount: Object.keys(modeProfile.node_weights).length,
+      canonicalConceptCount: canonical.diagnostics.canonicalConceptCount,
+      canonicalMergedNodeCount: canonical.diagnostics.mergedNodeCount,
     },
   };
 }

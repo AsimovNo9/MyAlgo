@@ -6,7 +6,7 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/#219 local topic verification are merged.
 
-1. **P0 — #221 / #214 canonical concepts + bounded semantic scoring.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods and ensure aliases/subtopics/broad categories cannot stack as independent positive score terms.
+1. **P0 — #221 / PR #223 canonical concepts + bounded semantic scoring — in review.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods, preserve source-node/evidence provenance, and prevent lexical/embedding duplicate score paths from stacking.
 2. **P0 — #214 durable inferred modes.** Build stable local mode IDs/revisions over canonical concept neighbourhoods, retain multi-label candidate affinity, and persist modes independently of feed-cache churn.
 3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
 4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
@@ -253,9 +253,9 @@ Still deferred until measured gaps justify them:
 
 The embedding infrastructure is implemented and now supports #221/#214. Remaining #209 work is bounded semantic-neighbour retrieval expansion, cluster output, broader benchmark coverage, and symbolic semantic paths for #153. Embeddings remain rebuildable derived enrichment and never authoritative preference state.
 
-### [#221](https://github.com/AsimovNo9/MyAlgo/issues/221): Canonicalize semantic concepts and bound redundant score contributions — **active P0**
+### [#221](https://github.com/AsimovNo9/MyAlgo/issues/221): Canonicalize semantic concepts and bound redundant score contributions — **active in PR #223**
 
-Reconcile aliases/near-duplicates into stable derived semantic neighbourhoods, preserve every source graph node/evidence chain, and emit at most one bounded semantic score contribution per neighbourhood. This is the immediate prerequisite for durable inferred modes and final score calibration.
+PR #223 implements stable derived semantic neighbourhoods, conservative embedding-assisted assignment, taxonomy separation, canonical candidate affinity, lexical/embedding reconciliation, exact source-node/evidence trace provenance, and fixed #162 aggregation metrics. The source graph remains intact. Durable inferred modes and final display calibration remain downstream #214/#210 work.
 
 ### [#214](https://github.com/AsimovNo9/MyAlgo/issues/214): Build durable inferred modes, graph-grounded scoring, and stable Home replacement — **P0 umbrella**
 

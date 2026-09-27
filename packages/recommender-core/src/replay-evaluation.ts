@@ -593,6 +593,94 @@ export function evaluateCanonicalAssignments(
   };
 }
 
+export type CanonicalSemanticAggregationSample = {
+  id: string;
+  sourceNodeMatchCount: number;
+  canonicalNeighbourhoodMatchCount: number;
+  lexicalContributionMass: number;
+  embeddingContributionMass: number;
+  reconciledContributionMass: number;
+  rawScoreBefore: number;
+  rawScoreAfter: number;
+  displayScoreBefore?: number | null;
+  displayScoreAfter?: number | null;
+};
+
+export type CanonicalSemanticAggregationMetrics = {
+  sampleCount: number;
+  sourceNodeMatchCount: number;
+  canonicalNeighbourhoodMatchCount: number;
+  matchCompressionRatio: number;
+  lexicalEmbeddingOverlapCount: number;
+  semanticContributionMassBefore: number;
+  semanticContributionMassAfter: number;
+  semanticContributionMassReduction: number;
+  averageRawScoreBefore: number;
+  averageRawScoreAfter: number;
+  displaySaturationBeforeCount: number;
+  displaySaturationAfterCount: number;
+  displaySaturationBeforeRate: number;
+  displaySaturationAfterRate: number;
+};
+
+export function evaluateCanonicalSemanticAggregation(
+  samples: readonly CanonicalSemanticAggregationSample[],
+): CanonicalSemanticAggregationMetrics {
+  const sourceNodeMatchCount = samples.reduce(
+    (sum, sample) => sum + Math.max(0, Math.floor(sample.sourceNodeMatchCount)),
+    0,
+  );
+  const canonicalNeighbourhoodMatchCount = samples.reduce(
+    (sum, sample) => sum + Math.max(0, Math.floor(sample.canonicalNeighbourhoodMatchCount)),
+    0,
+  );
+  const lexicalEmbeddingOverlapCount = samples.filter((sample) => (
+    Number(sample.lexicalContributionMass) > 0
+    && Number(sample.embeddingContributionMass) > 0
+  )).length;
+  const semanticContributionMassBefore = samples.reduce((sum, sample) => (
+    sum
+    + Math.max(0, Number(sample.lexicalContributionMass) || 0)
+    + Math.max(0, Number(sample.embeddingContributionMass) || 0)
+  ), 0);
+  const semanticContributionMassAfter = samples.reduce((sum, sample) => (
+    sum + Math.max(0, Number(sample.reconciledContributionMass) || 0)
+  ), 0);
+  const rawScoreBeforeTotal = samples.reduce(
+    (sum, sample) => sum + (Number(sample.rawScoreBefore) || 0),
+    0,
+  );
+  const rawScoreAfterTotal = samples.reduce(
+    (sum, sample) => sum + (Number(sample.rawScoreAfter) || 0),
+    0,
+  );
+  const displayBefore = samples
+    .map((sample) => sample.displayScoreBefore)
+    .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
+  const displayAfter = samples
+    .map((sample) => sample.displayScoreAfter)
+    .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
+  const displaySaturationBeforeCount = displayBefore.filter((score) => score >= 97).length;
+  const displaySaturationAfterCount = displayAfter.filter((score) => score >= 97).length;
+
+  return {
+    sampleCount: samples.length,
+    sourceNodeMatchCount,
+    canonicalNeighbourhoodMatchCount,
+    matchCompressionRatio: safeDivide(canonicalNeighbourhoodMatchCount, sourceNodeMatchCount),
+    lexicalEmbeddingOverlapCount,
+    semanticContributionMassBefore,
+    semanticContributionMassAfter,
+    semanticContributionMassReduction: semanticContributionMassBefore - semanticContributionMassAfter,
+    averageRawScoreBefore: safeDivide(rawScoreBeforeTotal, samples.length),
+    averageRawScoreAfter: safeDivide(rawScoreAfterTotal, samples.length),
+    displaySaturationBeforeCount,
+    displaySaturationAfterCount,
+    displaySaturationBeforeRate: safeDivide(displaySaturationBeforeCount, displayBefore.length),
+    displaySaturationAfterRate: safeDivide(displaySaturationAfterCount, displayAfter.length),
+  };
+}
+
 export type ModeSupplySample = {
   requestedSlots: number;
   nativeMatchingSupply: number;

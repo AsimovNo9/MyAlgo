@@ -29,7 +29,7 @@ Run the semantic bootstrap fixture directly:
 pnpm eval:semantic
 ```
 
-The command prints a JSON report containing the reference provider identity plus multi-label and primary-badge metrics.
+The default command prints one JSON report containing the reference semantic provider/multi-label metrics plus the fixed #221 canonical-assignment, aggregation-mass, raw-score, and display-saturation metrics.
 
 ## Fixed fixtures
 
@@ -95,11 +95,13 @@ Reported metrics include:
 
 The visible primary badge remains a separate presentation decision. A candidate can correctly retain several qualified internal semantic labels while displaying one badge or none.
 
-## Canonicalization metrics
+## Canonicalization and aggregation metrics (#221 / PR #223)
 
-The evaluator exposes a canonical-assignment metric for #214.
+The evaluator now runs the fixed `packages/recommender-core/test/fixtures/canonical-semantic-eval-v1.json` fixture in the default `pnpm eval:semantic` CI path.
 
-Given expected alias → canonical-ID pairs and predicted assignments, it reports exact accuracy and mismatches. This lets node canonicalization be implemented later without changing the evaluation contract.
+Canonical assignment compares expected source-node/alias → canonical-ID pairs with predicted assignments and reports exact accuracy plus mismatches. The same fixture reports source-node matches vs canonical-neighbourhood matches, lexical/embedding overlap, semantic contribution mass before/after reconciliation, average raw scores, and the fraction of supplied display scores saturating at 97–100. The fixture is synthetic/test-safe and is a regression gate, not a production-distribution claim.
+
+Browser validation adds a second, deliberately different regression layer: canonical identity may remain split while the scorer still has to reconcile nested concepts into one candidate-specific score region. Runtime tests therefore cover the live-style `chill lofi` / `chill lofi beats` / `lofi beats` case, weak relative embedding-neighbour rejection, and a single collective taxonomy fallback. This avoids weakening canonical identity merely to fix additive score overcount.
 
 ## Mode supply metrics
 
@@ -154,7 +156,7 @@ The committed semantic fixture currently gates:
 
 Those thresholds are regression guards for the reference baseline, not proof that production semantic quality is solved.
 
-Future #214 canonicalization, clustering, durable modes, graph-grounded mode scoring, and mode-aware retrieval should add their predictions to this same evaluation boundary rather than inventing new ad hoc live-only checks.
+#221/PR #223 canonicalization now uses this evaluation boundary. Future #214 clustering, durable modes, graph-grounded mode scoring, and mode-aware retrieval should add their predictions to the same boundary rather than inventing new ad hoc live-only checks.
 
 
 ## Mode-cluster and trace metrics
@@ -207,7 +209,7 @@ The initial #217 materializer intentionally favors precision over coverage:
 - title-only keyphrases are not eligible to create taxonomy nodes after live validation showed they dominated the vocabulary with noisy n-grams; title phrases may only reinforce existing metadata-derived topics;
 - proposals are bounded to 64 nodes and 24 evidence-backed content edges per node by default.
 
-These are bootstrap safeguards, not final taxonomy thresholds. Canonicalization and clustering remain downstream #214 work and should be measured against this evaluation boundary rather than tuned only from live screenshots.
+These are bootstrap safeguards, not final taxonomy thresholds. Canonicalization is implemented in #221/PR #223 against this evaluation boundary; durable clustering remains downstream #214 work and should be measured here rather than tuned only from live screenshots.
 
 
 ### Live precision correction
@@ -241,11 +243,11 @@ For labelled/reviewed examples, compare:
 - first-run and cached latency;
 - WebGPU/WASM fallback rate.
 
-The verifier output is not canonical truth. Even a correctly retained label remains a derived proposal until it is evidence-supported and passes the same #218 materializer. Embedding-assisted alias/canonical decisions remain the immediate #214 stage.
+The verifier output is not canonical truth. Even a correctly retained label remains a derived proposal until it is evidence-supported and passes the same #218 materializer. #221/PR #223 adds the downstream derived canonical-neighbourhood reconciliation; it does not rewrite the source graph.
 
-### Post-#220 canonicalization/scoring fixture requirements (#221)
+### Post-#220 canonicalization/scoring fixture implementation (#221 / PR #223)
 
-Live #220 validation produced the exact failure class the next fixture should encode: several verified labels can all be correct yet semantically redundant. Examples include tutorial/use-case variants around one product/topic, or multiple gameplay/franchise labels around the same interest. The current scorer can award each source node an independent additive term.
+Live #220 validation produced the exact failure class encoded by the committed fixture: several verified labels can all be correct yet semantically redundant. Tutorial/use-case variants around one product/topic and gameplay/franchise variants are reconciled into derived scoring neighbourhoods while the original graph nodes remain intact.
 
 Extend the fixed evaluation boundary with cases that assert:
 - expected source-label → canonical-neighbourhood assignment;

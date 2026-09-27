@@ -390,7 +390,7 @@ Committed CI fixtures:
 
 The replay projection compares semantic state independently of array insertion order and volatile persistence timestamps. The graph reviewer detects duplicate identities/relationships, dangling node references, stale evidence references, unsupported inferred edges, missing expected creator relationships and inferred-edge evidence coverage.
 
-The semantic evaluator reports multi-label micro/macro precision, recall and F1, exact-set match, per-label metrics, primary-badge precision/coverage/abstention, and ambiguous false-confidence rate. Supporting evaluators cover canonical assignment, mode-supply banner/fill behavior, source→replacement stability, and inference throughput/fallback by batch size.
+The semantic evaluator reports multi-label micro/macro precision, recall and F1, exact-set match, per-label metrics, primary-badge precision/coverage/abstention, and ambiguous false-confidence rate. The default CI evaluation now also runs #221 canonical assignment and aggregation diagnostics: source-node→neighbourhood compression, lexical/embedding overlap, contribution mass before/after reconciliation, raw-score averages, and supplied 97–100 display-saturation rates. Supporting evaluators also cover mode-supply banner/fill behavior, source→replacement stability, and inference throughput/fallback by batch size.
 
 Run:
 
@@ -458,7 +458,7 @@ console.table(
 );
 ```
 
-Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
+PR #223/#221 now evaluates canonicalization against a fixed synthetic fixture. Mode-cluster quality remains a separate #214 slice and must consume canonical neighbourhoods rather than raw graph labels.
 
 
 ## PR #220 local concept verification validation (#219)
@@ -579,4 +579,20 @@ Live replacement traces also exposed semantic score overcount. Multiple related 
 - trace reconciliation from the neighbourhood contribution back to every supporting source graph node.
 
 Do not retune the 0–100 presentation calibration until this raw semantic overcount is corrected.
+
+### PR #223 live browser regression (2026-09-27)
+
+The first browser run of #223 confirmed healthy packaged neural execution (`mxbai-embed-xsmall-v1`, WebGPU sandbox, no fallback) but also found gaps not represented by the initial synthetic fixture:
+
+- nested but non-identical canonical concepts such as `chill lofi`, `chill lofi beats`, and `lofi beats` could still each contribute large score terms to the same candidate;
+- weak embedding neighbours could receive score mass when they were merely among the top positive matches, producing visibly unrelated semantic reasons;
+- taxonomy-only matches could stack several broad categories when no specific match was present.
+
+The corrective #223 runtime gate therefore validates three layers separately:
+
+1. conservative canonical identity remains intact for provenance;
+2. nested non-explicit canonical concepts may reconcile into one bounded **scoring region** without erasing their source nodes;
+3. embedding-only matches must clear absolute + relative confidence thresholds, and taxonomy-only evidence contributes through one collective bounded fallback.
+
+Re-run the live browser trace after these changes and require that lofi/Silent-Hill-style examples collapse to one score-region contribution with all source node IDs, unrelated weak neighbours disappear from `Why this?`, broad taxonomy no longer stacks, and hard policy/feedback behavior remains unchanged. Presentation calibration remains deferred to #210.
 
