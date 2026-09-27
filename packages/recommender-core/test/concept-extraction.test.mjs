@@ -21,7 +21,7 @@ test('concept extraction prompt is bounded and deterministic', () => {
 
   assert.equal(second, first);
   assert.equal(conceptExtractionInputHash(candidate), conceptExtractionInputHash(candidate));
-  assert.match(first, /Return only a comma-separated list/);
+  assert.match(first, /Output exactly one comma-separated line/);
   assert.match(first, /Silent Hill Townfall Full Gameplay Ending/);
 });
 
@@ -40,6 +40,10 @@ test('concept extraction parser is conservative and bounded', () => {
 test('concept extraction parser rejects prompt echoes and malformed labels', () => {
   assert.deepEqual(
     parseConceptExtractionOutput('Title: example, Description: something, https://example.com, this phrase has far too many individual words for a compact concept label'),
+    [],
+  );
+  assert.deepEqual(
+    parseConceptExtractionOutput('YouTube video - wikipedia, List all episodes in chronological order., video video, seconds, Identify the topic of video games.'),
     [],
   );
 });
