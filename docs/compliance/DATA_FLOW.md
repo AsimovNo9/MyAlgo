@@ -19,7 +19,7 @@ candidate acquisition (observed DOM / optional RSS / optional YouTube search)
           ↓
 local candidate reservoir
           ↓
-optional public model-file download from Hugging Face
+packaged local neural model/runtime assets (no runtime model-host request)
 (no candidate/graph/history/feedback payload)
           ↓
 rebuildable local semantic enrichment
