@@ -412,14 +412,14 @@ PR #216 is merged and supplies the replay/evaluation contract. #217 validates th
 ### Automated requirements
 
 - interaction-supported enriched topics/content types materialize deterministic inferred nodes;
-- repeated title keyphrases can bootstrap topics only with stronger repeated interaction support;
+- repeated title keyphrases cannot create standalone taxonomy nodes; they may only reinforce an existing metadata-derived topic;
 - passive Home exposure alone cannot materialize concepts;
 - acquired/search/RSS metadata alone cannot materialize concepts without retained interaction support;
 - derived nodes/edges have deterministic IDs and exact retained evidence references;
 - unchanged projection reconciliation does not bump graph revision;
 - projection changes bump graph revision once without creating synthetic user-edit records;
 - explicit graph nodes survive derived projection replacement/removal;
-- proposal count and support-edge count remain bounded;
+- proposal count and support-edge count remain bounded, with `qualifiedBeforeCap` and `droppedByCap` diagnostics exposing cap pressure;
 - concept evaluation reports precision/recall/F1, unexpected/missing labels and duplicate normalized labels.
 
 ### Live acceptance
