@@ -1224,3 +1224,4 @@ export * from './personal-algorithm-scorer.ts';
 
 export * from './semantic-primitives.ts';
 export * from './semantic-reranking.ts';
+export * from './replay-evaluation.ts';
