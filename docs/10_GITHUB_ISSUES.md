@@ -4,25 +4,25 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #212 is merged. The acquisition layer is no longer the main product bottleneck; semantic classification and reranking are.
+PR #213 is merged. The acquisition and local semantic-execution layers are no longer the main bottleneck; the immediate risks are category calibration and Home-feed stability.
 
-1. **#209 + #210 — semantic mode reranking**: add a compact local text-embedding encoder, candidate↔graph semantic similarity, candidate↔mode semantic similarity, and deterministic traceable reranking. Modes become semantic lenses over one Personal Algorithm Graph rather than fixed presentation labels.
-2. **#170 + #153 — graph provenance and full Why-this UX**: expose the semantic/symbolic path and exact contributions behind each decision.
-3. **#162 — replay/evaluation baseline**: establish reproducible ranking fixtures and metrics for semantic model/scorer changes.
+1. **#214 — inferred semantic categories/modes + stable replacements**: replace the five fixed category anchors with graph-derived symbolic categories, leave ambiguous candidates uncategorized, populate mode controls from inferred local categories, and remove generation/time-based replacement cycling.
+2. **#162 — replay/evaluation baseline**: establish labelled category fixtures, neural/hash comparisons, mode-separation metrics, and deterministic replacement replay before considering model training.
+3. **#170 + #153 — graph provenance and full Why-this UX**: expose the semantic/symbolic path and exact contributions behind each decision.
 4. **#154 + #155 + #178 — correction, Forget/provenance, and history-cluster controls**.
-5. **#169 + #161 + #158 + #159 — remaining runtime validation, mode editing, graph editing, and counterfactual replay**.
+5. **#169 + #161 + #158 + #159 — remaining runtime validation, editable modes, graph editing, and counterfactual replay**.
 6. **#163/#164/#165/#166 — portability, optional sync, paid-value validation, and a second connector**.
 
-Multimodal inference remains deferred. Text embeddings are the next model layer because the observed failure is insufficient semantic ranking resolution, not missing thumbnail/video understanding.
+Multimodal inference remains deferred. Fine-tuning the embedding encoder is also deferred until a labelled replay set demonstrates residual systematic errors after classification taxonomy, ambiguity thresholds, metadata, and model choice are measured.
 
 
 ### Current handoff state
 
-PR #212 is merged and #206 is closed as the acquisition foundation. Live diagnostics established that YouTube search acquisition works; the active product gap is semantic understanding and reranking.
+PR #213 is merged. It established packaged local neural/hash embeddings, graph/mode semantic features, exact scorer traces, asynchronous candidate enrichment, and WebGPU/WASM/hash fallback.
 
-PR #213 is now the active implementation branch for #209 + #210. It introduces a replaceable local embedding-provider contract, graph-derived semantic mode profiles, bounded embedding/similarity caches, explicit graph/mode semantic score contributions, and asynchronous semantic enrichment that does not block first-paint ranking. The dependency-free local hash/subword provider is the integration baseline; it is not the final neural encoder.
+Post-merge live review exposed that nearest-of-five fixed anchor similarity was being used as a de facto classifier even though the embedding encoder is not a five-class classifier. It also exposed deliberate replacement rotation from a rank-generation tie-break seed plus a short sticky-assignment TTL. #214 is the active corrective slice for both findings.
 
-Next validation should focus on whether the same candidate set changes rank meaningfully across Work/Learning/Relax, whether semantic traces remain exact, and whether first-rank/cached latency stays within the long-session performance envelope.
+The intended classifier is now graph-native: candidate embeddings are compared to eligible graph topic/concept embeddings, category labels resolve to those symbolic nodes, and a candidate receives no category when the strongest match is too weak or too close to the runner-up. Mode controls are derived from the categories observed in local feed state plus a neutral All mode. Replacement choice must be deterministic on an unchanged route and survive ordinary DOM/metadata/semantic reranks.
 
 
 #152/#171 are completed in PR #204. #160 is completed in merged PR #205 after CI and live-browser validation/refinement.
