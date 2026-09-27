@@ -390,7 +390,7 @@ Committed CI fixtures:
 
 The replay projection compares semantic state independently of array insertion order and volatile persistence timestamps. The graph reviewer detects duplicate identities/relationships, dangling node references, stale evidence references, unsupported inferred edges, missing expected creator relationships and inferred-edge evidence coverage.
 
-The semantic evaluator reports multi-label micro/macro precision, recall and F1, exact-set match, per-label metrics, primary-badge precision/coverage/abstention, and ambiguous false-confidence rate. Supporting evaluators cover canonical assignment, mode-supply banner/fill behavior, source→replacement stability, and inference throughput/fallback by batch size.
+The semantic evaluator reports multi-label micro/macro precision, recall and F1, exact-set match, per-label metrics, primary-badge precision/coverage/abstention, and ambiguous false-confidence rate. The default CI evaluation now also runs #221 canonical assignment and aggregation diagnostics: source-node→neighbourhood compression, lexical/embedding overlap, contribution mass before/after reconciliation, raw-score averages, and supplied 97–100 display-saturation rates. Supporting evaluators also cover mode-supply banner/fill behavior, source→replacement stability, and inference throughput/fallback by batch size.
 
 Run:
 
@@ -458,7 +458,7 @@ console.table(
 );
 ```
 
-Do not evaluate canonicalization or mode-cluster quality in this PR; those are the next #214 slices.
+PR #223/#221 now evaluates canonicalization against a fixed synthetic fixture. Mode-cluster quality remains a separate #214 slice and must consume canonical neighbourhoods rather than raw graph labels.
 
 
 ## PR #220 local concept verification validation (#219)
