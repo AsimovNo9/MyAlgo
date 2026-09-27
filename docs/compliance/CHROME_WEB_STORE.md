@@ -89,7 +89,7 @@ The extension runs on YouTube and can request YouTube-owned URLs for metadata or
 
 With explicit web discovery enabled, MyAlgo requests YouTube search pages using only bounded graph-derived goal/topic queries plus active mode intent. It does not send raw watch-history rows, the full Personal Algorithm Graph, feedback records, or scoring traces. Search-page snippets are discovery metadata and are followed by canonical YouTube watch-page enrichment before scoring.
 
-With local neural semantics explicitly enabled, the extension loads packaged quantized `mixedbread-ai/mxbai-embed-xsmall-v1` embedding assets and `Xenova/flan-t5-small` concept-extraction assets plus the bundled Transformers.js/ONNX runtime. Inference runs locally in a sandboxed extension page. Runtime remote-model loading is disabled and there is no Hugging Face/jsDelivr model or executable-code request from the installed extension.
+With local neural semantics explicitly enabled, the extension loads packaged quantized `mixedbread-ai/mxbai-embed-xsmall-v1` embedding assets and `onnx-community/SmolLM2-135M-Instruct-ONNX-MHA` concept-extraction assets plus the bundled Transformers.js/ONNX runtime. Inference runs locally in a sandboxed extension page. Runtime remote-model loading is disabled and there is no Hugging Face/jsDelivr model or executable-code request from the installed extension.
 
 Any future MyAlgo-operated backend, telemetry, sync, cloud enrichment, third-party search provider, or materially different processor is a new data-flow boundary and requires review before collection begins.
 
