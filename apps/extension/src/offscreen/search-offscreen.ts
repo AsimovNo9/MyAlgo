@@ -6,6 +6,7 @@ type SearchJob = {
   provider?: 'hash' | 'neural';
   batchSize?: number;
   texts?: string[];
+  prompts?: string[];
 };
 
 const worker = new Worker(new URL('./youtube-search-worker.ts', import.meta.url), {
@@ -67,6 +68,13 @@ type SemanticResult = {
   dimensions: number;
 };
 
+type ConceptResult = {
+  outputs: string[];
+  modelId: string;
+  modelVersion: string;
+  backend: string;
+};
+
 const persistSemanticStatus = (
   provider: 'hash' | 'neural',
   data: {
@@ -108,6 +116,17 @@ const persistSemanticStatus = (
       inputCount: data.inputCount ?? null,
       tokenMaxLength: data.tokenMaxLength ?? null,
       elapsedMs: data.elapsedMs ?? null,
+      updatedAt: new Date().toISOString(),
+    },
+  }).catch(() => undefined);
+};
+
+const persistConceptStatus = (data: Record<string, unknown>) => {
+  void chrome.runtime.sendMessage({
+    type: 'CONCEPT_MODEL_STATUS',
+    payload: {
+      modelId: 'Xenova/flan-t5-small',
+      ...data,
       updatedAt: new Date().toISOString(),
     },
   }).catch(() => undefined);
@@ -313,6 +332,145 @@ const embedNeuralInSandbox = (
   });
 };
 
+const extractConceptsNeuralInSandbox = (
+  prompts: string[],
+): Promise<ConceptResult> => {
+  const id = `concept-sandbox-${++sequence}`;
+  const frame = ensureNeuralSandbox();
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Local concept extraction sandbox timed out.'));
+    }, 300_000);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+      frame.removeEventListener('load', onLoad);
+    };
+
+    let requestSent = false;
+    const postRequest = () => {
+      if (requestSent || !frame.contentWindow) return;
+      requestSent = true;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'EXTRACT_CONCEPTS',
+        prompts,
+      }, '*');
+    };
+    const onLoad = () => {
+      readyNeuralFrames.add(frame);
+      postRequest();
+    };
+
+    const onMessage = (event: MessageEvent<{
+      source?: string;
+      id?: string | null;
+      type?: 'ready' | 'progress' | 'concept-inference' | 'backend-fallback';
+      modelKind?: 'embedding' | 'concept';
+      backend?: string;
+      from?: string;
+      to?: string;
+      reason?: string;
+      progress?: {
+        status?: string;
+        progress?: number;
+        loaded?: number;
+        total?: number;
+        file?: string;
+      };
+      item?: number;
+      itemCount?: number;
+      completedItems?: number;
+      inputCount?: number;
+      elapsedMs?: number;
+      ok?: boolean;
+      outputs?: string[];
+      modelId?: string;
+      modelVersion?: string;
+      error?: string;
+    }>) => {
+      if (
+        event.source !== frame.contentWindow
+        || event.data?.source !== 'myalgo-neural-sandbox'
+      ) return;
+
+      if (event.data.type === 'ready') {
+        readyNeuralFrames.add(frame);
+        postRequest();
+        return;
+      }
+      if (event.data.id !== id || event.data.modelKind === 'embedding') return;
+
+      if (event.data.type === 'backend-fallback') {
+        persistConceptStatus({
+          status: 'loading',
+          backend: event.data.to ?? 'wasm-sandbox',
+          fallbackReason: event.data.reason ?? null,
+        });
+        return;
+      }
+      if (event.data.type === 'progress') {
+        const progress = event.data.progress ?? {};
+        persistConceptStatus({
+          status: progress.status ?? 'loading',
+          progress: typeof progress.progress === 'number' ? progress.progress : null,
+          loaded: typeof progress.loaded === 'number' ? progress.loaded : null,
+          total: typeof progress.total === 'number' ? progress.total : null,
+          file: progress.file ?? null,
+          backend: event.data.backend ?? 'webgpu-sandbox',
+        });
+        return;
+      }
+      if (event.data.type === 'concept-inference') {
+        persistConceptStatus({
+          status: 'inference',
+          backend: event.data.backend ?? 'webgpu-sandbox',
+          item: event.data.item ?? null,
+          itemCount: event.data.itemCount ?? null,
+          completedItems: event.data.completedItems ?? null,
+          inputCount: event.data.inputCount ?? null,
+          elapsedMs: event.data.elapsedMs ?? null,
+        });
+        return;
+      }
+
+      cleanup();
+      if (
+        !event.data.ok
+        || !Array.isArray(event.data.outputs)
+        || !event.data.modelId
+        || !event.data.modelVersion
+      ) {
+        reject(new Error(event.data.error ?? 'Local concept extraction failed.'));
+        return;
+      }
+      persistConceptStatus({
+        status: 'ready',
+        progress: 100,
+        backend: event.data.backend ?? 'webgpu-sandbox',
+      });
+      resolve({
+        outputs: event.data.outputs,
+        modelId: event.data.modelId,
+        modelVersion: event.data.modelVersion,
+        backend: event.data.backend ?? 'webgpu-sandbox',
+      });
+    };
+
+    window.addEventListener('message', onMessage);
+    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
+      readyNeuralFrames.add(frame);
+      postRequest();
+    } else {
+      frame.addEventListener('load', onLoad, { once: true });
+    }
+  });
+};
+
 const embedSemantics = (
   texts: string[],
   provider: 'hash' | 'neural',
@@ -324,6 +482,22 @@ const embedSemantics = (
 );
 
 chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse) => {
+  if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EXTRACT_CONCEPTS') {
+    void (async () => {
+      const prompts = Array.isArray(message.prompts)
+        ? message.prompts.filter((value): value is string => typeof value === 'string').slice(0, 4)
+        : [];
+      const result = await extractConceptsNeuralInSandbox(prompts);
+      sendResponse({ ok: true, ...result });
+    })().catch((error) => {
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Local concept extraction failed.',
+      });
+    });
+    return true;
+  }
+
   if (message?.target === 'semantic-embedding-offscreen' && message.type === 'EMBED_TEXTS') {
     void (async () => {
       const texts = Array.isArray(message.texts)
