@@ -19,6 +19,7 @@ export default defineConfig(() => {
         popup: 'index.html',
         options: 'options.html',
         offscreenSearch: 'offscreen-search.html',
+        neuralSandbox: 'neural-sandbox.html',
       },
     },
   },
