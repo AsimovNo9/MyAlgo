@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildInferredModeOptions, summarizeFeed } from './extension-helpers.ts';
+import { buildDurableModeOptions, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -31,17 +31,56 @@ test('summarizeFeed handles an empty feed', () => {
 });
 
 
-test('buildInferredModeOptions uses inferred categories instead of a fixed taxonomy', () => {
+test('buildDurableModeOptions uses persisted stable mode IDs instead of feed categories', () => {
+  const catalog = {
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 12,
+    generatedAt: '2026-09-27T20:00:00.000Z',
+    modes: [
+      {
+        id: 'mode:inferred:v1:systems',
+        label: 'Distributed systems',
+        revision: 3,
+        members: [],
+        provenance: 'inferred',
+        pipelineId: 'durable-semantic-mode-cluster-v1',
+        graphRevision: 12,
+        createdAt: '2026-09-27T19:00:00.000Z',
+        lastSupportedAt: '2026-09-27T20:00:00.000Z',
+        active: true,
+        pinned: false,
+      },
+      {
+        id: 'mode:inferred:v1:ambient',
+        label: 'Ambient music',
+        revision: 2,
+        members: [],
+        provenance: 'inferred',
+        pipelineId: 'durable-semantic-mode-cluster-v1',
+        graphRevision: 12,
+        createdAt: '2026-09-27T18:00:00.000Z',
+        lastSupportedAt: '2026-09-27T19:30:00.000Z',
+        active: false,
+        pinned: false,
+      },
+    ],
+  };
+
   assert.deepEqual(
-    buildInferredModeOptions('Default', [
-      { category: 'Distributed systems', count: 4 },
-      { category: 'Ambient music', count: 2 },
-    ]),
-    ['Default', 'Distributed systems', 'Ambient music'],
+    buildDurableModeOptions('default', catalog),
+    [
+      { id: 'default', label: 'All', revision: null, active: true },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
+    ],
   );
+
   assert.deepEqual(
-    buildInferredModeOptions('Legacy Work', [{ category: 'Distributed systems', count: 4 }]),
-    ['Default', 'Distributed systems', 'Legacy Work'],
+    buildDurableModeOptions('mode:inferred:v1:ambient', catalog),
+    [
+      { id: 'default', label: 'All', revision: null, active: true },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
+    ],
   );
 });
 
@@ -69,8 +108,4 @@ test('summarizeFeed discovers recurring mode categories from soft semantic score
     { category: 'AI tooling', count: 3 },
     { category: 'Personal finance', count: 2 },
   ]);
-  assert.deepEqual(
-    buildInferredModeOptions('Default', summary.categories),
-    ['Default', 'AI tooling', 'Personal finance'],
-  );
 });
