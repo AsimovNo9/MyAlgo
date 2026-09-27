@@ -70,7 +70,7 @@ update.
 
 ## Candidate acquisition
 
-The current runtime primarily acquires candidates by observing rendered YouTube pages. After PR #205, presentation/replacement can consume a broader local reservoir, so #206 adds independent acquisition without adding a second scorer.
+The runtime acquires candidates through rendered YouTube pages plus the merged #206/#212 acquisition foundation: opt-in RSS and opt-in YouTube search-page discovery behind connector-owned adapters. All acquisition mechanisms feed the same bounded local reservoir and deterministic scorer.
 
 The repository already contains deterministic planning primitives:
 
@@ -78,12 +78,12 @@ The repository already contains deterministic planning primitives:
 - `buildRecommendationProfile()` for goal/topic/format/creator intent;
 - `buildRecommendationQueries()` and `buildRecommendationQueryPlans()` for inspectable goal/topic/alias/format/intent/creator/freshness queries.
 
-Those helpers still lean on the legacy `Algorithm` contract. #206 must bridge the current `PersonalAlgorithmState`/graph into a retrieval-intent profile deterministically; it must not revive the legacy algorithm object as a second preference model.
+The merged #206 implementation bridges current `PersonalAlgorithmState` graph state into retrieval intent deterministically; the legacy `Algorithm` object is not revived as a second preference model.
 
-The first implemented acquisition mechanisms should be:
+The implemented acquisition mechanisms are:
 
 1. **RSS** — bounded source/channel update discovery;
-2. **web search** — opt-in queries derived from normalized graph concepts, explicit goals, and retained history-derived concepts rather than raw history rows.
+2. **YouTube search-page discovery** — opt-in queries derived from normalized graph concepts, explicit goals, and active mode intent rather than raw history rows.
 
 Retrieval expands the candidate set only. It must not directly update preference weights or create graph evidence. Each acquired candidate carries source-neutral acquisition provenance and then flows through the same local deterministic scorer and policy as browser-observed candidates.
 
@@ -319,13 +319,11 @@ The first concrete provider is YouTube search-page discovery. The `WebSearchProv
 Search result snippets are discovery metadata, not recommendation evidence and not authoritative video metadata.
 
 
-### Current PR #212 status
+### PR #212 handoff
 
-The current implementation has passed acquisition-level live validation and CI. One observed browser run reported 4/4 search plans succeeded, 32 candidates fetched, 3 newly added, 29 deduplicated, 35 search-origin candidates retained in the reservoir, and no retrieval error. This establishes the search → reservoir path.
+PR #212 is merged and #206 is closed. Live acquisition diagnostics established the search → reservoir path; its connector-owned acquisition, offscreen search worker, bounded retention, and retrieved-discovery exploration are now foundation behavior rather than the active implementation slice.
 
-The remaining live gate is search → scoring → replacement promotion after the bounded retrieved-discovery exploration change. Validate the new rank diagnostics (`searchCandidatesScored`, `searchCandidatesQualified`, `searchCandidatesInReplacementInventory`, `maxSearchCandidateScore`) together with `retrievedDiscoveryExplorationAssignments` and confirm search activity no longer disrupts badges/replacements.
-
-CI #662 passes 25/25 recommender-core tests and 122/122 extension tests, plus typecheck, lint, build, YouTube API-boundary audit, secret scan, and artifact upload.
+PR #213 is the active #209/#210 branch. Live validation should focus on semantic first-paint isolation, semantic follow-up reranking, mode-dependent score/rank changes, cache bounds, replacement stability, and deletion/re-disclosure behavior.
 
 ### Retrieved-discovery exploration
 
