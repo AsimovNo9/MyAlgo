@@ -155,3 +155,33 @@ The committed semantic fixture currently gates:
 Those thresholds are regression guards for the reference baseline, not proof that production semantic quality is solved.
 
 Future #214 canonicalization, clustering, durable modes, graph-grounded mode scoring, and mode-aware retrieval should add their predictions to this same evaluation boundary rather than inventing new ad hoc live-only checks.
+
+
+## Mode-cluster and trace metrics
+
+The evaluation API also defines contracts for the next #214 implementation slices:
+
+- canonical alias → canonical concept assignment accuracy;
+- cluster assignment accuracy;
+- predicted-cluster purity;
+- expected-mode fragmentation;
+- durable mode ID/member stability across snapshots using member-set Jaccard;
+- active-mode trace grounding to stable mode ID/revision and exact contributing graph node IDs;
+- exact reconciliation of per-member mode contributions to the aggregate mode contribution;
+- whether switching a mode actually changes retrieval query plans when the fixture expects it.
+
+These evaluators are deliberately available before canonicalization/clustering/mode-grounding implementation lands. #214 should produce predictions for these existing contracts rather than define new success metrics after the fact.
+
+## Bootstrap reference result
+
+The deterministic hash reference provider on `semantic-mode-eval-v1.json` currently produces:
+
+- multi-label micro precision: 0.4103;
+- recall: 1.0000;
+- F1: 0.5818;
+- exact set match: 0.1719;
+- primary badge precision: 1.0000;
+- primary badge coverage: 0.8438;
+- ambiguous false-confident primary badges: 0.
+
+This exposes the current architecture clearly: broad soft semantic membership has excessive false positives, while the stricter primary-badge gate is conservative and precise. The numbers are a baseline for #214, not a production-quality target.
