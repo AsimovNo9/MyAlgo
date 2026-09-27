@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const contexts = [];
 let sentMessages = [];
+let forceWorkerFailure = false;
 
 globalThis.chrome = {
   offscreen: {
@@ -18,6 +19,7 @@ globalThis.chrome = {
     },
     async sendMessage(message) {
       sentMessages.push(message);
+      if (forceWorkerFailure) return { ok: false, error: 'fixture neural failure' };
       const neural = message.provider === 'neural';
       const dimensions = neural ? 384 : 192;
       return {
@@ -88,4 +90,24 @@ test('offscreen neural embedding provider requests WebGPU model identity', async
   assert.equal(provider.dimensions, 384);
   assert.equal(sentMessages[0].provider, 'neural');
   assert.equal(vectors[0].length, 384);
+});
+
+
+test('neural provider throws on worker failure so orchestration can fall back with truthful model provenance', async () => {
+  sentMessages = [];
+  forceWorkerFailure = true;
+  contexts.splice(0, contexts.length, {
+    contextType: 'OFFSCREEN_DOCUMENT',
+    documentUrl: 'chrome-extension://test/offscreen-search.html',
+  });
+
+  try {
+    const provider = createOffscreenEmbeddingProvider('neural');
+    await assert.rejects(
+      provider.embed(['semantic candidate']),
+      /fixture neural failure/,
+    );
+  } finally {
+    forceWorkerFailure = false;
+  }
 });
