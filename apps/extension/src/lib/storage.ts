@@ -23,6 +23,7 @@ export const STORAGE_KEYS = {
   SEMANTIC_FEATURE_CACHE: 'personal-algorithm-semantic-feature-cache',
   SEMANTIC_MODEL_MODE: 'personal-algorithm-semantic-model-mode',
   SEMANTIC_MODEL_STATUS: 'personal-algorithm-semantic-model-status',
+  SEMANTIC_NEURAL_BATCH_SIZE: 'personal-algorithm-semantic-neural-batch-size',
   PRIVACY_DISCLOSURE_ACCEPTED_VERSION: 'personal-algorithm-privacy-disclosure-accepted-version',
 } as const;
 
