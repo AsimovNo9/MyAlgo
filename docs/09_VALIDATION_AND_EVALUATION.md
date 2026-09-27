@@ -264,7 +264,7 @@ Required invariants:
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
 12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
-14. the production artifact contains the pinned mxbai embedding model and FLAN-T5 concept-extraction model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, extracted concepts, graph state, history, feedback, embeddings, or traces outside the extension;
+14. the production artifact contains the pinned mxbai embedding model and SmolLM2-135M-Instruct concept-extraction model/tokenizer/configuration files plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, extracted concepts, graph state, history, feedback, embeddings, or traces outside the extension;
 15. neural execution prefers WebGPU, degrades to local WASM CPU inference when no usable GPU adapter is available, and only then degrades to the deterministic hash baseline if neural loading/inference still fails; none of these fallbacks may block first paint or canonical graph/evidence updates.
 
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider across WebGPU and WASM backends using a fixed replay fixture. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
@@ -467,7 +467,7 @@ PR #218 is merged and remains the authoritative evidence-backed materialization/
 
 ### Automated requirements
 
-- the production build contains pinned local FLAN-T5 Small q8 encoder/decoder/tokenizer assets as well as the existing mxbai embedding assets;
+- the production build contains pinned local SmolLM2-135M-Instruct q8 model/tokenizer assets as well as the existing mxbai embedding assets;
 - installed runtime has `allowRemoteModels = false` and cannot fetch model files from a model host;
 - deterministic prompt construction produces the same input hash for unchanged metadata;
 - parser returns at most four short concepts and rejects generic, malformed, repeated and prompt-echo outputs;
@@ -478,9 +478,15 @@ PR #218 is merged and remains the authoritative evidence-backed materialization/
 - missing/failed model output falls back to the #218 metadata path rather than fabricating concepts;
 - passive exposure and search/RSS acquisition alone still cannot materialize preference concepts;
 - concept and embedding neural requests share a serialized sandbox queue;
-- candidate embedding drain cannot trigger additional concept generations/graph-revision churn;
+- candidate embedding drain cannot trigger additional concept generations and must still reuse cached model concepts instead of rematerializing metadata-only graph state;
 - full local-data deletion removes the concept extraction cache and diagnostics;
 - prior disclosure-v5 acceptance is rejected after disclosure-v6.
+
+### FLAN-T5 live rejection
+
+The first live concept-model run used FLAN-T5 Small q8. It successfully loaded and generated locally on WASM, proving the two-model runtime path, but the 64 cached outputs were not adequate: approximately half were empty and several accepted outputs were generic/prompt-like. The model is therefore replaced in the same PR by SmolLM2-135M-Instruct q8. This is a model-quality rejection, not a runtime failure.
+
+The same run also exposed a drain-path bug: cache-only semantic passes reported generation disabled and discarded cached concept inputs, allowing metadata-only materialization to overwrite the model-backed projection. Regression behavior now requires `cache_only` passes to reuse valid cached concepts while starting no new generations.
 
 ### Live validation
 
