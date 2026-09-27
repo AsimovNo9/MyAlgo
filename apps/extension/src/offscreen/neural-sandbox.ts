@@ -1,4 +1,5 @@
 import { env, pipeline } from '@huggingface/transformers';
+import { createPriorityNeuralScheduler, type NeuralSchedulerStepResult } from './neural-request-scheduler.ts';
 
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-local-q8-v2';
@@ -42,8 +43,7 @@ type LocalBackend = 'webgpu-sandbox' | 'wasm-sandbox';
 let extractorPromise: Promise<{ extractor: FeatureExtractionPipeline; backend: LocalBackend }> | null = null;
 let conceptGeneratorPromise: Promise<{ generator: TextGenerationPipeline; backend: LocalBackend }> | null = null;
 let activeRequestId: string | null = null;
-const queuedRequestIds = new Set<string>();
-let requestQueue: Promise<void> = Promise.resolve();
+const scheduler = createPriorityNeuralScheduler();
 
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
@@ -208,36 +208,83 @@ async function getConceptGenerator(): Promise<{
   return conceptGeneratorPromise;
 }
 
-async function runEmbeddingRequest(id: string, request: NeuralSandboxRequest) {
-  const texts = Array.isArray(request.texts)
-    ? request.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
-    : [];
-  const { extractor, backend } = await getExtractor();
-  const requestedBatchSize = Math.max(
-    1,
-    Math.min(16, Math.floor(Number(request.batchSize ?? 1))),
-  );
-  const batchSize = backend === 'wasm-sandbox' ? 16 : requestedBatchSize;
-  const inferenceBatchCount = Math.ceil(texts.length / batchSize);
-  const startedAt = performance.now();
-  const embeddings: number[][] = [];
+type EmbeddingRequestState = {
+  texts: string[];
+  extractor: FeatureExtractionPipeline;
+  backend: LocalBackend;
+  batchSize: number;
+  inferenceBatchCount: number;
+  startedAt: number;
+  embeddings: number[][];
+  nextIndex: number;
+};
 
-  for (let index = 0; index < texts.length; index += batchSize) {
-    const batch = texts.slice(index, index + batchSize);
+function createEmbeddingRequestStep(
+  id: string,
+  request: NeuralSandboxRequest,
+): () => Promise<NeuralSchedulerStepResult> {
+  let state: EmbeddingRequestState | null = null;
+
+  return async () => {
+    activeRequestId = id;
+
+    if (!state) {
+      const texts = Array.isArray(request.texts)
+        ? request.texts.filter((value): value is string => typeof value === 'string').slice(0, 384)
+        : [];
+      const { extractor, backend } = await getExtractor();
+      const requestedBatchSize = Math.max(
+        1,
+        Math.min(16, Math.floor(Number(request.batchSize ?? 1))),
+      );
+      const batchSize = backend === 'wasm-sandbox' ? 16 : requestedBatchSize;
+      state = {
+        texts,
+        extractor,
+        backend,
+        batchSize,
+        inferenceBatchCount: Math.ceil(texts.length / batchSize),
+        startedAt: performance.now(),
+        embeddings: [],
+        nextIndex: 0,
+      };
+    }
+
+    if (state.nextIndex >= state.texts.length) {
+      postToHost({
+        id,
+        ok: true,
+        modelKind: 'embedding',
+        modelId: NEURAL_MODEL_ID,
+        modelVersion: NEURAL_MODEL_VERSION,
+        dimensions: NEURAL_DIMENSIONS,
+        backend: state.backend,
+        embeddings: state.embeddings,
+      });
+      return 'done';
+    }
+
+    const index = state.nextIndex;
+    const batch = state.texts.slice(index, index + state.batchSize);
     const progress = {
       id,
       type: 'inference',
       modelKind: 'embedding',
-      backend,
-      inferenceBatch: Math.floor(index / batchSize) + 1,
-      inferenceBatchCount,
-      completedBatches: Math.floor(index / batchSize),
-      batchSize,
-      inputCount: texts.length,
+      backend: state.backend,
+      inferenceBatch: Math.floor(index / state.batchSize) + 1,
+      inferenceBatchCount: state.inferenceBatchCount,
+      completedBatches: Math.floor(index / state.batchSize),
+      batchSize: state.batchSize,
+      inputCount: state.texts.length,
       tokenMaxLength: 128,
     };
-    postToHost({ ...progress, elapsedMs: Math.round(performance.now() - startedAt) });
-    const output = await extractor(batch, {
+
+    postToHost({
+      ...progress,
+      elapsedMs: Math.round(performance.now() - state.startedAt),
+    });
+
+    const output = await state.extractor(batch, {
       pooling: 'mean',
       normalize: true,
       truncation: true,
@@ -247,31 +294,37 @@ async function runEmbeddingRequest(id: string, request: NeuralSandboxRequest) {
     if (!Array.isArray(batchEmbeddings) || batchEmbeddings.length !== batch.length) {
       throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
     }
-    embeddings.push(...batchEmbeddings);
+    if (batchEmbeddings.some((vector) => !Array.isArray(vector) || vector.length !== NEURAL_DIMENSIONS)) {
+      throw new Error('Neural embedding pipeline returned an unexpected embedding dimension.');
+    }
+
+    state.embeddings.push(...batchEmbeddings);
+    state.nextIndex += batch.length;
     postToHost({
       ...progress,
       completedBatches: progress.inferenceBatch,
-      elapsedMs: Math.round(performance.now() - startedAt),
+      elapsedMs: Math.round(performance.now() - state.startedAt),
     });
-  }
 
-  if (embeddings.length !== texts.length) {
-    throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
-  }
-  if (embeddings.some((vector) => !Array.isArray(vector) || vector.length !== NEURAL_DIMENSIONS)) {
-    throw new Error('Neural embedding pipeline returned an unexpected embedding dimension.');
-  }
+    if (state.nextIndex >= state.texts.length) {
+      if (state.embeddings.length !== state.texts.length) {
+        throw new Error('Neural embedding pipeline returned an unexpected batch shape.');
+      }
+      postToHost({
+        id,
+        ok: true,
+        modelKind: 'embedding',
+        modelId: NEURAL_MODEL_ID,
+        modelVersion: NEURAL_MODEL_VERSION,
+        dimensions: NEURAL_DIMENSIONS,
+        backend: state.backend,
+        embeddings: state.embeddings,
+      });
+      return 'done';
+    }
 
-  postToHost({
-    id,
-    ok: true,
-    modelKind: 'embedding',
-    modelId: NEURAL_MODEL_ID,
-    modelVersion: NEURAL_MODEL_VERSION,
-    dimensions: NEURAL_DIMENSIONS,
-    backend,
-    embeddings,
-  });
+    return 'yield';
+  };
 }
 
 async function runConceptRequest(id: string, request: NeuralSandboxRequest) {
@@ -353,27 +406,41 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   }
 
   const id = request.id;
-  if (queuedRequestIds.has(id)) return;
-  queuedRequestIds.add(id);
+  if (scheduler.isQueued(id)) return;
 
-  const runRequest = async () => {
-    activeRequestId = id;
-    if (request.type === 'EXTRACT_CONCEPTS') {
-      await runConceptRequest(id, request);
-      return;
-    }
-    await runEmbeddingRequest(id, request);
-  };
-
-  requestQueue = requestQueue.then(runRequest).catch((error) => {
+  const onError = (error: unknown) => {
+    if (activeRequestId === id) activeRequestId = null;
     postToHost({
       id,
       ok: false,
       error: error instanceof Error ? error.message : 'Local neural sandbox failed.',
     });
-  }).finally(() => {
-    activeRequestId = null;
-    queuedRequestIds.delete(id);
+  };
+  const onDone = () => {
+    if (activeRequestId === id) activeRequestId = null;
+  };
+
+  if (request.type === 'EXTRACT_CONCEPTS') {
+    scheduler.enqueue({
+      id,
+      kind: 'concept',
+      step: async () => {
+        activeRequestId = id;
+        await runConceptRequest(id, request);
+        return 'done';
+      },
+      onDone,
+      onError,
+    });
+    return;
+  }
+
+  scheduler.enqueue({
+    id,
+    kind: 'embedding',
+    step: createEmbeddingRequestStep(id, request),
+    onDone,
+    onError,
   });
 });
 
