@@ -1,4 +1,6 @@
 import { env, pipeline } from '@huggingface/transformers';
+import ortMjsUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs?url';
+import ortWasmUrl from 'onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm?url';
 
 const NEURAL_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
 const NEURAL_MODEL_VERSION = 'transformersjs-webgpu-q8-v1';
@@ -24,6 +26,14 @@ env.allowLocalModels = false;
 // CacheStorage because extension sandbox CSP cannot opt into allow-same-origin.
 env.useBrowserCache = false;
 env.useWasmCache = false;
+// ONNX Runtime defaults these executable runtime files to jsDelivr. MV3 must
+// execute only code packaged with the extension, so force both URLs to Vite-
+// emitted local assets while model/configuration files remain the only remote
+// neural download boundary.
+env.backends.onnx.wasm.wasmPaths = {
+  mjs: new URL(ortMjsUrl, window.location.href).href,
+  wasm: new URL(ortWasmUrl, window.location.href).href,
+};
 
 const postToHost = (message: Record<string, unknown>) => {
   window.parent.postMessage({
