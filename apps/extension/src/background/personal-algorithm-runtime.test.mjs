@@ -99,7 +99,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p3');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p4');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
@@ -382,7 +382,7 @@ test('semantic mode similarity replaces the legacy heuristic mode boost instead 
 test('semantic graph matches become canonical trace contributions without changing total graph weight', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'semantic-symbolic',
-    title: 'Distributed systems design',
+    title: 'Distributed systems and local-first software design',
     semantic_graph_similarity: 0.75,
     semantic_mode_similarity: 0,
     semantic_model_version: 'fixture-model@v1',
@@ -588,4 +588,126 @@ test('independent canonical neighbourhoods retain separate bounded contributions
   assert.equal(semantic.length, 2);
   assert.ok(semantic.reduce((sum, item) => sum + item.value, 0) > 18);
   assert.ok(semantic.every((item) => item.value <= 18));
+});
+
+
+test('nested live-style lofi concepts collapse into one bounded scoring region', () => {
+  const fixture = structuredClone(state);
+  for (const [id, label] of [
+    ['topic:chill-lofi', 'chill lofi'],
+    ['topic:chill-lofi-beats', 'chill lofi beats'],
+    ['topic:lofi-beats', 'lofi beats'],
+  ]) {
+    fixture.graph.nodes.push({
+      id,
+      kind: 'topic',
+      label,
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    });
+  }
+
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'lofi-live-regression',
+    title: 'Chill lofi beats and lofi beats mix for sleep',
+  }], 'Default')[0];
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+
+  assert.equal(semantic.length, 1);
+  assert.equal(semantic[0].value, 12.6);
+  assert.ok(semantic[0].sourceId.startsWith('canonical:semantic:score-region:v1:'));
+  assert.deepEqual(semantic[0].sourceIds, [
+    'topic:chill-lofi',
+    'topic:chill-lofi-beats',
+    'topic:lofi-beats',
+  ]);
+});
+
+test('weak relative embedding neighbours do not receive score mass beside a strong match', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'game-boy-regression',
+    title: 'Game Boy Games on a graphing calculator',
+    semantic_graph_similarity: 0.6,
+    semantic_model_version: 'fixture-mxbai@v1',
+    semantic_graph_matches: [
+      {
+        node_id: 'topic:games',
+        node_label: 'games',
+        similarity: 0.65,
+        weight: 0.65,
+        canonical_id: 'canonical:games',
+        source_node_ids: ['topic:games'],
+      },
+      {
+        node_id: 'topic:homeless-couple',
+        node_label: 'Homeless Couple',
+        similarity: 0.42,
+        weight: 0.42,
+        canonical_id: 'canonical:homeless-couple',
+        source_node_ids: ['topic:homeless-couple'],
+      },
+    ],
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.equal(semantic[0].sourceId, 'canonical:games');
+  assert.equal(
+    semantic.some((item) => item.label.includes('Homeless Couple')),
+    false,
+  );
+});
+
+test('taxonomy-only semantic matches share one collective bounded fallback contribution', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'taxonomy-only-regression',
+    title: 'A generic candidate without a specific graph concept',
+    semantic_graph_similarity: 0.6,
+    semantic_model_version: 'fixture-mxbai@v1',
+    semantic_graph_matches: [
+      {
+        node_id: 'concept:education',
+        node_label: 'Education',
+        similarity: 0.6,
+        weight: 0.6,
+        canonical_id: 'canonical:education',
+        source_node_ids: ['concept:education'],
+        taxonomy_only: true,
+      },
+      {
+        node_id: 'concept:music',
+        node_label: 'Music',
+        similarity: 0.55,
+        weight: 0.55,
+        canonical_id: 'canonical:music',
+        source_node_ids: ['concept:music'],
+        taxonomy_only: true,
+      },
+      {
+        node_id: 'concept:people-blogs',
+        node_label: 'People & Blogs',
+        similarity: 0.52,
+        weight: 0.52,
+        canonical_id: 'canonical:people-blogs',
+        source_node_ids: ['concept:people-blogs'],
+        taxonomy_only: true,
+      },
+    ],
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.match(semantic[0].label, /^semantic taxonomy:/);
+  assert.ok(semantic[0].value > 0 && semantic[0].value <= 3);
+  assert.deepEqual(semantic[0].sourceIds, [
+    'concept:education',
+    'concept:music',
+    'concept:people-blogs',
+  ]);
 });
