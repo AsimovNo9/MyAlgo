@@ -14,7 +14,8 @@ The documentation must agree that:
 - Candidate acquisition (RSS/web search) expands what can be scored; retrieval is not preference evidence.
 - MVP is local-first.
 - Watch-history extraction was the first technical spike and is now completed.
-- Modes operate over one graph.
+- Modes operate as semantic/policy lenses over one graph; they do not create separate hidden user models.
+- Embeddings/similarities are rebuildable derived features and can feed the scorer directly without becoming canonical graph state.
 - Counterfactuals replay stored candidates.
 
 ## Pass 2 — Execution ordering
@@ -40,15 +41,17 @@ YouTube API boundary audit (#168) — implemented; no launch API integration fou
       ↓
 feed enforcement / stale-loop hardening — implemented
       ↓
-source-neutral candidate acquisition (#202/#206): RSS first, web search next
+source-neutral candidate acquisition (#202/#206) — implemented
       ↓
-Why / trace
+semantic matching + mode-aware reranking (#209/#210) — active PR #213
       ↓
-editing
+graph provenance + Why/trace UX (#170/#153)
       ↓
-counterfactuals
+replay/evaluation baseline (#162)
       ↓
-enrichment
+correction / Forget / history controls (#154/#155/#178)
+      ↓
+broader mode editing / counterfactuals
       ↓
 sync/cloud/productization
       ↓
