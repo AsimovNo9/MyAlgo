@@ -99,7 +99,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p4');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p5');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
@@ -660,6 +660,130 @@ test('weak relative embedding neighbours do not receive score mass beside a stro
   assert.equal(
     semantic.some((item) => item.label.includes('Homeless Couple')),
     false,
+  );
+});
+
+
+test('flat low-confidence semantic profiles abstain from embedding-only score mass', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'false-hero-live-regression',
+    title: 'False Hero indie souls livestream',
+    semantic_graph_similarity: 0.3351,
+    semantic_model_version: 'fixture-mxbai@v1',
+    semantic_graph_matches: [
+      {
+        node_id: 'topic:silent-hill',
+        node_label: 'Silent Hill Townfall PS5 Gameplay',
+        similarity: 0.3446,
+        weight: 0.3249,
+        canonical_id: 'canonical:silent-hill',
+        source_node_ids: ['topic:silent-hill'],
+      },
+      {
+        node_id: 'topic:games',
+        node_label: 'games',
+        similarity: 0.3359,
+        weight: 0.3322,
+        canonical_id: 'canonical:games',
+        source_node_ids: ['topic:games'],
+      },
+      {
+        node_id: 'topic:videogames',
+        node_label: 'this week in videogames',
+        similarity: 0.3247,
+        weight: 0.3061,
+        canonical_id: 'canonical:videogames',
+        source_node_ids: ['topic:videogames'],
+      },
+    ],
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.deepEqual(semantic, []);
+});
+
+test('alias-close top matches use the independent scoring region as runner-up', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'alias-margin-regression',
+    title: 'Ambient sleep mix',
+    semantic_graph_similarity: 0.55,
+    semantic_model_version: 'fixture-mxbai@v1',
+    semantic_graph_matches: [
+      {
+        node_id: 'topic:chill-lofi-beats',
+        node_label: 'chill lofi beats',
+        similarity: 0.6,
+        weight: 0.6,
+        canonical_id: 'canonical:chill-lofi-beats',
+        source_node_ids: ['topic:chill-lofi-beats'],
+      },
+      {
+        node_id: 'topic:lofi-beats',
+        node_label: 'lofi beats',
+        similarity: 0.58,
+        weight: 0.58,
+        canonical_id: 'canonical:lofi-beats',
+        source_node_ids: ['topic:lofi-beats'],
+      },
+      {
+        node_id: 'topic:games',
+        node_label: 'games',
+        similarity: 0.2,
+        weight: 0.2,
+        canonical_id: 'canonical:games',
+        source_node_ids: ['topic:games'],
+      },
+    ],
+  }], 'Default')[0];
+
+  const semantic = ranked.trace.featureContributions
+    .filter((item) => item.id.startsWith('feature:semantic-neighbourhood:'));
+  assert.equal(semantic.length, 1);
+  assert.ok(semantic[0].sourceId.startsWith('canonical:semantic:score-region:v1:'));
+  assert.deepEqual(semantic[0].sourceIds, [
+    'topic:chill-lofi-beats',
+    'topic:lofi-beats',
+  ]);
+});
+
+test('single generic words do not partially match multi-token semantic labels', () => {
+  const fixture = structuredClone(state);
+  for (const [id, label] of [
+    ['topic:homeless-couple', 'Homeless Couple'],
+    ['topic:grm-daily', 'GRM Daily'],
+    ['topic:week-videogames', 'this week in videogames'],
+  ]) {
+    fixture.graph.nodes.push({
+      id,
+      kind: 'topic',
+      label,
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    });
+  }
+
+  const falsePositive = scoreLocalCandidates(fixture, [{
+    external_id: 'partial-token-regression',
+    title: 'A daily update for a couple of projects this week',
+  }], 'Default')[0];
+  assert.equal(
+    falsePositive.trace.featureContributions.some((item) => (
+      item.id.startsWith('feature:semantic-neighbourhood:')
+    )),
+    false,
+  );
+
+  const exact = scoreLocalCandidates(fixture, [{
+    external_id: 'exact-token-control',
+    title: 'GRM Daily interview',
+  }], 'Default')[0];
+  assert.equal(
+    exact.trace.featureContributions.some((item) => item.label.includes('GRM Daily')),
+    true,
   );
 });
 
