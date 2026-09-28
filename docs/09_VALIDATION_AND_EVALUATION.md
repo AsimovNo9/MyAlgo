@@ -490,6 +490,21 @@ PR #224 passed that live durability gate and is merged. PR #225 adds the next sc
 
 Live review should inspect the full mode-grounding explanation object rather than only the top-five generic contribution summary, so a lower-ranked member contribution cannot be hidden by presentation truncation.
 
+PR #225 passed its live scoring gate and is merged. PR #226 adds the retrieval/supply gate. Validation must prove:
+- `GET_RETRIEVAL_PLAN` for a durable mode returns the exact stable mode ID/revision and bounded canonical member terms, and its query set differs from Default when the fixture expects a change;
+- switching durable mode revision changes retrieval-plan revision identity;
+- a dormant retained mode can still change retrieval intent without creating preference evidence;
+- for Home, `requestedModeSlots = replacementQuota(sliderPercent, eligibleNativeSlots)`;
+- `nativeModeSupply` counts only source-filter-eligible current-Home candidates with exact current mode grounding;
+- `poolModeSupply` excludes **all** current Home IDs and counts only off-page candidates that remain visible, policy-eligible, normally scored above the existing replacement threshold, and exact-mode grounded;
+- `shortfall = max(0, requestedModeSlots - nativeModeSupply)` and fill attempts are bounded by `min(shortfall, poolModeSupply)`;
+- fulfilled slots never exceed requested slots or native supply plus actually rendered pool replacements;
+- changing acquisition mechanism (observed/RSS/search) does not add score;
+- Default/All clears mode-supply diagnostics and preserves the pre-#226 general replacement behavior;
+- `evaluateRetrievalModeChanges` reports the expected plan changes and `evaluateModeSupply` reports correct banner/shortfall behavior and acquired fill rate.
+
+Live validation should capture both the stored `retrievalDiagnostics.modeSupply` snapshot and the content-script `[MyAlgo] native presentation` / `replacement slots` diagnostics so requested/native/pool/fulfilled counts can be reconciled against the DOM.
+
 
 ## PR #220 local concept verification validation (#219)
 
