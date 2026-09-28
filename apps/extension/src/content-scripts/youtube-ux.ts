@@ -290,6 +290,13 @@ export function navigationFinishRerankReason(
   return navigationInvalidationPending ? 'manual' : 'navigation';
 }
 
+export function shouldPreserveReplacementOwnedPresentation(
+  preserveReplacements: boolean,
+  isWithinReplacement: boolean,
+): boolean {
+  return preserveReplacements && isWithinReplacement;
+}
+
 
 export type ModeSupplyPlan = {
   modeId: string;
