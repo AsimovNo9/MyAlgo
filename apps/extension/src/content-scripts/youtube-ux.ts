@@ -35,6 +35,18 @@ export type RankedFeedItem = {
     graphRevision: number;
     acquisitionMechanism: string | null;
     contributions: Array<{ label: string; value: number; kind: string }>;
+    modeGrounding?: {
+      modeId: string;
+      modeRevision: number;
+      total: number;
+      members: Array<{
+        canonicalId: string;
+        label: string;
+        value: number;
+        sourceIds: string[];
+        evidenceIds: string[];
+      }>;
+    } | null;
   };
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
@@ -239,6 +251,107 @@ export function replacementQuota(percent: number, nativeCount: number): number {
   const value = Math.max(0, Math.min(100, percent));
   return Math.ceil(Math.max(0, Math.floor(nativeCount)) * value / 100);
 }
+
+export type DurableModePresentationContext = {
+  id: string;
+  label: string;
+  revision: number;
+};
+
+export type ModeSupplyPlan = {
+  modeId: string;
+  modeRevision: number;
+  modeLabel: string;
+  sliderPercent: number;
+  eligibleNativeSlots: number;
+  requestedModeSlots: number;
+  nativeModeSupply: number;
+  poolModeSupply: number;
+  shortfall: number;
+  fillLimit: number;
+  poolCandidates: RankedFeedItem[];
+};
+
+export function isDurableModeGroundedItem(
+  item: RankedFeedItem | undefined,
+  mode: DurableModePresentationContext | null | undefined,
+): boolean {
+  if (!item || !mode) return false;
+  const grounding = item.explanation?.modeGrounding;
+  return Boolean(
+    grounding
+    && grounding.modeId === mode.id
+    && grounding.modeRevision === mode.revision
+    && grounding.total > 0
+    && grounding.members.length > 0
+  );
+}
+
+const isEligibleReplacementCandidate = (
+  item: RankedFeedItem,
+  minimumScore: number,
+): boolean => (
+  Boolean(item.external_id && item.title && item.traceId)
+  && item.visible !== false
+  && item.suppressed !== true
+  && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+  && (item.score ?? 0) >= minimumScore
+);
+
+export function buildModeSupplyPlan(input: {
+  mode: DurableModePresentationContext;
+  sliderPercent: number;
+  eligibleNativeIds: string[];
+  feedItems: RankedFeedItem[];
+  minimumReplacementScore: number;
+}): ModeSupplyPlan {
+  const nativeIds = new Set(input.eligibleNativeIds.filter(Boolean));
+  const feedById = new Map(
+    input.feedItems
+      .filter((item) => item.external_id)
+      .map((item) => [item.external_id as string, item]),
+  );
+  const requestedModeSlots = replacementQuota(
+    input.sliderPercent,
+    nativeIds.size,
+  );
+  const nativeModeSupply = [...nativeIds].filter((id) => {
+    const item = feedById.get(id);
+    return Boolean(
+      item
+      && item.visible !== false
+      && item.suppressed !== true
+      && (item.policyOutcome == null || item.policyOutcome === 'eligible')
+      && isDurableModeGroundedItem(item, input.mode)
+    );
+  }).length;
+  const poolCandidates = input.feedItems
+    .filter((item) => (
+      !nativeIds.has(item.external_id ?? '')
+      && isEligibleReplacementCandidate(item, input.minimumReplacementScore)
+      && isDurableModeGroundedItem(item, input.mode)
+    ))
+    .sort((left, right) => (
+      (right.score ?? 0) - (left.score ?? 0)
+      || (left.external_id ?? '').localeCompare(right.external_id ?? '')
+    ));
+  const shortfall = Math.max(0, requestedModeSlots - nativeModeSupply);
+
+  return {
+    modeId: input.mode.id,
+    modeRevision: input.mode.revision,
+    modeLabel: input.mode.label,
+    sliderPercent: Math.max(0, Math.min(100, input.sliderPercent)),
+    eligibleNativeSlots: nativeIds.size,
+    requestedModeSlots,
+    nativeModeSupply,
+    poolModeSupply: poolCandidates.length,
+    shortfall,
+    fillLimit: Math.min(shortfall, poolCandidates.length),
+    poolCandidates,
+  };
+}
+
 
 export function selectFeedMixAssignments(
   nativeTargets: OpportunisticReplacementTarget[],
