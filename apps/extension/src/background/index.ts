@@ -1547,6 +1547,27 @@ async function refreshSemanticScoreFeatures(
         .slice(0, MAX_SEMANTIC_FEATURE_CACHE),
     );
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
+      status: 'started',
+      phase: 'semantic_feature_cache_write',
+      inputCount: semanticCandidates.length,
+      mode,
+      graphRevision: state.graph.currentRevision,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      neuralBatchSize: requestedContext.neuralBatchSize,
+      semanticModelMode: effectiveContext.semanticModelMode,
+      modelVersion: effectiveContext.semanticModelIdentity,
+      candidateCount: semanticCandidates.length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
+      totalCandidateCount: candidates.length,
+      pendingCandidateCount: Math.max(
+        0,
+        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+      ),
+      featureCacheSize: Object.keys(bounded).length,
+      generatedAt: new Date().toISOString(),
+    });
     await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
 
     const remainingPendingCandidateCount = Math.max(
