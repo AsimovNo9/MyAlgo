@@ -641,8 +641,8 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
       nextRssAllowedAt: null,
       lastError: 'No YouTube channel IDs are available yet. Refresh discovery after MyAlgo has observed a few videos.',
     };
-    await persistRetrievalDiagnostics(diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
@@ -702,17 +702,17 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     rssConsecutiveFailures: consecutiveFailures,
     lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
   };
-  await persistRetrievalDiagnostics(diagnostics);
+  const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
   console.info('[MyAlgo] retrieval refresh', {
     mechanism: 'rss',
-    channels: diagnostics.rssChannelsConsidered,
-    succeeded: diagnostics.rssFeedsSucceeded,
-    failed: diagnostics.rssFeedsFailed,
-    fetched: diagnostics.rssCandidatesFetched,
-    added: diagnostics.rssCandidatesAdded,
-    deduplicated: diagnostics.rssCandidatesDeduplicated,
+    channels: persistedDiagnostics.rssChannelsConsidered,
+    succeeded: persistedDiagnostics.rssFeedsSucceeded,
+    failed: persistedDiagnostics.rssFeedsFailed,
+    fetched: persistedDiagnostics.rssCandidatesFetched,
+    added: persistedDiagnostics.rssCandidatesAdded,
+    deduplicated: persistedDiagnostics.rssCandidatesDeduplicated,
   });
-  return { diagnostics, changed: addedCount > 0 || enrichedCount > 0 };
+  return { diagnostics: persistedDiagnostics, changed: addedCount > 0 || enrichedCount > 0 };
 }
 
 
@@ -794,8 +794,8 @@ async function refreshWebSearchCandidates(
       webSearchConsecutiveFailures: 0,
       lastError: null,
     };
-    await persistRetrievalDiagnostics(diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
@@ -809,8 +809,8 @@ async function refreshWebSearchCandidates(
       nextWebSearchAllowedAt: null,
       lastError: 'The active connector does not support search acquisition.',
     };
-    await persistRetrievalDiagnostics(diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   let candidates: PageCandidate[] = [];
@@ -850,7 +850,7 @@ async function refreshWebSearchCandidates(
     webSearchConsecutiveFailures: consecutiveFailures,
     lastError: failureMessage,
   };
-  await persistRetrievalDiagnostics(diagnostics);
+  const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
 
   console.info('[MyAlgo] web-search refresh', {
     provider: provider.id,
@@ -865,7 +865,7 @@ async function refreshWebSearchCandidates(
     failed,
   });
 
-  return { diagnostics, changed: addedCount > 0 };
+  return { diagnostics: persistedDiagnostics, changed: addedCount > 0 };
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
