@@ -1357,8 +1357,6 @@ async function refreshSemanticScoreFeatures(
         0,
         candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
       ),
-      recentFallbackCoverageCount,
-      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       generatedAt: new Date().toISOString(),
     });
 
@@ -1567,6 +1565,8 @@ async function refreshSemanticScoreFeatures(
       featureCacheSize: Object.keys(bounded).length,
       modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
       modeCatalogSignature: expectedModeCatalogSignature,
+      recentFallbackCoverageCount,
+      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       totalCandidateCount: candidates.length,
       pendingCandidateCount: Math.max(
         0,
