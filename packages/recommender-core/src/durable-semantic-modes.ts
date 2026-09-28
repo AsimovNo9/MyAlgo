@@ -413,6 +413,7 @@ export function buildCandidateModeAffinities(
   catalog: DurableSemanticModeCatalog | null | undefined,
   options: {
     minimumMemberSimilarity?: number;
+    minimumModeAffinity?: number;
     maxAffinities?: number;
     includeDormant?: boolean;
   } = {},
@@ -420,6 +421,16 @@ export function buildCandidateModeAffinities(
   const minimumMemberSimilarity = Math.max(
     0,
     Math.min(1, options.minimumMemberSimilarity ?? 0.35),
+  );
+  // Live PR #224 validation showed obvious cross-domain false positives in the
+  // 0.35-0.40 weighted-affinity band while grounded controls were >= ~0.51.
+  // Keep the raw member floor permissive for provenance/coverage, but abstain
+  // from exposing the durable mode unless the final weighted signal is strong.
+  // This is a provisional replay/live regression threshold, not a calibrated
+  // encoder constant.
+  const minimumModeAffinity = Math.max(
+    0,
+    Math.min(1, options.minimumModeAffinity ?? 0.45),
   );
   const maxAffinities = Math.max(1, Math.floor(options.maxAffinities ?? 4));
   const includeDormant = options.includeDormant === true;
@@ -459,6 +470,7 @@ export function buildCandidateModeAffinities(
 
     if (memberHits.length === 0) continue;
     const affinity = Math.max(...memberHits.map((hit) => hit.affinity));
+    if (affinity < minimumModeAffinity) continue;
     affinities.push({
       modeId: mode.id,
       modeRevision: mode.revision,
