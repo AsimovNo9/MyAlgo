@@ -297,6 +297,15 @@ export function shouldPreserveReplacementOwnedPresentation(
   return preserveReplacements && isWithinReplacement;
 }
 
+export function isStableReplacementCandidateAvailableToSource(
+  candidateId: string,
+  sourceId: string,
+  ownerByCandidateId: ReadonlyMap<string, string>,
+): boolean {
+  const ownerSourceId = ownerByCandidateId.get(candidateId);
+  return ownerSourceId == null || ownerSourceId === sourceId;
+}
+
 
 export type ModeSupplyPlan = {
   modeId: string;
