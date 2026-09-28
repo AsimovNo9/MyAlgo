@@ -1,4 +1,4 @@
-import type { Algorithm, PersonalAlgorithmState } from '@repo/shared-types';
+import type { Algorithm, DurableSemanticMode, PersonalAlgorithmState } from '@repo/shared-types';
 
 export interface ConceptCatalogEntry {
   id?: string;
@@ -1027,6 +1027,54 @@ export function applyModeToRetrievalProfile(
       ...(activeModeTerm ? [activeModeTerm] : []),
     ])],
     preferredFormats: [...profile.preferredFormats],
+  };
+}
+
+export function applyDurableModeToRetrievalProfile(
+  profile: RecommendationProfile,
+  mode: DurableSemanticMode | null | undefined,
+  options: { maxMembers?: number } = {},
+): RecommendationProfile {
+  if (!mode || !mode.active) return {
+    ...profile,
+    explicitTopics: [...profile.explicitTopics],
+    aliases: [...profile.aliases],
+    intents: [...profile.intents],
+    semanticTerms: [...profile.semanticTerms],
+    preferredFormats: [...profile.preferredFormats],
+    creatorTerms: [...profile.creatorTerms],
+  };
+
+  const maxMembers = Math.max(1, Math.min(8, Math.floor(options.maxMembers ?? 4)));
+  const memberLabels = [...mode.members]
+    .filter((member) => member.label.trim())
+    .sort((left, right) => (
+      right.weight - left.weight
+      || left.canonicalId.localeCompare(right.canonicalId)
+    ))
+    .map((member) => member.label.trim())
+    .filter((label, index, all) => (
+      all.findIndex((candidate) => normalizeTopic(candidate) === normalizeTopic(label)) === index
+    ))
+    .slice(0, maxMembers);
+  const modeLabel = mode.label.trim();
+  const retrievalTerms = [...new Set(
+    [modeLabel, ...memberLabels].map((value) => value.trim()).filter(Boolean),
+  )];
+
+  return {
+    ...profile,
+    goal: [profile.goal.trim(), modeLabel].filter(Boolean).join(' '),
+    explicitTopics: [
+      ...memberLabels,
+      ...profile.explicitTopics.filter((topic) => (
+        !memberLabels.some((member) => normalizeTopic(member) === normalizeTopic(topic))
+      )),
+    ],
+    intents: [...new Set([...retrievalTerms, ...profile.intents])],
+    semanticTerms: [...new Set([...retrievalTerms, ...profile.semanticTerms])],
+    preferredFormats: [...profile.preferredFormats],
+    creatorTerms: [...profile.creatorTerms],
   };
 }
 
