@@ -298,25 +298,29 @@ Record labelled examples of obvious correct, obvious incorrect, and ambiguous ca
 
 ### Home replacement stability
 
-For one unchanged Home route, record source native video ID → replacement video ID mappings across at least:
+For one unchanged Home route/mode/feed-mix context, record source native video ID → replacement video ID mappings across at least:
 
-- ordinary MutationObserver reranks;
+- ordinary MutationObserver / `yt-page-data-updated` reranks;
 - metadata-enrichment reranks;
-- semantic-enrichment reranks;
-- more than 45 seconds of idle/normal DOM churn.
+- semantic-enrichment reranks where `conceptGraphChanged !== true`;
+- retrieval-reservoir expansion;
+- ordinary manual retry/rerank.
 
-A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Ordinary rank-generation increments must not rotate equal/near-equal candidates.
+A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Rank-generation, score, trace, or presentation-metadata changes alone must not rotate equal/near-equal candidates or recreate a retained replacement DOM node.
 
 Then deliberately trigger meaningful invalidations and confirm reselection is allowed:
 
 - route/navigation change;
-- mode change;
-- graph/feedback/policy change;
+- durable mode ID/revision change;
+- graph-changing semantic materialization;
+- explicit feedback/rebuild;
+- source-filter policy change;
 - feed replacement percentage change;
+- extension/model lifecycle reset;
 - source native card removal;
-- replacement candidate becoming ineligible/suppressed.
+- replacement candidate becoming native, ineligible/suppressed, below threshold/native relevance, or stale-mode grounded.
 
-This distinguishes YouTube DOM recycling from MyAlgo-owned candidate cycling. Diagnostics should report the stable/bound replacement counts without logging private candidate text.
+This distinguishes YouTube DOM recycling and derived-cache churn from MyAlgo-owned intent/policy changes. Diagnostics should report stable/bound counts, binding revision, and invalidation reason without logging private candidate text.
 
 
 ## P0: labelled semantic-mode evaluation inside PR #215 (#162)
