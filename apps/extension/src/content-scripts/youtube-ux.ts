@@ -258,6 +258,33 @@ export type DurableModePresentationContext = {
   revision: number;
 };
 
+export type ReplacementRerankReason =
+  | 'navigation'
+  | 'mutation'
+  | 'metadata'
+  | 'semantic'
+  | 'mode'
+  | 'feedback'
+  | 'graph'
+  | 'retrieval'
+  | 'policy'
+  | 'feed_mix'
+  | 'lifecycle'
+  | 'manual';
+
+export function shouldInvalidateStableReplacementBindings(
+  reason: ReplacementRerankReason,
+): boolean {
+  return reason === 'navigation'
+    || reason === 'mode'
+    || reason === 'feedback'
+    || reason === 'graph'
+    || reason === 'policy'
+    || reason === 'feed_mix'
+    || reason === 'lifecycle';
+}
+
+
 export type ModeSupplyPlan = {
   modeId: string;
   modeRevision: number;
@@ -286,6 +313,35 @@ export function isDurableModeGroundedItem(
     && grounding.members.length > 0
   );
 }
+
+export function isStableReplacementCandidateEligible(
+  item: RankedFeedItem | undefined,
+  options: {
+    activeMode?: DurableModePresentationContext | null;
+    minimumScore: number;
+    nativeScore: number;
+    feedReplacementPercent: number;
+  },
+): boolean {
+  if (
+    !item
+    || item.visible === false
+    || item.suppressed === true
+    || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+    || (item.score ?? 0) < options.minimumScore
+    || !Number.isFinite(options.nativeScore)
+    || (
+      options.activeMode
+      && !isDurableModeGroundedItem(item, options.activeMode)
+    )
+  ) {
+    return false;
+  }
+
+  return options.feedReplacementPercent >= 100
+    || (item.score ?? 0) >= options.nativeScore;
+}
+
 
 const isEligibleReplacementCandidate = (
   item: RankedFeedItem,
