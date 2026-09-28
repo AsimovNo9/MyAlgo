@@ -850,7 +850,7 @@ const applyRankedFeed = () => {
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
         element.dataset.personalAlgorithmSourceScore = String(
-          Number.isFinite(item?.score) ? Number(item?.score) : 0,
+          Number.isFinite(item?.score ?? NaN) ? Number(item?.score) : 0,
         );
       }
       element.style.setProperty('display', 'none', 'important');
