@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -705,15 +705,34 @@ async function refreshWebSearchCandidates(
     return { diagnostics: previous, changed: false };
   }
 
-  const state = await personalAlgorithmStore.exportState();
-  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
+  const [
+    state,
+    storedMode,
+    activeModeId,
+    durableModeCatalog,
+  ] = await Promise.all([
+    personalAlgorithmStore.exportState(),
+    getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const effectiveModeLabel = modeOverride ?? activeDurableMode?.label ?? storedMode;
   const baseProfile = buildGraphRetrievalProfile(state);
-  const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
+  const profile = activeDurableMode
+    ? applyDurableModeToRetrievalProfile(baseProfile, activeDurableMode)
+    : applyModeToRetrievalProfile(baseProfile, effectiveModeLabel);
   const retrievalRevision = buildGraphRetrievalRevision(state);
+  const modeRevisionTag = activeDurableMode
+    ? `${activeDurableMode.id}:r${activeDurableMode.revision}`
+    : effectiveModeLabel.toLowerCase();
   const plans = buildRecommendationQueryPlans(
     profile,
     8,
-    `${retrievalRevision}:mode-${storedMode.toLowerCase()}`,
+    `${retrievalRevision}:mode-${modeRevisionTag}`,
     [],
     [],
     true,
@@ -792,7 +811,10 @@ async function refreshWebSearchCandidates(
 
   console.info('[MyAlgo] web-search refresh', {
     provider: provider.id,
-    mode: storedMode,
+    mode: effectiveModeLabel,
+    modeId: activeDurableMode?.id ?? null,
+    modeRevision: activeDurableMode?.revision ?? null,
+    modeMembers: activeDurableMode?.members.map((member) => member.label) ?? [],
     plans: plans.length,
     fetched: unique.length,
     added: addedCount,
@@ -2437,14 +2459,25 @@ const handleRuntimeMessage = (
     void Promise.all([
       personalAlgorithmStore.exportState(),
       getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
-    ]).then(([state, mode]) => {
+      getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+      getStorage<DurableSemanticModeCatalog | null>(
+        STORAGE_KEYS.DURABLE_MODE_CATALOG,
+        null,
+      ),
+    ]).then(([state, mode, activeModeId, durableModeCatalog]) => {
+      const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
       const baseProfile = buildGraphRetrievalProfile(state);
-      const profile = applyModeToRetrievalProfile(baseProfile, mode);
+      const profile = activeDurableMode
+        ? applyDurableModeToRetrievalProfile(baseProfile, activeDurableMode)
+        : applyModeToRetrievalProfile(baseProfile, mode);
       const retrievalRevision = buildGraphRetrievalRevision(state);
+      const modeRevisionTag = activeDurableMode
+        ? `${activeDurableMode.id}:r${activeDurableMode.revision}`
+        : mode.toLowerCase();
       const plans = buildRecommendationQueryPlans(
         profile,
         8,
-        `${retrievalRevision}:mode-${mode.toLowerCase()}`,
+        `${retrievalRevision}:mode-${modeRevisionTag}`,
         [],
         [],
         true,
@@ -2452,9 +2485,22 @@ const handleRuntimeMessage = (
       sendResponse({
         ok: true,
         mode,
+        activeMode: activeDurableMode
+          ? {
+              id: activeDurableMode.id,
+              label: activeDurableMode.label,
+              revision: activeDurableMode.revision,
+              members: activeDurableMode.members.map((member) => ({
+                canonicalId: member.canonicalId,
+                label: member.label,
+                weight: member.weight,
+              })),
+            }
+          : null,
         graphRevision: state.graph.currentRevision,
         retrievalRevision,
         goal: profile.goal,
+        explicitTopics: profile.explicitTopics,
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
