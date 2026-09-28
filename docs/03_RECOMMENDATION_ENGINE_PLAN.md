@@ -495,6 +495,8 @@ The UI may still show one conservative primary badge when the leading label clea
 
 PR #224 persists a bounded candidate↔mode affinity list alongside semantic candidate features. Each affinity resolves to a stable mode ID/revision, matched canonical IDs, and exact source graph node IDs. This slice does not yet award score from that list; the next #214 slice will convert qualified member affinities into exact trace contributions.
 
+Live validation also showed that raw member similarity alone was too permissive: unrelated music/game candidates could enter a durable mode through weak weighted signals around 0.35–0.40. PR #224 therefore applies a provisional final weighted mode-affinity abstention floor of 0.45 while preserving the underlying member matches for diagnostics/provenance. In the labelled live sample, obvious grounded controls began above ~0.51. This is a replay/live regression guard, not a calibrated encoder threshold.
+
 ### 4. Graph-grounded mode scoring
 
 Do not implement mode behavior as an opaque parallel `mode_adjustment` detached from graph structure.
