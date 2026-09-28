@@ -48,6 +48,7 @@ let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
 let replacementBindingRevision = 0;
 let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
+let navigationInvalidationPending = false;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
@@ -1896,6 +1897,7 @@ window.addEventListener('load', () => {
 });
 window.addEventListener('yt-navigate-start', () => {
   invalidateStableReplacements('navigation');
+  navigationInvalidationPending = true;
   if (mutationRankTimer !== undefined) {
     window.clearTimeout(mutationRankTimer);
     mutationRankTimer = undefined;
@@ -1913,10 +1915,15 @@ window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
     if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   if (isYouTubeHistoryPage(location.pathname)) {
+    navigationInvalidationPending = false;
     scheduleHistoryObservation();
   } else {
     clearLegacyRecommendationShelf();
-    triggerRank('navigation');
+    const rerankReason: ReplacementRerankReason = navigationInvalidationPending
+      ? 'manual'
+      : 'navigation';
+    navigationInvalidationPending = false;
+    triggerRank(rerankReason);
     scheduleHomeRecommendationObservation();
   }
 });
