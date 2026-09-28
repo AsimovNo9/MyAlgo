@@ -141,6 +141,7 @@ const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
+const CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -1116,12 +1117,21 @@ async function refreshSemanticConceptGraph(
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [initialState, initialCandidatePool, semanticModelMode] = await Promise.all([
+  const [initialState, initialCandidatePool, semanticModelMode, conceptModelStatus] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
     getSemanticModelMode(),
+    getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
   ]);
-  const generationEnabled = allowModelExtraction && semanticModelMode === 'neural';
+  const conceptStatusUpdatedAt = typeof conceptModelStatus?.updatedAt === 'string'
+    ? Date.parse(conceptModelStatus.updatedAt)
+    : Number.NaN;
+  const conceptFailureCooldownActive = conceptModelStatus?.status === 'error'
+    && Number.isFinite(conceptStatusUpdatedAt)
+    && Date.now() - conceptStatusUpdatedAt < CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS;
+  const generationEnabled = allowModelExtraction
+    && semanticModelMode === 'neural'
+    && !conceptFailureCooldownActive;
   const generation = await refreshConceptExtractionCache(
     initialState,
     initialCandidatePool,
@@ -1184,6 +1194,9 @@ async function refreshSemanticConceptGraph(
     materializedEdgeCount: reconciled.edgeCount,
     preservedReferencedNodeCount: reconciled.preservedReferencedNodeCount,
     modelExtractionStatus: generation.diagnostics.status,
+    modelExtractionSuppressedReason: conceptFailureCooldownActive
+      ? 'recent_verifier_failure'
+      : null,
     modelExtractedCandidateCount: generation.diagnostics.extracted,
     modelCachedCandidateCount: extraction.diagnostics.cachedConceptCandidateCount,
     modelPendingCandidateCount: extraction.diagnostics.pending,
