@@ -311,18 +311,20 @@ const refreshDurableModeCatalog = async (
 
 const resolveModeSelection = async (
   requested: string | null | undefined,
-): Promise<{ modeId: string; label: string }> => {
+): Promise<{ modeId: string; label: string; revision: number | null }> => {
   const value = requested?.trim() || 'default';
-  if (value.toLowerCase() === 'default') return { modeId: 'default', label: 'Default' };
+  if (value.toLowerCase() === 'default') {
+    return { modeId: 'default', label: 'Default', revision: null };
+  }
   const catalog = await getStorage<DurableSemanticModeCatalog | null>(
     STORAGE_KEYS.DURABLE_MODE_CATALOG,
     null,
   );
   const byId = resolveDurableMode(catalog, value);
-  if (byId) return { modeId: byId.id, label: byId.label };
+  if (byId) return { modeId: byId.id, label: byId.label, revision: byId.revision };
   const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
-  if (byLabel) return { modeId: byLabel.id, label: byLabel.label };
-  return { modeId: value, label: value };
+  if (byLabel) return { modeId: byLabel.id, label: byLabel.label, revision: byLabel.revision };
+  return { modeId: value, label: value, revision: null };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -2250,8 +2252,25 @@ const handleRuntimeMessage = (
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
+        const activeModeId = await getStorage<string>(
+          STORAGE_KEYS.ACTIVE_MODE_ID,
+          'default',
+        );
+        const durableModeCatalog = await getStorage<DurableSemanticModeCatalog | null>(
+          STORAGE_KEYS.DURABLE_MODE_CATALOG,
+          null,
+        );
+        const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+
         sendResponse({
           ok: true,
+          activeDurableMode: activeDurableMode
+            ? {
+                id: activeDurableMode.id,
+                label: activeDurableMode.label,
+                revision: activeDurableMode.revision,
+              }
+            : null,
           feed: presentationFeed,
           cachedFeedSize: feedCache.length,
           currentPageScored: currentPageFeed.length,
@@ -2358,10 +2377,19 @@ const handleRuntimeMessage = (
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
-          payload: { mode: selection.label, modeId: selection.modeId },
+          payload: {
+            mode: selection.label,
+            modeId: selection.modeId,
+            modeRevision: selection.revision,
+          },
         }).catch(() => undefined)
         : undefined));
-      sendResponse({ ok: true, mode: selection.label, modeId: selection.modeId });
+      sendResponse({
+        ok: true,
+        mode: selection.label,
+        modeId: selection.modeId,
+        modeRevision: selection.revision,
+      });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
   }
