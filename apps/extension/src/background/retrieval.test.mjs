@@ -8,6 +8,8 @@ import {
   mergeCandidateAcquisitionHistory,
   nextRssAllowedAt,
   nextWebSearchAllowedAt,
+  reconcileModeSupplyForSelection,
+  selectWebSearchPlans,
   shouldRefreshObservedCandidate,
 } from './retrieval.ts';
 import {
@@ -134,6 +136,100 @@ test('planned web-search requests stay bounded and preserve graph query provenan
       acquiredAt: '2026-09-26T18:00:00.000Z',
       limit: 20,
     },
+  );
+});
+
+
+test('durable mode web-search selection reserves bounded slots for canonical member topics', () => {
+  const plans = [
+    { text: 'chill lofi', lane: 'goal', topics: ['chill lofi', 'chill lofi beats', 'lofi beats'], algorithmRevision: 'graph:r5' },
+    { text: 'creator one guide', lane: 'creator', topics: [], algorithmRevision: 'graph:r5' },
+    { text: 'creator two guide', lane: 'creator', topics: [], algorithmRevision: 'graph:r5' },
+    { text: 'creator three guide', lane: 'creator', topics: [], algorithmRevision: 'graph:r5' },
+    { text: 'chill lofi guide', lane: 'format', topics: ['chill lofi'], algorithmRevision: 'graph:r5' },
+    { text: 'chill lofi beats guide', lane: 'format', topics: ['chill lofi beats'], algorithmRevision: 'graph:r5' },
+    { text: 'lofi beats guide', lane: 'format', topics: ['lofi beats'], algorithmRevision: 'graph:r5' },
+    { text: 'chill lofi latest', lane: 'freshness', topics: ['chill lofi'], algorithmRevision: 'graph:r5' },
+  ];
+
+  assert.deepEqual(
+    selectWebSearchPlans(
+      plans,
+      4,
+      ['chill lofi', 'chill lofi beats', 'lofi beats'],
+    ).map((plan) => plan.text),
+    [
+      'chill lofi',
+      'chill lofi guide',
+      'chill lofi beats guide',
+      'lofi beats guide',
+    ],
+  );
+});
+
+test('default web-search selection preserves existing planner order', () => {
+  const plans = [
+    { text: 'creator one guide', lane: 'creator', topics: [], algorithmRevision: 'graph:default' },
+    { text: 'creator two guide', lane: 'creator', topics: [], algorithmRevision: 'graph:default' },
+    { text: 'topic guide', lane: 'format', topics: ['topic'], algorithmRevision: 'graph:default' },
+  ];
+  assert.deepEqual(
+    selectWebSearchPlans(plans, 2).map((plan) => plan.text),
+    ['creator one guide', 'creator two guide'],
+  );
+});
+
+test('mode supply diagnostics are cleared when selection identity changes or returns to Default', () => {
+  const diagnostics = {
+    lastRssSyncAt: null,
+    nextRssAllowedAt: null,
+    rssChannelsConsidered: 0,
+    rssFeedsSucceeded: 0,
+    rssFeedsFailed: 0,
+    rssCandidatesFetched: 0,
+    rssCandidatesAdded: 0,
+    rssCandidatesDeduplicated: 0,
+    rssConsecutiveFailures: 0,
+    lastWebSearchAt: null,
+    nextWebSearchAllowedAt: null,
+    webSearchPlansAttempted: 0,
+    webSearchPlansSucceeded: 0,
+    webSearchCandidatesFetched: 0,
+    webSearchCandidatesAdded: 0,
+    webSearchCandidatesDeduplicated: 0,
+    webSearchConsecutiveFailures: 0,
+    modeSupply: {
+      generatedAt: '2026-09-28T17:42:26.163Z',
+      modeId: 'mode:lofi',
+      modeRevision: 5,
+      modeLabel: 'chill lofi',
+      sliderPercent: 50,
+      eligibleNativeSlots: 28,
+      requestedModeSlots: 14,
+      nativeModeSupply: 1,
+      poolModeSupply: 9,
+      shortfall: 13,
+      fulfilledModeSlots: 6,
+      bannerShown: true,
+    },
+    lastError: null,
+  };
+
+  assert.equal(
+    reconcileModeSupplyForSelection(diagnostics, 'mode:lofi', 5).modeSupply?.modeRevision,
+    5,
+  );
+  assert.equal(
+    reconcileModeSupplyForSelection(diagnostics, 'mode:lofi', 6).modeSupply,
+    null,
+  );
+  assert.equal(
+    reconcileModeSupplyForSelection(diagnostics, 'default', null).modeSupply,
+    null,
+  );
+  assert.equal(
+    reconcileModeSupplyForSelection(diagnostics, 'mode:other', 1).modeSupply,
+    null,
   );
 });
 
