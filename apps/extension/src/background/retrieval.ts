@@ -1,7 +1,82 @@
-import type { CandidateAcquisitionProvenance, RecommendationCandidate, RecommendationQueryPlan } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, RecommendationCandidate, RecommendationQueryPlan, RetrievalDiagnostics } from '@repo/shared-types';
 import type { WebSearchProvider, WebSearchRequest } from '../connectors/types';
 
 export const RSS_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+
+const normalizePlanTopic = (value: string): string => (
+  value.trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+);
+
+export function selectWebSearchPlans(
+  plans: readonly RecommendationQueryPlan[],
+  maxPlans = 4,
+  priorityTopics: readonly string[] = [],
+): RecommendationQueryPlan[] {
+  const limit = Math.max(0, Math.floor(maxPlans));
+  if (limit === 0) return [];
+
+  const selected: RecommendationQueryPlan[] = [];
+  const selectedIndexes = new Set<number>();
+  const add = (index: number) => {
+    if (index < 0 || selected.length >= limit || selectedIndexes.has(index)) return;
+    selected.push(plans[index]);
+    selectedIndexes.add(index);
+  };
+
+  const goalIndex = plans.findIndex((plan) => plan.lane === 'goal');
+  add(goalIndex);
+
+  const normalizedPriorities = [...new Set(
+    priorityTopics.map(normalizePlanTopic).filter(Boolean),
+  )];
+
+  for (const priority of normalizedPriorities) {
+    const index = plans.findIndex((plan, planIndex) => (
+      !selectedIndexes.has(planIndex)
+      && plan.lane !== 'goal'
+      && plan.topics.some((topic) => normalizePlanTopic(topic) === priority)
+    ));
+    add(index);
+  }
+
+  if (selected.length < limit && normalizedPriorities.length > 0) {
+    for (let index = 0; index < plans.length && selected.length < limit; index += 1) {
+      if (selectedIndexes.has(index) || plans[index].lane === 'goal') continue;
+      const matchesPriority = plans[index].topics.some((topic) => (
+        normalizedPriorities.includes(normalizePlanTopic(topic))
+      ));
+      if (matchesPriority) add(index);
+    }
+  }
+
+  for (let index = 0; index < plans.length && selected.length < limit; index += 1) {
+    add(index);
+  }
+
+  return selected;
+}
+
+export function reconcileModeSupplyForSelection(
+  diagnostics: RetrievalDiagnostics,
+  activeModeId: string | null | undefined,
+  activeModeRevision: number | null | undefined,
+): RetrievalDiagnostics {
+  const modeId = activeModeId?.trim() ?? '';
+  const supply = diagnostics.modeSupply ?? null;
+  const keepSupply = Boolean(
+    supply
+    && modeId
+    && modeId !== 'default'
+    && Number.isInteger(activeModeRevision)
+    && supply.modeId === modeId
+    && supply.modeRevision === activeModeRevision
+  );
+  if (keepSupply || supply == null) return diagnostics;
+  return {
+    ...diagnostics,
+    modeSupply: null,
+  };
+}
 export async function acquireWebSearchCandidates(
   provider: WebSearchProvider,
   plans: RecommendationQueryPlan[],

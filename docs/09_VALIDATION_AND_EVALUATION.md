@@ -490,6 +490,39 @@ PR #224 passed that live durability gate and is merged. PR #225 adds the next sc
 
 Live review should inspect the full mode-grounding explanation object rather than only the top-five generic contribution summary, so a lower-ranked member contribution cannot be hidden by presentation truncation.
 
+PR #225 passed its live scoring gate and is merged. PR #226 adds the retrieval/supply gate. Validation must prove:
+- `GET_RETRIEVAL_PLAN` for a durable mode returns the exact stable mode ID/revision and bounded canonical member terms, and its query set differs from Default when the fixture expects a change;
+- switching durable mode revision changes retrieval-plan revision identity;
+- a dormant retained mode can still change retrieval intent without creating preference evidence;
+- for Home, `requestedModeSlots = replacementQuota(sliderPercent, eligibleNativeSlots)`;
+- `nativeModeSupply` counts only source-filter-eligible current-Home candidates with exact current mode grounding;
+- `poolModeSupply` excludes **all** current Home IDs and counts only off-page candidates that remain visible, policy-eligible, normally scored above the existing replacement threshold, and exact-mode grounded;
+- `shortfall = max(0, requestedModeSlots - nativeModeSupply)` and fill attempts are bounded by `min(shortfall, poolModeSupply)`;
+- fulfilled slots never exceed requested slots or native supply plus actually rendered pool replacements;
+- changing acquisition mechanism (observed/RSS/search) does not add score;
+- Default/All clears mode-supply diagnostics and preserves the pre-#226 general replacement behavior;
+- `evaluateRetrievalModeChanges` reports the expected plan changes and `evaluateModeSupply` reports correct banner/shortfall behavior and acquired fill rate.
+
+Live validation should capture both the stored `retrievalDiagnostics.modeSupply` snapshot and the content-script `[MyAlgo] native presentation` / `replacement slots` diagnostics so requested/native/pool/fulfilled counts can be reconciled against the DOM.
+
+### PR #226 first live retrieval/supply checkpoint
+
+The first real Home run validated the core exact-mode supply path for durable mode `mode:inferred:v1:5b7102b1` revision 5:
+
+- five rendered pool replacements all exposed that exact mode ID/revision in DOM provenance;
+- at a 50% slider, 28 eligible native slots produced 14 requested mode slots;
+- native exact-mode supply was 1, pool exact-mode supply was 9, and shortfall was 13;
+- five pool replacements rendered, so fulfilled mode coverage reconciled to 6 = 1 native + 5 pool;
+- requested-slot, shortfall, and fulfilled-bound checks all evaluated true.
+
+The same run exposed two corrective regressions before PR readiness:
+
+1. Switching to Default correctly removed durable mode provenance from rendered replacements and `GET_RETRIEVAL_PLAN.activeMode`, but the persisted `modeSupply` snapshot could remain from the previous durable mode. Retrieval refresh and content-script diagnostics can race during a mode transition. The runtime therefore clears incompatible supply atomically with mode selection and reconciles every later retrieval/supply diagnostics write against the **current** selected mode ID/revision so an older async refresh cannot restore stale mode state.
+
+2. The diagnostic planner contained durable canonical-member queries, but production web acquisition consumed only the first four plans. In the observed ordering those were the mode goal followed by creator lanes, so member-topic queries could be truncated before acquisition. Production selection now builds a larger bounded candidate plan set and reserves the four acquisition slots as: goal first, then one query per highest-priority durable member while available, then ordinary fallback lanes. Default retains the existing first-N planner ordering.
+
+For follow-up live validation, inspect `GET_RETRIEVAL_PLAN.acquisitionPlans` rather than assuming the first four diagnostic `plans` are the search requests that will execute.
+
 
 ## PR #220 local concept verification validation (#219)
 

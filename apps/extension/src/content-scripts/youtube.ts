@@ -1,10 +1,10 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
-import type { RankedFeedItem } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
@@ -37,6 +37,9 @@ let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
 let feedReplacementPercent = 0;
+let activeDurableMode: DurableModePresentationContext | null = null;
+let latestModeSupplyPlan: ModeSupplyPlan | null = null;
+let lastModeSupplySignature = '';
 let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
 const WATCH_SELECTION_INTENT_MAX_AGE_MS = 15_000;
 let pendingWatchExposure: { videoId: string; exposureId: string | null; observedAt: number } | null = null;
@@ -98,6 +101,63 @@ const safeStorageGet = (keys: string[]): Promise<Record<string, unknown>> => {
       .catch(() => ({}));
   } catch {
     return Promise.resolve({});
+  }
+};
+
+const resolveDurableModeContext = (
+  activeModeId: unknown,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): DurableModePresentationContext | null => {
+  const id = typeof activeModeId === 'string' ? activeModeId.trim() : '';
+  if (!id || id === 'default') return null;
+  const mode = catalog?.modes.find((entry) => entry.id === id);
+  return mode
+    ? { id: mode.id, label: mode.label, revision: mode.revision }
+    : null;
+};
+
+const persistModeSupplyDiagnostics = (
+  plan: ModeSupplyPlan | null,
+  filledFromPool: number,
+) => {
+  const diagnostics: ModeSupplyDiagnostics | null = plan
+    ? {
+        generatedAt: new Date().toISOString(),
+        modeId: plan.modeId,
+        modeRevision: plan.modeRevision,
+        modeLabel: plan.modeLabel,
+        sliderPercent: plan.sliderPercent,
+        eligibleNativeSlots: plan.eligibleNativeSlots,
+        requestedModeSlots: plan.requestedModeSlots,
+        nativeModeSupply: plan.nativeModeSupply,
+        poolModeSupply: plan.poolModeSupply,
+        shortfall: plan.shortfall,
+        fulfilledModeSlots: Math.min(
+          plan.requestedModeSlots,
+          plan.nativeModeSupply + Math.max(0, filledFromPool),
+        ),
+        bannerShown: plan.shortfall > 0,
+      }
+    : null;
+
+  const signature = diagnostics
+    ? JSON.stringify({
+        ...diagnostics,
+        generatedAt: undefined,
+      })
+    : 'none';
+  if (signature === lastModeSupplySignature) return;
+  lastModeSupplySignature = signature;
+
+  safeSendMessage({
+    type: 'MODE_SUPPLY_DIAGNOSTICS',
+    payload: { modeSupply: diagnostics },
+  });
+
+  if (diagnostics?.shortfall) {
+    showStatus(
+      `Not enough native ${diagnostics.modeLabel} supply · ${diagnostics.nativeModeSupply}/${diagnostics.requestedModeSlots} native · ${diagnostics.poolModeSupply} available from MyAlgo pool`,
+    );
   }
 };
 
@@ -222,6 +282,11 @@ const createReplacementCard = (
   card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
   card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
   card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  const modeGrounding = item.explanation?.modeGrounding;
+  if (modeGrounding) {
+    card.dataset.personalAlgorithmReplacementModeId = modeGrounding.modeId;
+    card.dataset.personalAlgorithmReplacementModeRevision = String(modeGrounding.modeRevision);
+  }
   card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
   card.setAttribute('role', 'group');
   card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
@@ -599,11 +664,35 @@ const applyRankedFeed = () => {
     title: getVideoTitle(element),
     flags: getVideoSourceFlags(element),
   }));
-  const replacementLimit = isYouTubeHomePage(location.pathname)
-    ? replacementQuota(feedReplacementPercent, nativeCards.length)
-    : 0;
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
     * (1 - feedReplacementPercent / 100);
+  const homePage = isYouTubeHomePage(location.pathname);
+  const allNativeIds = nativeCards
+    .map((card) => card.id)
+    .filter((id) => id && !id.startsWith('title:'));
+  const eligibleModeNativeIds = activeDurableMode && homePage
+    ? nativeCards
+        .filter((card) => (
+          card.id
+          && !card.id.startsWith('title:')
+          && !shouldHideForSourceFilters(card.flags, sourceFilters)
+        ))
+        .map((card) => card.id)
+    : [];
+  latestModeSupplyPlan = activeDurableMode && homePage
+    ? buildModeSupplyPlan({
+        mode: activeDurableMode,
+        sliderPercent: feedReplacementPercent,
+        nativeIds: allNativeIds,
+        eligibleNativeIds: eligibleModeNativeIds,
+        feedItems: cachedFeed,
+        minimumReplacementScore: replacementMinimumScore,
+      })
+    : null;
+  const replacementLimit = homePage
+    ? latestModeSupplyPlan?.fillLimit
+      ?? replacementQuota(feedReplacementPercent, nativeCards.length)
+    : 0;
 
   nativeCards.forEach(({ element, id, title, flags }, nativeIndex) => {
     element.style.removeProperty('display');
@@ -632,7 +721,12 @@ const applyRankedFeed = () => {
         && slotWidth >= 120
         && element.parentElement
       ) {
-        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(rankGeneration, getRouteKey(), nativeIndex, sourceVideoId);
+        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
+          rankGeneration,
+          getRouteKey(),
+          nativeIndex,
+          sourceVideoId,
+        );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
       }
       element.style.setProperty('display', 'none', 'important');
@@ -674,8 +768,10 @@ const applyRankedFeed = () => {
       : `MyAlgo · ${score}`;
   });
 
-  // Swap eligible native cards only when a distinct, scored reservoir candidate
-  // is already available. At 100%, fill as many safe Home slots as the pool can.
+  // Default mode preserves the general feed-replacement behavior. A durable
+  // mode instead treats the slider as requested mode coverage: existing native
+  // mode matches satisfy the quota first, then only grounded mode candidates
+  // from the already-acquired reservoir may fill the shortfall.
   const existingReplacementSlots = knownElements.filter((element) => Boolean(
     element.dataset.personalAlgorithmSlotId
     && element.style.getPropertyValue('display') === 'none',
@@ -693,16 +789,15 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const routeKey = getRouteKey();
-    const nativeIds = new Set(
-      nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
-    );
+    const nativeIds = new Set(allNativeIds);
     const usedCandidateIds = new Set<string>();
     for (const sourceId of stableReplacementBySourceId.keys()) {
       if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
     }
 
-    // Keep a rendered replacement stable across ordinary YouTube DOM
-    // churn while it remains eligible under the current feed mix.
+    // Keep a rendered replacement stable across ordinary YouTube DOM churn
+    // while it remains eligible and, for a durable mode, still resolves to the
+    // exact selected mode ID/revision.
     for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
       const { element, id } = nativeCards[nativeIndex];
       const sticky = stableReplacementBySourceId.get(id);
@@ -716,6 +811,7 @@ const applyRankedFeed = () => {
       const candidateScore = item?.score ?? -Infinity;
       const valid = Boolean(
         item
+        && (!activeDurableMode || isDurableModeGroundedItem(item, activeDurableMode))
         && !nativeIds.has(sticky.candidateId)
         && !usedCandidateIds.has(sticky.candidateId)
         && item.visible !== false
@@ -751,19 +847,27 @@ const applyRankedFeed = () => {
 
     if (remainingReplacementCapacity > 0) {
       const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
-      // Retrieved candidates receive no provenance bonus. The slider relaxes
-      // the native-score uplift as it approaches full replacement.
+      const replacementSource = latestModeSupplyPlan?.poolCandidates ?? cachedFeed;
+      // Retrieved candidates receive no provenance bonus. In durable mode, the
+      // source list is already constrained to exact grounded mode matches.
       const replacementCandidates = getReplacementCandidates(
-        cachedFeed,
+        replacementSource,
         [...nativeIds, ...usedCandidateIds],
         Math.max(24, remainingReplacementCapacity * 6),
         replacementMinimumScore,
         replacementSelectionSeed,
       );
-      const nativeTargets = nativeCards.flatMap(({ element, id }, nativeIndex) => {
+      const nativeTargets = nativeCards.flatMap(({ element, id, title }, nativeIndex) => {
         if (element.style.getPropertyValue('display') === 'none') return [];
         const score = Number(element.dataset.personalAlgorithmScore);
         if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
+        const nativeItem = feedById.get(id) ?? feedByTitle.get(title);
+        if (
+          activeDurableMode
+          && isDurableModeGroundedItem(nativeItem, activeDurableMode)
+        ) {
+          return [];
+        }
         return [{ externalId: id, score, nativeIndex }];
       });
 
@@ -827,6 +931,17 @@ const applyRankedFeed = () => {
     retrievedDiscoveryExplorationAssignments: 0,
     feedReplacementPercent,
     replacementLimit,
+    modeSupply: latestModeSupplyPlan
+      ? {
+          modeId: latestModeSupplyPlan.modeId,
+          modeRevision: latestModeSupplyPlan.modeRevision,
+          requestedModeSlots: latestModeSupplyPlan.requestedModeSlots,
+          nativeModeSupply: latestModeSupplyPlan.nativeModeSupply,
+          poolModeSupply: latestModeSupplyPlan.poolModeSupply,
+          shortfall: latestModeSupplyPlan.shortfall,
+          fillLimit: latestModeSupplyPlan.fillLimit,
+        }
+      : null,
     opportunisticUpliftQualified,
     replacementMinimumUplift: youtubeConnector.presentation.replacementMinimumUplift,
   });
@@ -899,6 +1014,7 @@ const renderReplacementSlots = (generation: number) => {
       || item.visible === false
       || item.suppressed === true
       || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+      || (activeDurableMode && !isDurableModeGroundedItem(item, activeDurableMode))
       || (item.score ?? 0) < replacementMinimumScore
     ) {
       return [];
@@ -907,17 +1023,22 @@ const renderReplacementSlots = (generation: number) => {
   });
   const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
   const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
+  const replacementSource = activeDurableMode
+    ? cachedFeed.filter((item) => isDurableModeGroundedItem(item, activeDurableMode))
+    : cachedFeed;
   const fallbackAssignments = planReplacementAssignments(
-    cachedFeed,
+    replacementSource,
     slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
     [...blockedIds, ...boundCandidateIds],
     replacementMinimumScore,
     createReplacementSelectionSeed(getRouteKey()),
   );
+  const assignmentLimit = isYouTubeHomePage(location.pathname)
+    ? latestModeSupplyPlan?.fillLimit
+      ?? replacementQuota(feedReplacementPercent, nativeElements.length)
+    : 0;
   const assignments = [...boundAssignments, ...fallbackAssignments]
-    .slice(0, isYouTubeHomePage(location.pathname)
-      ? replacementQuota(feedReplacementPercent, nativeElements.length)
-      : 0);
+    .slice(0, assignmentLimit);
   const existingBySourceId = new Map<string, HTMLElement>();
   for (const replacement of existingReplacements) {
     const sourceId = replacement.dataset.personalAlgorithmReplacementSourceVideoId?.trim();
@@ -983,6 +1104,8 @@ const renderReplacementSlots = (generation: number) => {
     if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
+  persistModeSupplyDiagnostics(latestModeSupplyPlan, filled);
+
   console.info('[MyAlgo] replacement slots', {
     generation,
     eligibleSlots: slots.length,
@@ -995,6 +1118,20 @@ const renderReplacementSlots = (generation: number) => {
     offPageCandidates: cachedFeed.filter((item) => item.external_id && !blockedIds.has(item.external_id)).length,
     boundAssignments: boundAssignments.length,
     fallbackAssignments: fallbackAssignments.length,
+    modeSupply: latestModeSupplyPlan
+      ? {
+          modeId: latestModeSupplyPlan.modeId,
+          modeRevision: latestModeSupplyPlan.modeRevision,
+          requestedModeSlots: latestModeSupplyPlan.requestedModeSlots,
+          nativeModeSupply: latestModeSupplyPlan.nativeModeSupply,
+          poolModeSupply: latestModeSupplyPlan.poolModeSupply,
+          shortfall: latestModeSupplyPlan.shortfall,
+          fulfilledModeSlots: Math.min(
+            latestModeSupplyPlan.requestedModeSlots,
+            latestModeSupplyPlan.nativeModeSupply + filled,
+          ),
+        }
+      : null,
     candidates: replacementCandidateDiagnostics,
   });
 };
@@ -1071,6 +1208,15 @@ const rankCurrentPage = async (requestGeneration: number) => {
     }
 
     if (response?.ok && Array.isArray(response.feed)) {
+      activeDurableMode = response.activeDurableMode
+        && typeof response.activeDurableMode.id === 'string'
+        && Number.isInteger(response.activeDurableMode.revision)
+        ? {
+            id: response.activeDurableMode.id,
+            label: response.activeDurableMode.label ?? activeMode,
+            revision: response.activeDurableMode.revision,
+          }
+        : null;
       console.info('[MyAlgo] rank response', {
         generation: requestGeneration,
         pageCandidates: candidates.length,
@@ -1103,7 +1249,13 @@ const rankCurrentPage = async (requestGeneration: number) => {
         && (item.policyOutcome == null || item.policyOutcome === 'eligible')
         && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
-      showStatus(`MyAlgo: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
+      if (latestModeSupplyPlan?.shortfall) {
+        showStatus(
+          `MyAlgo · ${latestModeSupplyPlan.modeLabel}: ${latestModeSupplyPlan.nativeModeSupply}/${latestModeSupplyPlan.requestedModeSlots} native · ${latestModeSupplyPlan.poolModeSupply} pool`,
+        );
+      } else {
+        showStatus(`MyAlgo: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
+      }
     } else {
       console.warn('[MyAlgo] native feed ranking failed', { phase: 'rank-response' });
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
@@ -1165,12 +1317,18 @@ const scheduleInitialRank = (attempt = 0) => {
 
 safeStorageGet([
   STORAGE_KEYS.MODE,
+  STORAGE_KEYS.ACTIVE_MODE_ID,
+  STORAGE_KEYS.DURABLE_MODE_CATALOG,
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.SOURCE_FILTERS,
   STORAGE_KEYS.FEED_REPLACEMENT_PERCENT,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+  activeDurableMode = resolveDurableModeContext(
+    result[STORAGE_KEYS.ACTIVE_MODE_ID],
+    result[STORAGE_KEYS.DURABLE_MODE_CATALOG] as DurableSemanticModeCatalog | null | undefined,
+  );
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
   const storedPercent = Number(result[STORAGE_KEYS.FEED_REPLACEMENT_PERCENT] ?? 0);
   feedReplacementPercent = Number.isFinite(storedPercent)
@@ -1252,9 +1410,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // request from before the pause strand the clean page waiting for its
       // callback; its generation is already stale and cannot render.
       rankingInFlight = false;
-      void safeStorageGet([STORAGE_KEYS.MODE]).then((result) => {
+      void safeStorageGet([
+        STORAGE_KEYS.MODE,
+        STORAGE_KEYS.ACTIVE_MODE_ID,
+        STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      ]).then((result) => {
         if (!isCurrentInstance() || !extensionEnabled) return;
         activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+        activeDurableMode = resolveDurableModeContext(
+          result[STORAGE_KEYS.ACTIVE_MODE_ID],
+          result[STORAGE_KEYS.DURABLE_MODE_CATALOG] as DurableSemanticModeCatalog | null | undefined,
+        );
         showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
         clearLegacyRecommendationShelf();
         triggerRank('manual');
@@ -1303,6 +1469,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   clearStableReplacements();
   rankGeneration += 1;
   activeMode = message.payload.mode;
+  activeDurableMode = typeof message.payload?.modeId === 'string'
+    && message.payload.modeId !== 'default'
+    && Number.isInteger(message.payload?.modeRevision)
+    ? {
+        id: message.payload.modeId,
+        label: message.payload.mode,
+        revision: message.payload.modeRevision,
+      }
+    : null;
+  latestModeSupplyPlan = null;
+  lastModeSupplySignature = '';
   cachedFeed = [];
   lastCandidateSignature = '';
   lastRankMode = '';

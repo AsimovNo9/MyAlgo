@@ -45,13 +45,14 @@ Current execution order:
 
 1. **Complete — #221 / PR #223 canonical concepts + bounded semantic scoring:** canonical neighbourhoods, scorer-only region reconciliation, field-local lexical grounding, embedding abstention, and bounded taxonomy fallback are merged and live-validated.
 2. **Complete — #214 / PR #224 durable inferred modes:** canonical concepts now reconcile into stable local mode IDs/revisions, preserve multi-label candidate affinities, survive feed-cache churn, and retain unsupported exposed modes as dormant.
-3. **P0 — #214 / PR #225 graph-grounded mode scoring:** replace free-floating durable-mode boosts with bounded member contributions carrying stable mode ID/revision, canonical member identity, exact source graph nodes, and evidence provenance.
-4. **P0 — #214 mode-aware retrieval/supply + replacement stability:** make mode selection change retrieval planning, measure slider-relative native-mode supply, fill shortfalls only through the existing governed reservoir, and preserve valid source→replacement bindings across ordinary reranks.
-5. **P1 — #210 + #153 + #170:** recalibrate display scoring after the graph-grounded mode distribution is stable, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
-6. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
-7. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+3. **Complete — #214 / PR #225 graph-grounded mode scoring:** durable mode score mass now resolves to exact stable mode revision, canonical members, current source graph nodes, and evidence provenance with exact trace reconciliation.
+4. **P0 — #214 / PR #226 mode-aware retrieval + slider-relative supply:** make stable mode members change retrieval planning, count eligible native mode supply against slider demand, and fill only measured shortfall from the existing governed scored reservoir.
+5. **P0 — #214 replacement stability:** preserve valid source→replacement bindings across ordinary mutation/metadata/semantic reranks and rotate only on meaningful invalidation.
+6. **P1 — #210 + #153 + #170:** recalibrate display scoring after the P0 mode runtime distribution is stable, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
+7. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
+8. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #223/#221 and PR #224 are merged and live-validated. Canonical semantic neighbourhoods now feed a durable mode catalog with stable IDs/revisions and bounded multi-label candidate affinities. PR #225 is the next #214 slice: affinity pipeline v2 preserves per-canonical-member similarity/provenance, ranking resolves the selected stable mode ID/revision, and one bounded mode budget is reconciled into exact `modeContributions` carrying canonical/source-node/evidence provenance. Mode-aware retrieval/supply and replacement stability remain subsequent #214 slices.
+PR #223/#221, PR #224, and PR #225 are merged and live-validated. Canonical semantic neighbourhoods feed a durable mode catalog; durable candidate affinities and score contributions resolve through stable mode revisions to exact canonical/source-node/evidence provenance. PR #226 is the next #214 slice: retrieval planning consumes weighted durable-mode members, and Home treats the slider as requested mode coverage—native exact-mode supply first, then only the measured shortfall from the already-acquired normally scored reservoir. Replacement-binding stability remains the following #214 slice.
 
 The intended hierarchy is:
 

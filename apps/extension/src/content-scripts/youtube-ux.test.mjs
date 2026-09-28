@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -375,6 +375,165 @@ test('feed mix quota targets a bounded fraction and fills only qualified slots',
   assert.deepEqual(selectFeedMixAssignments(targets, candidates, 0, 0, 5), []);
   assert.equal(selectFeedMixAssignments(targets, candidates, 2, 50, 5).length, 1);
   assert.equal(selectFeedMixAssignments(targets, candidates, 2, 100, 5).length, 2);
+});
+
+
+test('durable mode supply turns slider demand into native-first shortfall fill', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 4 };
+  const grounded = (id, score, revision = 4) => ({
+    external_id: id,
+    title: id,
+    score,
+    visible: true,
+    traceId: `trace-${id}`,
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: score,
+      displayScore: score,
+      graphRevision: 12,
+      acquisitionMechanism: null,
+      contributions: [],
+      modeGrounding: {
+        modeId: 'mode:lofi',
+        modeRevision: revision,
+        total: 8,
+        members: [{
+          canonicalId: 'canonical:lofi',
+          label: 'mode: chill lofi → canonical concept: lofi',
+          value: 8,
+          sourceIds: ['topic:lofi'],
+          evidenceIds: ['e:lofi'],
+        }],
+      },
+    },
+  });
+
+  const plan = buildModeSupplyPlan({
+    mode,
+    sliderPercent: 50,
+    nativeIds: ['native-a', 'native-b', 'native-c', 'source-filtered-native'],
+    eligibleNativeIds: ['native-a', 'native-b', 'native-c'],
+    feedItems: [
+      grounded('native-a', 70),
+      { external_id: 'native-b', title: 'native-b', score: 70, visible: true, traceId: 'trace-native-b', policyOutcome: 'eligible' },
+      grounded('source-filtered-native', 90),
+      grounded('pool-a', 80),
+      grounded('pool-b', 75),
+    ],
+    minimumReplacementScore: 55,
+  });
+
+  assert.equal(plan.eligibleNativeSlots, 3);
+  assert.equal(plan.requestedModeSlots, 2);
+  assert.equal(plan.nativeModeSupply, 1);
+  assert.equal(plan.poolModeSupply, 2);
+  assert.equal(plan.shortfall, 1);
+  assert.equal(plan.fillLimit, 1);
+  assert.deepEqual(plan.poolCandidates.map((item) => item.external_id), ['pool-a', 'pool-b']);
+});
+
+test('mode supply requires exact mode revision and ordinary replacement eligibility', () => {
+  const mode = { id: 'mode:systems', label: 'Systems', revision: 3 };
+  const item = (id, { revision = 3, score = 70, policyOutcome = 'eligible', visible = true } = {}) => ({
+    external_id: id,
+    title: id,
+    score,
+    visible,
+    traceId: `trace-${id}`,
+    policyOutcome,
+    explanation: {
+      rawScore: score,
+      displayScore: score,
+      graphRevision: 8,
+      acquisitionMechanism: null,
+      contributions: [],
+      modeGrounding: {
+        modeId: 'mode:systems',
+        modeRevision: revision,
+        total: 6,
+        members: [{
+          canonicalId: 'canonical:crdts',
+          label: 'CRDTs',
+          value: 6,
+          sourceIds: ['topic:crdts'],
+          evidenceIds: [],
+        }],
+      },
+    },
+  });
+
+  assert.equal(isDurableModeGroundedItem(item('current'), mode), true);
+  assert.equal(isDurableModeGroundedItem(item('stale', { revision: 2 }), mode), false);
+
+  const plan = buildModeSupplyPlan({
+    mode,
+    sliderPercent: 100,
+    nativeIds: ['native-current', 'native-stale'],
+    eligibleNativeIds: ['native-current', 'native-stale'],
+    feedItems: [
+      item('native-current'),
+      item('native-stale', { revision: 2 }),
+      item('pool-good', { score: 70 }),
+      item('pool-stale', { revision: 2, score: 99 }),
+      item('pool-low', { score: 54 }),
+      item('pool-excluded', { score: 99, policyOutcome: 'excluded', visible: false }),
+    ],
+    minimumReplacementScore: 55,
+  });
+
+  assert.equal(plan.requestedModeSlots, 2);
+  assert.equal(plan.nativeModeSupply, 1);
+  assert.equal(plan.poolModeSupply, 1);
+  assert.equal(plan.shortfall, 1);
+  assert.equal(plan.fillLimit, 1);
+  assert.equal(plan.poolCandidates[0].external_id, 'pool-good');
+});
+
+test('higher durable-mode slider demand increases shortfall without inventing pool supply', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 2 };
+  const feedItems = [{
+    external_id: 'native-a',
+    title: 'native-a',
+    score: 70,
+    visible: true,
+    traceId: 'trace-native-a',
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: 70,
+      displayScore: 70,
+      graphRevision: 10,
+      acquisitionMechanism: null,
+      contributions: [],
+      modeGrounding: {
+        modeId: mode.id,
+        modeRevision: mode.revision,
+        total: 7,
+        members: [{
+          canonicalId: 'canonical:lofi',
+          label: 'lofi',
+          value: 7,
+          sourceIds: ['topic:lofi'],
+          evidenceIds: [],
+        }],
+      },
+    },
+  }];
+  const input = {
+    mode,
+    nativeIds: ['native-a', 'native-b', 'native-c', 'native-d', 'native-e'],
+    eligibleNativeIds: ['native-a', 'native-b', 'native-c', 'native-d', 'native-e'],
+    feedItems,
+    minimumReplacementScore: 55,
+  };
+
+  const low = buildModeSupplyPlan({ ...input, sliderPercent: 20 });
+  const high = buildModeSupplyPlan({ ...input, sliderPercent: 80 });
+  assert.equal(low.requestedModeSlots, 1);
+  assert.equal(low.shortfall, 0);
+  assert.equal(high.requestedModeSlots, 4);
+  assert.equal(high.shortfall, 3);
+  assert.equal(high.poolModeSupply, 0);
+  assert.equal(high.fillLimit, 0);
 });
 
 

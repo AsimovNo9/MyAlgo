@@ -550,6 +550,20 @@ Pool-sourced candidates still pass through:
 
 Record shortfall count, requested slots, native matching supply, acquired matching supply, and fulfilled slots as bounded local diagnostics for #162.
 
+PR #226 implements this retrieval/supply slice without creating a parallel mode pool:
+- retrieval planning resolves the selected durable mode from its stable ID/revision and prepends a bounded set of the highest-weight canonical member labels to graph retrieval topics; the mode label and members remain derived intent, not preference evidence;
+- search-plan revision identity includes the durable mode ID/revision so a member/revision change cannot silently reuse a prior mode plan;
+- a dormant durable mode may still contribute its retained member labels to retrieval intent, allowing acquisition to search for supply without treating retrieval as renewed preference evidence;
+- on Home, the slider becomes requested **mode coverage** for a selected durable mode. Source-filter-eligible native cards are counted first using the same exact `modeGrounding` ID/revision contract as scoring;
+- current Home IDs are excluded from pool supply even when source-filtered, preventing a native card from being miscounted as acquired off-page inventory;
+- only normally scored, visible, policy-eligible, minimum-score candidates with exact current mode grounding count as pool supply or may fill the measured shortfall;
+- Default/All retains the prior general replacement behavior;
+- one bounded latest mode-supply snapshot records slider percent, eligible native slots, requested slots, native supply, pool supply, shortfall, fulfilled slots, and whether shortfall status fired.
+
+Acquisition mechanism remains score-neutral. PR #226 does not yet claim final source→replacement stability across ordinary reranks; that remains the following #214 slice.
+
+Live validation tightened two implementation details. First, mode-supply diagnostics are mode-scoped state: switching mode clears a snapshot whose mode ID/revision no longer matches, and asynchronous RSS/search or content-script writes are reconciled against the current selection before persistence. Second, the production web-search budget reserves durable-member coverage instead of blindly taking the first four generic planner rows. The bounded acquisition selector keeps the goal query first, then chooses one query for each highest-priority durable canonical member while capacity remains, then falls back to ordinary creator/topic/freshness lanes. Default mode preserves the pre-existing planner ordering.
+
 ### Evaluation-first rule
 
 Threshold changes, clustering heuristics, model replacement, and any future fine-tuning must be evaluated on fixed labelled replay fixtures first. Live feed review remains a validation surface, not the sole quality metric.

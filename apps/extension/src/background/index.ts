@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -11,9 +11,9 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
@@ -194,10 +194,37 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   webSearchCandidatesAdded: 0,
   webSearchCandidatesDeduplicated: 0,
   webSearchConsecutiveFailures: 0,
+  modeSupply: null,
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 const semanticEmbeddingCache = createChromeEmbeddingCache(600);
+
+const reconcileRetrievalDiagnosticsForActiveMode = async (
+  diagnostics: RetrievalDiagnostics,
+): Promise<RetrievalDiagnostics> => {
+  const [activeModeId, durableModeCatalog] = await Promise.all([
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  return reconcileModeSupplyForSelection(
+    diagnostics,
+    activeDurableMode?.id ?? 'default',
+    activeDurableMode?.revision ?? null,
+  );
+};
+
+const persistRetrievalDiagnostics = async (
+  diagnostics: RetrievalDiagnostics,
+): Promise<RetrievalDiagnostics> => {
+  const reconciled = await reconcileRetrievalDiagnosticsForActiveMode(diagnostics);
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, reconciled);
+  return reconciled;
+};
 
 const getSemanticModelMode = async (): Promise<SemanticModelMode> => {
   const stored = await getStorage<string>(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash');
@@ -311,18 +338,20 @@ const refreshDurableModeCatalog = async (
 
 const resolveModeSelection = async (
   requested: string | null | undefined,
-): Promise<{ modeId: string; label: string }> => {
+): Promise<{ modeId: string; label: string; revision: number | null }> => {
   const value = requested?.trim() || 'default';
-  if (value.toLowerCase() === 'default') return { modeId: 'default', label: 'Default' };
+  if (value.toLowerCase() === 'default') {
+    return { modeId: 'default', label: 'Default', revision: null };
+  }
   const catalog = await getStorage<DurableSemanticModeCatalog | null>(
     STORAGE_KEYS.DURABLE_MODE_CATALOG,
     null,
   );
   const byId = resolveDurableMode(catalog, value);
-  if (byId) return { modeId: byId.id, label: byId.label };
+  if (byId) return { modeId: byId.id, label: byId.label, revision: byId.revision };
   const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
-  if (byLabel) return { modeId: byLabel.id, label: byLabel.label };
-  return { modeId: value, label: value };
+  if (byLabel) return { modeId: byLabel.id, label: byLabel.label, revision: byLabel.revision };
+  return { modeId: value, label: value, revision: null };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -607,13 +636,13 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
 
   if (channelIds.length === 0) {
     const diagnostics: RetrievalDiagnostics = {
-      ...EMPTY_RETRIEVAL_DIAGNOSTICS,
+      ...previous,
       lastRssSyncAt: new Date(nowMs).toISOString(),
       nextRssAllowedAt: null,
       lastError: 'No YouTube channel IDs are available yet. Refresh discovery after MyAlgo has observed a few videos.',
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
@@ -660,6 +689,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     ? (previous.rssConsecutiveFailures ?? 0) + 1
     : 0;
   const diagnostics: RetrievalDiagnostics = {
+    ...previous,
     lastRssSyncAt: acquiredAt,
     nextRssAllowedAt: nextRssAllowedAt(nowMs, consecutiveFailures),
     rssChannelsConsidered: channelIds.length,
@@ -672,17 +702,17 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     rssConsecutiveFailures: consecutiveFailures,
     lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
   };
-  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
   console.info('[MyAlgo] retrieval refresh', {
     mechanism: 'rss',
-    channels: diagnostics.rssChannelsConsidered,
-    succeeded: diagnostics.rssFeedsSucceeded,
-    failed: diagnostics.rssFeedsFailed,
-    fetched: diagnostics.rssCandidatesFetched,
-    added: diagnostics.rssCandidatesAdded,
-    deduplicated: diagnostics.rssCandidatesDeduplicated,
+    channels: persistedDiagnostics.rssChannelsConsidered,
+    succeeded: persistedDiagnostics.rssFeedsSucceeded,
+    failed: persistedDiagnostics.rssFeedsFailed,
+    fetched: persistedDiagnostics.rssCandidatesFetched,
+    added: persistedDiagnostics.rssCandidatesAdded,
+    deduplicated: persistedDiagnostics.rssCandidatesDeduplicated,
   });
-  return { diagnostics, changed: addedCount > 0 || enrichedCount > 0 };
+  return { diagnostics: persistedDiagnostics, changed: addedCount > 0 || enrichedCount > 0 };
 }
 
 
@@ -705,19 +735,51 @@ async function refreshWebSearchCandidates(
     return { diagnostics: previous, changed: false };
   }
 
-  const state = await personalAlgorithmStore.exportState();
-  const storedMode = modeOverride ?? await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
+  const [
+    state,
+    storedMode,
+    activeModeId,
+    durableModeCatalog,
+  ] = await Promise.all([
+    personalAlgorithmStore.exportState(),
+    getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const effectiveModeLabel = modeOverride ?? activeDurableMode?.label ?? storedMode;
   const baseProfile = buildGraphRetrievalProfile(state);
-  const profile = applyModeToRetrievalProfile(baseProfile, storedMode);
+  const profile = activeDurableMode
+    ? applyDurableModeToRetrievalProfile(baseProfile, activeDurableMode)
+    : applyModeToRetrievalProfile(baseProfile, effectiveModeLabel);
   const retrievalRevision = buildGraphRetrievalRevision(state);
-  const plans = buildRecommendationQueryPlans(
+  const modeRevisionTag = activeDurableMode
+    ? `${activeDurableMode.id}:r${activeDurableMode.revision}`
+    : effectiveModeLabel.toLowerCase();
+  const plannedQueries = buildRecommendationQueryPlans(
     profile,
-    8,
-    `${retrievalRevision}:mode-${storedMode.toLowerCase()}`,
+    activeDurableMode ? 16 : 8,
+    `${retrievalRevision}:mode-${modeRevisionTag}`,
     [],
     [],
     true,
-  ).slice(0, 4);
+  );
+  const priorityModeTopics = activeDurableMode
+    ? [...activeDurableMode.members]
+        .sort((left, right) => (
+          right.weight - left.weight
+          || left.canonicalId.localeCompare(right.canonicalId)
+        ))
+        .map((member) => member.label)
+    : [];
+  const plans = selectWebSearchPlans(
+    plannedQueries,
+    4,
+    priorityModeTopics,
+  );
 
   if (plans.length === 0) {
     const diagnostics = {
@@ -732,8 +794,8 @@ async function refreshWebSearchCandidates(
       webSearchConsecutiveFailures: 0,
       lastError: null,
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   const existingPool = await getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []);
@@ -747,8 +809,8 @@ async function refreshWebSearchCandidates(
       nextWebSearchAllowedAt: null,
       lastError: 'The active connector does not support search acquisition.',
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
-    return { diagnostics, changed: false };
+    const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
+    return { diagnostics: persistedDiagnostics, changed: false };
   }
 
   let candidates: PageCandidate[] = [];
@@ -788,18 +850,22 @@ async function refreshWebSearchCandidates(
     webSearchConsecutiveFailures: consecutiveFailures,
     lastError: failureMessage,
   };
-  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  const persistedDiagnostics = await persistRetrievalDiagnostics(diagnostics);
 
   console.info('[MyAlgo] web-search refresh', {
     provider: provider.id,
-    mode: storedMode,
+    mode: effectiveModeLabel,
+    modeId: activeDurableMode?.id ?? null,
+    modeRevision: activeDurableMode?.revision ?? null,
+    modeMembers: activeDurableMode?.members.map((member) => member.label) ?? [],
     plans: plans.length,
+    planTexts: plans.map((plan) => plan.text),
     fetched: unique.length,
     added: addedCount,
     failed,
   });
 
-  return { diagnostics, changed: addedCount > 0 };
+  return { diagnostics: persistedDiagnostics, changed: addedCount > 0 };
 }
 
 const ensureHistoryReconciled = (): Promise<void> => {
@@ -1836,6 +1902,7 @@ const handleRuntimeMessage = (
       sourceFilters?: FeedSourceFilters;
       feedReplacementPercent?: number;
       retrievalSettings?: RetrievalSettings;
+      modeSupply?: ModeSupplyDiagnostics | null;
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
@@ -2228,8 +2295,25 @@ const handleRuntimeMessage = (
         await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
         await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
         await setStorage('personal-algorithm-last-error', null);
+        const activeModeId = await getStorage<string>(
+          STORAGE_KEYS.ACTIVE_MODE_ID,
+          'default',
+        );
+        const durableModeCatalog = await getStorage<DurableSemanticModeCatalog | null>(
+          STORAGE_KEYS.DURABLE_MODE_CATALOG,
+          null,
+        );
+        const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+
         sendResponse({
           ok: true,
+          activeDurableMode: activeDurableMode
+            ? {
+                id: activeDurableMode.id,
+                label: activeDurableMode.label,
+                revision: activeDurableMode.revision,
+              }
+            : null,
           feed: presentationFeed,
           cachedFeedSize: feedCache.length,
           currentPageScored: currentPageFeed.length,
@@ -2319,9 +2403,19 @@ const handleRuntimeMessage = (
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     void (async () => {
       const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
+      const previousDiagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      const nextDiagnostics = reconcileModeSupplyForSelection(
+        previousDiagnostics,
+        selection.modeId,
+        selection.revision,
+      );
       await Promise.all([
         setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
         setStorage(STORAGE_KEYS.MODE, selection.label),
+        setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
       ]);
       const settings = await getStorage<RetrievalSettings>(
         STORAGE_KEYS.RETRIEVAL_SETTINGS,
@@ -2336,10 +2430,19 @@ const handleRuntimeMessage = (
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
-          payload: { mode: selection.label, modeId: selection.modeId },
+          payload: {
+            mode: selection.label,
+            modeId: selection.modeId,
+            modeRevision: selection.revision,
+          },
         }).catch(() => undefined)
         : undefined));
-      sendResponse({ ok: true, mode: selection.label, modeId: selection.modeId });
+      sendResponse({
+        ok: true,
+        mode: selection.label,
+        modeId: selection.modeId,
+        modeRevision: selection.revision,
+      });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
   }
@@ -2437,27 +2540,65 @@ const handleRuntimeMessage = (
     void Promise.all([
       personalAlgorithmStore.exportState(),
       getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
-    ]).then(([state, mode]) => {
+      getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+      getStorage<DurableSemanticModeCatalog | null>(
+        STORAGE_KEYS.DURABLE_MODE_CATALOG,
+        null,
+      ),
+    ]).then(([state, mode, activeModeId, durableModeCatalog]) => {
+      const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
       const baseProfile = buildGraphRetrievalProfile(state);
-      const profile = applyModeToRetrievalProfile(baseProfile, mode);
+      const profile = activeDurableMode
+        ? applyDurableModeToRetrievalProfile(baseProfile, activeDurableMode)
+        : applyModeToRetrievalProfile(baseProfile, mode);
       const retrievalRevision = buildGraphRetrievalRevision(state);
+      const modeRevisionTag = activeDurableMode
+        ? `${activeDurableMode.id}:r${activeDurableMode.revision}`
+        : mode.toLowerCase();
       const plans = buildRecommendationQueryPlans(
         profile,
-        8,
-        `${retrievalRevision}:mode-${mode.toLowerCase()}`,
+        activeDurableMode ? 16 : 8,
+        `${retrievalRevision}:mode-${modeRevisionTag}`,
         [],
         [],
         true,
       );
+      const priorityModeTopics = activeDurableMode
+        ? [...activeDurableMode.members]
+            .sort((left, right) => (
+              right.weight - left.weight
+              || left.canonicalId.localeCompare(right.canonicalId)
+            ))
+            .map((member) => member.label)
+        : [];
+      const acquisitionPlans = selectWebSearchPlans(
+        plans,
+        4,
+        priorityModeTopics,
+      );
       sendResponse({
         ok: true,
         mode,
+        activeMode: activeDurableMode
+          ? {
+              id: activeDurableMode.id,
+              label: activeDurableMode.label,
+              revision: activeDurableMode.revision,
+              members: activeDurableMode.members.map((member) => ({
+                canonicalId: member.canonicalId,
+                label: member.label,
+                weight: member.weight,
+              })),
+            }
+          : null,
         graphRevision: state.graph.currentRevision,
         retrievalRevision,
         goal: profile.goal,
+        explicitTopics: profile.explicitTopics,
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
+        acquisitionPlans,
       });
     }).catch((error) => sendResponse({
       ok: false,
@@ -2487,6 +2628,33 @@ const handleRuntimeMessage = (
     }).catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to read semantic diagnostics.',
+    }));
+    return true;
+  }
+
+  if (type === 'MODE_SUPPLY_DIAGNOSTICS') {
+    void (async () => {
+      const previous = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      const nextModeSupply = payload?.modeSupply ?? null;
+      const requestedDiagnostics: RetrievalDiagnostics = {
+        ...previous,
+        modeSupply: nextModeSupply,
+      };
+      const reconciled = await reconcileRetrievalDiagnosticsForActiveMode(
+        requestedDiagnostics,
+      );
+      const same = JSON.stringify(previous.modeSupply ?? null)
+        === JSON.stringify(reconciled.modeSupply ?? null);
+      if (!same) {
+        await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, reconciled);
+      }
+      sendResponse({ ok: true, modeSupply: reconciled.modeSupply ?? null });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to persist mode supply diagnostics.',
     }));
     return true;
   }
