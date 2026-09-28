@@ -659,11 +659,35 @@ const applyRankedFeed = () => {
     title: getVideoTitle(element),
     flags: getVideoSourceFlags(element),
   }));
-  const replacementLimit = isYouTubeHomePage(location.pathname)
-    ? replacementQuota(feedReplacementPercent, nativeCards.length)
-    : 0;
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
     * (1 - feedReplacementPercent / 100);
+  const homePage = isYouTubeHomePage(location.pathname);
+  const allNativeIds = nativeCards
+    .map((card) => card.id)
+    .filter((id) => id && !id.startsWith('title:'));
+  const eligibleModeNativeIds = activeDurableMode && homePage
+    ? nativeCards
+        .filter((card) => (
+          card.id
+          && !card.id.startsWith('title:')
+          && !shouldHideForSourceFilters(card.flags, sourceFilters)
+        ))
+        .map((card) => card.id)
+    : [];
+  latestModeSupplyPlan = activeDurableMode && homePage
+    ? buildModeSupplyPlan({
+        mode: activeDurableMode,
+        sliderPercent: feedReplacementPercent,
+        nativeIds: allNativeIds,
+        eligibleNativeIds: eligibleModeNativeIds,
+        feedItems: cachedFeed,
+        minimumReplacementScore: replacementMinimumScore,
+      })
+    : null;
+  const replacementLimit = homePage
+    ? latestModeSupplyPlan?.fillLimit
+      ?? replacementQuota(feedReplacementPercent, nativeCards.length)
+    : 0;
 
   nativeCards.forEach(({ element, id, title, flags }, nativeIndex) => {
     element.style.removeProperty('display');
@@ -692,7 +716,12 @@ const applyRankedFeed = () => {
         && slotWidth >= 120
         && element.parentElement
       ) {
-        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(rankGeneration, getRouteKey(), nativeIndex, sourceVideoId);
+        element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
+          rankGeneration,
+          getRouteKey(),
+          nativeIndex,
+          sourceVideoId,
+        );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
       }
       element.style.setProperty('display', 'none', 'important');
@@ -734,8 +763,10 @@ const applyRankedFeed = () => {
       : `MyAlgo · ${score}`;
   });
 
-  // Swap eligible native cards only when a distinct, scored reservoir candidate
-  // is already available. At 100%, fill as many safe Home slots as the pool can.
+  // Default mode preserves the general feed-replacement behavior. A durable
+  // mode instead treats the slider as requested mode coverage: existing native
+  // mode matches satisfy the quota first, then only grounded mode candidates
+  // from the already-acquired reservoir may fill the shortfall.
   const existingReplacementSlots = knownElements.filter((element) => Boolean(
     element.dataset.personalAlgorithmSlotId
     && element.style.getPropertyValue('display') === 'none',
@@ -753,16 +784,15 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const routeKey = getRouteKey();
-    const nativeIds = new Set(
-      nativeCards.map((card) => card.id).filter((id) => id && !id.startsWith('title:')),
-    );
+    const nativeIds = new Set(allNativeIds);
     const usedCandidateIds = new Set<string>();
     for (const sourceId of stableReplacementBySourceId.keys()) {
       if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
     }
 
-    // Keep a rendered replacement stable across ordinary YouTube DOM
-    // churn while it remains eligible under the current feed mix.
+    // Keep a rendered replacement stable across ordinary YouTube DOM churn
+    // while it remains eligible and, for a durable mode, still resolves to the
+    // exact selected mode ID/revision.
     for (let nativeIndex = 0; nativeIndex < nativeCards.length && remainingReplacementCapacity > 0; nativeIndex += 1) {
       const { element, id } = nativeCards[nativeIndex];
       const sticky = stableReplacementBySourceId.get(id);
@@ -776,6 +806,7 @@ const applyRankedFeed = () => {
       const candidateScore = item?.score ?? -Infinity;
       const valid = Boolean(
         item
+        && (!activeDurableMode || isDurableModeGroundedItem(item, activeDurableMode))
         && !nativeIds.has(sticky.candidateId)
         && !usedCandidateIds.has(sticky.candidateId)
         && item.visible !== false
@@ -811,19 +842,27 @@ const applyRankedFeed = () => {
 
     if (remainingReplacementCapacity > 0) {
       const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
-      // Retrieved candidates receive no provenance bonus. The slider relaxes
-      // the native-score uplift as it approaches full replacement.
+      const replacementSource = latestModeSupplyPlan?.poolCandidates ?? cachedFeed;
+      // Retrieved candidates receive no provenance bonus. In durable mode, the
+      // source list is already constrained to exact grounded mode matches.
       const replacementCandidates = getReplacementCandidates(
-        cachedFeed,
+        replacementSource,
         [...nativeIds, ...usedCandidateIds],
         Math.max(24, remainingReplacementCapacity * 6),
         replacementMinimumScore,
         replacementSelectionSeed,
       );
-      const nativeTargets = nativeCards.flatMap(({ element, id }, nativeIndex) => {
+      const nativeTargets = nativeCards.flatMap(({ element, id, title }, nativeIndex) => {
         if (element.style.getPropertyValue('display') === 'none') return [];
         const score = Number(element.dataset.personalAlgorithmScore);
         if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
+        const nativeItem = feedById.get(id) ?? feedByTitle.get(title);
+        if (
+          activeDurableMode
+          && isDurableModeGroundedItem(nativeItem, activeDurableMode)
+        ) {
+          return [];
+        }
         return [{ externalId: id, score, nativeIndex }];
       });
 
@@ -887,6 +926,17 @@ const applyRankedFeed = () => {
     retrievedDiscoveryExplorationAssignments: 0,
     feedReplacementPercent,
     replacementLimit,
+    modeSupply: latestModeSupplyPlan
+      ? {
+          modeId: latestModeSupplyPlan.modeId,
+          modeRevision: latestModeSupplyPlan.modeRevision,
+          requestedModeSlots: latestModeSupplyPlan.requestedModeSlots,
+          nativeModeSupply: latestModeSupplyPlan.nativeModeSupply,
+          poolModeSupply: latestModeSupplyPlan.poolModeSupply,
+          shortfall: latestModeSupplyPlan.shortfall,
+          fillLimit: latestModeSupplyPlan.fillLimit,
+        }
+      : null,
     opportunisticUpliftQualified,
     replacementMinimumUplift: youtubeConnector.presentation.replacementMinimumUplift,
   });
