@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -309,6 +309,38 @@ test('ordinary rerank causes preserve stable replacement bindings', () => {
       `${reason} should invalidate bindings`,
     );
   }
+});
+
+test('stable candidate ownership allows the incumbent source but blocks another source', () => {
+  const ownerByCandidateId = new Map([
+    ['replacement-a', 'native-a'],
+    ['replacement-b', 'native-b'],
+  ]);
+
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-a',
+      'native-a',
+      ownerByCandidateId,
+    ),
+    true,
+  );
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-a',
+      'native-b',
+      ownerByCandidateId,
+    ),
+    false,
+  );
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-c',
+      'native-c',
+      ownerByCandidateId,
+    ),
+    true,
+  );
 });
 
 test('stable replacement candidate survives score and trace refresh while still eligible', () => {
