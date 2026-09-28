@@ -9,3 +9,38 @@ test('feedback changes trace identity',()=>{const p={revision:'p-feedback',baseS
 test('insertion order does not change trace',()=>{const p={revision:'p5',edgeRelationWeights:{created_by:2}};const reversed={...state,graph:{...state.graph,nodes:[...state.graph.nodes].reverse(),edges:[...state.graph.edges].reverse()}};const a=scorePersonalAlgorithm(state,candidate,p),b=scorePersonalAlgorithm(reversed,candidate,p);assert.equal(b.trace.id,a.trace.id);assert.deepEqual(b.trace.edgeContributions,a.trace.edgeContributions)});
 
 test('decimal semantic-style contributions reconcile exactly',()=>{const p={revision:'p-decimal',baseScore:.1};const decimalCandidate={...candidate,features:[{id:'semantic:graph',label:'semantic match: personal graph',value:.2},{id:'semantic:mode',label:'semantic match: active mode',value:.3}]};const r=scorePersonalAlgorithm(state,decimalCandidate,p);assert.equal(r.score,.6);assert.equal(traceContributionTotal(r.trace),.6);assert.equal(isScoreTraceConsistent(r.trace),true)});
+test('candidate mode features land in mode contributions with exact graph grounding',()=>{
+  const p={revision:'p-mode-grounded'};
+  const groundedCandidate={
+    ...candidate,
+    modeFeatures:[{
+      id:'durable:mode:systems:r2:canonical:crdts',
+      label:'mode: Distributed systems → canonical concept: CRDTs',
+      value:3.5,
+      sourceId:'canonical:crdts',
+      sourceIds:['topic:crdts','topic:replication'],
+      evidenceIds:['e1'],
+      modeId:'mode:systems',
+      modeRevision:2,
+      canonicalId:'canonical:crdts',
+    }],
+  };
+  const r=scorePersonalAlgorithm(state,groundedCandidate,p,'Distributed systems');
+  assert.equal(r.score,3.5);
+  assert.equal(r.trace.featureContributions.length,0);
+  assert.equal(r.trace.modeContributions.length,1);
+  assert.deepEqual(r.trace.modeContributions[0],{
+    id:'mode-feature:durable:mode:systems:r2:canonical:crdts',
+    kind:'mode',
+    label:'mode: Distributed systems → canonical concept: CRDTs',
+    value:3.5,
+    sourceId:'canonical:crdts',
+    sourceIds:['topic:crdts','topic:replication'],
+    evidenceIds:['e1'],
+    modeId:'mode:systems',
+    modeRevision:2,
+    canonicalId:'canonical:crdts',
+  });
+  assert.equal(traceContributionTotal(r.trace),3.5);
+  assert.equal(isScoreTraceConsistent(r.trace),true);
+});
