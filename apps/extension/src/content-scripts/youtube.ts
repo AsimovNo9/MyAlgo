@@ -288,6 +288,8 @@ const createReplacementCard = (
   card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
   card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
   card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementBindingRevision = String(replacementBindingRevision);
+  card.dataset.personalAlgorithmReplacementInvalidationReason = lastReplacementInvalidationReason;
   card.dataset.personalAlgorithmReplacementMode = metadata.mode;
   const modeGrounding = item.explanation?.modeGrounding;
   if (modeGrounding) {
@@ -334,6 +336,7 @@ const createReplacementCard = (
   card.appendChild(link);
 
   const meta = document.createElement('div');
+  meta.dataset.personalAlgorithmReplacementSummary = 'true';
   meta.textContent = contentLabel
     ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
     : `MyAlgo · ${item.score ?? 0}/100`;
@@ -385,6 +388,93 @@ const createReplacementCard = (
   card.appendChild(explanation);
 
   return card;
+};
+
+const refreshReplacementCardPresentation = (
+  card: HTMLElement,
+  item: RankedFeedItem,
+  slotId: string,
+  sourceVideoId: string,
+  generation: number,
+) => {
+  const metadata = getReplacementPresentationMetadata(
+    { slot: { slotId, sourceVideoId }, item },
+    generation,
+    activeMode,
+  );
+  const displayMetadata = getReplacementTextMetadata(item);
+  const contentLabel = getContentPresentationLabel(item);
+
+  card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
+  card.dataset.personalAlgorithmTraceId = metadata.traceId;
+  card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
+  card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
+  card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementBindingRevision = String(replacementBindingRevision);
+  card.dataset.personalAlgorithmReplacementInvalidationReason = lastReplacementInvalidationReason;
+  card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
+  const modeGrounding = item.explanation?.modeGrounding;
+  if (modeGrounding) {
+    card.dataset.personalAlgorithmReplacementModeId = modeGrounding.modeId;
+    card.dataset.personalAlgorithmReplacementModeRevision = String(modeGrounding.modeRevision);
+  } else {
+    delete card.dataset.personalAlgorithmReplacementModeId;
+    delete card.dataset.personalAlgorithmReplacementModeRevision;
+  }
+  card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
+
+  const badge = card.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
+  if (badge) {
+    badge.textContent = contentLabel
+      ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
+      : `MyAlgo replacement · ${metadata.score}`;
+  }
+
+  const link = card.querySelector<HTMLAnchorElement>('a[data-personal-algorithm-video-id]');
+  if (link) {
+    link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
+    link.dataset.personalAlgorithmVideoId = item.external_id ?? '';
+    link.setAttribute('aria-label', item.title ?? 'MyAlgo recommended video');
+  }
+  const title = card.querySelector<HTMLElement>('[data-personal-algorithm-title]');
+  if (title) title.textContent = displayMetadata.title;
+  const creator = card.querySelector<HTMLElement>('[data-personal-algorithm-creator]');
+  if (creator) creator.textContent = displayMetadata.creator;
+  const summary = card.querySelector<HTMLElement>('[data-personal-algorithm-replacement-summary]');
+  if (summary) {
+    summary.textContent = contentLabel
+      ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
+      : `MyAlgo · ${item.score ?? 0}/100`;
+  }
+
+  const why = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation]');
+  if (why) why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  const explanation = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel]');
+  if (!explanation) return;
+  explanation.replaceChildren();
+
+  const explanationData = item.explanation;
+  const scoreLine = document.createElement('div');
+  scoreLine.textContent = explanationData
+    ? `Score ${explanationData.displayScore}/100 · raw ${explanationData.rawScore} · graph r${explanationData.graphRevision}`
+    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
+  explanation.appendChild(scoreLine);
+
+  if (explanationData?.acquisitionMechanism) {
+    const acquired = document.createElement('div');
+    acquired.textContent = `Acquired via ${explanationData.acquisitionMechanism} · acquisition is not preference evidence`;
+    acquired.style.cssText = 'margin-top:4px;color:#cbd5e1;';
+    explanation.appendChild(acquired);
+  }
+
+  for (const contribution of explanationData?.contributions ?? []) {
+    const row = document.createElement('div');
+    const sign = contribution.value > 0 ? '+' : '';
+    row.textContent = `${contribution.label}: ${sign}${contribution.value}`;
+    row.style.cssText = 'margin-top:4px;';
+    explanation.appendChild(row);
+  }
 };
 
 const clearLegacyRecommendationShelf = () => {
