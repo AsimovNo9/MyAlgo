@@ -1035,7 +1035,7 @@ export function applyDurableModeToRetrievalProfile(
   mode: DurableSemanticMode | null | undefined,
   options: { maxMembers?: number } = {},
 ): RecommendationProfile {
-  if (!mode || !mode.active) return {
+  if (!mode) return {
     ...profile,
     explicitTopics: [...profile.explicitTopics],
     aliases: [...profile.aliases],
