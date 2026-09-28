@@ -44,13 +44,14 @@ Implemented foundations now include:
 Current execution order:
 
 1. **Complete — #221 / PR #223 canonical concepts + bounded semantic scoring:** canonical neighbourhoods, scorer-only region reconciliation, field-local lexical grounding, embedding abstention, and bounded taxonomy fallback are merged and live-validated.
-2. **P0 — #214 / PR #224 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, persist mode identity independently of the current feed cache, and keep unsupported exposed modes dormant rather than silently deleting them.
-3. **P0 — #214 graph-grounded mode retrieval/supply:** resolve every mode score change to exact member nodes, make mode selection change retrieval planning, and measure slider-relative native-mode supply before filling from the existing acquired reservoir.
-4. **P1 — #210 + #153 + #170:** recalibrate display scoring after raw semantic overcounting is fixed, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
-5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
-6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+2. **Complete — #214 / PR #224 durable inferred modes:** canonical concepts now reconcile into stable local mode IDs/revisions, preserve multi-label candidate affinities, survive feed-cache churn, and retain unsupported exposed modes as dormant.
+3. **P0 — #214 / PR #225 graph-grounded mode scoring:** replace free-floating durable-mode boosts with bounded member contributions carrying stable mode ID/revision, canonical member identity, exact source graph nodes, and evidence provenance.
+4. **P0 — #214 mode-aware retrieval/supply + replacement stability:** make mode selection change retrieval planning, measure slider-relative native-mode supply, fill shortfalls only through the existing governed reservoir, and preserve valid source→replacement bindings across ordinary reranks.
+5. **P1 — #210 + #153 + #170:** recalibrate display scoring after the graph-grounded mode distribution is stable, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
+6. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
+7. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #223/#221 is merged and live-validated. The canonical layer now preserves source-node provenance while preventing duplicate semantic score mass from aliases/nested concepts and suppressing weak unrelated neighbours. PR #224 is the next #214 slice: durable inferred mode clusters are derived from canonical concepts with repeated shared graph support, reconciled to stable IDs/revisions across snapshots, persisted independently of the current feed, and exposed as bounded multi-label candidate affinities. Graph-grounded mode score contributions and mode-aware retrieval/supply remain the following #214 slice.
+PR #223/#221 and PR #224 are merged and live-validated. Canonical semantic neighbourhoods now feed a durable mode catalog with stable IDs/revisions and bounded multi-label candidate affinities. PR #225 is the next #214 slice: affinity pipeline v2 preserves per-canonical-member similarity/provenance, ranking resolves the selected stable mode ID/revision, and one bounded mode budget is reconciled into exact `modeContributions` carrying canonical/source-node/evidence provenance. Mode-aware retrieval/supply and replacement stability remain subsequent #214 slices.
 
 The intended hierarchy is:
 
