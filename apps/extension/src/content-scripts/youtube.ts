@@ -790,6 +790,17 @@ const applyRankedFeed = () => {
   const allNativeIds = nativeCards
     .map((card) => card.id)
     .filter((id) => id && !id.startsWith('title:'));
+  const currentRouteKey = getRouteKey();
+  const retainedBindingItems = [...stableReplacementBySourceId.values()]
+    .filter((binding) => (
+      binding.routeKey === currentRouteKey
+      && binding.bindingRevision === replacementBindingRevision
+    ))
+    .map((binding) => binding.item);
+  const modeSupplyFeed = dedupeCandidatesById([
+    ...cachedFeed,
+    ...retainedBindingItems,
+  ]);
   const eligibleModeNativeIds = activeDurableMode && homePage
     ? nativeCards
         .filter((card) => (
@@ -805,7 +816,7 @@ const applyRankedFeed = () => {
         sliderPercent: feedReplacementPercent,
         nativeIds: allNativeIds,
         eligibleNativeIds: eligibleModeNativeIds,
-        feedItems: cachedFeed,
+        feedItems: modeSupplyFeed,
         minimumReplacementScore: replacementMinimumScore,
       })
     : null;
