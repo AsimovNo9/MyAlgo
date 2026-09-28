@@ -358,6 +358,75 @@ test('durable mode scoring abstains when affinity provenance no longer resolves 
   );
 });
 
+test('removed strongest member cannot transfer its mode budget to a weaker grounded member', () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push({
+    id: 'topic:surviving',
+    kind: 'topic',
+    label: 'Surviving concept',
+    provenance: 'inferred',
+    confidence: 0.9,
+    attributes: { sourceKinds: ['model_topic'] },
+    createdAt: '2026-09-27T00:00:00.000Z',
+    updatedAt: '2026-09-27T00:00:00.000Z',
+  });
+  fixture.graph.edges.push({
+    id: 'edge:mode:surviving',
+    sourceNodeId: 'topic:surviving',
+    targetNodeId: 'content:youtube:video-a',
+    relation: 'about',
+    provenance: 'inferred',
+    confidence: 0.9,
+    evidenceIds: ['e-mode-surviving'],
+    attributes: {},
+    createdAt: '2026-09-27T00:00:00.000Z',
+    updatedAt: '2026-09-27T00:00:00.000Z',
+  });
+  fixture.graph.currentRevision += 1;
+
+  const activeMode = {
+    id: 'mode:inferred:v1:partial-stale',
+    label: 'Partial stale mode',
+    revision: 4,
+  };
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'partial-stale-affinity',
+    title: 'Neutral candidate',
+    semantic_mode_affinities: [{
+      modeId: activeMode.id,
+      modeRevision: activeMode.revision,
+      label: activeMode.label,
+      affinity: 0.9,
+      matchedCanonicalIds: ['canonical:removed', 'canonical:surviving'],
+      sourceNodeIds: ['topic:removed', 'topic:surviving'],
+      memberAffinities: [
+        {
+          canonicalId: 'canonical:removed',
+          label: 'Removed strongest',
+          memberWeight: 1,
+          similarity: 0.9,
+          weightedAffinity: 0.9,
+          sourceNodeIds: ['topic:removed'],
+        },
+        {
+          canonicalId: 'canonical:surviving',
+          label: 'Surviving concept',
+          memberWeight: 0.5,
+          similarity: 0.6,
+          weightedAffinity: 0.3,
+          sourceNodeIds: ['topic:surviving'],
+        },
+      ],
+    }],
+  }], activeMode.label, [], {}, activeMode)[0];
+
+  assert.equal(ranked.trace.modeContributions.length, 1);
+  assert.equal(ranked.trace.modeContributions[0].canonicalId, 'canonical:surviving');
+  assert.equal(ranked.trace.modeContributions[0].value, 4.2);
+  assert.deepEqual(ranked.trace.modeContributions[0].sourceIds, ['topic:surviving']);
+});
+
+
 
 test('explicit local feedback changes the score without treating watch evidence as preference', () => {
   const signals = buildLocalFeedbackSignals([
