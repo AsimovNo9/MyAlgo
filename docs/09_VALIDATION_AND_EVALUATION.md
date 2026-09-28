@@ -553,6 +553,8 @@ A hard invalidation must advance the replacement binding revision and may choose
 
 Generation changes alone are not churn. Live diagnostics should record source ID, candidate ID, rank generation, binding revision, trace ID, score, and last hard invalidation reason so identity can be compared separately from ordinary score/trace updates.
 
+Include one retrieval-expansion case where the incumbent replacement is no longer present in the newly bounded off-page scoring working set. If its binding context is still valid, it should remain rendered from the retained stability reservoir rather than rotate solely because newer acquired candidates displaced it from that bounded working set. Conversely, if current mode demand contracts and the source is no longer rebound to a replacement slot, the old binding should disappear rather than remain latent.
+
 
 ## PR #220 local concept verification validation (#219)
 
