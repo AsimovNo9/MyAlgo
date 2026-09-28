@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateEligible, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -271,6 +272,121 @@ test('replacement text metadata always provides visible title and creator fallba
   );
 });
 
+
+test('ordinary rerank causes preserve stable replacement bindings', () => {
+  for (const reason of ['mutation', 'metadata', 'semantic', 'retrieval', 'manual']) {
+    assert.equal(
+      shouldInvalidateStableReplacementBindings(reason),
+      false,
+      `${reason} should preserve bindings`,
+    );
+  }
+
+  for (const reason of ['navigation', 'mode', 'feedback', 'graph', 'policy', 'feed_mix', 'lifecycle']) {
+    assert.equal(
+      shouldInvalidateStableReplacementBindings(reason),
+      true,
+      `${reason} should invalidate bindings`,
+    );
+  }
+});
+
+test('stable replacement candidate survives score and trace refresh while still eligible', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 5 };
+  const refreshed = {
+    external_id: 'replacement-a',
+    title: 'Replacement A enriched',
+    score: 78,
+    visible: true,
+    suppressed: false,
+    traceId: 'trace-new',
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: 12.4,
+      displayScore: 78,
+      graphRevision: 357,
+      acquisitionMechanism: 'web_search',
+      contributions: [],
+      modeGrounding: {
+        modeId: mode.id,
+        modeRevision: mode.revision,
+        total: 8,
+        members: [{
+          canonicalId: 'canonical:lofi',
+          label: 'lofi',
+          value: 8,
+          sourceIds: ['topic:lofi'],
+          evidenceIds: [],
+        }],
+      },
+    },
+  };
+
+  assert.equal(isStableReplacementCandidateEligible(refreshed, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 70,
+    feedReplacementPercent: 50,
+  }), true);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    score: 54,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    policyOutcome: 'excluded',
+    visible: false,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    explanation: {
+      ...refreshed.explanation,
+      modeGrounding: {
+        ...refreshed.explanation.modeGrounding,
+        modeRevision: 4,
+      },
+    },
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+});
+
+test('replacement identity evaluator stays perfect across ordinary score and trace churn', () => {
+  const before = {
+    'native-a': 'replacement-a',
+    'native-b': 'replacement-b',
+    'native-c': 'replacement-c',
+  };
+  const afterMetadataAndSemanticRerank = {
+    'native-a': 'replacement-a',
+    'native-b': 'replacement-b',
+    'native-c': 'replacement-c',
+  };
+
+  const metrics = evaluateReplacementStability(
+    before,
+    afterMetadataAndSemanticRerank,
+  );
+  assert.equal(metrics.commonSourceCount, 3);
+  assert.equal(metrics.changedSourceCount, 0);
+  assert.equal(metrics.stabilityRate, 1);
+});
 
 test('replacement candidate selection is stable for the same route', () => {
   const items = Array.from({ length: 8 }, (_, index) => ({
