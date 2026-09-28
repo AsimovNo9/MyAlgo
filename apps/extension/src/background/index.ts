@@ -636,12 +636,12 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
 
   if (channelIds.length === 0) {
     const diagnostics: RetrievalDiagnostics = {
-      ...EMPTY_RETRIEVAL_DIAGNOSTICS,
+      ...previous,
       lastRssSyncAt: new Date(nowMs).toISOString(),
       nextRssAllowedAt: null,
       lastError: 'No YouTube channel IDs are available yet. Refresh discovery after MyAlgo has observed a few videos.',
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    await persistRetrievalDiagnostics(diagnostics);
     return { diagnostics, changed: false };
   }
 
@@ -702,7 +702,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     rssConsecutiveFailures: consecutiveFailures,
     lastError: results.length > 0 && succeeded === 0 ? 'RSS refresh failed for all attempted channels.' : null,
   };
-  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  await persistRetrievalDiagnostics(diagnostics);
   console.info('[MyAlgo] retrieval refresh', {
     mechanism: 'rss',
     channels: diagnostics.rssChannelsConsidered,
@@ -759,14 +759,27 @@ async function refreshWebSearchCandidates(
   const modeRevisionTag = activeDurableMode
     ? `${activeDurableMode.id}:r${activeDurableMode.revision}`
     : effectiveModeLabel.toLowerCase();
-  const plans = buildRecommendationQueryPlans(
+  const plannedQueries = buildRecommendationQueryPlans(
     profile,
-    8,
+    activeDurableMode ? 16 : 8,
     `${retrievalRevision}:mode-${modeRevisionTag}`,
     [],
     [],
     true,
-  ).slice(0, 4);
+  );
+  const priorityModeTopics = activeDurableMode
+    ? [...activeDurableMode.members]
+        .sort((left, right) => (
+          right.weight - left.weight
+          || left.canonicalId.localeCompare(right.canonicalId)
+        ))
+        .map((member) => member.label)
+    : [];
+  const plans = selectWebSearchPlans(
+    plannedQueries,
+    4,
+    priorityModeTopics,
+  );
 
   if (plans.length === 0) {
     const diagnostics = {
@@ -781,7 +794,7 @@ async function refreshWebSearchCandidates(
       webSearchConsecutiveFailures: 0,
       lastError: null,
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    await persistRetrievalDiagnostics(diagnostics);
     return { diagnostics, changed: false };
   }
 
@@ -796,7 +809,7 @@ async function refreshWebSearchCandidates(
       nextWebSearchAllowedAt: null,
       lastError: 'The active connector does not support search acquisition.',
     };
-    await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+    await persistRetrievalDiagnostics(diagnostics);
     return { diagnostics, changed: false };
   }
 
@@ -837,7 +850,7 @@ async function refreshWebSearchCandidates(
     webSearchConsecutiveFailures: consecutiveFailures,
     lastError: failureMessage,
   };
-  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, diagnostics);
+  await persistRetrievalDiagnostics(diagnostics);
 
   console.info('[MyAlgo] web-search refresh', {
     provider: provider.id,
@@ -846,6 +859,7 @@ async function refreshWebSearchCandidates(
     modeRevision: activeDurableMode?.revision ?? null,
     modeMembers: activeDurableMode?.members.map((member) => member.label) ?? [],
     plans: plans.length,
+    planTexts: plans.map((plan) => plan.text),
     fetched: unique.length,
     added: addedCount,
     failed,
@@ -2389,9 +2403,19 @@ const handleRuntimeMessage = (
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     void (async () => {
       const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
+      const previousDiagnostics = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      const nextDiagnostics = reconcileModeSupplyForSelection(
+        previousDiagnostics,
+        selection.modeId,
+        selection.revision,
+      );
       await Promise.all([
         setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
         setStorage(STORAGE_KEYS.MODE, selection.label),
+        setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
       ]);
       const settings = await getStorage<RetrievalSettings>(
         STORAGE_KEYS.RETRIEVAL_SETTINGS,
@@ -2533,11 +2557,24 @@ const handleRuntimeMessage = (
         : mode.toLowerCase();
       const plans = buildRecommendationQueryPlans(
         profile,
-        8,
+        activeDurableMode ? 16 : 8,
         `${retrievalRevision}:mode-${modeRevisionTag}`,
         [],
         [],
         true,
+      );
+      const priorityModeTopics = activeDurableMode
+        ? [...activeDurableMode.members]
+            .sort((left, right) => (
+              right.weight - left.weight
+              || left.canonicalId.localeCompare(right.canonicalId)
+            ))
+            .map((member) => member.label)
+        : [];
+      const acquisitionPlans = selectWebSearchPlans(
+        plans,
+        4,
+        priorityModeTopics,
       );
       sendResponse({
         ok: true,
@@ -2561,6 +2598,7 @@ const handleRuntimeMessage = (
         topicCount: profile.explicitTopics.length,
         creatorCount: profile.creatorTerms.length,
         plans,
+        acquisitionPlans,
       });
     }).catch((error) => sendResponse({
       ok: false,
@@ -2601,15 +2639,19 @@ const handleRuntimeMessage = (
         EMPTY_RETRIEVAL_DIAGNOSTICS,
       );
       const nextModeSupply = payload?.modeSupply ?? null;
+      const requestedDiagnostics: RetrievalDiagnostics = {
+        ...previous,
+        modeSupply: nextModeSupply,
+      };
+      const reconciled = await reconcileRetrievalDiagnosticsForActiveMode(
+        requestedDiagnostics,
+      );
       const same = JSON.stringify(previous.modeSupply ?? null)
-        === JSON.stringify(nextModeSupply);
+        === JSON.stringify(reconciled.modeSupply ?? null);
       if (!same) {
-        await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, {
-          ...previous,
-          modeSupply: nextModeSupply,
-        });
+        await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, reconciled);
       }
-      sendResponse({ ok: true, modeSupply: nextModeSupply });
+      sendResponse({ ok: true, modeSupply: reconciled.modeSupply ?? null });
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to persist mode supply diagnostics.',
