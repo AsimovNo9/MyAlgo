@@ -1211,7 +1211,10 @@ async function refreshSemanticConceptGraph(
 async function refreshSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
-  allowConceptExtraction = true,
+  // Scoring must not await the much slower q8 concept verifier. Verified
+  // concept generation is scheduled separately once the current neural
+  // candidate-affinity slice has caught up.
+  allowConceptExtraction = false,
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) {
     const diagnostics = {
@@ -1984,6 +1987,9 @@ const handleRuntimeMessage = (
         diagnostics: semanticRefresh.diagnostics,
       });
       const senderTabId = _sender.tab?.id;
+      const pendingCandidateCount = Number(
+        semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+      );
       if (senderTabId && semanticRefresh.changed > 0) {
         await chrome.tabs.sendMessage(senderTabId, {
           type: 'YOUTUBE_SEMANTICS_ENRICHED',
@@ -1992,11 +1998,28 @@ const handleRuntimeMessage = (
             modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
               ? semanticRefresh.diagnostics.modelVersion
               : null,
-            pendingCandidateCount: Number(
-              semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
-            ),
+            pendingCandidateCount,
           },
         }).catch(() => undefined);
+      }
+
+      if (
+        semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+        && pendingCandidateCount === 0
+      ) {
+        void refreshSemanticConceptGraph(true).then(async (materialization) => {
+          if (!materialization.changed || !senderTabId) return;
+          await chrome.tabs.sendMessage(senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: 0,
+              conceptGraphChanged: true,
+              graphRevision: materialization.diagnostics.graphRevision ?? null,
+            },
+          }).catch(() => undefined);
+        }).catch((error) => {
+          console.warn('[MyAlgo] deferred concept verification failed', error);
+        });
       }
     })().catch((error) => sendResponse({
       ok: false,
@@ -2094,19 +2117,44 @@ const handleRuntimeMessage = (
         const senderTabId = _sender.tab?.id;
         const activeRankMode = payload?.mode ?? 'default';
         void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
-          if (!senderTabId || semanticRefresh.changed <= 0) return;
-          await chrome.tabs.sendMessage(senderTabId, {
-            type: 'YOUTUBE_SEMANTICS_ENRICHED',
-            payload: {
-              count: semanticRefresh.changed,
-              modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
-                ? semanticRefresh.diagnostics.modelVersion
-                : null,
-              pendingCandidateCount: Number(
-                semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
-              ),
-            },
-          }).catch(() => undefined);
+          const pendingCandidateCount = Number(
+            semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+          );
+          if (senderTabId && semanticRefresh.changed > 0) {
+            await chrome.tabs.sendMessage(senderTabId, {
+              type: 'YOUTUBE_SEMANTICS_ENRICHED',
+              payload: {
+                count: semanticRefresh.changed,
+                modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+                  ? semanticRefresh.diagnostics.modelVersion
+                  : null,
+                pendingCandidateCount,
+              },
+            }).catch(() => undefined);
+          }
+
+          // Run the DeBERTa verifier only after the current neural semantic
+          // working set is caught up. If it changes the graph, request a fresh
+          // rank against the new graph revision; otherwise leave the already
+          // valid affinity-bearing feed untouched.
+          if (
+            semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+            && pendingCandidateCount === 0
+          ) {
+            void refreshSemanticConceptGraph(true).then(async (materialization) => {
+              if (!materialization.changed || !senderTabId) return;
+              await chrome.tabs.sendMessage(senderTabId, {
+                type: 'YOUTUBE_SEMANTICS_ENRICHED',
+                payload: {
+                  count: 0,
+                  conceptGraphChanged: true,
+                  graphRevision: materialization.diagnostics.graphRevision ?? null,
+                },
+              }).catch(() => undefined);
+            }).catch((error) => {
+              console.warn('[MyAlgo] deferred concept verification failed', error);
+            });
+          }
         }).catch((error) => {
           console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
         });
