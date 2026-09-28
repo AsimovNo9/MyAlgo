@@ -49,8 +49,8 @@ Current execution order:
 4. **P0 — #214 / PR #226 mode-aware retrieval + slider-relative supply:** make stable mode members change retrieval planning, count eligible native mode supply against slider demand, and fill only measured shortfall from the existing governed scored reservoir.
 5. **P0 — #214 replacement stability:** preserve valid source→replacement bindings across ordinary mutation/metadata/semantic reranks and rotate only on meaningful invalidation.
 6. **P1 — #210 + #153 + #170:** recalibrate display scoring after the P0 mode runtime distribution is stable, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
-6. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
-7. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+7. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
+8. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
 PR #223/#221, PR #224, and PR #225 are merged and live-validated. Canonical semantic neighbourhoods feed a durable mode catalog; durable candidate affinities and score contributions resolve through stable mode revisions to exact canonical/source-node/evidence provenance. PR #226 is the next #214 slice: retrieval planning consumes weighted durable-mode members, and Home treats the slider as requested mode coverage—native exact-mode supply first, then only the measured shortfall from the already-acquired normally scored reservoir. Replacement-binding stability remains the following #214 slice.
 
