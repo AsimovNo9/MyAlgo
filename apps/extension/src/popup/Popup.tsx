@@ -34,6 +34,7 @@ const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
   webSearchCandidatesAdded: 0,
   webSearchCandidatesDeduplicated: 0,
   webSearchConsecutiveFailures: 0,
+  modeSupply: null,
   lastError: null,
 };
 
@@ -273,8 +274,18 @@ export function Popup() {
           onBlur={(event) => void handleReplacementChange(Number(event.currentTarget.value))}
         />
         <p style={{ margin: '4px 0 10px', fontSize: 12 }}>
-          0 keeps native recommendations; 100 tries to fill every safe Home slot from MyAlgo's scored pool. Unfilled slots keep their native card.
+          {activeModeId === 'default'
+            ? '0 keeps native recommendations; 100 tries to fill every safe Home slot from MyAlgo\'s scored pool. Unfilled slots keep their native card.'
+            : 'For a durable mode, the slider requests mode coverage across eligible Home slots. Native mode matches count first; any shortfall may be filled only from eligible scored candidates already in MyAlgo\'s acquired pool.'}
         </p>
+        {retrievalDiagnostics.modeSupply?.modeId === activeModeId ? (
+          <p role="status" style={{ margin: '4px 0 10px', fontSize: 12 }}>
+            Mode supply: <strong>{retrievalDiagnostics.modeSupply.nativeModeSupply}/{retrievalDiagnostics.modeSupply.requestedModeSlots} native</strong>
+            {' · '}<strong>{retrievalDiagnostics.modeSupply.poolModeSupply} pool</strong>
+            {' · '}<strong>{retrievalDiagnostics.modeSupply.fulfilledModeSlots} fulfilled</strong>
+            {retrievalDiagnostics.modeSupply.shortfall > 0 ? ' · native shortfall' : ''}
+          </p>
+        ) : null}
         <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>
         <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
