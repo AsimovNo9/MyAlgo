@@ -178,7 +178,30 @@ test('embedding phases identify the graph, mode seed, and candidate workload in 
     ['graph_embeddings', 3],
     ['mode_seed', 1],
     ['candidate_embeddings', 1],
+    ['embedding_cache_flush', 5],
   ]);
+});
+
+test('semantic reranking flushes a persistent embedding cache once per slice', async () => {
+  const memory = createMemoryEmbeddingCache();
+  let flushes = 0;
+  const cache = {
+    get: (key) => memory.get(key),
+    set: (key, record) => memory.set(key, record),
+    async flush() {
+      flushes += 1;
+    },
+  };
+
+  await enrichCandidatesWithSemanticReranking(
+    state,
+    [{ external_id: 'flush-video', title: 'Distributed systems' }],
+    'Work',
+    provider,
+    cache,
+  );
+
+  assert.equal(flushes, 1);
 });
 
 test('candidate category comes from graph-derived semantic matches regardless of selected mode', async () => {
