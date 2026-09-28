@@ -858,8 +858,15 @@ const groundedDurableModeFeatures = (
     .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
   if (!affinity || members.length === 0) return [];
 
+  // Recompute the aggregate from members that still resolve to the current
+  // graph. Do not transfer score mass from a removed/stale strongest member to
+  // weaker surviving members.
+  const groundedAffinity = Math.max(
+    0,
+    ...members.map((member) => Math.max(0, Math.min(1, member.weightedAffinity))),
+  );
   const total = roundModeValue(
-    GROUNDED_MODE_CONTRIBUTION_CAP * Math.max(0, Math.min(1, affinity.affinity)),
+    GROUNDED_MODE_CONTRIBUTION_CAP * groundedAffinity,
   );
   if (total <= 0) return [];
   const weightTotal = members.reduce(
