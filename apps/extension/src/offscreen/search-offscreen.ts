@@ -64,6 +64,11 @@ const ensureNeuralSandbox = (): HTMLIFrameElement => {
   return frame;
 };
 
+const resetNeuralSandbox = (frame: HTMLIFrameElement): void => {
+  readyNeuralFrames.delete(frame);
+  if (frame.isConnected) frame.remove();
+};
+
 type SemanticResult = {
   embeddings: number[][];
   modelId: string;
@@ -198,6 +203,10 @@ const embedNeuralInSandbox = (
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
+      // A timed-out request may still be executing inside the iframe scheduler.
+      // Reset the sandbox so an orphaned inference cannot block every later
+      // embedding/concept request behind it.
+      resetNeuralSandbox(frame);
       reject(new Error('Neural semantic sandbox timed out.'));
     }, 300_000);
 
@@ -344,6 +353,10 @@ const verifyConceptsNeuralInSandbox = (
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
+      // Concept inference shares the iframe scheduler with embeddings. Kill the
+      // sandbox on timeout so a stuck q8 WASM verifier cannot strand subsequent
+      // WebGPU embedding requests behind an abandoned job.
+      resetNeuralSandbox(frame);
       persistConceptStatus({
         status: 'error',
         backend: 'unknown',
