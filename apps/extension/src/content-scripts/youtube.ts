@@ -1384,10 +1384,11 @@ const triggerRank = (
     reason === 'metadata'
     || reason === 'semantic'
     || reason === 'retrieval'
+    || reason === 'graph'
   ) {
-    // These reranks may change score/trace/candidate inventory without changing
-    // the user's replacement intent. Force fresh ranking but keep valid
-    // source→candidate bindings until the new result proves one invalid.
+    // Soft reranks keep valid bindings; graph changes invalidate them. Both
+    // still require a fresh score pass rather than the same-signature cache
+    // shortcut.
     lastCandidateSignature = '';
   }
 
