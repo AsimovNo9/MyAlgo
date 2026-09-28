@@ -13,7 +13,7 @@ import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../l
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
+import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
@@ -199,6 +199,32 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
 const semanticEmbeddingCache = createChromeEmbeddingCache(600);
+
+const reconcileRetrievalDiagnosticsForActiveMode = async (
+  diagnostics: RetrievalDiagnostics,
+): Promise<RetrievalDiagnostics> => {
+  const [activeModeId, durableModeCatalog] = await Promise.all([
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  return reconcileModeSupplyForSelection(
+    diagnostics,
+    activeDurableMode?.id ?? 'default',
+    activeDurableMode?.revision ?? null,
+  );
+};
+
+const persistRetrievalDiagnostics = async (
+  diagnostics: RetrievalDiagnostics,
+): Promise<RetrievalDiagnostics> => {
+  const reconciled = await reconcileRetrievalDiagnosticsForActiveMode(diagnostics);
+  await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, reconciled);
+  return reconciled;
+};
 
 const getSemanticModelMode = async (): Promise<SemanticModelMode> => {
   const stored = await getStorage<string>(STORAGE_KEYS.SEMANTIC_MODEL_MODE, 'hash');
