@@ -815,20 +815,18 @@ const applyRankedFeed = () => {
       }
       const item = feedById.get(sticky.candidateId) ?? sticky.item;
       const nativeScore = Number(element.dataset.personalAlgorithmScore);
-      const candidateScore = item?.score ?? -Infinity;
       const valid = Boolean(
-        item
-        && (!activeDurableMode || isDurableModeGroundedItem(item, activeDurableMode))
+        sticky.bindingRevision === replacementBindingRevision
         && !nativeIds.has(sticky.candidateId)
         && !usedCandidateIds.has(sticky.candidateId)
-        && item.visible !== false
-        && item.suppressed !== true
-        && (item.policyOutcome == null || item.policyOutcome === 'eligible')
-        && candidateScore >= replacementMinimumScore
-        && Number.isFinite(nativeScore)
-        && (feedReplacementPercent === 100 || candidateScore >= nativeScore)
         && element.parentElement
         && element.style.getPropertyValue('display') !== 'none'
+        && isStableReplacementCandidateEligible(item, {
+          activeMode: activeDurableMode,
+          minimumScore: replacementMinimumScore,
+          nativeScore,
+          feedReplacementPercent,
+        })
       );
       if (!valid) {
         stableReplacementBySourceId.delete(id);
@@ -932,6 +930,9 @@ const applyRankedFeed = () => {
       '[data-personal-algorithm-source-layout-hidden]',
     ).length,
     stableReplacementAssignments,
+    stableBindingCount: stableReplacementBySourceId.size,
+    replacementBindingRevision,
+    lastReplacementInvalidationReason,
     opportunisticReplacementCandidates,
     opportunisticNativeTargets,
     opportunisticSelectedTargets,
@@ -1104,6 +1105,7 @@ const renderReplacementSlots = (generation: number) => {
       candidateId: replacementVideoId,
       item: assignment.item,
       routeKey: getRouteKey(),
+      bindingRevision: replacementBindingRevision,
     });
   }
 
@@ -1118,6 +1120,9 @@ const renderReplacementSlots = (generation: number) => {
     eligibleSlots: slots.length,
     filled,
     reused,
+    stableBindingCount: stableReplacementBySourceId.size,
+    replacementBindingRevision,
+    lastReplacementInvalidationReason,
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
