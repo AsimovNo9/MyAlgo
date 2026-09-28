@@ -594,6 +594,8 @@ PR #227 makes these invalidation causes explicit. Retrieval expansion is treated
 
 When the same binding remains valid but score/trace/metadata change, the existing rendered replacement DOM node is updated in place rather than destroyed and recreated. The node carries a binding revision and last hard invalidation reason for live inspection. The existing #162 `evaluateReplacementStability` contract remains the metric: common source IDs should retain the same replacement candidate across soft reranks; sources legitimately removed by YouTube are excluded from churn.
 
+A retained incumbent is also part of the local presentation stability reservoir even if a later bounded ranking working set no longer includes that off-page candidate. Soft retrieval expansion therefore cannot evict a valid incumbent merely by changing which 180 off-page items were rescored. The retained item remains subject to the last valid policy/mode context and current source/native relevance check; hard graph/policy/mode changes clear that context before it can be reused. If current mode demand contracts so the source is no longer rebound to a replacement slot, the latent binding is deleted rather than resurrected later.
+
 There is no arbitrary time-to-live for a valid binding. Stability ends because its contract becomes invalid, not because 45 seconds elapsed.
 
 ### Evaluation-first rule
