@@ -523,6 +523,30 @@ The same run exposed two corrective regressions before PR readiness:
 
 For follow-up live validation, inspect `GET_RETRIEVAL_PLAN.acquisitionPlans` rather than assuming the first four diagnostic `plans` are the search requests that will execute.
 
+PR #226 subsequently passed that follow-up gate and is merged. PR #227 adds the replacement-stability gate. Validation must distinguish **soft rerank churn** from **hard invalidation**.
+
+For a fixed Home route/mode/feed-mix context, capture the rendered source-native-ID → replacement-candidate-ID snapshot before and after each soft cause:
+- mutation/page-data update;
+- metadata enrichment;
+- semantic enrichment with no graph change;
+- retrieval-reservoir expansion;
+- ordinary manual rerank.
+
+Common source IDs must retain the same candidate ID, so `evaluateReplacementStability(before, after).stabilityRate === 1`. Score, trace ID, generation, or presentation text may legitimately change. For a retained binding, the rendered replacement element should also remain the same DOM node while its trace/score metadata is refreshed in place.
+
+Then exercise hard invalidation independently:
+- route change;
+- durable mode change/revision change;
+- graph-changing semantic materialization;
+- explicit feedback/rebuild;
+- source-filter change;
+- feed-mix slider change;
+- extension/model lifecycle reset.
+
+A hard invalidation must advance the replacement binding revision and may choose a new candidate after the new policy/rank completes. Candidate-level invalidation must also release only the affected binding when the candidate becomes excluded/suppressed/ineligible, falls below threshold/native relevance, loses exact durable-mode grounding, becomes native on the current page, or its source card disappears.
+
+Generation changes alone are not churn. Live diagnostics should record source ID, candidate ID, rank generation, binding revision, trace ID, score, and last hard invalidation reason so identity can be compared separately from ordinary score/trace updates.
+
 
 ## PR #220 local concept verification validation (#219)
 
