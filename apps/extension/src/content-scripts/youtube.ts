@@ -249,6 +249,7 @@ const createThumbnail = (
   aspectRatio = youtubeConnector.presentation.horizontalAspectRatio,
 ): HTMLElement => {
   const media = item.thumbnail_url ? document.createElement('img') : document.createElement('div');
+  media.dataset.personalAlgorithmThumbnail = 'true';
   if (media instanceof HTMLImageElement) {
     media.src = item.thumbnail_url ?? '';
     media.alt = '';
@@ -437,6 +438,27 @@ const refreshReplacementCardPresentation = (
     link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
     link.dataset.personalAlgorithmVideoId = item.external_id ?? '';
     link.setAttribute('aria-label', item.title ?? 'MyAlgo recommended video');
+
+    const currentThumbnail = link.querySelector<HTMLElement>(
+      '[data-personal-algorithm-thumbnail]',
+    );
+    const wantsImage = Boolean(item.thumbnail_url);
+    const hasImage = currentThumbnail instanceof HTMLImageElement;
+    if (currentThumbnail && wantsImage === hasImage) {
+      if (currentThumbnail instanceof HTMLImageElement) {
+        currentThumbnail.src = item.thumbnail_url ?? '';
+      }
+    } else if (currentThumbnail) {
+      const targetFlags = getVideoSourceFlags(
+        card.nextElementSibling instanceof HTMLElement
+          ? card.nextElementSibling
+          : card,
+      );
+      const aspectRatio = targetFlags.is_short
+        ? youtubeConnector.presentation.verticalAspectRatio
+        : youtubeConnector.presentation.horizontalAspectRatio;
+      currentThumbnail.replaceWith(createThumbnail(item, aspectRatio));
+    }
   }
   const title = card.querySelector<HTMLElement>('[data-personal-algorithm-title]');
   if (title) title.textContent = displayMetadata.title;
