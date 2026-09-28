@@ -827,6 +827,9 @@ const applyRankedFeed = () => {
           sourceVideoId,
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+        element.dataset.personalAlgorithmSourceScore = String(
+          Number.isFinite(item?.score) ? Number(item?.score) : 0,
+        );
       }
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = decision.reason;
@@ -1175,6 +1178,7 @@ const renderReplacementSlots = (generation: number) => {
 
     const existing = existingBySourceId.get(assignment.slot.sourceVideoId);
     const replacementVideoId = assignment.item.external_id ?? '';
+    target.dataset.personalAlgorithmReplacementCandidateId = replacementVideoId;
     if (
       existing
       && existing.isConnected
