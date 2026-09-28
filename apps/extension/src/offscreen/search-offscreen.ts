@@ -240,9 +240,16 @@ const embedNeuralInSandbox = (
         texts,
       }, '*');
     };
+    const probeReady = () => {
+      if (!frame.contentWindow || requestSent) return;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'PING',
+      }, '*');
+    };
     const onLoad = () => {
-      readyNeuralFrames.add(frame);
-      postRequest();
+      probeReady();
     };
 
     const onMessage = (event: MessageEvent<{
@@ -282,6 +289,7 @@ const embedNeuralInSandbox = (
       }
 
       if (event.data.type === 'ready') {
+        if (event.data.id && event.data.id !== id) return;
         readyNeuralFrames.add(frame);
         postRequest();
         return;
@@ -347,11 +355,13 @@ const embedNeuralInSandbox = (
 
     window.addEventListener('message', onMessage);
 
-    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
-      readyNeuralFrames.add(frame);
+    if (readyNeuralFrames.has(frame)) {
       postRequest();
     } else {
       frame.addEventListener('load', onLoad, { once: true });
+      // Covers the race where the packaged iframe has already loaded and emitted
+      // its one-shot ready message before the host attached listeners.
+      probeReady();
     }
   });
 };
@@ -397,9 +407,16 @@ const verifyConceptsNeuralInSandbox = (
         conceptItems,
       }, '*');
     };
+    const probeReady = () => {
+      if (!frame.contentWindow || requestSent) return;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'PING',
+      }, '*');
+    };
     const onLoad = () => {
-      readyNeuralFrames.add(frame);
-      postRequest();
+      probeReady();
     };
 
     const onMessage = (event: MessageEvent<{
@@ -435,6 +452,7 @@ const verifyConceptsNeuralInSandbox = (
       ) return;
 
       if (event.data.type === 'ready') {
+        if (event.data.id && event.data.id !== id) return;
         readyNeuralFrames.add(frame);
         postRequest();
         return;
@@ -504,11 +522,11 @@ const verifyConceptsNeuralInSandbox = (
     };
 
     window.addEventListener('message', onMessage);
-    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
-      readyNeuralFrames.add(frame);
+    if (readyNeuralFrames.has(frame)) {
       postRequest();
     } else {
       frame.addEventListener('load', onLoad, { once: true });
+      probeReady();
     }
   });
 };
