@@ -118,6 +118,9 @@ type LocalFeedItem = CandidatePoolItem & {
       sourceId?: string;
       sourceIds?: string[];
       evidenceIds: string[];
+      modeId?: string;
+      modeRevision?: number;
+      canonicalId?: string;
     }>;
   };
 };
@@ -1653,10 +1656,18 @@ async function rankLocalCandidates(
   mode: string,
 ): Promise<LocalFeedItem[]> {
   const state = await personalAlgorithmStore.exportState();
-  const feedbackEvents = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
-    'personal-algorithm-local-events',
-    [],
-  );
+  const [feedbackEvents, activeModeId, durableModeCatalog] = await Promise.all([
+    getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
+      'personal-algorithm-local-events',
+      [],
+    ),
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
       .filter((event) => event.kind === 'feedback')
@@ -1686,6 +1697,13 @@ async function rankLocalCandidates(
     mode,
     feedbackSignals,
     sourceFilters,
+    activeDurableMode
+      ? {
+          id: activeDurableMode.id,
+          label: activeDurableMode.label,
+          revision: activeDurableMode.revision,
+        }
+      : null,
   );
 
   const traces = ranked.slice(0, 60).map((item) => ({
@@ -1717,6 +1735,9 @@ async function rankLocalCandidates(
         kind: contribution.kind,
         ...(contribution.sourceId ? { sourceId: contribution.sourceId } : {}),
         ...(contribution.sourceIds?.length ? { sourceIds: contribution.sourceIds } : {}),
+        ...(contribution.modeId ? { modeId: contribution.modeId } : {}),
+        ...(Number.isInteger(contribution.modeRevision) ? { modeRevision: contribution.modeRevision } : {}),
+        ...(contribution.canonicalId ? { canonicalId: contribution.canonicalId } : {}),
         evidenceIds: contribution.evidenceIds,
       }));
 
