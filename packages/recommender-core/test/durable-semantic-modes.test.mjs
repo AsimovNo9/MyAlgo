@@ -334,3 +334,77 @@ test('candidate affinities preserve multiple qualified durable modes and source 
   assert.equal(affinities[1].modeId, 'mode:inferred:v1:systems');
   assert.equal(affinities[1].affinity, 0.488);
 });
+
+test('weak weighted durable-mode affinities abstain instead of exposing cross-domain matches', () => {
+  const catalog = {
+    pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+    graphRevision: 8,
+    generatedAt: timestamp,
+    modes: [{
+      id: 'mode:inferred:v1:lofi',
+      label: 'chill lofi',
+      revision: 1,
+      members: [
+        {
+          canonicalId: 'canonical:chill-lofi',
+          label: 'chill lofi',
+          weight: 1,
+          sourceNodeIds: ['topic:chill-lofi'],
+          supportContentIds: ['content:youtube:lofi-a', 'content:youtube:lofi-b'],
+        },
+        {
+          canonicalId: 'canonical:lofi-beats',
+          label: 'lofi beats',
+          weight: 1,
+          sourceNodeIds: ['topic:lofi-beats'],
+          supportContentIds: ['content:youtube:lofi-a', 'content:youtube:lofi-b'],
+        },
+      ],
+      provenance: 'inferred',
+      pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+      graphRevision: 8,
+      createdAt: timestamp,
+      lastSupportedAt: timestamp,
+      active: true,
+      pinned: false,
+    }],
+  };
+
+  const weak = buildCandidateModeAffinities([
+    {
+      node_id: 'topic:chill-lofi',
+      node_label: 'chill lofi',
+      canonical_id: 'canonical:chill-lofi',
+      source_node_ids: ['topic:chill-lofi'],
+      similarity: 0.4,
+      weight: 0.4,
+      taxonomy_only: false,
+    },
+    {
+      node_id: 'topic:lofi-beats',
+      node_label: 'lofi beats',
+      canonical_id: 'canonical:lofi-beats',
+      source_node_ids: ['topic:lofi-beats'],
+      similarity: 0.36,
+      weight: 0.36,
+      taxonomy_only: false,
+    },
+  ], catalog);
+  assert.deepEqual(weak, []);
+
+  const strong = buildCandidateModeAffinities([
+    {
+      node_id: 'topic:chill-lofi',
+      node_label: 'chill lofi',
+      canonical_id: 'canonical:chill-lofi',
+      source_node_ids: ['topic:chill-lofi'],
+      similarity: 0.64,
+      weight: 0.64,
+      taxonomy_only: false,
+    },
+  ], catalog);
+  assert.equal(strong.length, 1);
+  assert.equal(strong[0].modeId, 'mode:inferred:v1:lofi');
+  assert.equal(strong[0].affinity, 0.64);
+});
+
