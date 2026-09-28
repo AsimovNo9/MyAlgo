@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
 import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -956,11 +956,13 @@ const applyRankedFeed = () => {
 
   if (remainingReplacementCapacity > 0) {
     const routeKey = currentRouteKey;
-    const usedCandidateIds = new Set(
-      nativeCards
-        .map(({ element }) => element.dataset.personalAlgorithmReplacementCandidateId?.trim())
-        .filter((id): id is string => Boolean(id)),
-    );
+    const usedCandidateOwnerById = new Map<string, string>();
+    for (const { element, id } of nativeCards) {
+      const candidateId = element.dataset.personalAlgorithmReplacementCandidateId?.trim();
+      if (candidateId && !usedCandidateOwnerById.has(candidateId)) {
+        usedCandidateOwnerById.set(candidateId, id);
+      }
+    }
 
     // Keep a rendered replacement stable across ordinary YouTube DOM churn
     // while it remains eligible and, for a durable mode, still resolves to the
@@ -978,7 +980,11 @@ const applyRankedFeed = () => {
       const valid = Boolean(
         sticky.bindingRevision === replacementBindingRevision
         && !nativeIds.has(sticky.candidateId)
-        && !usedCandidateIds.has(sticky.candidateId)
+        && isStableReplacementCandidateAvailableToSource(
+          sticky.candidateId,
+          id,
+          usedCandidateOwnerById,
+        )
         && element.parentElement
         && element.style.getPropertyValue('display') !== 'none'
         && isStableReplacementCandidateEligible(item, {
@@ -1006,7 +1012,7 @@ const applyRankedFeed = () => {
       element.dataset.personalAlgorithmSourceScore = String(nativeScore);
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = 'replacement_slot';
-      usedCandidateIds.add(sticky.candidateId);
+      usedCandidateOwnerById.set(sticky.candidateId, id);
       stableReplacementAssignments += 1;
       remainingReplacementCapacity -= 1;
     }
@@ -1018,7 +1024,7 @@ const applyRankedFeed = () => {
       // source list is already constrained to exact grounded mode matches.
       const replacementCandidates = getReplacementCandidates(
         replacementSource,
-        [...nativeIds, ...usedCandidateIds],
+        [...nativeIds, ...usedCandidateOwnerById.keys()],
         Math.max(24, remainingReplacementCapacity * 6),
         replacementMinimumScore,
         replacementSelectionSeed,
@@ -1063,7 +1069,11 @@ const applyRankedFeed = () => {
           selected.externalId,
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
-        element.dataset.personalAlgorithmReplacementCandidateId = assignment.item.external_id ?? '';
+        const replacementCandidateId = assignment.item.external_id ?? '';
+        element.dataset.personalAlgorithmReplacementCandidateId = replacementCandidateId;
+        if (replacementCandidateId) {
+          usedCandidateOwnerById.set(replacementCandidateId, selected.externalId);
+        }
         element.dataset.personalAlgorithmSourceScore = String(selected.score);
         element.style.setProperty('display', 'none', 'important');
         element.dataset.personalAlgorithmScore = 'replacement_slot';
