@@ -1244,7 +1244,13 @@ const rankCurrentPage = async (requestGeneration: number) => {
         && (item.policyOutcome == null || item.policyOutcome === 'eligible')
         && (item.score ?? 0) >= youtubeConnector.presentation.minimumVisibleScore
       )).length;
-      showStatus(`MyAlgo: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
+      if (latestModeSupplyPlan?.shortfall) {
+        showStatus(
+          `MyAlgo · ${latestModeSupplyPlan.modeLabel}: ${latestModeSupplyPlan.nativeModeSupply}/${latestModeSupplyPlan.requestedModeSlots} native · ${latestModeSupplyPlan.poolModeSupply} pool`,
+        );
+      } else {
+        showStatus(`MyAlgo: ${visibleCount} scored visible · ${response.feed.length - visibleCount} scored hidden`);
+      }
     } else {
       console.warn('[MyAlgo] native feed ranking failed', { phase: 'rank-response' });
       showStatus(`Personal Algorithm: ${response?.error ?? 'ranking failed'}`, true);
