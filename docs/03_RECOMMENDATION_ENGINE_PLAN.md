@@ -495,7 +495,7 @@ Candidates may qualify for multiple graph regions/modes simultaneously. Preserve
 
 The UI may still show one conservative primary badge when the leading label clears the badge confidence/margin rule. That badge is presentation only. Scoring, retrieval and evaluation consume the multi-label affinity set.
 
-PR #224 persists a bounded candidate↔mode affinity list alongside semantic candidate features. Each affinity resolves to a stable mode ID/revision, matched canonical IDs, and exact source graph node IDs. This slice does not yet award score from that list; the next #214 slice will convert qualified member affinities into exact trace contributions.
+PR #224 persists a bounded candidate↔mode affinity list alongside semantic candidate features. PR #225 versions that record to retain per-canonical-member affinity/provenance and consumes it for exact graph-grounded mode scoring. The candidate may still retain several qualified mode affinities internally; only the currently selected stable mode ID/revision receives score mass.
 
 Live validation also showed that raw member similarity alone was too permissive: unrelated music/game candidates could enter a durable mode through weak weighted signals around 0.35–0.40. PR #224 therefore applies a provisional final weighted mode-affinity abstention floor of 0.45 while preserving the underlying member matches for diagnostics/provenance. In the labelled live sample, obvious grounded controls began above ~0.51. This is a replay/live regression guard, not a calibrated encoder threshold.
 
@@ -517,6 +517,17 @@ The user-facing explanation should be able to say:
 rather than only:
 
 `mode similarity +X`.
+
+PR #225 implements the first scoring slice over the durable catalog:
+- candidate↔mode affinity pipeline v2 retains each matched canonical member's similarity, member weight, weighted affinity, and exact source graph node IDs;
+- ranking resolves the selected durable mode by stable ID/revision from the persisted catalog rather than trusting only the display label;
+- the existing 14-point semantic-mode budget remains bounded by the candidate's qualified durable-mode affinity and is split across matched canonical members in proportion to their weighted affinity;
+- the final member receives the rounding residual so the member contributions reconcile exactly to the aggregate mode amount;
+- each trace entry is a `modeContribution` with mode ID, mode revision, canonical ID, source graph node IDs, and supporting evidence IDs;
+- a stale mode revision or source node that no longer exists in the current graph causes abstention rather than a score side door;
+- the older classifier, mode-centroid similarity, and active-category boosts remain compatibility behavior only for non-durable/custom mode values and do not stack beside a selected durable mode.
+
+The 14-point cap is inherited from the previous semantic-mode contribution budget. It is not a new calibration result; #210 remains responsible for presentation-score recalibration after the P0 mode runtime is stable.
 
 ### Mode-aware retrieval and supply shortfall
 
