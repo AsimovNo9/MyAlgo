@@ -275,7 +275,6 @@ async function embedWithCache(
     }
   }
 
-  await cache.flush?.();
   return { records, computed: misses.length, fromCache };
 }
 
@@ -321,7 +320,10 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   options: {
     maxGraphNodes?: number;
     minimumModeNodeSimilarity?: number;
-    onEmbeddingPhase?: (phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings', inputCount: number) => void | Promise<void>;
+    onEmbeddingPhase?: (
+      phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings' | 'embedding_cache_flush',
+      inputCount: number,
+    ) => void | Promise<void>;
   } = {},
 ): Promise<SemanticRerankingResult<T>> {
   const maxGraphNodes = Math.max(1, Math.floor(options.maxGraphNodes ?? 64));
@@ -417,6 +419,16 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   }));
   await options.onEmbeddingPhase?.('candidate_embeddings', candidateInputs.length);
   const candidateEmbeddings = await embedWithCache(provider, cache, candidateInputs);
+
+  // Persist the embedding cache once per semantic slice. Flushing after graph,
+  // mode-seed, and candidate phases rewrote the full Chrome storage cache three
+  // times per 8-candidate slice and could dominate wall time after WebGPU had
+  // already finished.
+  await options.onEmbeddingPhase?.(
+    'embedding_cache_flush',
+    graphEmbeddings.computed + modeSeed.computed + candidateEmbeddings.computed,
+  );
+  await cache.flush?.();
 
   const categoryConcepts = canonicalConcepts.filter((concept) => (
     concept.kinds.includes('topic') || concept.kinds.includes('concept')
