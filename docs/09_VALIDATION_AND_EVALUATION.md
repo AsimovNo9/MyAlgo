@@ -528,7 +528,7 @@ console.log(cached);
 
 The first request runs one bounded verifier batch against the persisted candidate reservoir and immediately returns materialization, verifier diagnostics, and model status. The second request reuses only valid cached verified labels. This command is intended for validation/debugging, not routine UI use.
 
-`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Cache-only embedding-drain passes do not overwrite it.
+`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Semantic scoring/affinity passes are cache-only with respect to concept verification and do not overwrite it. The verifier is deferred until the current neural semantic working set is caught up, and it runs in a separate sandbox iframe from WebGPU embeddings; a verifier timeout must therefore not block incremental affinity reranks.
 
 A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
 
