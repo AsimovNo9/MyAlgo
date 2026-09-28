@@ -1,10 +1,10 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
-import type { RankedFeedItem } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
+import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
-import type { FeedSourceFilters } from '@repo/shared-types';
+import type { DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics } from '@repo/shared-types';
 import { isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { collectHistoryEvidenceFromDom, isYouTubeHistoryPage } from './youtube-history';
 import { collectRecommendationObservationsFromDom, isYouTubeHomePage } from './youtube-recommendations';
@@ -37,6 +37,9 @@ let lastCandidateSignature = '';
 let lastRankMode = '';
 let sourceFilters: FeedSourceFilters = {};
 let feedReplacementPercent = 0;
+let activeDurableMode: DurableModePresentationContext | null = null;
+let latestModeSupplyPlan: ModeSupplyPlan | null = null;
+let lastModeSupplySignature = '';
 let lastSelectionInteraction: { signature: string; kind: 'click' | 'auxclick' | 'keyboard'; at: number } | null = null;
 const WATCH_SELECTION_INTENT_MAX_AGE_MS = 15_000;
 let pendingWatchExposure: { videoId: string; exposureId: string | null; observedAt: number } | null = null;
