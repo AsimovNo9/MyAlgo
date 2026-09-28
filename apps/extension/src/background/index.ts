@@ -1295,6 +1295,8 @@ async function refreshSemanticScoreFeatures(
       requestedSemanticModelMode: requestedContext.semanticModelMode,
       modelVersion: requestedContext.semanticModelIdentity,
       candidateCount: semanticCandidates.length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
       totalCandidateCount: candidates.length,
       pendingCandidateCount: Math.max(
         0,
@@ -1355,6 +1357,8 @@ async function refreshSemanticScoreFeatures(
         semanticModelMode: effectiveContext.semanticModelMode,
         modelVersion: effectiveContext.semanticModelIdentity,
         candidateCount: semanticCandidates.length,
+        modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+        modeCatalogSignature: expectedModeCatalogSignature,
         totalCandidateCount: candidates.length,
         pendingCandidateCount: Math.max(0, candidatesNeedingRequestedFeatures.length - semanticCandidates.length),
         conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
@@ -1553,29 +1557,6 @@ async function refreshSemanticScoreFeatures(
   } finally {
     semanticRefreshInFlight.delete(refreshKey);
   }
-}
-
-async function drainPendingSemanticCandidates(
-  candidates: CandidatePoolItem[],
-  mode: string,
-  firstDiagnostics: Record<string, unknown> | null,
-): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
-  let diagnostics = firstDiagnostics;
-  let pending = Number(diagnostics?.pendingCandidateCount ?? 0);
-  let changed = 0;
-  while (
-    diagnostics?.status === 'completed'
-    && diagnostics.semanticModelMode === 'neural'
-    && pending > 0
-  ) {
-    const next = await refreshSemanticScoreFeatures(candidates, mode, false);
-    changed += next.changed;
-    diagnostics = next.diagnostics;
-    const nextPending = Number(diagnostics?.pendingCandidateCount ?? 0);
-    if (nextPending >= pending) break;
-    pending = nextPending;
-  }
-  return { changed, diagnostics };
 }
 
 async function rankLocalCandidates(
@@ -1990,14 +1971,20 @@ const handleRuntimeMessage = (
         diagnostics: semanticRefresh.diagnostics,
       });
       const senderTabId = _sender.tab?.id;
-      void drainPendingSemanticCandidates(hydrated, mode, semanticRefresh.diagnostics).then(async (drained) => {
-        const changed = semanticRefresh.changed + drained.changed;
-        if (!senderTabId || changed <= 0) return;
+      if (senderTabId && semanticRefresh.changed > 0) {
         await chrome.tabs.sendMessage(senderTabId, {
           type: 'YOUTUBE_SEMANTICS_ENRICHED',
-          payload: { count: changed, modelVersion: drained.diagnostics?.modelVersion ?? null },
+          payload: {
+            count: semanticRefresh.changed,
+            modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+              ? semanticRefresh.diagnostics.modelVersion
+              : null,
+            pendingCandidateCount: Number(
+              semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+            ),
+          },
         }).catch(() => undefined);
-      }).catch((error) => console.warn('[MyAlgo] semantic candidate drain failed', error));
+      }
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh semantic features.',
@@ -2094,20 +2081,19 @@ const handleRuntimeMessage = (
         const senderTabId = _sender.tab?.id;
         const activeRankMode = payload?.mode ?? 'default';
         void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
-          const notifyChanged = async (changed: number, diagnostics: Record<string, unknown> | null) => {
-            if (!senderTabId || changed <= 0) return;
-            await chrome.tabs.sendMessage(senderTabId, {
-              type: 'YOUTUBE_SEMANTICS_ENRICHED',
-              payload: {
-                count: changed,
-                modelVersion: typeof diagnostics?.modelVersion === 'string' ? diagnostics.modelVersion : null,
-              },
-            }).catch(() => undefined);
-          };
-          const drained = await drainPendingSemanticCandidates(
-            hydratedWorkingPool, activeRankMode, semanticRefresh.diagnostics,
-          );
-          await notifyChanged(semanticRefresh.changed + drained.changed, drained.diagnostics);
+          if (!senderTabId || semanticRefresh.changed <= 0) return;
+          await chrome.tabs.sendMessage(senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: semanticRefresh.changed,
+              modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+                ? semanticRefresh.diagnostics.modelVersion
+                : null,
+              pendingCandidateCount: Number(
+                semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+              ),
+            },
+          }).catch(() => undefined);
         }).catch((error) => {
           console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
         });
