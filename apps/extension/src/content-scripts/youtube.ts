@@ -282,6 +282,11 @@ const createReplacementCard = (
   card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
   card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
   card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  const modeGrounding = item.explanation?.modeGrounding;
+  if (modeGrounding) {
+    card.dataset.personalAlgorithmReplacementModeId = modeGrounding.modeId;
+    card.dataset.personalAlgorithmReplacementModeRevision = String(modeGrounding.modeRevision);
+  }
   card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
   card.setAttribute('role', 'group');
   card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
