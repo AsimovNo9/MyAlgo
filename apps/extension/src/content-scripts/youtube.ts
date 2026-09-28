@@ -213,7 +213,13 @@ const clearExtensionPresentation = (
     ) return;
     element.remove();
   });
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => {
+    if (
+      preserveReplacements
+      && badge.closest('[data-personal-algorithm-replacement]')
+    ) return;
+    badge.remove();
+  });
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
   ).forEach((container) => {
