@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
 import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -977,6 +977,16 @@ const applyRankedFeed = () => {
       }
       const item = feedById.get(sticky.candidateId) ?? sticky.item;
       const nativeScore = Number(element.dataset.personalAlgorithmScore);
+      const sourceCandidateId = element.dataset.personalAlgorithmReplacementCandidateId?.trim();
+      const sourceHidden = element.style.getPropertyValue('display') === 'none';
+      if (isStableReplacementSourceSlotPrebound(
+        sourceCandidateId,
+        sticky.candidateId,
+        sourceHidden,
+      )) {
+        usedCandidateOwnerById.set(sticky.candidateId, id);
+        continue;
+      }
       const valid = Boolean(
         sticky.bindingRevision === replacementBindingRevision
         && !nativeIds.has(sticky.candidateId)
