@@ -104,6 +104,63 @@ const safeStorageGet = (keys: string[]): Promise<Record<string, unknown>> => {
   }
 };
 
+const resolveDurableModeContext = (
+  activeModeId: unknown,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): DurableModePresentationContext | null => {
+  const id = typeof activeModeId === 'string' ? activeModeId.trim() : '';
+  if (!id || id === 'default') return null;
+  const mode = catalog?.modes.find((entry) => entry.id === id && entry.active);
+  return mode
+    ? { id: mode.id, label: mode.label, revision: mode.revision }
+    : null;
+};
+
+const persistModeSupplyDiagnostics = (
+  plan: ModeSupplyPlan | null,
+  filledFromPool: number,
+) => {
+  const diagnostics: ModeSupplyDiagnostics | null = plan
+    ? {
+        generatedAt: new Date().toISOString(),
+        modeId: plan.modeId,
+        modeRevision: plan.modeRevision,
+        modeLabel: plan.modeLabel,
+        sliderPercent: plan.sliderPercent,
+        eligibleNativeSlots: plan.eligibleNativeSlots,
+        requestedModeSlots: plan.requestedModeSlots,
+        nativeModeSupply: plan.nativeModeSupply,
+        poolModeSupply: plan.poolModeSupply,
+        shortfall: plan.shortfall,
+        fulfilledModeSlots: Math.min(
+          plan.requestedModeSlots,
+          plan.nativeModeSupply + Math.max(0, filledFromPool),
+        ),
+        bannerShown: plan.shortfall > 0,
+      }
+    : null;
+
+  const signature = diagnostics
+    ? JSON.stringify({
+        ...diagnostics,
+        generatedAt: undefined,
+      })
+    : 'none';
+  if (signature === lastModeSupplySignature) return;
+  lastModeSupplySignature = signature;
+
+  safeSendMessage({
+    type: 'MODE_SUPPLY_DIAGNOSTICS',
+    payload: { modeSupply: diagnostics },
+  });
+
+  if (diagnostics?.shortfall) {
+    showStatus(
+      `Not enough native ${diagnostics.modeLabel} supply · ${diagnostics.nativeModeSupply}/${diagnostics.requestedModeSlots} native · ${diagnostics.poolModeSupply} available from MyAlgo pool`,
+    );
+  }
+};
+
 const showStatus = (message: string, error = false, paused = false) => {
   if (!isCurrentInstance()) return;
   let status = document.querySelector<HTMLElement>('[data-personal-algorithm-status]');
