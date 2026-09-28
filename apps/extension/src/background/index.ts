@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -194,6 +194,7 @@ const EMPTY_RETRIEVAL_DIAGNOSTICS: RetrievalDiagnostics = {
   webSearchCandidatesAdded: 0,
   webSearchCandidatesDeduplicated: 0,
   webSearchConsecutiveFailures: 0,
+  modeSupply: null,
   lastError: null,
 };
 const personalAlgorithmStore = new LocalPersonalAlgorithmStore(createChromeLocalStateStorage());
@@ -662,6 +663,7 @@ async function refreshRssCandidates(force = false): Promise<{ diagnostics: Retri
     ? (previous.rssConsecutiveFailures ?? 0) + 1
     : 0;
   const diagnostics: RetrievalDiagnostics = {
+    ...previous,
     lastRssSyncAt: acquiredAt,
     nextRssAllowedAt: nextRssAllowedAt(nowMs, consecutiveFailures),
     rssChannelsConsidered: channelIds.length,
@@ -1860,6 +1862,7 @@ const handleRuntimeMessage = (
       sourceFilters?: FeedSourceFilters;
       feedReplacementPercent?: number;
       retrievalSettings?: RetrievalSettings;
+      modeSupply?: ModeSupplyDiagnostics | null;
       evidence?: unknown[];
       observations?: unknown[];
       metrics?: unknown;
@@ -2561,6 +2564,29 @@ const handleRuntimeMessage = (
     }).catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to read semantic diagnostics.',
+    }));
+    return true;
+  }
+
+  if (type === 'MODE_SUPPLY_DIAGNOSTICS') {
+    void (async () => {
+      const previous = await getStorage<RetrievalDiagnostics>(
+        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+        EMPTY_RETRIEVAL_DIAGNOSTICS,
+      );
+      const nextModeSupply = payload?.modeSupply ?? null;
+      const same = JSON.stringify(previous.modeSupply ?? null)
+        === JSON.stringify(nextModeSupply);
+      if (!same) {
+        await setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, {
+          ...previous,
+          modeSupply: nextModeSupply,
+        });
+      }
+      sendResponse({ ok: true, modeSupply: nextModeSupply });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to persist mode supply diagnostics.',
     }));
     return true;
   }
