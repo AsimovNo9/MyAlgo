@@ -1416,9 +1416,10 @@ const triggerRank = (
   const invalidateBindings = shouldInvalidateStableReplacementBindings(reason);
   if (invalidateBindings) {
     invalidateStableReplacements(reason);
-    document.querySelectorAll<HTMLElement>(
-      '[data-personal-algorithm-replacement]',
-    ).forEach((element) => element.remove());
+    // A hard invalidation removes the incumbent replacement intent entirely.
+    // Restore hidden native targets immediately rather than leaving blank slots
+    // while the fresh policy/graph/mode rank is in flight.
+    clearExtensionPresentation(false);
   }
 
   if (
