@@ -235,6 +235,7 @@ const clearExtensionPresentation = (
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
     delete element.dataset.personalAlgorithmReplacementCandidateId;
+    delete element.dataset.personalAlgorithmSourceScore;
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -799,6 +800,7 @@ const applyRankedFeed = () => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmSourceScore;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const item = feedById.get(id) ?? feedByTitle.get(title);
@@ -933,6 +935,7 @@ const applyRankedFeed = () => {
       );
       element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
       element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
+      element.dataset.personalAlgorithmSourceScore = String(nativeScore);
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = 'replacement_slot';
       usedCandidateIds.add(sticky.candidateId);
@@ -993,6 +996,7 @@ const applyRankedFeed = () => {
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
         element.dataset.personalAlgorithmReplacementCandidateId = assignment.item.external_id ?? '';
+        element.dataset.personalAlgorithmSourceScore = String(selected.score);
         element.style.setProperty('display', 'none', 'important');
         element.dataset.personalAlgorithmScore = 'replacement_slot';
       }
@@ -1105,15 +1109,26 @@ const renderReplacementSlots = (generation: number) => {
   const boundAssignments = slots.flatMap((slot) => {
     const target = targetBySlot.get(slot.slotId);
     const candidateId = target?.dataset.personalAlgorithmReplacementCandidateId?.trim();
-    const item = candidateId ? feedById.get(candidateId) : undefined;
+    const sticky = stableReplacementBySourceId.get(slot.sourceVideoId);
+    const retainedItem = sticky
+      && sticky.candidateId === candidateId
+      && sticky.routeKey === getRouteKey()
+      && sticky.bindingRevision === replacementBindingRevision
+      ? sticky.item
+      : undefined;
+    const item = candidateId
+      ? feedById.get(candidateId) ?? retainedItem
+      : undefined;
+    const nativeScore = Number(target?.dataset.personalAlgorithmSourceScore);
     if (
       !item
       || blockedIds.has(candidateId ?? '')
-      || item.visible === false
-      || item.suppressed === true
-      || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
-      || (activeDurableMode && !isDurableModeGroundedItem(item, activeDurableMode))
-      || (item.score ?? 0) < replacementMinimumScore
+      || !isStableReplacementCandidateEligible(item, {
+        activeMode: activeDurableMode,
+        minimumScore: replacementMinimumScore,
+        nativeScore,
+        feedReplacementPercent,
+      })
     ) {
       return [];
     }
