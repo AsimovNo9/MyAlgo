@@ -1160,17 +1160,18 @@ const renderReplacementSlots = (generation: number) => {
 
     const existing = existingBySourceId.get(assignment.slot.sourceVideoId);
     const replacementVideoId = assignment.item.external_id ?? '';
-    const replacementScore = String(assignment.item.score ?? 0);
-    const replacementTraceId = assignment.item.traceId ?? '';
     if (
       existing
       && existing.isConnected
       && existing.dataset.personalAlgorithmVideoId === replacementVideoId
-      && existing.dataset.personalAlgorithmTraceId === replacementTraceId
-      && existing.dataset.personalAlgorithmReplacementScore === replacementScore
     ) {
-      existing.dataset.personalAlgorithmReplacementSlot = assignment.slot.slotId;
-      existing.dataset.personalAlgorithmReplacementGeneration = String(generation);
+      refreshReplacementCardPresentation(
+        existing,
+        assignment.item,
+        assignment.slot.slotId,
+        assignment.slot.sourceVideoId,
+        generation,
+      );
       if (existing.parentElement !== target.parentElement || target.previousElementSibling !== existing) {
         target.parentElement.insertBefore(existing, target);
       }
