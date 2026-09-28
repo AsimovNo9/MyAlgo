@@ -365,6 +365,16 @@ test('stable replacement candidate survives score and trace refresh while still 
     nativeScore: 40,
     feedReplacementPercent: 50,
   }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    score: 60,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 90,
+    feedReplacementPercent: 100,
+  }), true);
 });
 
 test('replacement identity evaluator stays perfect across ordinary score and trace churn', () => {
