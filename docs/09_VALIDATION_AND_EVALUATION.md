@@ -185,7 +185,9 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 
 ### Replacement stability regression
 
-For live replacement validation, render at least one replacement and then allow ordinary Home mutations and `yt-page-data-updated` events to occur for at least 45 seconds. The same replacement should remain present while its source card and candidate stay valid. Confirm that `yt-navigate-start`, mode changes, feedback/graph invalidation, suppression, and stability expiry correctly permit teardown/reselection.
+Replacement stability is validity-scoped rather than time-scoped. Capture source-native-ID → replacement-candidate-ID mappings before and after ordinary in-route mutation, metadata enrichment, non-graph semantic enrichment, retrieval expansion, and manual rerank. Common valid sources must retain the same candidate with `evaluateReplacementStability(...).stabilityRate === 1`; there is no 45-second expiry requirement.
+
+Hard boundaries—navigation, active mode, graph-changing semantic materialization, feedback/rebuild, source policy, feed-mix slider, and lifecycle/model reset—must invalidate the binding context. Candidate-level exclusion/suppression/ineligibility, threshold/native-relevance failure, exact-mode grounding loss, native duplication, or source disappearance must release the affected binding. Generation or trace changes alone are not invalidation.
 
 
 ### Overlay first-paint latency regression
