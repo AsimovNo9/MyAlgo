@@ -301,11 +301,15 @@ const isEligibleReplacementCandidate = (
 export function buildModeSupplyPlan(input: {
   mode: DurableModePresentationContext;
   sliderPercent: number;
+  nativeIds?: string[];
   eligibleNativeIds: string[];
   feedItems: RankedFeedItem[];
   minimumReplacementScore: number;
 }): ModeSupplyPlan {
-  const nativeIds = new Set(input.eligibleNativeIds.filter(Boolean));
+  const allNativeIds = new Set(
+    (input.nativeIds ?? input.eligibleNativeIds).filter(Boolean),
+  );
+  const eligibleNativeIds = new Set(input.eligibleNativeIds.filter(Boolean));
   const feedById = new Map(
     input.feedItems
       .filter((item) => item.external_id)
@@ -313,9 +317,9 @@ export function buildModeSupplyPlan(input: {
   );
   const requestedModeSlots = replacementQuota(
     input.sliderPercent,
-    nativeIds.size,
+    eligibleNativeIds.size,
   );
-  const nativeModeSupply = [...nativeIds].filter((id) => {
+  const nativeModeSupply = [...eligibleNativeIds].filter((id) => {
     const item = feedById.get(id);
     return Boolean(
       item
@@ -327,7 +331,7 @@ export function buildModeSupplyPlan(input: {
   }).length;
   const poolCandidates = input.feedItems
     .filter((item) => (
-      !nativeIds.has(item.external_id ?? '')
+      !allNativeIds.has(item.external_id ?? '')
       && isEligibleReplacementCandidate(item, input.minimumReplacementScore)
       && isDurableModeGroundedItem(item, input.mode)
     ))
@@ -342,7 +346,7 @@ export function buildModeSupplyPlan(input: {
     modeRevision: input.mode.revision,
     modeLabel: input.mode.label,
     sliderPercent: Math.max(0, Math.min(100, input.sliderPercent)),
-    eligibleNativeSlots: nativeIds.size,
+    eligibleNativeSlots: eligibleNativeIds.size,
     requestedModeSlots,
     nativeModeSupply,
     poolModeSupply: poolCandidates.length,
