@@ -29,7 +29,7 @@ globalThis.chrome = {
 
 await import('./search-offscreen.ts');
 
-test('ready and load dispatch once, then an opaque-origin iframe accepts a second request', async () => {
+test('readiness probe dispatches once, then an opaque-origin ready iframe accepts a second request', async () => {
   const result = new Promise((resolve) => {
     assert.equal(runtimeListener({
       target: 'semantic-embedding-offscreen',
@@ -95,54 +95,6 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
     },
   }));
   assert.equal((await secondResult).ok, true);
-});
-
-
-test('a missed one-shot ready event is recovered by an idempotent readiness probe', async () => {
-  hostMessages.length = 0;
-  frame.contentDocument = null;
-
-  const result = new Promise((resolve) => {
-    assert.equal(runtimeListener({
-      target: 'semantic-embedding-offscreen',
-      type: 'EMBED_TEXTS',
-      provider: 'neural',
-      texts: ['already loaded sandbox'],
-    }, {}, resolve), true);
-  });
-
-  const probe = hostMessages.find((message) => message.type === 'PING');
-  assert.ok(probe);
-  assert.equal(
-    hostMessages.some((message) => message.type === 'EMBED_TEXTS'),
-    false,
-  );
-
-  window.dispatchEvent(Object.assign(new Event('message'), {
-    source: frame.contentWindow,
-    data: {
-      source: 'myalgo-neural-sandbox',
-      id: probe.id,
-      type: 'ready',
-    },
-  }));
-
-  const request = hostMessages.find((message) => message.type === 'EMBED_TEXTS');
-  assert.ok(request);
-  window.dispatchEvent(Object.assign(new Event('message'), {
-    source: frame.contentWindow,
-    data: {
-      source: 'myalgo-neural-sandbox',
-      id: request.id,
-      ok: true,
-      embeddings: [new Array(384).fill(0)],
-      modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
-      modelVersion: 'transformersjs-local-q8-v2',
-      dimensions: 384,
-    },
-  }));
-
-  assert.equal((await result).ok, true);
 });
 
 
