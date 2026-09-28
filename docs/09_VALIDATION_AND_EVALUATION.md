@@ -538,7 +538,7 @@ For a fixed Home route/mode/feed-mix context, capture the rendered source-native
 - retrieval-reservoir expansion;
 - ordinary manual rerank.
 
-Common source IDs must retain the same candidate ID, so `evaluateReplacementStability(before, after).stabilityRate === 1`. Score, trace ID, generation, or presentation text may legitimately change. For a retained binding, the rendered replacement element should also remain the same DOM node while its trace/score metadata is refreshed in place.
+Common source IDs must retain the same candidate ID, so `evaluateReplacementStability(before, after).stabilityRate === 1`. Score, trace ID, generation, or presentation text may legitimately change. For a retained binding, the rendered replacement element should also remain the same DOM node while its trace/score metadata is refreshed in place. Replacement-owned presentation UI (badge, title/creator/thumbnail, summary, Why-this control/panel) must remain present after the cleanup/reuse pass rather than being removed by generic native-card cleanup.
 
 Then exercise hard invalidation independently:
 - route change;
@@ -549,7 +549,7 @@ Then exercise hard invalidation independently:
 - feed-mix slider change;
 - extension/model lifecycle reset.
 
-A hard invalidation must advance the replacement binding revision and may choose a new candidate after the new policy/rank completes. Candidate-level invalidation must also release only the affected binding when the candidate becomes excluded/suppressed/ineligible, falls below threshold/native relevance, loses exact durable-mode grounding, becomes native on the current page, or its source card disappears.
+A hard invalidation must advance the replacement binding revision and may choose a new candidate after the new policy/rank completes. One SPA navigation transition should advance the binding-context revision once: `yt-navigate-start` owns the invalidation, while the corresponding finish reranks without a second clear; a finish observed without a start may still invalidate defensively. Candidate-level invalidation must also release only the affected binding when the candidate becomes excluded/suppressed/ineligible, falls below threshold/native relevance, loses exact durable-mode grounding, becomes native on the current page, or its source card disappears.
 
 Generation changes alone are not churn. Live diagnostics should record source ID, candidate ID, rank generation, binding revision, trace ID, score, and last hard invalidation reason so identity can be compared separately from ordinary score/trace updates.
 
