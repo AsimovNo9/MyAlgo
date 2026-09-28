@@ -395,6 +395,7 @@ const createReplacementCard = (
 const refreshReplacementCardPresentation = (
   card: HTMLElement,
   item: RankedFeedItem,
+  target: HTMLElement,
   slotId: string,
   sourceVideoId: string,
   generation: number,
@@ -449,11 +450,7 @@ const refreshReplacementCardPresentation = (
         currentThumbnail.src = item.thumbnail_url ?? '';
       }
     } else if (currentThumbnail) {
-      const targetFlags = getVideoSourceFlags(
-        card.nextElementSibling instanceof HTMLElement
-          ? card.nextElementSibling
-          : card,
-      );
+      const targetFlags = getVideoSourceFlags(target);
       const aspectRatio = targetFlags.is_short
         ? youtubeConnector.presentation.verticalAspectRatio
         : youtubeConnector.presentation.horizontalAspectRatio;
@@ -1264,6 +1261,7 @@ const renderReplacementSlots = (generation: number) => {
       refreshReplacementCardPresentation(
         existing,
         assignment.item,
+        target,
         assignment.slot.slotId,
         assignment.slot.sourceVideoId,
         generation,
