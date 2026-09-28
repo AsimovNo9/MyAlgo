@@ -14,6 +14,7 @@ import {
 } from './canonical-semantic.ts';
 
 export const DURABLE_SEMANTIC_MODE_PIPELINE_ID = 'durable-semantic-mode-cluster-v1';
+export const DURABLE_MODE_AFFINITY_PIPELINE_ID = 'durable-mode-affinity-v1';
 
 export type DurableSemanticModeProposal = {
   label: string;
