@@ -306,6 +306,15 @@ export function isStableReplacementCandidateAvailableToSource(
   return ownerSourceId == null || ownerSourceId === sourceId;
 }
 
+export function isStableReplacementSourceSlotPrebound(
+  sourceCandidateId: string | undefined,
+  stableCandidateId: string,
+  sourceHidden: boolean,
+): boolean {
+  return sourceHidden
+    && sourceCandidateId?.trim() === stableCandidateId;
+}
+
 
 export type ModeSupplyPlan = {
   modeId: string;
