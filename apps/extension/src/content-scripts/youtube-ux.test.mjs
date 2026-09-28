@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -340,6 +340,33 @@ test('stable candidate ownership allows the incumbent source but blocks another 
       ownerByCandidateId,
     ),
     true,
+  );
+});
+
+test('policy-created source slots keep their own prebound stable candidate', () => {
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-a',
+      'replacement-a',
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-b',
+      'replacement-a',
+      true,
+    ),
+    false,
+  );
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-a',
+      'replacement-a',
+      false,
+    ),
+    false,
   );
 });
 
