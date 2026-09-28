@@ -848,7 +848,13 @@ const groundedDurableModeFeatures = (
     && entry.modeRevision === activeMode.revision
   ));
   const members = affinity?.memberAffinities
-    ?.filter((member) => member.weightedAffinity > 0)
+    ?.map((member) => ({
+      ...member,
+      sourceNodeIds: member.sourceNodeIds.filter((nodeId) => (
+        index.evidenceIdsByNodeId.has(nodeId)
+      )),
+    }))
+    .filter((member) => member.weightedAffinity > 0 && member.sourceNodeIds.length > 0)
     .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
   if (!affinity || members.length === 0) return [];
 
