@@ -110,7 +110,7 @@ const resolveDurableModeContext = (
 ): DurableModePresentationContext | null => {
   const id = typeof activeModeId === 'string' ? activeModeId.trim() : '';
   if (!id || id === 'default') return null;
-  const mode = catalog?.modes.find((entry) => entry.id === id && entry.active);
+  const mode = catalog?.modes.find((entry) => entry.id === id);
   return mode
     ? { id: mode.id, label: mode.label, revision: mode.revision }
     : null;
