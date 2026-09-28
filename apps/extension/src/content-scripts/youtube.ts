@@ -790,6 +790,7 @@ const applyRankedFeed = () => {
   const allNativeIds = nativeCards
     .map((card) => card.id)
     .filter((id) => id && !id.startsWith('title:'));
+  const nativeIds = new Set(allNativeIds);
   const currentRouteKey = getRouteKey();
   const retainedBindingItems = [...stableReplacementBySourceId.values()]
     .filter((binding) => (
@@ -833,6 +834,7 @@ const applyRankedFeed = () => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmReplacementCandidateId;
     delete element.dataset.personalAlgorithmSourceScore;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
@@ -859,10 +861,32 @@ const applyRankedFeed = () => {
           nativeIndex,
           sourceVideoId,
         );
+        const sourceScore = Number.isFinite(item?.score ?? NaN)
+          ? Number(item?.score)
+          : 0;
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
-        element.dataset.personalAlgorithmSourceScore = String(
-          Number.isFinite(item?.score ?? NaN) ? Number(item?.score) : 0,
-        );
+        element.dataset.personalAlgorithmSourceScore = String(sourceScore);
+
+        const sticky = stableReplacementBySourceId.get(sourceVideoId);
+        const stickyItem = sticky
+          ? feedById.get(sticky.candidateId) ?? sticky.item
+          : undefined;
+        if (
+          sticky
+          && sticky.routeKey === currentRouteKey
+          && sticky.bindingRevision === replacementBindingRevision
+          && !nativeIds.has(sticky.candidateId)
+          && isStableReplacementCandidateEligible(stickyItem, {
+            activeMode: activeDurableMode,
+            minimumScore: replacementMinimumScore,
+            nativeScore: sourceScore,
+            feedReplacementPercent,
+          })
+        ) {
+          element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
+        } else if (sticky) {
+          stableReplacementBySourceId.delete(sourceVideoId);
+        }
       }
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = decision.reason;
@@ -922,13 +946,17 @@ const applyRankedFeed = () => {
   let opportunisticSelectedTargets = 0;
   let opportunisticUpliftQualified = 0;
 
+  for (const sourceId of stableReplacementBySourceId.keys()) {
+    if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
+  }
+
   if (remainingReplacementCapacity > 0) {
-    const routeKey = getRouteKey();
-    const nativeIds = new Set(allNativeIds);
-    const usedCandidateIds = new Set<string>();
-    for (const sourceId of stableReplacementBySourceId.keys()) {
-      if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
-    }
+    const routeKey = currentRouteKey;
+    const usedCandidateIds = new Set(
+      nativeCards
+        .map(({ element }) => element.dataset.personalAlgorithmReplacementCandidateId?.trim())
+        .filter((id): id is string => Boolean(id)),
+    );
 
     // Keep a rendered replacement stable across ordinary YouTube DOM churn
     // while it remains eligible and, for a durable mode, still resolves to the
@@ -1036,6 +1064,22 @@ const applyRankedFeed = () => {
         element.style.setProperty('display', 'none', 'important');
         element.dataset.personalAlgorithmScore = 'replacement_slot';
       }
+    }
+  }
+
+  // A binding that is no longer represented by a source slot in the current
+  // presentation has lost its replacement intent (for example because mode
+  // supply now satisfies the quota natively or capacity contracted). Do not
+  // keep it latent and resurrect it on a later soft rerank.
+  const reboundCandidateBySource = new Map(
+    nativeCards.map(({ element, id }) => [
+      id,
+      element.dataset.personalAlgorithmReplacementCandidateId?.trim() ?? '',
+    ]),
+  );
+  for (const [sourceId, binding] of stableReplacementBySourceId) {
+    if (reboundCandidateBySource.get(sourceId) !== binding.candidateId) {
+      stableReplacementBySourceId.delete(sourceId);
     }
   }
 
