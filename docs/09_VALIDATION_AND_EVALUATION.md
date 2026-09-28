@@ -505,6 +505,24 @@ PR #225 passed its live scoring gate and is merged. PR #226 adds the retrieval/s
 
 Live validation should capture both the stored `retrievalDiagnostics.modeSupply` snapshot and the content-script `[MyAlgo] native presentation` / `replacement slots` diagnostics so requested/native/pool/fulfilled counts can be reconciled against the DOM.
 
+### PR #226 first live retrieval/supply checkpoint
+
+The first real Home run validated the core exact-mode supply path for durable mode `mode:inferred:v1:5b7102b1` revision 5:
+
+- five rendered pool replacements all exposed that exact mode ID/revision in DOM provenance;
+- at a 50% slider, 28 eligible native slots produced 14 requested mode slots;
+- native exact-mode supply was 1, pool exact-mode supply was 9, and shortfall was 13;
+- five pool replacements rendered, so fulfilled mode coverage reconciled to 6 = 1 native + 5 pool;
+- requested-slot, shortfall, and fulfilled-bound checks all evaluated true.
+
+The same run exposed two corrective regressions before PR readiness:
+
+1. Switching to Default correctly removed durable mode provenance from rendered replacements and `GET_RETRIEVAL_PLAN.activeMode`, but the persisted `modeSupply` snapshot could remain from the previous durable mode. Retrieval refresh and content-script diagnostics can race during a mode transition. The runtime therefore clears incompatible supply atomically with mode selection and reconciles every later retrieval/supply diagnostics write against the **current** selected mode ID/revision so an older async refresh cannot restore stale mode state.
+
+2. The diagnostic planner contained durable canonical-member queries, but production web acquisition consumed only the first four plans. In the observed ordering those were the mode goal followed by creator lanes, so member-topic queries could be truncated before acquisition. Production selection now builds a larger bounded candidate plan set and reserves the four acquisition slots as: goal first, then one query per highest-priority durable member while available, then ordinary fallback lanes. Default retains the existing first-N planner ordering.
+
+For follow-up live validation, inspect `GET_RETRIEVAL_PLAN.acquisitionPlans` rather than assuming the first four diagnostic `plans` are the search requests that will execute.
+
 
 ## PR #220 local concept verification validation (#219)
 
