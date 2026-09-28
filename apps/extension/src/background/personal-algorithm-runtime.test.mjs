@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { evaluateModeTraceGrounding } from '@repo/recommender-core';
 import {
   buildLocalFeedbackSignals,
   buildLocalScoringPolicy,
@@ -110,7 +111,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 11);
   assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p6');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p7');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 11);
   assert.equal(ranked[0].trace.edgeContributions.length, 1);
@@ -124,6 +125,200 @@ test('local runtime scores candidates from the persisted graph and returns deter
     matchedCanonicalIds: ['canonical:test'],
     sourceNodeIds: ['topic:test'],
   }]);
+});
+
+test('durable active mode score is split across exact canonical members and source graph nodes', () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push(
+    {
+      id: 'topic:crdts',
+      kind: 'topic',
+      label: 'CRDTs',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:replication',
+      kind: 'topic',
+      label: 'Replication',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.edges.push(
+    {
+      id: 'edge:mode:crdts',
+      sourceNodeId: 'topic:crdts',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-crdts'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'edge:mode:replication',
+      sourceNodeId: 'topic:replication',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-replication'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.currentRevision += 1;
+
+  const activeMode = {
+    id: 'mode:inferred:v1:systems',
+    label: 'Distributed systems',
+    revision: 2,
+  };
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'mode-grounded',
+    title: 'Neutral candidate',
+    semantic_mode_similarity: 0.95,
+    semantic_model_version: 'fixture-model@v2',
+    semantic_mode_affinities: [
+      {
+        modeId: 'mode:inferred:v1:other',
+        modeRevision: 1,
+        label: 'Other mode',
+        affinity: 0.9,
+        matchedCanonicalIds: ['canonical:other'],
+        sourceNodeIds: ['topic:other'],
+        memberAffinities: [{
+          canonicalId: 'canonical:other',
+          label: 'Other',
+          memberWeight: 1,
+          similarity: 0.9,
+          weightedAffinity: 0.9,
+          sourceNodeIds: ['topic:other'],
+        }],
+      },
+      {
+        modeId: activeMode.id,
+        modeRevision: activeMode.revision,
+        label: activeMode.label,
+        affinity: 0.6,
+        matchedCanonicalIds: ['canonical:crdts', 'canonical:replication'],
+        sourceNodeIds: ['topic:crdts', 'topic:replication'],
+        memberAffinities: [
+          {
+            canonicalId: 'canonical:crdts',
+            label: 'CRDTs',
+            memberWeight: 1,
+            similarity: 0.6,
+            weightedAffinity: 0.6,
+            sourceNodeIds: ['topic:crdts'],
+          },
+          {
+            canonicalId: 'canonical:replication',
+            label: 'Replication',
+            memberWeight: 0.5,
+            similarity: 0.6,
+            weightedAffinity: 0.3,
+            sourceNodeIds: ['topic:replication'],
+          },
+        ],
+      },
+    ],
+  }], activeMode.label, [], {}, activeMode)[0];
+
+  assert.equal(ranked.rawScore, 8.4);
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => item.label === 'semantic match: active mode'),
+    false,
+  );
+  assert.equal(ranked.trace.modeContributions.length, 2);
+  assert.deepEqual(
+    ranked.trace.modeContributions.map((item) => ({
+      value: item.value,
+      modeId: item.modeId,
+      modeRevision: item.modeRevision,
+      canonicalId: item.canonicalId,
+      sourceIds: item.sourceIds,
+      evidenceIds: item.evidenceIds,
+    })),
+    [
+      {
+        value: 5.6,
+        modeId: activeMode.id,
+        modeRevision: 2,
+        canonicalId: 'canonical:crdts',
+        sourceIds: ['topic:crdts'],
+        evidenceIds: ['e-mode-crdts'],
+      },
+      {
+        value: 2.8,
+        modeId: activeMode.id,
+        modeRevision: 2,
+        canonicalId: 'canonical:replication',
+        sourceIds: ['topic:replication'],
+        evidenceIds: ['e-mode-replication'],
+      },
+    ],
+  );
+
+  const modeContributions = ranked.trace.modeContributions;
+  const metrics = evaluateModeTraceGrounding([{
+    traceId: ranked.trace.id,
+    modeContribution: modeContributions.reduce((sum, item) => sum + item.value, 0),
+    modeId: activeMode.id,
+    modeRevision: activeMode.revision,
+    contributingNodeIds: [...new Set(modeContributions.flatMap((item) => item.sourceIds ?? []))],
+    memberContributions: modeContributions.map((item) => item.value),
+  }]);
+  assert.equal(metrics.groundingRate, 1);
+  assert.equal(metrics.reconciliationRate, 1);
+});
+
+test('durable mode revision mismatch abstains instead of using stale or free-floating mode similarity', () => {
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'stale-mode-affinity',
+    title: 'Learn Rust with a complete tutorial',
+    semantic_mode_similarity: 0.95,
+    semantic_mode_affinities: [{
+      modeId: 'mode:inferred:v1:learning',
+      modeRevision: 1,
+      label: 'Learning',
+      affinity: 0.8,
+      matchedCanonicalIds: ['canonical:learning'],
+      sourceNodeIds: ['topic:learning'],
+      memberAffinities: [{
+        canonicalId: 'canonical:learning',
+        label: 'Learning',
+        memberWeight: 1,
+        similarity: 0.8,
+        weightedAffinity: 0.8,
+        sourceNodeIds: ['topic:learning'],
+      }],
+    }],
+  }], 'Learning', [], {}, {
+    id: 'mode:inferred:v1:learning',
+    label: 'Learning',
+    revision: 2,
+  })[0];
+
+  assert.equal(ranked.trace.modeContributions.length, 0);
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => (
+      item.label === 'semantic match: active mode'
+      || item.label === 'mode alignment: learning'
+      || item.label === 'semantic category: learning'
+    )),
+    false,
+  );
 });
 
 test('explicit local feedback changes the score without treating watch evidence as preference', () => {
