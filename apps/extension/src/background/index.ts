@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -75,6 +75,8 @@ type SemanticFeatureRecord = {
     pipeline_id?: string;
   }>;
   modeAffinities: CandidateModeAffinity[];
+  modeAffinityPipelineId: string;
+  modeCatalogSignature: string;
   generatedAt: string;
 };
 
@@ -195,6 +197,33 @@ const getSemanticProviderContext = async () => {
     provider,
     semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
   };
+};
+
+const durableModeCatalogSignature = (
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): string => {
+  const input = JSON.stringify(
+    [...(catalog?.modes ?? [])]
+      .filter((mode) => mode.active)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((mode) => ({
+        id: mode.id,
+        revision: mode.revision,
+        members: [...mode.members]
+          .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId))
+          .map((member) => ({
+            canonicalId: member.canonicalId,
+            weight: member.weight,
+            sourceNodeIds: [...member.sourceNodeIds].sort(),
+          })),
+      })),
+  );
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${DURABLE_MODE_AFFINITY_PIPELINE_ID}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
 };
 
 const refreshDurableModeCatalog = async (
@@ -843,10 +872,17 @@ async function hydrateSemanticScoreFeatures(
   mode: string,
   semanticModelIdentities: string[],
 ): Promise<CandidatePoolItem[]> {
-  const cache = await getStorage<Record<string, SemanticFeatureRecord>>(
-    STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-    {},
-  );
+  const [cache, durableModeCatalog] = await Promise.all([
+    getStorage<Record<string, SemanticFeatureRecord>>(
+      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+      {},
+    ),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
     const record = semanticModelIdentities
@@ -857,7 +893,11 @@ async function hydrateSemanticScoreFeatures(
         mode,
         semanticModelIdentity,
       )])
-      .find(Boolean);
+      .find((candidateRecord) => (
+        candidateRecord
+        && candidateRecord.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+        && candidateRecord.modeCatalogSignature === expectedModeCatalogSignature
+      ));
     if (!record) return candidate;
     return {
       ...candidate,
@@ -1174,6 +1214,7 @@ async function refreshSemanticScoreFeatures(
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
   const durableModeCatalog = await refreshDurableModeCatalog(state);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) {
@@ -1237,7 +1278,10 @@ async function refreshSemanticScoreFeatures(
       // Records created by prior builds use the same semantic key but do not
       // contain that field, so force a one-time refresh instead of silently
       // hydrating an empty affinity list forever.
-      return cached === undefined || !Array.isArray(cached.modeAffinities);
+      return cached === undefined
+        || !Array.isArray(cached.modeAffinities)
+        || cached.modeAffinityPipelineId !== DURABLE_MODE_AFFINITY_PIPELINE_ID
+        || cached.modeCatalogSignature !== expectedModeCatalogSignature;
     });
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
       ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
@@ -1411,6 +1455,8 @@ async function refreshSemanticScoreFeatures(
           candidate.semantic_graph_matches,
           durableModeCatalog,
         ),
+        modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+        modeCatalogSignature: expectedModeCatalogSignature,
         generatedAt,
       };
       const previous = existing[key];
@@ -1420,6 +1466,8 @@ async function refreshSemanticScoreFeatures(
         || Math.abs(previous.modeSimilarity - record.modeSimilarity) > 0.0001
         || JSON.stringify(previous.graphMatches ?? []) !== JSON.stringify(record.graphMatches)
         || JSON.stringify(previous.modeAffinities ?? []) !== JSON.stringify(record.modeAffinities)
+        || previous.modeAffinityPipelineId !== record.modeAffinityPipelineId
+        || previous.modeCatalogSignature !== record.modeCatalogSignature
       ) {
         changed += 1;
       }
@@ -1448,6 +1496,8 @@ async function refreshSemanticScoreFeatures(
       elapsedMs: Math.round(performance.now() - startedAt),
       embeddingCacheSize: await semanticEmbeddingCache.size(),
       featureCacheSize: Object.keys(bounded).length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
       totalCandidateCount: candidates.length,
       pendingCandidateCount: Math.max(
         0,
