@@ -315,6 +315,21 @@ export interface RetrievalSettings {
   webSearchEnabled?: boolean;
 }
 
+export interface ModeSupplyDiagnostics {
+  generatedAt: string;
+  modeId: string;
+  modeRevision: number;
+  modeLabel: string;
+  sliderPercent: number;
+  eligibleNativeSlots: number;
+  requestedModeSlots: number;
+  nativeModeSupply: number;
+  poolModeSupply: number;
+  shortfall: number;
+  fulfilledModeSlots: number;
+  bannerShown: boolean;
+}
+
 export interface RetrievalDiagnostics {
   lastRssSyncAt: string | null;
   nextRssAllowedAt: string | null;
@@ -333,6 +348,7 @@ export interface RetrievalDiagnostics {
   webSearchCandidatesAdded?: number;
   webSearchCandidatesDeduplicated?: number;
   webSearchConsecutiveFailures?: number;
+  modeSupply?: ModeSupplyDiagnostics | null;
   lastError: string | null;
 }
 
