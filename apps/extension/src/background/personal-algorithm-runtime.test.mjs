@@ -321,6 +321,44 @@ test('durable mode revision mismatch abstains instead of using stale or free-flo
   );
 });
 
+test('durable mode scoring abstains when affinity provenance no longer resolves to current graph nodes', () => {
+  const activeMode = {
+    id: 'mode:inferred:v1:missing-source',
+    label: 'Missing source mode',
+    revision: 3,
+  };
+  const ranked = scoreLocalCandidates(state, [{
+    external_id: 'missing-source-affinity',
+    title: 'Neutral candidate',
+    semantic_mode_similarity: 0.9,
+    semantic_mode_affinities: [{
+      modeId: activeMode.id,
+      modeRevision: activeMode.revision,
+      label: activeMode.label,
+      affinity: 0.8,
+      matchedCanonicalIds: ['canonical:missing'],
+      sourceNodeIds: ['topic:removed-from-graph'],
+      memberAffinities: [{
+        canonicalId: 'canonical:missing',
+        label: 'Removed concept',
+        memberWeight: 1,
+        similarity: 0.8,
+        weightedAffinity: 0.8,
+        sourceNodeIds: ['topic:removed-from-graph'],
+      }],
+    }],
+  }], activeMode.label, [], {}, activeMode)[0];
+
+  assert.equal(ranked.trace.modeContributions.length, 0);
+  assert.equal(
+    ranked.trace.featureContributions.some((item) => (
+      item.label === 'semantic match: active mode'
+    )),
+    false,
+  );
+});
+
+
 test('explicit local feedback changes the score without treating watch evidence as preference', () => {
   const signals = buildLocalFeedbackSignals([
     { contentItemId: 'video-b', eventType: 'more_like_this' },
