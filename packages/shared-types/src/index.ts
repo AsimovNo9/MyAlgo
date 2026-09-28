@@ -268,6 +268,15 @@ export interface DurableSemanticModeCatalog {
   modes: DurableSemanticMode[];
 }
 
+export interface CandidateModeMemberAffinity {
+  canonicalId: string;
+  label: string;
+  memberWeight: number;
+  similarity: number;
+  weightedAffinity: number;
+  sourceNodeIds: string[];
+}
+
 export interface CandidateModeAffinity {
   modeId: string;
   modeRevision: number;
@@ -275,6 +284,8 @@ export interface CandidateModeAffinity {
   affinity: number;
   matchedCanonicalIds: string[];
   sourceNodeIds: string[];
+  /** Present for durable-mode affinity pipeline v2+; optional for persisted v1 compatibility. */
+  memberAffinities?: CandidateModeMemberAffinity[];
 }
 
 export interface SemanticGraphMatch {
