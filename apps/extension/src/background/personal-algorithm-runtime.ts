@@ -9,6 +9,7 @@ import {
   type ScoreCandidate,
   type ScoreFeedbackSignal,
   type ScoreFeatureSignal,
+  type ScoreModeFeatureSignal,
   type PersonalScoreTrace,
 } from '@repo/recommender-core';
 
@@ -69,6 +70,12 @@ export type LocalRuntimeFeedbackEvent = {
   channelId?: string | null;
 };
 
+export type LocalDurableModeScoringContext = {
+  id: string;
+  label: string;
+  revision: number;
+};
+
 const contentNodeId = (source: string, externalId: string) =>
   `content:${encodeURIComponent(source)}:${encodeURIComponent(externalId)}`;
 
@@ -81,6 +88,7 @@ const FEATURE_WEIGHTS = {
 } as const;
 
 const SEMANTIC_NEIGHBOURHOOD_CONTRIBUTION_CAP = 18;
+const GROUNDED_MODE_CONTRIBUTION_CAP = 14;
 const TAXONOMY_ONLY_MAX_CONTRIBUTION = 3;
 const TAXONOMY_ONLY_WEIGHT_MULTIPLIER = 0.25;
 const SEMANTIC_MATCH_MINIMUM_BEST_SIMILARITY = 0.35;
@@ -764,6 +772,7 @@ export function classifyCandidateContent(
 const semanticAlignmentFeatures = (
   candidate: LocalRuntimeCandidate,
   mode: string,
+  allowLegacyModeSignals = true,
 ): ScoreFeatureSignal[] => {
   const features: ScoreFeatureSignal[] = [];
   const modeSimilarity = Number(candidate.semantic_mode_similarity ?? 0);
@@ -771,7 +780,7 @@ const semanticAlignmentFeatures = (
   const activeMode = mode.trim().toLowerCase();
   const hasActiveMode = Boolean(activeMode && activeMode !== 'default');
 
-  if (hasActiveMode && Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
+  if (allowLegacyModeSignals && hasActiveMode && Number.isFinite(modeSimilarity) && modeSimilarity >= 0.2) {
     features.push({
       id: 'semantic:mode',
       label: 'semantic match: active mode',
@@ -786,7 +795,7 @@ const semanticAlignmentFeatures = (
   // graph-derived category strongly enough to beat the alternatives.
   const scores = candidate.semantic_category_scores;
   const scoreEntries = Object.entries(scores ?? {});
-  const activeEntry = hasActiveMode
+  const activeEntry = allowLegacyModeSignals && hasActiveMode
     ? scoreEntries.find(([category]) => category.trim().toLowerCase() === activeMode)
     : undefined;
   if (activeEntry) {
@@ -826,6 +835,70 @@ const modeAlignmentFeature = (
   };
 }
 
+const roundModeValue = (value: number): number => Number(value.toFixed(2));
+
+const groundedDurableModeFeatures = (
+  candidate: LocalRuntimeCandidate,
+  index: LocalScoringIndex,
+  activeMode: LocalDurableModeScoringContext | null | undefined,
+): ScoreModeFeatureSignal[] => {
+  if (!activeMode || activeMode.id === 'default') return [];
+  const affinity = candidate.semantic_mode_affinities?.find((entry) => (
+    entry.modeId === activeMode.id
+    && entry.modeRevision === activeMode.revision
+  ));
+  const members = affinity?.memberAffinities
+    ?.map((member) => ({
+      ...member,
+      sourceNodeIds: member.sourceNodeIds.filter((nodeId) => (
+        index.evidenceIdsByNodeId.has(nodeId)
+      )),
+    }))
+    .filter((member) => member.weightedAffinity > 0 && member.sourceNodeIds.length > 0)
+    .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
+  if (!affinity || members.length === 0) return [];
+
+  // Recompute the aggregate from members that still resolve to the current
+  // graph. Do not transfer score mass from a removed/stale strongest member to
+  // weaker surviving members.
+  const groundedAffinity = Math.max(
+    0,
+    ...members.map((member) => Math.max(0, Math.min(1, member.weightedAffinity))),
+  );
+  const total = roundModeValue(
+    GROUNDED_MODE_CONTRIBUTION_CAP * groundedAffinity,
+  );
+  if (total <= 0) return [];
+  const weightTotal = members.reduce(
+    (sum, member) => sum + Math.max(0, member.weightedAffinity),
+    0,
+  );
+  if (weightTotal <= 0) return [];
+
+  let allocated = 0;
+  return members.map((member, memberIndex) => {
+    const value = memberIndex === members.length - 1
+      ? roundModeValue(total - allocated)
+      : roundModeValue(total * (member.weightedAffinity / weightTotal));
+    allocated = roundModeValue(allocated + value);
+    const evidenceIds = [...new Set(
+      member.sourceNodeIds.flatMap((nodeId) => index.evidenceIdsByNodeId.get(nodeId) ?? []),
+    )].sort();
+
+    return {
+      id: `durable:${activeMode.id}:r${activeMode.revision}:${member.canonicalId}`,
+      label: `mode: ${activeMode.label} → canonical concept: ${member.label}`,
+      value,
+      sourceId: member.canonicalId,
+      sourceIds: [...member.sourceNodeIds].sort(),
+      evidenceIds,
+      modeId: activeMode.id,
+      modeRevision: activeMode.revision,
+      canonicalId: member.canonicalId,
+    };
+  }).filter((feature) => feature.value !== 0);
+};
+
 export function calibrateLocalScore(rawScore: number): number {
   if (!Number.isFinite(rawScore)) return 0;
   return Math.max(0, Math.min(100, Math.round(50 + 50 * Math.tanh(rawScore / 30))));
@@ -836,6 +909,7 @@ const candidateContext = (
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex = buildLocalScoringIndex(state),
   mode = 'default',
+  activeDurableMode?: LocalDurableModeScoringContext | null,
 ): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
@@ -846,14 +920,22 @@ const candidateContext = (
     index.evidenceIdsByNodeId,
   );
   const classification = classifyCandidateContent(candidate);
-  // Once semantic mode similarity exists, it becomes the mode-ranking signal.
-  // The deterministic classifier remains useful for UI labels/fallbacks, but
-  // must not double-count the same active-mode intent.
-  const modeFeature = candidate.semantic_mode_similarity == null
-    ? modeAlignmentFeature(mode, classification)
-    : null;
-  if (modeFeature) extracted.features.push(modeFeature);
-  extracted.features.push(...semanticAlignmentFeatures(candidate, mode));
+  const hasDurableMode = Boolean(activeDurableMode && activeDurableMode.id !== 'default');
+  // Durable modes use only graph-grounded member contributions. Legacy
+  // classifier/centroid/category mode signals remain available for custom
+  // non-durable mode values but must not stack beside a stable mode ID.
+  if (!hasDurableMode) {
+    const modeFeature = candidate.semantic_mode_similarity == null
+      ? modeAlignmentFeature(mode, classification)
+      : null;
+    if (modeFeature) extracted.features.push(modeFeature);
+  }
+  extracted.features.push(...semanticAlignmentFeatures(candidate, mode, !hasDurableMode));
+  const durableModeFeatures = groundedDurableModeFeatures(
+    candidate,
+    index,
+    activeDurableMode,
+  );
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;
@@ -869,6 +951,7 @@ const candidateContext = (
     nodeIds: [...new Set([...(contentNode ? [contentNode.id] : []), ...extracted.nodeIds])],
     creatorNodeId,
     features: extracted.features,
+    modeFeatures: durableModeFeatures,
   };
 };
 
@@ -880,7 +963,7 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p6',
+    revision: 'local-mvp-p7',
     baseScore: 0,
     nodeWeights,
     edgeRelationWeights: {
@@ -949,6 +1032,7 @@ export function scoreLocalCandidates(
   mode: string,
   feedbackSignals: ScoreFeedbackSignal[] = [],
   sourceFilters: FeedSourceFilters = {},
+  activeDurableMode?: LocalDurableModeScoringContext | null,
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
   const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
@@ -957,7 +1041,7 @@ export function scoreLocalCandidates(
   return candidates
     .map((candidate) => {
       const classification = classifyCandidateContent(candidate);
-      const context = candidateContext(state, candidate, scoringIndex, mode);
+      const context = candidateContext(state, candidate, scoringIndex, mode, activeDurableMode);
       const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
@@ -989,9 +1073,16 @@ export function traceForLocalCandidate(
   candidate: LocalRuntimeCandidate,
   mode: string,
   feedbackSignals: ScoreFeedbackSignal[] = [],
+  activeDurableMode?: LocalDurableModeScoringContext | null,
 ): PersonalScoreTrace {
   const policy = buildLocalScoringPolicy(state);
-  const result = scorePersonalAlgorithm(state, candidateContext(state, candidate, buildLocalScoringIndex(state), mode), policy, mode, feedbackSignals);
+  const result = scorePersonalAlgorithm(
+    state,
+    candidateContext(state, candidate, buildLocalScoringIndex(state), mode, activeDurableMode),
+    policy,
+    mode,
+    feedbackSignals,
+  );
   if (!isScoreTraceConsistent(result.trace)) {
     throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
   }

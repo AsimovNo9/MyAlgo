@@ -118,7 +118,22 @@ type LocalFeedItem = CandidatePoolItem & {
       sourceId?: string;
       sourceIds?: string[];
       evidenceIds: string[];
+      modeId?: string;
+      modeRevision?: number;
+      canonicalId?: string;
     }>;
+    modeGrounding: {
+      modeId: string;
+      modeRevision: number;
+      total: number;
+      members: Array<{
+        canonicalId: string;
+        label: string;
+        value: number;
+        sourceIds: string[];
+        evidenceIds: string[];
+      }>;
+    } | null;
   };
 };
 
@@ -1653,10 +1668,18 @@ async function rankLocalCandidates(
   mode: string,
 ): Promise<LocalFeedItem[]> {
   const state = await personalAlgorithmStore.exportState();
-  const feedbackEvents = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
-    'personal-algorithm-local-events',
-    [],
-  );
+  const [feedbackEvents, activeModeId, durableModeCatalog] = await Promise.all([
+    getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
+      'personal-algorithm-local-events',
+      [],
+    ),
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
       .filter((event) => event.kind === 'feedback')
@@ -1686,6 +1709,13 @@ async function rankLocalCandidates(
     mode,
     feedbackSignals,
     sourceFilters,
+    activeDurableMode
+      ? {
+          id: activeDurableMode.id,
+          label: activeDurableMode.label,
+          revision: activeDurableMode.revision,
+        }
+      : null,
   );
 
   const traces = ranked.slice(0, 60).map((item) => ({
@@ -1701,6 +1731,33 @@ async function rankLocalCandidates(
   }
 
   return ranked.map(({ trace, ...item }) => {
+    const groundedModeContributions = trace.modeContributions
+      .filter((contribution) => (
+        contribution.modeId
+        && Number.isInteger(contribution.modeRevision)
+        && contribution.canonicalId
+      ))
+      .sort((left, right) => (
+        (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '')
+      ));
+    const firstGroundedMode = groundedModeContributions[0];
+    const modeGrounding = firstGroundedMode
+      ? {
+          modeId: firstGroundedMode.modeId!,
+          modeRevision: firstGroundedMode.modeRevision!,
+          total: Number(groundedModeContributions
+            .reduce((sum, contribution) => sum + contribution.value, 0)
+            .toFixed(2)),
+          members: groundedModeContributions.map((contribution) => ({
+            canonicalId: contribution.canonicalId!,
+            label: contribution.label,
+            value: contribution.value,
+            sourceIds: contribution.sourceIds ?? [],
+            evidenceIds: contribution.evidenceIds,
+          })),
+        }
+      : null;
+
     const contributions = [
       ...trace.featureContributions,
       ...trace.nodeContributions,
@@ -1717,6 +1774,9 @@ async function rankLocalCandidates(
         kind: contribution.kind,
         ...(contribution.sourceId ? { sourceId: contribution.sourceId } : {}),
         ...(contribution.sourceIds?.length ? { sourceIds: contribution.sourceIds } : {}),
+        ...(contribution.modeId ? { modeId: contribution.modeId } : {}),
+        ...(Number.isInteger(contribution.modeRevision) ? { modeRevision: contribution.modeRevision } : {}),
+        ...(contribution.canonicalId ? { canonicalId: contribution.canonicalId } : {}),
         evidenceIds: contribution.evidenceIds,
       }));
 
@@ -1733,6 +1793,7 @@ async function rankLocalCandidates(
         policyRevision: trace.policyRevision,
         acquisitionMechanism: item.provenance?.mechanism ?? null,
         contributions,
+        modeGrounding,
       },
     };
   });

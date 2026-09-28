@@ -14,7 +14,7 @@ import {
 } from './canonical-semantic.ts';
 
 export const DURABLE_SEMANTIC_MODE_PIPELINE_ID = 'durable-semantic-mode-cluster-v1';
-export const DURABLE_MODE_AFFINITY_PIPELINE_ID = 'durable-mode-affinity-v1';
+export const DURABLE_MODE_AFFINITY_PIPELINE_ID = 'durable-mode-affinity-v2';
 
 export type DurableSemanticModeProposal = {
   label: string;
@@ -443,6 +443,9 @@ export function buildCandidateModeAffinities(
     if (!mode.active && !includeDormant) continue;
     const memberHits: Array<{
       canonicalId: string;
+      label: string;
+      memberWeight: number;
+      similarity: number;
       affinity: number;
       sourceNodeIds: string[];
     }> = [];
@@ -461,6 +464,9 @@ export function buildCandidateModeAffinities(
       if (!match || match.similarity < minimumMemberSimilarity) continue;
       memberHits.push({
         canonicalId: member.canonicalId,
+        label: member.label,
+        memberWeight: member.weight,
+        similarity: Math.max(0, Math.min(1, match.similarity)),
         affinity: Math.max(0, Math.min(1, match.similarity * member.weight)),
         sourceNodeIds: [...new Set([
           ...member.sourceNodeIds,
@@ -479,6 +485,19 @@ export function buildCandidateModeAffinities(
       affinity: Number(affinity.toFixed(4)),
       matchedCanonicalIds: memberHits.map((hit) => hit.canonicalId).sort(),
       sourceNodeIds: [...new Set(memberHits.flatMap((hit) => hit.sourceNodeIds))].sort(),
+      memberAffinities: memberHits
+        .map((hit) => ({
+          canonicalId: hit.canonicalId,
+          label: hit.label,
+          memberWeight: Number(hit.memberWeight.toFixed(4)),
+          similarity: Number(hit.similarity.toFixed(4)),
+          weightedAffinity: Number(hit.affinity.toFixed(4)),
+          sourceNodeIds: [...hit.sourceNodeIds],
+        }))
+        .sort((left, right) => (
+          right.weightedAffinity - left.weightedAffinity
+          || left.canonicalId.localeCompare(right.canonicalId)
+        )),
     });
   }
 

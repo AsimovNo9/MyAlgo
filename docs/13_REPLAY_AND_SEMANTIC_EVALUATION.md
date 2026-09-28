@@ -174,7 +174,7 @@ The evaluation API also defines contracts for the next #214 implementation slice
 
 PR #224 now exercises the durable-identity portion of these contracts directly. Its deterministic fixture covers canonical co-support clustering, taxonomy exclusion, ID/revision reuse across membership growth, unchanged-snapshot revision stability, dormant-mode retention, and multi-label candidate affinity provenance. The fixture also feeds the produced snapshots into `evaluateModeStability` so the implementation consumes the existing replay contract rather than introducing a parallel metric.
 
-Graph-grounded mode contribution reconciliation and retrieval-plan changes remain the next #214 slice and should use `evaluateModeTraceGrounding` / retrieval-mode evaluators when implemented.
+PR #225 implements graph-grounded mode contribution reconciliation and directly feeds runtime-produced member contributions into the existing `evaluateModeTraceGrounding` contract. Candidate affinity v2 retains per-member canonical/source-node detail; scoring emits one trace contribution per qualified canonical member and requires the member total to reconcile exactly to the bounded aggregate mode amount. Stale mode revisions and missing current graph nodes abstain. Retrieval-plan changes remain the next #214 slice and should use `evaluateRetrievalModeChanges`.
 
 ## Bootstrap reference result
 
