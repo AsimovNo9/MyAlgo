@@ -426,7 +426,9 @@ The failure mode was structural: a tiny generative model was being asked to inve
 - an empty verified label set is an intentional abstention and must **not** fall back to raw keyword topics;
 - missing verifier output or a verifier runtime failure may fall back to the #218 metadata path;
 - output is cached by model identity + verifier-pipeline revision + candidate input hash;
-- cache-only embedding-drain passes reuse valid verified labels without starting another verifier batch;
+- semantic scoring/affinity passes are cache-only with respect to concept verification: they reuse valid verified labels without awaiting or starting a DeBERTa verifier batch;
+- concept verification runs only after the current neural semantic working set is caught up (or via the explicit validation command), and a graph change then schedules a fresh semantic pass against the new revision;
+- embedding and concept verification use isolated sandbox iframes so a slow q8 WASM verifier cannot occupy the WebGPU embedding scheduler;
 - verifier-cache validity is independent of graph revision; graph materialization re-reads current evidence/candidate state before reconciliation;
 - model output remains derived/rebuildable and cannot directly create explicit preference state.
 
