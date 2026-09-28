@@ -1009,6 +1009,7 @@ const renderReplacementSlots = (generation: number) => {
       || item.visible === false
       || item.suppressed === true
       || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
+      || (activeDurableMode && !isDurableModeGroundedItem(item, activeDurableMode))
       || (item.score ?? 0) < replacementMinimumScore
     ) {
       return [];
@@ -1017,17 +1018,22 @@ const renderReplacementSlots = (generation: number) => {
   });
   const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
   const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
+  const replacementSource = activeDurableMode
+    ? cachedFeed.filter((item) => isDurableModeGroundedItem(item, activeDurableMode))
+    : cachedFeed;
   const fallbackAssignments = planReplacementAssignments(
-    cachedFeed,
+    replacementSource,
     slots.filter((slot) => !boundSlotIds.has(slot.slotId)),
     [...blockedIds, ...boundCandidateIds],
     replacementMinimumScore,
     createReplacementSelectionSeed(getRouteKey()),
   );
+  const assignmentLimit = isYouTubeHomePage(location.pathname)
+    ? latestModeSupplyPlan?.fillLimit
+      ?? replacementQuota(feedReplacementPercent, nativeElements.length)
+    : 0;
   const assignments = [...boundAssignments, ...fallbackAssignments]
-    .slice(0, isYouTubeHomePage(location.pathname)
-      ? replacementQuota(feedReplacementPercent, nativeElements.length)
-      : 0);
+    .slice(0, assignmentLimit);
   const existingBySourceId = new Map<string, HTMLElement>();
   for (const replacement of existingReplacements) {
     const sourceId = replacement.dataset.personalAlgorithmReplacementSourceVideoId?.trim();
@@ -1093,6 +1099,8 @@ const renderReplacementSlots = (generation: number) => {
     if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
+  persistModeSupplyDiagnostics(latestModeSupplyPlan, filled);
+
   console.info('[MyAlgo] replacement slots', {
     generation,
     eligibleSlots: slots.length,
@@ -1105,6 +1113,20 @@ const renderReplacementSlots = (generation: number) => {
     offPageCandidates: cachedFeed.filter((item) => item.external_id && !blockedIds.has(item.external_id)).length,
     boundAssignments: boundAssignments.length,
     fallbackAssignments: fallbackAssignments.length,
+    modeSupply: latestModeSupplyPlan
+      ? {
+          modeId: latestModeSupplyPlan.modeId,
+          modeRevision: latestModeSupplyPlan.modeRevision,
+          requestedModeSlots: latestModeSupplyPlan.requestedModeSlots,
+          nativeModeSupply: latestModeSupplyPlan.nativeModeSupply,
+          poolModeSupply: latestModeSupplyPlan.poolModeSupply,
+          shortfall: latestModeSupplyPlan.shortfall,
+          fulfilledModeSlots: Math.min(
+            latestModeSupplyPlan.requestedModeSlots,
+            latestModeSupplyPlan.nativeModeSupply + filled,
+          ),
+        }
+      : null,
     candidates: replacementCandidateDiagnostics,
   });
 };
