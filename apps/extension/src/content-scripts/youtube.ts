@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
-import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateEligible, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings } from './youtube-ux';
+import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
 import type { DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics } from '@repo/shared-types';
@@ -46,10 +46,13 @@ let pendingWatchExposure: { videoId: string; exposureId: string | null; observed
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
+let replacementBindingRevision = 0;
+let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
   routeKey: string;
+  bindingRevision: number;
 }>();
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -58,7 +61,11 @@ document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 const getRouteKey = () => `${location.pathname}${location.search}`;
-const clearStableReplacements = () => stableReplacementBySourceId.clear();
+const invalidateStableReplacements = (reason: ReplacementRerankReason) => {
+  replacementBindingRevision += 1;
+  lastReplacementInvalidationReason = reason;
+  stableReplacementBySourceId.clear();
+};
 
 const logStaleRender = (phase: string, requestGeneration: number) => {
   console.info('[MyAlgo] skipped stale render', {
