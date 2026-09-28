@@ -1368,30 +1368,40 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'metadata' | 'semantic' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: ReplacementRerankReason = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
-    if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
-      clearStableReplacements();
-    }
-    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  const invalidateBindings = shouldInvalidateStableReplacementBindings(reason);
+  if (invalidateBindings) {
+    invalidateStableReplacements(reason);
+    document.querySelectorAll<HTMLElement>(
+      '[data-personal-algorithm-replacement]',
+    ).forEach((element) => element.remove());
   }
 
-  if (reason === 'metadata' || reason === 'semantic') {
-    // Force a new score pass because cached watch metadata changed, but keep
-    // stable replacement assignments until the new scores actually render.
+  if (
+    reason === 'metadata'
+    || reason === 'semantic'
+    || reason === 'retrieval'
+  ) {
+    // These reranks may change score/trace/candidate inventory without changing
+    // the user's replacement intent. Force fresh ranking but keep valid
+    // source→candidate bindings until the new result proves one invalid.
     lastCandidateSignature = '';
   }
 
   if (rankingInFlight) {
     rankQueued = true;
-    // Ordinary feed churn must not invalidate the response already in flight;
-    // otherwise a continuously mutating YouTube Home page can starve MyAlgo
-    // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
-    // changes still invalidate the active generation.
-    if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
+    // Ordinary mutation/metadata/semantic/retrieval churn must not invalidate
+    // the response already in flight. Hard intent/policy changes do.
+    if (
+      reason !== 'mutation'
+      && reason !== 'metadata'
+      && reason !== 'semantic'
+      && reason !== 'retrieval'
+      && reason !== 'manual'
+    ) {
       rankGeneration += 1;
     }
     return;
@@ -1400,7 +1410,7 @@ const triggerRank = (
   const generation = ++rankGeneration;
   const delayMs = reason === 'mutation'
     ? 320
-    : reason === 'metadata' || reason === 'semantic'
+    : reason === 'metadata' || reason === 'semantic' || reason === 'retrieval'
       ? 120
       : 60;
   scheduleRankGeneration(generation, delayMs);
@@ -1465,20 +1475,18 @@ const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) =
 const applySourceFilters = (nextFilters: FeedSourceFilters) => {
   if (!isCurrentInstance() || sourceFiltersEqual(sourceFilters, nextFilters)) return;
   sourceFilters = nextFilters;
+  invalidateStableReplacements('policy');
   rankGeneration += 1;
 
   // Keep the last valid scored generation available for the optimistic local
-  // presentation pass. Source controls are presentation policy, so clearing
-  // cachedFeed here would remove mode/score badges until a later rank response
-  // wins the generation race.
+  // presentation pass, but do not reuse a binding created under the old source
+  // policy.
   clearExtensionPresentation(false);
   applyRankedFeed();
 
-  // Force a fresh score/trace request after the immediate presentation update.
-  // The generation guard prevents older in-flight work from replacing it.
   lastCandidateSignature = '';
   lastRankMode = '';
-  triggerRank('mode');
+  triggerRank('manual');
 };
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -1494,11 +1502,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'YOUTUBE_SEMANTICS_ENRICHED') {
-    if (extensionEnabled) triggerRank('semantic');
+    if (extensionEnabled) {
+      triggerRank(message.payload?.conceptGraphChanged === true ? 'graph' : 'semantic');
+    }
     return;
   }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
+    invalidateStableReplacements('lifecycle');
     rankGeneration += 1;
     if (rankTimer !== undefined) window.clearTimeout(rankTimer);
     rankTimer = undefined;
@@ -1550,7 +1561,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const next = Number(message.payload?.percent);
     if (!Number.isFinite(next) || next === feedReplacementPercent) return;
     feedReplacementPercent = Math.max(0, Math.min(100, next));
-    clearStableReplacements();
+    invalidateStableReplacements('feed_mix');
     rankGeneration += 1;
     clearExtensionPresentation(false);
     applyRankedFeed();
@@ -1559,17 +1570,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {
-    clearStableReplacements();
-    rankGeneration += 1;
+    const reason = String(message.payload?.reason ?? 'rebuild');
+    if (reason === 'retrieval') {
+      lastCandidateSignature = '';
+      triggerRank('retrieval');
+      return;
+    }
+
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
     clearExtensionPresentation(false);
-    triggerRank('graph');
+    triggerRank(reason === 'feedback' ? 'feedback' : 'graph');
     return;
   }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
-  clearStableReplacements();
   rankGeneration += 1;
   activeMode = message.payload.mode;
   activeDurableMode = typeof message.payload?.modeId === 'string'
@@ -1784,7 +1799,7 @@ window.addEventListener('load', () => {
   attachTemporalWatchObserver();
 });
 window.addEventListener('yt-navigate-start', () => {
-  clearStableReplacements();
+  invalidateStableReplacements('navigation');
   if (mutationRankTimer !== undefined) {
     window.clearTimeout(mutationRankTimer);
     mutationRankTimer = undefined;
