@@ -1225,6 +1225,7 @@ export * from './personal-algorithm-scorer.ts';
 export * from './semantic-primitives.ts';
 export * from './semantic-reranking.ts';
 export * from './canonical-semantic.ts';
+export * from './durable-semantic-modes.ts';
 export * from './concept-materialization.ts';
 export * from './concept-extraction.ts';
 export * from './replay-evaluation.ts';

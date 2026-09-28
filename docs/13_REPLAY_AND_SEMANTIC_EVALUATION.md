@@ -156,7 +156,7 @@ The committed semantic fixture currently gates:
 
 Those thresholds are regression guards for the reference baseline, not proof that production semantic quality is solved.
 
-#221/PR #223 canonicalization now uses this evaluation boundary. Future #214 clustering, durable modes, graph-grounded mode scoring, and mode-aware retrieval should add their predictions to the same boundary rather than inventing new ad hoc live-only checks.
+#221/PR #223 canonicalization uses this evaluation boundary. PR #224 adds deterministic durable-mode identity/stability coverage; later #214 graph-grounded scoring and mode-aware retrieval should continue using the same contracts rather than ad hoc live-only checks.
 
 
 ## Mode-cluster and trace metrics
@@ -172,7 +172,9 @@ The evaluation API also defines contracts for the next #214 implementation slice
 - exact reconciliation of per-member mode contributions to the aggregate mode contribution;
 - whether switching a mode actually changes retrieval query plans when the fixture expects it.
 
-These evaluators are deliberately available before canonicalization/clustering/mode-grounding implementation lands. #214 should produce predictions for these existing contracts rather than define new success metrics after the fact.
+PR #224 now exercises the durable-identity portion of these contracts directly. Its deterministic fixture covers canonical co-support clustering, taxonomy exclusion, ID/revision reuse across membership growth, unchanged-snapshot revision stability, dormant-mode retention, and multi-label candidate affinity provenance. The fixture also feeds the produced snapshots into `evaluateModeStability` so the implementation consumes the existing replay contract rather than introducing a parallel metric.
+
+Graph-grounded mode contribution reconciliation and retrieval-plan changes remain the next #214 slice and should use `evaluateModeTraceGrounding` / retrieval-mode evaluators when implemented.
 
 ## Bootstrap reference result
 

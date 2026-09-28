@@ -426,7 +426,9 @@ The failure mode was structural: a tiny generative model was being asked to inve
 - an empty verified label set is an intentional abstention and must **not** fall back to raw keyword topics;
 - missing verifier output or a verifier runtime failure may fall back to the #218 metadata path;
 - output is cached by model identity + verifier-pipeline revision + candidate input hash;
-- cache-only embedding-drain passes reuse valid verified labels without starting another verifier batch;
+- semantic scoring/affinity passes are cache-only with respect to concept verification: they reuse valid verified labels without awaiting or starting a DeBERTa verifier batch;
+- concept verification runs only after the current neural semantic working set is caught up (or via the explicit validation command), and a graph change then schedules a fresh semantic pass against the new revision;
+- embedding and concept verification use isolated sandbox iframes so a slow q8 WASM verifier cannot occupy the WebGPU embedding scheduler;
 - verifier-cache validity is independent of graph revision; graph materialization re-reads current evidence/candidate state before reconciliation;
 - model output remains derived/rebuildable and cannot directly create explicit preference state.
 
@@ -477,11 +479,25 @@ A mode cluster should contain:
 
 Derived clusters can be recomputed, but once exposed as a control they need stable identity. A promoted/pinned mode must not disappear because the current feed lacks matching candidates.
 
+PR #224 implements this identity/persistence slice with a conservative graph-grounded bootstrap:
+- only non-taxonomy canonical concepts with repeated retained-content support are eligible;
+- concepts cluster when they share at least two supported content nodes and their support-set Jaccard clears the bootstrap threshold;
+- cluster snapshots reconcile one-to-one against the previous durable catalog by canonical-member Jaccard, preserving mode IDs and incrementing revisions only when membership/label/support state changes;
+- an exposed mode that temporarily loses support becomes dormant instead of losing its identity;
+- the catalog is bounded and stored separately from the current feed cache;
+- the UI selects by stable mode ID while the existing mode-label seed remains a compatibility bridge until graph-grounded mode scoring/retrieval lands.
+
+These support/Jaccard values are deterministic bootstrap safeguards, not calibrated semantic-quality thresholds. Tune them only against labelled replay/live review rather than ad hoc feed screenshots.
+
 ### 3. Multi-label candidate affinity
 
 Candidates may qualify for multiple graph regions/modes simultaneously. Preserve a bounded list/map of qualified affinities rather than collapsing all semantic state to one winning label.
 
 The UI may still show one conservative primary badge when the leading label clears the badge confidence/margin rule. That badge is presentation only. Scoring, retrieval and evaluation consume the multi-label affinity set.
+
+PR #224 persists a bounded candidate↔mode affinity list alongside semantic candidate features. Each affinity resolves to a stable mode ID/revision, matched canonical IDs, and exact source graph node IDs. This slice does not yet award score from that list; the next #214 slice will convert qualified member affinities into exact trace contributions.
+
+Live validation also showed that raw member similarity alone was too permissive: unrelated music/game candidates could enter a durable mode through weak weighted signals around 0.35–0.40. PR #224 therefore applies a provisional final weighted mode-affinity abstention floor of 0.45 while preserving the underlying member matches for diagnostics/provenance. In the labelled live sample, obvious grounded controls began above ~0.51. This is a replay/live regression guard, not a calibrated encoder threshold.
 
 ### 4. Graph-grounded mode scoring
 

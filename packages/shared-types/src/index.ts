@@ -52,6 +52,7 @@ export interface FeedItem {
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
   semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_mode_affinities?: CandidateModeAffinity[];
 }
 
 export interface FeedResponse {
@@ -238,6 +239,44 @@ export interface SemanticModeProfile {
   embedding?: number[] | null;
 }
 
+export interface DurableSemanticModeMember {
+  canonicalId: string;
+  label: string;
+  weight: number;
+  sourceNodeIds: string[];
+  supportContentIds: string[];
+}
+
+export interface DurableSemanticMode {
+  id: string;
+  label: string;
+  revision: number;
+  members: DurableSemanticModeMember[];
+  provenance: 'inferred';
+  pipelineId: string;
+  graphRevision: number;
+  createdAt: string;
+  lastSupportedAt: string;
+  active: boolean;
+  pinned: boolean;
+}
+
+export interface DurableSemanticModeCatalog {
+  pipelineId: string;
+  graphRevision: number;
+  generatedAt: string;
+  modes: DurableSemanticMode[];
+}
+
+export interface CandidateModeAffinity {
+  modeId: string;
+  modeRevision: number;
+  label: string;
+  affinity: number;
+  matchedCanonicalIds: string[];
+  sourceNodeIds: string[];
+}
+
 export interface SemanticGraphMatch {
   node_id: string;
   node_label: string;
@@ -318,6 +357,7 @@ export interface RecommendationCandidate {
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
   semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_mode_affinities?: CandidateModeAffinity[];
   content_label?: 'learning' | 'work' | 'relax' | null;
   content_label_confidence?: number | null;
 }

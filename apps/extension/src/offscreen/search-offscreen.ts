@@ -51,17 +51,34 @@ const parseInWorker = (html: string, limit: number): Promise<unknown[]> => {
   });
 };
 
-const ensureNeuralSandbox = (): HTMLIFrameElement => {
-  let frame = document.querySelector<HTMLIFrameElement>('[data-myalgo-neural-sandbox]');
+const ensureModelSandbox = (
+  kind: 'embedding' | 'concept',
+): HTMLIFrameElement => {
+  const selector = kind === 'embedding'
+    ? '[data-myalgo-neural-sandbox]'
+    : '[data-myalgo-concept-sandbox]';
+  let frame = document.querySelector<HTMLIFrameElement>(selector);
   if (frame) return frame;
 
   frame = document.createElement('iframe');
-  frame.dataset.myalgoNeuralSandbox = 'true';
+  if (kind === 'embedding') frame.dataset.myalgoNeuralSandbox = 'true';
+  else frame.dataset.myalgoConceptSandbox = 'true';
   frame.src = chrome.runtime.getURL('neural-sandbox.html');
   frame.setAttribute('aria-hidden', 'true');
   frame.style.display = 'none';
   document.body.append(frame);
   return frame;
+};
+
+const ensureNeuralSandbox = (): HTMLIFrameElement =>
+  ensureModelSandbox('embedding');
+
+const ensureConceptSandbox = (): HTMLIFrameElement =>
+  ensureModelSandbox('concept');
+
+const resetModelSandbox = (frame: HTMLIFrameElement): void => {
+  readyNeuralFrames.delete(frame);
+  if (frame.isConnected) frame.remove();
 };
 
 type SemanticResult = {
@@ -198,6 +215,10 @@ const embedNeuralInSandbox = (
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
+      // A timed-out request may still be executing inside the iframe scheduler.
+      // Reset the sandbox so an orphaned inference cannot block every later
+      // embedding/concept request behind it.
+      resetModelSandbox(frame);
       reject(new Error('Neural semantic sandbox timed out.'));
     }, 300_000);
 
@@ -219,9 +240,16 @@ const embedNeuralInSandbox = (
         texts,
       }, '*');
     };
+    const probeReady = () => {
+      if (!frame.contentWindow || requestSent) return;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'PING',
+      }, '*');
+    };
     const onLoad = () => {
-      readyNeuralFrames.add(frame);
-      postRequest();
+      probeReady();
     };
 
     const onMessage = (event: MessageEvent<{
@@ -261,6 +289,7 @@ const embedNeuralInSandbox = (
       }
 
       if (event.data.type === 'ready') {
+        if (event.data.id && event.data.id !== id) return;
         readyNeuralFrames.add(frame);
         postRequest();
         return;
@@ -326,11 +355,13 @@ const embedNeuralInSandbox = (
 
     window.addEventListener('message', onMessage);
 
-    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
-      readyNeuralFrames.add(frame);
+    if (readyNeuralFrames.has(frame)) {
       postRequest();
     } else {
       frame.addEventListener('load', onLoad, { once: true });
+      // Covers the race where the packaged iframe has already loaded and emitted
+      // its one-shot ready message before the host attached listeners.
+      probeReady();
     }
   });
 };
@@ -339,11 +370,18 @@ const verifyConceptsNeuralInSandbox = (
   conceptItems: Array<{ text: string; labels: string[] }>,
 ): Promise<ConceptResult> => {
   const id = `concept-sandbox-${++sequence}`;
-  const frame = ensureNeuralSandbox();
+  // Keep the q8 WASM verifier physically separate from the embedding iframe.
+  // A slow/stuck concept request must not occupy the scheduler that services
+  // WebGPU candidate embeddings.
+  const frame = ensureConceptSandbox();
 
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
+      // Concept inference shares the iframe scheduler with embeddings. Kill the
+      // sandbox on timeout so a stuck q8 WASM verifier cannot strand subsequent
+      // WebGPU embedding requests behind an abandoned job.
+      resetModelSandbox(frame);
       persistConceptStatus({
         status: 'error',
         backend: 'unknown',
@@ -369,9 +407,16 @@ const verifyConceptsNeuralInSandbox = (
         conceptItems,
       }, '*');
     };
+    const probeReady = () => {
+      if (!frame.contentWindow || requestSent) return;
+      frame.contentWindow.postMessage({
+        source: 'myalgo-neural-host',
+        id,
+        type: 'PING',
+      }, '*');
+    };
     const onLoad = () => {
-      readyNeuralFrames.add(frame);
-      postRequest();
+      probeReady();
     };
 
     const onMessage = (event: MessageEvent<{
@@ -407,6 +452,7 @@ const verifyConceptsNeuralInSandbox = (
       ) return;
 
       if (event.data.type === 'ready') {
+        if (event.data.id && event.data.id !== id) return;
         readyNeuralFrames.add(frame);
         postRequest();
         return;
@@ -476,11 +522,11 @@ const verifyConceptsNeuralInSandbox = (
     };
 
     window.addEventListener('message', onMessage);
-    if (readyNeuralFrames.has(frame) || frame.contentDocument?.readyState === 'complete') {
-      readyNeuralFrames.add(frame);
+    if (readyNeuralFrames.has(frame)) {
       postRequest();
     } else {
       frame.addEventListener('load', onLoad, { once: true });
+      probeReady();
     }
   });
 };

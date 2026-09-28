@@ -284,9 +284,13 @@ Required checks:
 2. the strongest category must clear both the configured absolute similarity floor and the runner-up margin;
 3. near-ties produce **no category badge** rather than forcing the least-wrong label;
 4. changing the active mode does not change the candidate's category score map when candidate/graph inputs are unchanged;
-5. the popup/Settings mode list contains All/Default plus categories actually inferred in local feed state; it must not synthesize Work/Learning/Relax/Gaming/French merely because those labels existed in PR #213;
-6. selecting a dynamic category mode still produces exact traceable mode/category-affinity contributions and bounded retrieval intent;
-7. migration converts the known PR #213 fixed bootstrap modes to All/Default while preserving an arbitrary custom mode value; neither path may recreate the old fixed taxonomy.
+5. the popup/Settings mode list contains All/Default plus persisted durable modes from the canonical graph catalog; ordinary feed-cache churn must not add/remove mode identity;
+6. each exposed inferred mode has a stable local ID, integer revision, canonical member IDs/weights, source graph node provenance, creation time, last-supported time, and active/dormant state;
+7. a cluster that keeps sufficient member overlap across graph snapshots reuses its prior ID and increments revision only for a meaningful mode-state change;
+8. a previously exposed mode that temporarily loses cluster support becomes dormant rather than being silently deleted;
+9. candidate semantic features preserve a bounded multi-label mode-affinity list with mode ID/revision, matched canonical IDs, and exact source node IDs;
+10. selecting a durable mode stores the stable mode ID while the current label-based semantic seed remains a compatibility bridge until graph-grounded mode scoring/retrieval lands;
+11. migration converts the known PR #213 fixed bootstrap modes to All/Default while preserving an arbitrary custom mode value; neither path may recreate the old fixed taxonomy.
 
 Record labelled examples of obvious correct, obvious incorrect, and ambiguous cases. Do not fine-tune the embedding encoder until the replay set is large enough to show a systematic residual error after taxonomy choice, metadata enrichment, thresholds/margins, and candidate model choice have been tested.
 
@@ -458,7 +462,20 @@ console.table(
 );
 ```
 
-PR #223/#221 now evaluates canonicalization against a fixed synthetic fixture. Mode-cluster quality remains a separate #214 slice and must consume canonical neighbourhoods rather than raw graph labels.
+PR #223/#221 now evaluates canonicalization against a fixed synthetic fixture. PR #224 consumes those canonical neighbourhoods for the first durable-mode slice.
+
+### PR #224 durable-mode validation
+
+Automated validation must prove:
+- taxonomy-only canonical concepts never become inferred preference-mode members;
+- mode proposals require repeated shared content support and are deterministic across insertion order;
+- stable IDs survive ordinary membership growth when member-set Jaccard clears the reconciliation threshold;
+- unchanged snapshots do not bump a mode revision;
+- lost support marks a mode dormant without changing its ID or last-supported timestamp;
+- candidate↔mode affinities remain multi-label and preserve exact source-node provenance;
+- popup/Settings controls consume the persisted durable catalog rather than deriving available modes from the current feed cache.
+
+The initial support/Jaccard thresholds are bootstrap regression settings, not calibrated product thresholds. Live validation should inspect cluster coherence and stability before changing them.
 
 
 ## PR #220 local concept verification validation (#219)
@@ -511,7 +528,7 @@ console.log(cached);
 
 The first request runs one bounded verifier batch against the persisted candidate reservoir and immediately returns materialization, verifier diagnostics, and model status. The second request reuses only valid cached verified labels. This command is intended for validation/debugging, not routine UI use.
 
-`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Cache-only embedding-drain passes do not overwrite it.
+`CONCEPT_EXTRACTION_DIAGNOSTICS` retains the historical storage key for compatibility but now describes the last actual **verification** attempt. Semantic scoring/affinity passes are cache-only with respect to concept verification and do not overwrite it. The verifier is deferred until the current neural semantic working set is caught up, and it runs in a separate sandbox iframe from WebGPU embeddings; a verifier timeout must therefore not block incremental affinity reranks.
 
 A model load/inference failure must persist `conceptModelStatus.status: "error"` with the runtime error string so a later cache-only pass cannot hide the failure.
 

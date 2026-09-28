@@ -51,7 +51,10 @@ export function createLocalConceptExtractionProvider(): LocalConceptExtractionPr
         new Promise<ConceptVerificationResponse>((_, reject) => {
           timeout = setTimeout(
             () => reject(new Error('Timed out waiting for local concept verification.')),
-            180_000,
+            // The offscreen sandbox owns the 300s execution timeout. Do not
+            // abandon this request earlier and leave its verifier job running
+            // in the shared scheduler while embeddings queue behind it.
+            330_000,
           );
         }),
       ]).finally(() => {

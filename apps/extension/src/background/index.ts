@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -11,7 +11,7 @@ import { toNormalizedInteraction } from '../content-scripts/youtube-interactions
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
 import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
-import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, enrichCandidatesWithSemanticReranking, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
+import { applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, shouldRefreshObservedCandidate } from './retrieval';
 import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
@@ -50,6 +50,7 @@ type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
   lastAcquiredAt?: string;
+  semantic_mode_affinities?: CandidateModeAffinity[];
 };
 
 type SemanticFeatureRecord = {
@@ -58,6 +59,8 @@ type SemanticFeatureRecord = {
   graphRevision: number;
   mode: string;
   modelVersion: string;
+  requestedModelVersion: string;
+  fallbackReason: string | null;
   graphSimilarity: number;
   modeSimilarity: number;
   category: SemanticCategoryId | null;
@@ -73,6 +76,9 @@ type SemanticFeatureRecord = {
     taxonomy_only?: boolean;
     pipeline_id?: string;
   }>;
+  modeAffinities: CandidateModeAffinity[];
+  modeAffinityPipelineId: string;
+  modeCatalogSignature: string;
   generatedAt: string;
 };
 
@@ -137,6 +143,8 @@ const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
+const CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+const NEURAL_FALLBACK_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -193,6 +201,113 @@ const getSemanticProviderContext = async () => {
     provider,
     semanticModelIdentity: `${identity.modelId}@${identity.modelVersion}`,
   };
+};
+
+const durableModeCatalogSignature = (
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): string => {
+  const input = JSON.stringify(
+    [...(catalog?.modes ?? [])]
+      .filter((mode) => mode.active)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((mode) => ({
+        id: mode.id,
+        revision: mode.revision,
+        members: [...mode.members]
+          .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId))
+          .map((member) => ({
+            canonicalId: member.canonicalId,
+            weight: member.weight,
+            sourceNodeIds: [...member.sourceNodeIds].sort(),
+          })),
+      })),
+  );
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${DURABLE_MODE_AFFINITY_PIPELINE_ID}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+};
+
+const refreshDurableModeCatalog = async (
+  state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
+): Promise<DurableSemanticModeCatalog> => {
+  const previous = await getStorage<DurableSemanticModeCatalog | null>(
+    STORAGE_KEYS.DURABLE_MODE_CATALOG,
+    null,
+  );
+  const canonical = buildCanonicalSemanticConcepts(state);
+  const clustered = buildDurableSemanticModeClusters(state, canonical, {
+    minimumSupportPerConcept: 2,
+    minimumSharedContent: 2,
+    minimumSupportJaccard: 0.5,
+    minimumMembers: 2,
+  });
+  const reconciled = reconcileDurableSemanticModes(
+    previous,
+    clustered.proposals,
+    state.graph.currentRevision,
+    new Date().toISOString(),
+    {
+      minimumIdentityJaccard: 0.5,
+      maxModes: 12,
+    },
+  );
+
+  if (reconciled.changed || !previous) {
+    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, reconciled.catalog);
+  }
+  await setStorage(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, {
+    status: 'completed',
+    marker: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+    graphRevision: state.graph.currentRevision,
+    ...clustered.diagnostics,
+    ...reconciled.diagnostics,
+    generatedAt: reconciled.catalog.generatedAt,
+  });
+
+  const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
+  let activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
+  if (!activeModeId) {
+    const migrated = storedMode.toLowerCase() === 'default'
+      ? null
+      : reconciled.catalog.modes.find((mode) => (
+          mode.label.toLowerCase() === storedMode.toLowerCase()
+        ));
+    activeModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, activeModeId);
+  }
+
+  const activeMode = resolveDurableMode(reconciled.catalog, activeModeId);
+  if (activeMode && storedMode !== activeMode.label) {
+    await setStorage(STORAGE_KEYS.MODE, activeMode.label);
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    await Promise.all(tabs.map((tab) => tab.id
+      ? chrome.tabs.sendMessage(tab.id, {
+        type: 'MODE_CHANGED',
+        payload: { mode: activeMode.label, modeId: activeMode.id },
+      }).catch(() => undefined)
+      : undefined));
+  }
+
+  return reconciled.catalog;
+};
+
+const resolveModeSelection = async (
+  requested: string | null | undefined,
+): Promise<{ modeId: string; label: string }> => {
+  const value = requested?.trim() || 'default';
+  if (value.toLowerCase() === 'default') return { modeId: 'default', label: 'Default' };
+  const catalog = await getStorage<DurableSemanticModeCatalog | null>(
+    STORAGE_KEYS.DURABLE_MODE_CATALOG,
+    null,
+  );
+  const byId = resolveDurableMode(catalog, value);
+  if (byId) return { modeId: byId.id, label: byId.label };
+  const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
+  if (byLabel) return { modeId: byLabel.id, label: byLabel.label };
+  return { modeId: value, label: value };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -761,10 +876,17 @@ async function hydrateSemanticScoreFeatures(
   mode: string,
   semanticModelIdentities: string[],
 ): Promise<CandidatePoolItem[]> {
-  const cache = await getStorage<Record<string, SemanticFeatureRecord>>(
-    STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-    {},
-  );
+  const [cache, durableModeCatalog] = await Promise.all([
+    getStorage<Record<string, SemanticFeatureRecord>>(
+      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+      {},
+    ),
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+  ]);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
     const record = semanticModelIdentities
@@ -775,7 +897,11 @@ async function hydrateSemanticScoreFeatures(
         mode,
         semanticModelIdentity,
       )])
-      .find(Boolean);
+      .find((candidateRecord) => (
+        candidateRecord
+        && candidateRecord.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+        && candidateRecord.modeCatalogSignature === expectedModeCatalogSignature
+      ));
     if (!record) return candidate;
     return {
       ...candidate,
@@ -786,6 +912,7 @@ async function hydrateSemanticScoreFeatures(
       semantic_category: record.category,
       semantic_category_confidence: record.categoryConfidence,
       semantic_category_scores: record.categoryScores,
+      semantic_mode_affinities: record.modeAffinities ?? [],
     };
   });
 }
@@ -993,12 +1120,21 @@ async function refreshSemanticConceptGraph(
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [initialState, initialCandidatePool, semanticModelMode] = await Promise.all([
+  const [initialState, initialCandidatePool, semanticModelMode, conceptModelStatus] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
     getSemanticModelMode(),
+    getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
   ]);
-  const generationEnabled = allowModelExtraction && semanticModelMode === 'neural';
+  const conceptStatusUpdatedAt = typeof conceptModelStatus?.updatedAt === 'string'
+    ? Date.parse(conceptModelStatus.updatedAt)
+    : Number.NaN;
+  const conceptFailureCooldownActive = conceptModelStatus?.status === 'error'
+    && Number.isFinite(conceptStatusUpdatedAt)
+    && Date.now() - conceptStatusUpdatedAt < CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS;
+  const generationEnabled = allowModelExtraction
+    && semanticModelMode === 'neural'
+    && !conceptFailureCooldownActive;
   const generation = await refreshConceptExtractionCache(
     initialState,
     initialCandidatePool,
@@ -1048,6 +1184,9 @@ async function refreshSemanticConceptGraph(
     semanticRefreshInFlight.clear();
   }
 
+  const modeState = await personalAlgorithmStore.exportState();
+  const durableModes = await refreshDurableModeCatalog(modeState);
+
   const diagnostics = {
     status: 'completed',
     marker: SEMANTIC_CONCEPT_MATERIALIZER_ID,
@@ -1058,9 +1197,14 @@ async function refreshSemanticConceptGraph(
     materializedEdgeCount: reconciled.edgeCount,
     preservedReferencedNodeCount: reconciled.preservedReferencedNodeCount,
     modelExtractionStatus: generation.diagnostics.status,
+    modelExtractionSuppressedReason: conceptFailureCooldownActive
+      ? 'recent_verifier_failure'
+      : null,
     modelExtractedCandidateCount: generation.diagnostics.extracted,
     modelCachedCandidateCount: extraction.diagnostics.cachedConceptCandidateCount,
     modelPendingCandidateCount: extraction.diagnostics.pending,
+    durableModeCount: durableModes.modes.length,
+    activeDurableModeCount: durableModes.modes.filter((mode) => mode.active).length,
     generatedAt: new Date().toISOString(),
   };
   await setStorage(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, diagnostics);
@@ -1070,7 +1214,10 @@ async function refreshSemanticConceptGraph(
 async function refreshSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
-  allowConceptExtraction = true,
+  // Scoring must not await the much slower q8 concept verifier. Verified
+  // concept generation is scheduled separately once the current neural
+  // candidate-affinity slice has caught up.
+  allowConceptExtraction = false,
 ): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
   if (candidates.length === 0) {
     const diagnostics = {
@@ -1085,6 +1232,8 @@ async function refreshSemanticScoreFeatures(
   }
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
+  const durableModeCatalog = await refreshDurableModeCatalog(state);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
   if (semanticRefreshInFlight.has(refreshKey)) {
@@ -1134,6 +1283,9 @@ async function refreshSemanticScoreFeatures(
       STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
       {},
     );
+    const fallbackIdentity = semanticProviderIdentity('hash');
+    const fallbackModelIdentity = `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`;
+    let recentFallbackCoverageCount = 0;
     const candidatesNeedingRequestedFeatures = candidates.filter((candidate) => {
       const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
       const key = semanticFeatureKey(
@@ -1143,7 +1295,46 @@ async function refreshSemanticScoreFeatures(
         mode,
         requestedContext.semanticModelIdentity,
       );
-      return existing[key] === undefined;
+      const cached = existing[key];
+      const requestedRecordValid = Boolean(
+        cached
+        && Array.isArray(cached.modeAffinities)
+        && cached.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+        && cached.modeCatalogSignature === expectedModeCatalogSignature
+      );
+      if (requestedRecordValid) return false;
+
+      if (requestedContext.semanticModelMode === 'neural') {
+        const fallbackKey = semanticFeatureKey(
+          candidate.external_id,
+          inputHash,
+          state.graph.currentRevision,
+          mode,
+          fallbackModelIdentity,
+        );
+        const fallbackRecord = existing[fallbackKey];
+        const fallbackGeneratedAt = fallbackRecord?.generatedAt
+          ? Date.parse(fallbackRecord.generatedAt)
+          : Number.NaN;
+        const recentFallbackCoversRequest = Boolean(
+          fallbackRecord
+          && Array.isArray(fallbackRecord.modeAffinities)
+          && fallbackRecord.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+          && fallbackRecord.modeCatalogSignature === expectedModeCatalogSignature
+          && fallbackRecord.requestedModelVersion === requestedContext.semanticModelIdentity
+          && fallbackRecord.fallbackReason
+          && Number.isFinite(fallbackGeneratedAt)
+          && Date.now() - fallbackGeneratedAt < NEURAL_FALLBACK_RETRY_COOLDOWN_MS
+        );
+        if (recentFallbackCoversRequest) {
+          recentFallbackCoverageCount += 1;
+          return false;
+        }
+      }
+
+      // Missing affinity metadata, catalog mismatch, or an expired neural
+      // fallback record means this candidate needs a fresh semantic pass.
+      return true;
     });
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
       ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
@@ -1157,6 +1348,10 @@ async function refreshSemanticScoreFeatures(
       requestedSemanticModelMode: requestedContext.semanticModelMode,
       modelVersion: requestedContext.semanticModelIdentity,
       candidateCount: semanticCandidates.length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
+      recentFallbackCoverageCount,
+      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       totalCandidateCount: candidates.length,
       pendingCandidateCount: Math.max(
         0,
@@ -1182,7 +1377,11 @@ async function refreshSemanticScoreFeatures(
         requestedSemanticModelMode: requestedContext.semanticModelMode,
         semanticModelMode: requestedContext.semanticModelMode,
         execution: requestedContext.provider.execution,
-        fallbackReason: null,
+        fallbackReason: recentFallbackCoverageCount > 0
+          ? 'Recent neural fallback records are in retry cooldown.'
+          : null,
+        recentFallbackCoverageCount,
+        neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
         mode,
         graphRevision: state.graph.currentRevision,
         elapsedMs: Math.round(performance.now() - startedAt),
@@ -1201,7 +1400,7 @@ async function refreshSemanticScoreFeatures(
     let lastNeuralStatus: Record<string, unknown> | null = null;
     let semantic;
     const reportEmbeddingPhase = async (
-      phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings',
+      phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings' | 'embedding_cache_flush',
       inputCount: number,
     ) => {
       if (refreshEpoch !== semanticEpoch) return;
@@ -1217,6 +1416,8 @@ async function refreshSemanticScoreFeatures(
         semanticModelMode: effectiveContext.semanticModelMode,
         modelVersion: effectiveContext.semanticModelIdentity,
         candidateCount: semanticCandidates.length,
+        modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+        modeCatalogSignature: expectedModeCatalogSignature,
         totalCandidateCount: candidates.length,
         pendingCandidateCount: Math.max(0, candidatesNeedingRequestedFeatures.length - semanticCandidates.length),
         conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
@@ -1307,12 +1508,20 @@ async function refreshSemanticScoreFeatures(
         graphRevision: state.graph.currentRevision,
         mode,
         modelVersion: effectiveContext.semanticModelIdentity,
+        requestedModelVersion: requestedContext.semanticModelIdentity,
+        fallbackReason,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
         category: candidate.semantic_category ?? null,
         categoryConfidence: Number(candidate.semantic_category_confidence ?? 0),
         categoryScores: candidate.semantic_category_scores ?? {},
         graphMatches: (candidate.semantic_graph_matches ?? []).slice(0, 3),
+        modeAffinities: buildCandidateModeAffinities(
+          candidate.semantic_graph_matches,
+          durableModeCatalog,
+        ),
+        modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+        modeCatalogSignature: expectedModeCatalogSignature,
         generatedAt,
       };
       const previous = existing[key];
@@ -1321,6 +1530,11 @@ async function refreshSemanticScoreFeatures(
         || Math.abs(previous.graphSimilarity - record.graphSimilarity) > 0.0001
         || Math.abs(previous.modeSimilarity - record.modeSimilarity) > 0.0001
         || JSON.stringify(previous.graphMatches ?? []) !== JSON.stringify(record.graphMatches)
+        || JSON.stringify(previous.modeAffinities ?? []) !== JSON.stringify(record.modeAffinities)
+        || previous.modeAffinityPipelineId !== record.modeAffinityPipelineId
+        || previous.modeCatalogSignature !== record.modeCatalogSignature
+        || previous.requestedModelVersion !== record.requestedModelVersion
+        || previous.fallbackReason !== record.fallbackReason
       ) {
         changed += 1;
       }
@@ -1333,10 +1547,36 @@ async function refreshSemanticScoreFeatures(
         .slice(0, MAX_SEMANTIC_FEATURE_CACHE),
     );
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
+    await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
+      status: 'started',
+      phase: 'semantic_feature_cache_write',
+      inputCount: semanticCandidates.length,
+      mode,
+      graphRevision: state.graph.currentRevision,
+      requestedSemanticModelMode: requestedContext.semanticModelMode,
+      neuralBatchSize: requestedContext.neuralBatchSize,
+      semanticModelMode: effectiveContext.semanticModelMode,
+      modelVersion: effectiveContext.semanticModelIdentity,
+      candidateCount: semanticCandidates.length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
+      totalCandidateCount: candidates.length,
+      pendingCandidateCount: Math.max(
+        0,
+        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+      ),
+      featureCacheSize: Object.keys(bounded).length,
+      generatedAt: new Date().toISOString(),
+    });
     await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
 
+    const remainingPendingCandidateCount = Math.max(
+      0,
+      candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+    );
     const diagnostics = {
-      status: 'completed',
+      status: remainingPendingCandidateCount > 0 ? 'partial' : 'completed',
+      phase: remainingPendingCandidateCount > 0 ? 'slice_completed' : 'complete',
       ...semantic.diagnostics,
       requestedSemanticModelMode: requestedContext.semanticModelMode,
       semanticModelMode: effectiveContext.semanticModelMode,
@@ -1349,11 +1589,12 @@ async function refreshSemanticScoreFeatures(
       elapsedMs: Math.round(performance.now() - startedAt),
       embeddingCacheSize: await semanticEmbeddingCache.size(),
       featureCacheSize: Object.keys(bounded).length,
+      modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
+      modeCatalogSignature: expectedModeCatalogSignature,
+      recentFallbackCoverageCount,
+      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       totalCandidateCount: candidates.length,
-      pendingCandidateCount: Math.max(
-        0,
-        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
-      ),
+      pendingCandidateCount: remainingPendingCandidateCount,
       changed,
       conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
       conceptEdgeCount: Number(conceptMaterialization.diagnostics.materializedEdgeCount ?? 0),
@@ -1404,29 +1645,6 @@ async function refreshSemanticScoreFeatures(
   } finally {
     semanticRefreshInFlight.delete(refreshKey);
   }
-}
-
-async function drainPendingSemanticCandidates(
-  candidates: CandidatePoolItem[],
-  mode: string,
-  firstDiagnostics: Record<string, unknown> | null,
-): Promise<{ changed: number; diagnostics: Record<string, unknown> | null }> {
-  let diagnostics = firstDiagnostics;
-  let pending = Number(diagnostics?.pendingCandidateCount ?? 0);
-  let changed = 0;
-  while (
-    diagnostics?.status === 'completed'
-    && diagnostics.semanticModelMode === 'neural'
-    && pending > 0
-  ) {
-    const next = await refreshSemanticScoreFeatures(candidates, mode, false);
-    changed += next.changed;
-    diagnostics = next.diagnostics;
-    const nextPending = Number(diagnostics?.pendingCandidateCount ?? 0);
-    if (nextPending >= pending) break;
-    pending = nextPending;
-  }
-  return { changed, diagnostics };
 }
 
 async function rankLocalCandidates(
@@ -1548,6 +1766,7 @@ const handleRuntimeMessage = (
     type: string;
     payload?: {
       mode?: string;
+      modeId?: string;
       algorithmId?: string;
       enabled?: boolean;
       contentItemId?: string;
@@ -1840,14 +2059,40 @@ const handleRuntimeMessage = (
         diagnostics: semanticRefresh.diagnostics,
       });
       const senderTabId = _sender.tab?.id;
-      void drainPendingSemanticCandidates(hydrated, mode, semanticRefresh.diagnostics).then(async (drained) => {
-        const changed = semanticRefresh.changed + drained.changed;
-        if (!senderTabId || changed <= 0) return;
+      const pendingCandidateCount = Number(
+        semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+      );
+      if (senderTabId && semanticRefresh.changed > 0) {
         await chrome.tabs.sendMessage(senderTabId, {
           type: 'YOUTUBE_SEMANTICS_ENRICHED',
-          payload: { count: changed, modelVersion: drained.diagnostics?.modelVersion ?? null },
+          payload: {
+            count: semanticRefresh.changed,
+            modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+              ? semanticRefresh.diagnostics.modelVersion
+              : null,
+            pendingCandidateCount,
+          },
         }).catch(() => undefined);
-      }).catch((error) => console.warn('[MyAlgo] semantic candidate drain failed', error));
+      }
+
+      if (
+        semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+        && pendingCandidateCount === 0
+      ) {
+        void refreshSemanticConceptGraph(true).then(async (materialization) => {
+          if (!materialization.changed || !senderTabId) return;
+          await chrome.tabs.sendMessage(senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: 0,
+              conceptGraphChanged: true,
+              graphRevision: materialization.diagnostics.graphRevision ?? null,
+            },
+          }).catch(() => undefined);
+        }).catch((error) => {
+          console.warn('[MyAlgo] deferred concept verification failed', error);
+        });
+      }
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to refresh semantic features.',
@@ -1944,20 +2189,44 @@ const handleRuntimeMessage = (
         const senderTabId = _sender.tab?.id;
         const activeRankMode = payload?.mode ?? 'default';
         void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
-          const notifyChanged = async (changed: number, diagnostics: Record<string, unknown> | null) => {
-            if (!senderTabId || changed <= 0) return;
+          const pendingCandidateCount = Number(
+            semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+          );
+          if (senderTabId && semanticRefresh.changed > 0) {
             await chrome.tabs.sendMessage(senderTabId, {
               type: 'YOUTUBE_SEMANTICS_ENRICHED',
               payload: {
-                count: changed,
-                modelVersion: typeof diagnostics?.modelVersion === 'string' ? diagnostics.modelVersion : null,
+                count: semanticRefresh.changed,
+                modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+                  ? semanticRefresh.diagnostics.modelVersion
+                  : null,
+                pendingCandidateCount,
               },
             }).catch(() => undefined);
-          };
-          const drained = await drainPendingSemanticCandidates(
-            hydratedWorkingPool, activeRankMode, semanticRefresh.diagnostics,
-          );
-          await notifyChanged(semanticRefresh.changed + drained.changed, drained.diagnostics);
+          }
+
+          // Run the DeBERTa verifier only after the current neural semantic
+          // working set is caught up. If it changes the graph, request a fresh
+          // rank against the new graph revision; otherwise leave the already
+          // valid affinity-bearing feed untouched.
+          if (
+            semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+            && pendingCandidateCount === 0
+          ) {
+            void refreshSemanticConceptGraph(true).then(async (materialization) => {
+              if (!materialization.changed || !senderTabId) return;
+              await chrome.tabs.sendMessage(senderTabId, {
+                type: 'YOUTUBE_SEMANTICS_ENRICHED',
+                payload: {
+                  count: 0,
+                  conceptGraphChanged: true,
+                  graphRevision: materialization.diagnostics.graphRevision ?? null,
+                },
+              }).catch(() => undefined);
+            }).catch((error) => {
+              console.warn('[MyAlgo] deferred concept verification failed', error);
+            });
+          }
         }).catch((error) => {
           console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
         });
@@ -1987,23 +2256,29 @@ const handleRuntimeMessage = (
   }
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
-    const nextMode = payload?.mode ?? 'Default';
     void (async () => {
-      await setStorage(STORAGE_KEYS.MODE, nextMode);
+      const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
+      await Promise.all([
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
+        setStorage(STORAGE_KEYS.MODE, selection.label),
+      ]);
       const settings = await getStorage<RetrievalSettings>(
         STORAGE_KEYS.RETRIEVAL_SETTINGS,
         DEFAULT_RETRIEVAL_SETTINGS,
       );
       if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, nextMode).then(async (refresh) => {
+        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
           if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
         }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
       }
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
-        ? chrome.tabs.sendMessage(tab.id, { type: 'MODE_CHANGED', payload: { mode: nextMode } }).catch(() => undefined)
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'MODE_CHANGED',
+          payload: { mode: selection.label, modeId: selection.modeId },
+        }).catch(() => undefined)
         : undefined));
-      sendResponse({ ok: true });
+      sendResponse({ ok: true, mode: selection.label, modeId: selection.modeId });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
   }
@@ -2136,13 +2411,17 @@ const handleRuntimeMessage = (
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.SEMANTIC_CONCEPT_DIAGNOSTICS, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
-    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus]) => {
+      getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, null),
+    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus, durableModes, durableModeDiagnostics]) => {
       sendResponse({
         ok: true,
         diagnostics,
         conceptMaterialization,
         conceptExtraction,
         conceptModelStatus,
+        durableModes,
+        durableModeDiagnostics,
       });
     }).catch((error) => sendResponse({
       ok: false,

@@ -1,4 +1,4 @@
-import type { CandidateAcquisitionProvenance, FeedSourceFilters, PersonalAlgorithmState, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, FeedSourceFilters, PersonalAlgorithmState, SemanticCategoryId } from '@repo/shared-types';
 import {
   buildCanonicalSemanticConcepts,
   buildPersonalScoringRevisionContext,
@@ -37,6 +37,7 @@ export type LocalRuntimeCandidate = {
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
   semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_mode_affinities?: CandidateModeAffinity[];
   semantic_graph_matches?: Array<{
     node_id: string;
     node_label: string;

@@ -1,5 +1,8 @@
 export const STORAGE_KEYS = {
   MODE: 'personal-algorithm-mode',
+  ACTIVE_MODE_ID: 'personal-algorithm-active-mode-id',
+  DURABLE_MODE_CATALOG: 'personal-algorithm-durable-mode-catalog',
+  DURABLE_MODE_DIAGNOSTICS: 'personal-algorithm-durable-mode-diagnostics',
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
   FEED_CANDIDATE_POOL: 'personal-algorithm-feed-candidate-pool',

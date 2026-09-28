@@ -11,7 +11,13 @@ globalThis.Worker = class {};
 globalThis.window = new EventTarget();
 window.setTimeout = setTimeout;
 window.clearTimeout = clearTimeout;
-globalThis.document = { querySelector: () => frame };
+const queriedSelectors = [];
+globalThis.document = {
+  querySelector(selector) {
+    queriedSelectors.push(selector);
+    return frame;
+  },
+};
 
 let runtimeListener;
 globalThis.chrome = {
@@ -23,7 +29,7 @@ globalThis.chrome = {
 
 await import('./search-offscreen.ts');
 
-test('ready and load dispatch once, then an opaque-origin iframe accepts a second request', async () => {
+test('readiness probe dispatches once, then an opaque-origin ready iframe accepts a second request', async () => {
   const result = new Promise((resolve) => {
     assert.equal(runtimeListener({
       target: 'semantic-embedding-offscreen',
@@ -33,18 +39,25 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
     }, {}, resolve), true);
   });
 
+  assert.equal(hostMessages[0].type, 'PING');
+  const readinessProbeId = hostMessages[0].id;
   window.dispatchEvent(Object.assign(new Event('message'), {
     source: frame.contentWindow,
-    data: { source: 'myalgo-neural-sandbox', type: 'ready' },
+    data: { source: 'myalgo-neural-sandbox', id: readinessProbeId, type: 'ready' },
   }));
   frame.dispatchEvent(new Event('load'));
-  assert.equal(hostMessages.length, 1);
+  const firstEmbeddingRequest = hostMessages.find((message) => message.type === 'EMBED_TEXTS');
+  assert.ok(firstEmbeddingRequest);
+  assert.equal(
+    hostMessages.filter((message) => message.type === 'EMBED_TEXTS').length,
+    1,
+  );
 
   window.dispatchEvent(Object.assign(new Event('message'), {
     source: frame.contentWindow,
     data: {
       source: 'myalgo-neural-sandbox',
-      id: hostMessages[0].id,
+      id: firstEmbeddingRequest.id,
       ok: true,
       embeddings: [new Array(384).fill(0)],
       modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
@@ -65,14 +78,15 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
       texts: ['learning mode seed'],
     }, {}, resolve);
   });
-  assert.equal(hostMessages.length, 2);
-  assert.deepEqual(hostMessages[1].texts, ['learning mode seed']);
+  const embeddingRequests = hostMessages.filter((message) => message.type === 'EMBED_TEXTS');
+  assert.equal(embeddingRequests.length, 2);
+  assert.deepEqual(embeddingRequests[1].texts, ['learning mode seed']);
 
   window.dispatchEvent(Object.assign(new Event('message'), {
     source: frame.contentWindow,
     data: {
       source: 'myalgo-neural-sandbox',
-      id: hostMessages[1].id,
+      id: embeddingRequests[1].id,
       ok: true,
       embeddings: [new Array(384).fill(0)],
       modelId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
@@ -84,8 +98,9 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
 });
 
 
-test('concept verification reuses the local neural sandbox and returns selected labels', async () => {
+test('concept verification uses an isolated sandbox selector and returns selected labels', async () => {
   hostMessages.length = 0;
+  queriedSelectors.length = 0;
   frame.contentDocument = null;
 
   const result = new Promise((resolve) => {
@@ -99,9 +114,10 @@ test('concept verification reuses the local neural sandbox and returns selected 
     }, {}, resolve), true);
   });
 
-  assert.equal(hostMessages.length, 1);
-  assert.equal(hostMessages[0].type, 'VERIFY_CONCEPTS');
-  assert.deepEqual(hostMessages[0].conceptItems, [{
+  assert.ok(queriedSelectors.includes('[data-myalgo-concept-sandbox]'));
+  const conceptRequest = hostMessages.find((message) => message.type === 'VERIFY_CONCEPTS');
+  assert.ok(conceptRequest);
+  assert.deepEqual(conceptRequest.conceptItems, [{
     text: 'distributed systems and CRDT implementation',
     labels: ['distributed systems', 'CRDTs', 'cooking'],
   }]);
@@ -110,7 +126,7 @@ test('concept verification reuses the local neural sandbox and returns selected 
     source: frame.contentWindow,
     data: {
       source: 'myalgo-neural-sandbox',
-      id: hostMessages[0].id,
+      id: conceptRequest.id,
       modelKind: 'concept',
       ok: true,
       concepts: [['distributed systems', 'CRDTs']],
@@ -143,12 +159,13 @@ test('concept verification persists an explicit runtime error status', async () 
     }, {}, resolve), true);
   });
 
-  assert.equal(hostMessages.length, 1);
+  const conceptRequest = hostMessages.find((message) => message.type === 'VERIFY_CONCEPTS');
+  assert.ok(conceptRequest);
   window.dispatchEvent(Object.assign(new Event('message'), {
     source: frame.contentWindow,
     data: {
       source: 'myalgo-neural-sandbox',
-      id: hostMessages[0].id,
+      id: conceptRequest.id,
       modelKind: 'concept',
       ok: false,
       error: 'fixture model load failed',

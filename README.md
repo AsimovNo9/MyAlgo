@@ -43,14 +43,14 @@ Implemented foundations now include:
 
 Current execution order:
 
-1. **P0 — #221 / PR #223 canonical concepts + bounded semantic scoring (in review):** reconcile near-duplicate verified/materialized topic nodes into deterministic canonical neighbourhoods, preserve source-node provenance, and stop semantically redundant/broad matches from stacking as independent score evidence.
-2. **P0 — #214 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, and stop deriving mode identity from the current feed cache.
+1. **Complete — #221 / PR #223 canonical concepts + bounded semantic scoring:** canonical neighbourhoods, scorer-only region reconciliation, field-local lexical grounding, embedding abstention, and bounded taxonomy fallback are merged and live-validated.
+2. **P0 — #214 / PR #224 durable inferred modes:** cluster canonical concepts into stable local mode IDs/revisions, preserve multi-label candidate affinities, persist mode identity independently of the current feed cache, and keep unsupported exposed modes dormant rather than silently deleting them.
 3. **P0 — #214 graph-grounded mode retrieval/supply:** resolve every mode score change to exact member nodes, make mode selection change retrieval planning, and measure slider-relative native-mode supply before filling from the existing acquired reservoir.
 4. **P1 — #210 + #153 + #170:** recalibrate display scoring after raw semantic overcounting is fixed, then complete exact Why-this and graph/provenance inspection over the stable trace contract.
 5. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
 6. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #220/#219 is merged. It verifies bounded metadata topic candidates with a packaged local zero-shot NLI classifier before #218's evidence-backed materializer. Live validation confirmed the verifier can run locally and abstain, but also exposed the next bottleneck: broad and near-duplicate graph nodes were scored as independent additive evidence. PR #223/#221 is the focused correction: a derived canonical-neighbourhood layer, canonical embedding matches, lexical/embedding reconciliation, exact source-node trace provenance, and fixed aggregation metrics. Durable modes remain a separate #214 slice.
+PR #223/#221 is merged and live-validated. The canonical layer now preserves source-node provenance while preventing duplicate semantic score mass from aliases/nested concepts and suppressing weak unrelated neighbours. PR #224 is the next #214 slice: durable inferred mode clusters are derived from canonical concepts with repeated shared graph support, reconciled to stable IDs/revisions across snapshots, persisted independently of the current feed, and exposed as bounded multi-label candidate affinities. Graph-grounded mode score contributions and mode-aware retrieval/supply remain the following #214 slice.
 
 The intended hierarchy is:
 
@@ -69,7 +69,7 @@ interaction-supported candidate metadata
 
 A visible video badge remains conservative and may show one label or none. Internal semantic classification is multi-label. User-facing modes are stable clusters over multiple canonical graph nodes rather than transient one-node labels derived from the current feed cache.
 
-Do not retune display-score calibration or fine-tune a model to hide duplicate semantic evidence. First make #221 canonicalization and semantic contribution aggregation replayable against the #162 evaluation boundary; only then calibrate the presentation score or compare alternative encoders.
+Do not mix display-score recalibration into durable-mode identity work. #221 has removed the duplicate semantic-score defect, so #210 is now unblocked, but the P0 sequence completes durable mode identity and graph-grounded mode behavior first.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 

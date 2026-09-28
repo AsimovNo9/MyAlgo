@@ -33,7 +33,7 @@ type ZeroShotClassificationPipeline = {
 type NeuralSandboxRequest = {
   source?: 'myalgo-neural-host';
   id?: string;
-  type?: 'EMBED_TEXTS' | 'VERIFY_CONCEPTS';
+  type?: 'PING' | 'EMBED_TEXTS' | 'VERIFY_CONCEPTS';
   batchSize?: number;
   texts?: string[];
   conceptItems?: Array<{
@@ -389,9 +389,20 @@ window.addEventListener('message', (event: MessageEvent<NeuralSandboxRequest>) =
   if (
     event.source !== window.parent
     || request?.source !== 'myalgo-neural-host'
-    || (request.type !== 'EMBED_TEXTS' && request.type !== 'VERIFY_CONCEPTS')
     || typeof request.id !== 'string'
   ) {
+    return;
+  }
+
+  if (request.type === 'PING') {
+    // The host can miss the one-shot startup ready message if this packaged
+    // iframe loads before host listeners are attached. PING provides an
+    // idempotent readiness handshake for both already-loaded and loading frames.
+    postToHost({ id: request.id, type: 'ready' });
+    return;
+  }
+
+  if (request.type !== 'EMBED_TEXTS' && request.type !== 'VERIFY_CONCEPTS') {
     return;
   }
 

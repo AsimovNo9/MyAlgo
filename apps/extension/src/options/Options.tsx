@@ -1,10 +1,12 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildInferredModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
-import type { FeedItem } from '@repo/shared-types';
+import { buildDurableModeOptions } from '../lib/extension-helpers';
+import type { DurableSemanticModeCatalog } from '@repo/shared-types';
 
 export function Options() {
   const [mode, setMode] = React.useState('Default');
+  const [activeModeId, setActiveModeId] = React.useState('default');
+  const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
@@ -26,11 +28,12 @@ export function Options() {
   } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
-  const [modeCategories, setModeCategories] = React.useState<FeedSummary['categories']>([]);
 
   React.useEffect(() => {
     chrome.storage.local.get([
       'personal-algorithm-mode',
+      'personal-algorithm-active-mode-id',
+      'personal-algorithm-durable-mode-catalog',
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
@@ -38,9 +41,15 @@ export function Options() {
       'personal-algorithm-concept-model-status',
       'personal-algorithm-semantic-neural-batch-size',
       'personal-algorithm-privacy-disclosure-accepted-version',
-      'personal-algorithm-feed-cache',
     ]).then((result) => {
-      setMode((result['personal-algorithm-mode'] as string) ?? 'Default');
+      const storedMode = (result['personal-algorithm-mode'] as string) ?? 'Default';
+      const catalog = (result['personal-algorithm-durable-mode-catalog'] as DurableSemanticModeCatalog | undefined) ?? null;
+      const storedModeId = (result['personal-algorithm-active-mode-id'] as string | undefined)
+        ?? catalog?.modes.find((entry) => entry.label.toLowerCase() === storedMode.toLowerCase())?.id
+        ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+      setMode(storedMode);
+      setActiveModeId(storedModeId);
+      setDurableModeCatalog(catalog);
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
@@ -49,8 +58,6 @@ export function Options() {
       const storedBatchSize = Number(result['personal-algorithm-semantic-neural-batch-size'] ?? 1);
       setNeuralBatchSize(Number.isFinite(storedBatchSize) ? Math.max(1, Math.min(16, Math.floor(storedBatchSize))) : 1);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
-      const cachedFeed = result['personal-algorithm-feed-cache'] as FeedItem[] | undefined;
-      setModeCategories(Array.isArray(cachedFeed) ? summarizeFeed(cachedFeed).categories : []);
     });
     const handleStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== 'local') return;
@@ -62,11 +69,12 @@ export function Options() {
       if (conceptChange) {
         setConceptModelStatus((conceptChange.newValue as typeof conceptModelStatus) ?? null);
       }
-      const feedChange = changes['personal-algorithm-feed-cache'];
-      if (feedChange) {
-        const nextFeed = feedChange.newValue as FeedItem[] | undefined;
-        setModeCategories(Array.isArray(nextFeed) ? summarizeFeed(nextFeed).categories : []);
-      }
+      const catalogChange = changes['personal-algorithm-durable-mode-catalog'];
+      if (catalogChange) setDurableModeCatalog((catalogChange.newValue as DurableSemanticModeCatalog | undefined) ?? null);
+      const activeModeChange = changes['personal-algorithm-active-mode-id'];
+      if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
+      const modeChange = changes['personal-algorithm-mode'];
+      if (modeChange) setMode((modeChange.newValue as string | undefined) ?? 'Default');
     };
     chrome.storage.onChanged.addListener(handleStorageChanged);
     return () => chrome.storage.onChanged.removeListener(handleStorageChanged);
@@ -97,12 +105,23 @@ export function Options() {
     setConceptModelStatus(null);
     setNeuralBatchSize(1);
     setMode('Default');
+    setActiveModeId('default');
+    setDurableModeCatalog(null);
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
 
-  const handleModeChange = async (nextMode: string) => {
-    setMode(nextMode);
-    await chrome.runtime.sendMessage({ type: 'SET_MODE', payload: { mode: nextMode } });
+  const handleModeChange = async (nextModeId: string) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_MODE',
+      payload: { modeId: nextModeId },
+    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to change mode.');
+      return;
+    }
+    setActiveModeId(response.modeId ?? nextModeId);
+    setMode(response.mode ?? 'Default');
+    setStatus(null);
   };
 
   const handleHistoryObservationChange = async (enabled: boolean) => {
@@ -148,7 +167,7 @@ export function Options() {
     setStatus(`Neural WebGPU batch size set to ${response.batchSize ?? batchSize}. New embedding work will use this setting.`);
   };
 
-  const modeOptions = buildInferredModeOptions(mode, modeCategories);
+  const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
 
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'sans-serif' }}>
@@ -170,11 +189,14 @@ export function Options() {
 
       <section style={{ marginBottom: 24 }}>
         <h2>Mode</h2>
-        <select value={mode} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
+        <select value={activeModeId} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
           {modeOptions.map((option) => (
-            <option key={option} value={option}>{option === 'Default' ? 'All' : option}</option>
+            <option key={option.id} value={option.id}>
+              {option.label}{option.active ? '' : ' (dormant)'}
+            </option>
           ))}
         </select>
+        <p>Modes are persisted clusters over canonical Personal Algorithm concepts rather than labels from the current feed.</p>
       </section>
 
       <section>
