@@ -562,6 +562,8 @@ PR #226 implements this retrieval/supply slice without creating a parallel mode 
 
 Acquisition mechanism remains score-neutral. PR #226 does not yet claim final source→replacement stability across ordinary reranks; that remains the following #214 slice.
 
+Live validation tightened two implementation details. First, mode-supply diagnostics are mode-scoped state: switching mode clears a snapshot whose mode ID/revision no longer matches, and asynchronous RSS/search or content-script writes are reconciled against the current selection before persistence. Second, the production web-search budget reserves durable-member coverage instead of blindly taking the first four generic planner rows. The bounded acquisition selector keeps the goal query first, then chooses one query for each highest-priority durable canonical member while capacity remains, then falls back to ordinary creator/topic/freshness lanes. Default mode preserves the pre-existing planner ordering.
+
 ### Evaluation-first rule
 
 Threshold changes, clustering heuristics, model replacement, and any future fine-tuning must be evaluated on fixed labelled replay fixtures first. Live feed review remains a validation surface, not the sole quality metric.
