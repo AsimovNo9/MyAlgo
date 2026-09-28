@@ -477,6 +477,19 @@ Automated validation must prove:
 
 The initial support/Jaccard thresholds are bootstrap regression settings, not calibrated product thresholds. Live validation should inspect cluster coherence and stability before changing them.
 
+PR #224 passed that live durability gate and is merged. PR #225 adds the next scoring gate. For a selected durable mode, validation must prove:
+- only a candidate affinity matching the exact active mode ID **and revision** can affect score;
+- member contributions resolve to canonical IDs and source graph nodes that still exist in the current graph;
+- supporting edge evidence IDs are preserved when available;
+- the member contributions reconcile exactly to the one bounded aggregate mode budget;
+- the aggregate durable-mode contribution does not exceed 14 points;
+- legacy heuristic mode alignment, free-floating mode-centroid similarity, and active-category mode boosts do not stack beside a durable mode;
+- stale mode revisions or removed source graph nodes abstain;
+- hard exclusions and explicit feedback remain authoritative;
+- the produced trace samples achieve grounding and reconciliation rate 1.0 under `evaluateModeTraceGrounding`.
+
+Live review should inspect the full mode-grounding explanation object rather than only the top-five generic contribution summary, so a lower-ranked member contribution cannot be hidden by presentation truncation.
+
 
 ## PR #220 local concept verification validation (#219)
 
