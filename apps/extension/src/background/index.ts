@@ -59,6 +59,8 @@ type SemanticFeatureRecord = {
   graphRevision: number;
   mode: string;
   modelVersion: string;
+  requestedModelVersion: string;
+  fallbackReason: string | null;
   graphSimilarity: number;
   modeSimilarity: number;
   category: SemanticCategoryId | null;
@@ -142,6 +144,7 @@ const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+const NEURAL_FALLBACK_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
 const OBSERVED_CANDIDATE_REFRESH_MS = 30_000;
 const MAX_RANK_WORKING_SET = 320;
@@ -1280,6 +1283,9 @@ async function refreshSemanticScoreFeatures(
       STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
       {},
     );
+    const fallbackIdentity = semanticProviderIdentity('hash');
+    const fallbackModelIdentity = `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`;
+    let recentFallbackCoverageCount = 0;
     const candidatesNeedingRequestedFeatures = candidates.filter((candidate) => {
       const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
       const key = semanticFeatureKey(
@@ -1290,14 +1296,45 @@ async function refreshSemanticScoreFeatures(
         requestedContext.semanticModelIdentity,
       );
       const cached = existing[key];
-      // PR #224 adds durable candidate↔mode affinity to semantic feature records.
-      // Records created by prior builds use the same semantic key but do not
-      // contain that field, so force a one-time refresh instead of silently
-      // hydrating an empty affinity list forever.
-      return cached === undefined
-        || !Array.isArray(cached.modeAffinities)
-        || cached.modeAffinityPipelineId !== DURABLE_MODE_AFFINITY_PIPELINE_ID
-        || cached.modeCatalogSignature !== expectedModeCatalogSignature;
+      const requestedRecordValid = Boolean(
+        cached
+        && Array.isArray(cached.modeAffinities)
+        && cached.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+        && cached.modeCatalogSignature === expectedModeCatalogSignature
+      );
+      if (requestedRecordValid) return false;
+
+      if (requestedContext.semanticModelMode === 'neural') {
+        const fallbackKey = semanticFeatureKey(
+          candidate.external_id,
+          inputHash,
+          state.graph.currentRevision,
+          mode,
+          fallbackModelIdentity,
+        );
+        const fallbackRecord = existing[fallbackKey];
+        const fallbackGeneratedAt = fallbackRecord?.generatedAt
+          ? Date.parse(fallbackRecord.generatedAt)
+          : Number.NaN;
+        const recentFallbackCoversRequest = Boolean(
+          fallbackRecord
+          && Array.isArray(fallbackRecord.modeAffinities)
+          && fallbackRecord.modeAffinityPipelineId === DURABLE_MODE_AFFINITY_PIPELINE_ID
+          && fallbackRecord.modeCatalogSignature === expectedModeCatalogSignature
+          && fallbackRecord.requestedModelVersion === requestedContext.semanticModelIdentity
+          && fallbackRecord.fallbackReason
+          && Number.isFinite(fallbackGeneratedAt)
+          && Date.now() - fallbackGeneratedAt < NEURAL_FALLBACK_RETRY_COOLDOWN_MS
+        );
+        if (recentFallbackCoversRequest) {
+          recentFallbackCoverageCount += 1;
+          return false;
+        }
+      }
+
+      // Missing affinity metadata, catalog mismatch, or an expired neural
+      // fallback record means this candidate needs a fresh semantic pass.
+      return true;
     });
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
       ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
@@ -1313,11 +1350,15 @@ async function refreshSemanticScoreFeatures(
       candidateCount: semanticCandidates.length,
       modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
       modeCatalogSignature: expectedModeCatalogSignature,
+      recentFallbackCoverageCount,
+      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       totalCandidateCount: candidates.length,
       pendingCandidateCount: Math.max(
         0,
         candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
       ),
+      recentFallbackCoverageCount,
+      neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       generatedAt: new Date().toISOString(),
     });
 
@@ -1338,7 +1379,11 @@ async function refreshSemanticScoreFeatures(
         requestedSemanticModelMode: requestedContext.semanticModelMode,
         semanticModelMode: requestedContext.semanticModelMode,
         execution: requestedContext.provider.execution,
-        fallbackReason: null,
+        fallbackReason: recentFallbackCoverageCount > 0
+          ? 'Recent neural fallback records are in retry cooldown.'
+          : null,
+        recentFallbackCoverageCount,
+        neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
         mode,
         graphRevision: state.graph.currentRevision,
         elapsedMs: Math.round(performance.now() - startedAt),
@@ -1465,6 +1510,8 @@ async function refreshSemanticScoreFeatures(
         graphRevision: state.graph.currentRevision,
         mode,
         modelVersion: effectiveContext.semanticModelIdentity,
+        requestedModelVersion: requestedContext.semanticModelIdentity,
+        fallbackReason,
         graphSimilarity: Number(candidate.semantic_graph_similarity ?? 0),
         modeSimilarity: Number(candidate.semantic_mode_similarity ?? 0),
         category: candidate.semantic_category ?? null,
@@ -1488,6 +1535,8 @@ async function refreshSemanticScoreFeatures(
         || JSON.stringify(previous.modeAffinities ?? []) !== JSON.stringify(record.modeAffinities)
         || previous.modeAffinityPipelineId !== record.modeAffinityPipelineId
         || previous.modeCatalogSignature !== record.modeCatalogSignature
+        || previous.requestedModelVersion !== record.requestedModelVersion
+        || previous.fallbackReason !== record.fallbackReason
       ) {
         changed += 1;
       }
