@@ -1549,8 +1549,13 @@ async function refreshSemanticScoreFeatures(
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
 
+    const remainingPendingCandidateCount = Math.max(
+      0,
+      candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
+    );
     const diagnostics = {
-      status: 'completed',
+      status: remainingPendingCandidateCount > 0 ? 'partial' : 'completed',
+      phase: remainingPendingCandidateCount > 0 ? 'slice_completed' : 'complete',
       ...semantic.diagnostics,
       requestedSemanticModelMode: requestedContext.semanticModelMode,
       semanticModelMode: effectiveContext.semanticModelMode,
@@ -1568,10 +1573,7 @@ async function refreshSemanticScoreFeatures(
       recentFallbackCoverageCount,
       neuralFallbackRetryCooldownMs: NEURAL_FALLBACK_RETRY_COOLDOWN_MS,
       totalCandidateCount: candidates.length,
-      pendingCandidateCount: Math.max(
-        0,
-        candidatesNeedingRequestedFeatures.length - semanticCandidates.length,
-      ),
+      pendingCandidateCount: remainingPendingCandidateCount,
       changed,
       conceptNodeCount: Number(conceptMaterialization.diagnostics.materializedNodeCount ?? 0),
       conceptEdgeCount: Number(conceptMaterialization.diagnostics.materializedEdgeCount ?? 0),
