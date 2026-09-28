@@ -11,7 +11,13 @@ globalThis.Worker = class {};
 globalThis.window = new EventTarget();
 window.setTimeout = setTimeout;
 window.clearTimeout = clearTimeout;
-globalThis.document = { querySelector: () => frame };
+const queriedSelectors = [];
+globalThis.document = {
+  querySelector(selector) {
+    queriedSelectors.push(selector);
+    return frame;
+  },
+};
 
 let runtimeListener;
 globalThis.chrome = {
@@ -84,8 +90,9 @@ test('ready and load dispatch once, then an opaque-origin iframe accepts a secon
 });
 
 
-test('concept verification reuses the local neural sandbox and returns selected labels', async () => {
+test('concept verification uses an isolated sandbox selector and returns selected labels', async () => {
   hostMessages.length = 0;
+  queriedSelectors.length = 0;
   frame.contentDocument = null;
 
   const result = new Promise((resolve) => {
@@ -100,6 +107,7 @@ test('concept verification reuses the local neural sandbox and returns selected 
   });
 
   assert.equal(hostMessages.length, 1);
+  assert.ok(queriedSelectors.includes('[data-myalgo-concept-sandbox]'));
   assert.equal(hostMessages[0].type, 'VERIFY_CONCEPTS');
   assert.deepEqual(hostMessages[0].conceptItems, [{
     text: 'distributed systems and CRDT implementation',
