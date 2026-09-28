@@ -284,6 +284,12 @@ export function shouldInvalidateStableReplacementBindings(
     || reason === 'lifecycle';
 }
 
+export function navigationFinishRerankReason(
+  navigationInvalidationPending: boolean,
+): ReplacementRerankReason {
+  return navigationInvalidationPending ? 'manual' : 'navigation';
+}
+
 
 export type ModeSupplyPlan = {
   modeId: string;
