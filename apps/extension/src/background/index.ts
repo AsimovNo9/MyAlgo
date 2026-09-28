@@ -1400,7 +1400,7 @@ async function refreshSemanticScoreFeatures(
     let lastNeuralStatus: Record<string, unknown> | null = null;
     let semantic;
     const reportEmbeddingPhase = async (
-      phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings',
+      phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings' | 'embedding_cache_flush',
       inputCount: number,
     ) => {
       if (refreshEpoch !== semanticEpoch) return;
