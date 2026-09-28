@@ -331,6 +331,14 @@ test('candidate affinities preserve multiple qualified durable modes and source 
   assert.equal(affinities[0].modeId, 'mode:inferred:v1:ai');
   assert.equal(affinities[0].affinity, 0.72);
   assert.deepEqual(affinities[0].sourceNodeIds, ['topic:local-ai']);
+  assert.deepEqual(affinities[0].memberAffinities, [{
+    canonicalId: 'canonical:ai',
+    label: 'Local AI tooling',
+    memberWeight: 1,
+    similarity: 0.72,
+    weightedAffinity: 0.72,
+    sourceNodeIds: ['topic:local-ai'],
+  }]);
   assert.equal(affinities[1].modeId, 'mode:inferred:v1:systems');
   assert.equal(affinities[1].affinity, 0.488);
 });
@@ -406,5 +414,13 @@ test('weak weighted durable-mode affinities abstain instead of exposing cross-do
   assert.equal(strong.length, 1);
   assert.equal(strong[0].modeId, 'mode:inferred:v1:lofi');
   assert.equal(strong[0].affinity, 0.64);
+  assert.deepEqual(strong[0].memberAffinities, [{
+    canonicalId: 'canonical:chill-lofi',
+    label: 'chill lofi',
+    memberWeight: 1,
+    similarity: 0.64,
+    weightedAffinity: 0.64,
+    sourceNodeIds: ['topic:chill-lofi'],
+  }]);
 });
 
