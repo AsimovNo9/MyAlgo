@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan, buildSemanticModeProfile, cosineSimilarity, semanticModeSeed, weightedEmbeddingCentroid } from '../src/index.ts';
+import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildRetrievalCoordinatorPlan, buildSemanticModeProfile, cosineSimilarity, evaluateRetrievalModeChanges, semanticModeSeed, weightedEmbeddingCentroid } from '../src/index.ts';
 
 test('buildRetrievalCoordinatorPlan allocates more budget to under-covered interests', () => {
   const plan = buildRetrievalCoordinatorPlan({
@@ -167,6 +167,125 @@ test('inferred mode changes retrieval intent without replacing the graph goal', 
   assert.equal(neutral.goal, 'Distributed systems');
   assert.deepEqual(neutral.intents, []);
   assert.equal(base.goal, 'Distributed systems');
+});
+
+
+test('durable mode retrieval is driven by weighted canonical members and changes query plans', () => {
+  const base = {
+    goal: 'Personal recommendations',
+    language: null,
+    explicitTopics: ['Technology'],
+    aliases: [],
+    intents: [],
+    semanticTerms: ['Technology'],
+    positiveRuleTerms: [],
+    negativeRuleTerms: [],
+    preferredFormats: ['guide'],
+    creatorTerms: [],
+  };
+  const mode = {
+    id: 'mode:inferred:v1:lofi',
+    label: 'chill lofi',
+    revision: 4,
+    members: [
+      {
+        canonicalId: 'canonical:lofi-beats',
+        label: 'lofi beats',
+        weight: 1,
+        sourceNodeIds: ['topic:lofi-beats'],
+        supportContentIds: ['a', 'b'],
+      },
+      {
+        canonicalId: 'canonical:chill-lofi',
+        label: 'chill lofi',
+        weight: 0.9,
+        sourceNodeIds: ['topic:chill-lofi'],
+        supportContentIds: ['a', 'c'],
+      },
+      {
+        canonicalId: 'canonical:lofi-rain',
+        label: 'lofi rain ambience',
+        weight: 0.7,
+        sourceNodeIds: ['topic:lofi-rain'],
+        supportContentIds: ['b', 'c'],
+      },
+    ],
+    provenance: 'inferred',
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 12,
+    createdAt: '2026-09-28T00:00:00.000Z',
+    lastSupportedAt: '2026-09-28T00:00:00.000Z',
+    active: true,
+    pinned: false,
+  };
+
+  const profile = applyDurableModeToRetrievalProfile(base, mode);
+  assert.deepEqual(
+    profile.explicitTopics.slice(0, 3),
+    ['lofi beats', 'chill lofi', 'lofi rain ambience'],
+  );
+  assert.equal(profile.goal, 'Personal recommendations chill lofi');
+  assert.equal(profile.semanticTerms.includes('lofi beats'), true);
+
+  const baselinePlans = buildRecommendationQueryPlans(base, 6, 'graph-12:default');
+  const modePlans = buildRecommendationQueryPlans(
+    profile,
+    6,
+    'graph-12:mode-mode:inferred:v1:lofi:r4',
+  );
+  assert.ok(modePlans.some((plan) => /lofi beats/i.test(plan.text)));
+  assert.ok(modePlans.every((plan) => plan.algorithmRevision.includes('r4')));
+
+  const metrics = evaluateRetrievalModeChanges([{
+    id: 'durable-lofi',
+    baselineQueries: baselinePlans.map((plan) => plan.text),
+    modeQueries: modePlans.map((plan) => plan.text),
+    expectedChange: true,
+  }]);
+  assert.equal(metrics.accuracy, 1);
+  assert.equal(metrics.observedChangeCount, 1);
+});
+
+test('dormant durable mode still changes retrieval intent so acquisition can rebuild supply', () => {
+  const base = {
+    goal: '',
+    language: null,
+    explicitTopics: ['General'],
+    aliases: [],
+    intents: [],
+    semanticTerms: ['General'],
+    positiveRuleTerms: [],
+    negativeRuleTerms: [],
+    preferredFormats: ['guide'],
+    creatorTerms: [],
+  };
+  const dormant = {
+    id: 'mode:inferred:v1:systems',
+    label: 'Distributed systems',
+    revision: 7,
+    members: [{
+      canonicalId: 'canonical:crdts',
+      label: 'CRDTs',
+      weight: 1,
+      sourceNodeIds: ['topic:crdts'],
+      supportContentIds: [],
+    }],
+    provenance: 'inferred',
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 22,
+    createdAt: '2026-09-28T00:00:00.000Z',
+    lastSupportedAt: '2026-09-28T00:00:00.000Z',
+    active: false,
+    pinned: false,
+  };
+
+  const profile = applyDurableModeToRetrievalProfile(base, dormant);
+  assert.equal(profile.explicitTopics[0], 'CRDTs');
+  assert.equal(profile.goal, 'Distributed systems');
+  assert.ok(
+    buildRecommendationQueryPlans(profile, 4, 'graph-22:mode-systems-r7')
+      .some((plan) => /crdts/i.test(plan.text)),
+  );
 });
 
 
