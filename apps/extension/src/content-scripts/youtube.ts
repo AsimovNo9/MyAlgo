@@ -1203,6 +1203,15 @@ const rankCurrentPage = async (requestGeneration: number) => {
     }
 
     if (response?.ok && Array.isArray(response.feed)) {
+      activeDurableMode = response.activeDurableMode
+        && typeof response.activeDurableMode.id === 'string'
+        && Number.isInteger(response.activeDurableMode.revision)
+        ? {
+            id: response.activeDurableMode.id,
+            label: response.activeDurableMode.label ?? activeMode,
+            revision: response.activeDurableMode.revision,
+          }
+        : null;
       console.info('[MyAlgo] rank response', {
         generation: requestGeneration,
         pageCandidates: candidates.length,
@@ -1297,12 +1306,18 @@ const scheduleInitialRank = (attempt = 0) => {
 
 safeStorageGet([
   STORAGE_KEYS.MODE,
+  STORAGE_KEYS.ACTIVE_MODE_ID,
+  STORAGE_KEYS.DURABLE_MODE_CATALOG,
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.SOURCE_FILTERS,
   STORAGE_KEYS.FEED_REPLACEMENT_PERCENT,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+  activeDurableMode = resolveDurableModeContext(
+    result[STORAGE_KEYS.ACTIVE_MODE_ID],
+    result[STORAGE_KEYS.DURABLE_MODE_CATALOG] as DurableSemanticModeCatalog | null | undefined,
+  );
   sourceFilters = result[STORAGE_KEYS.SOURCE_FILTERS] as FeedSourceFilters | undefined ?? {};
   const storedPercent = Number(result[STORAGE_KEYS.FEED_REPLACEMENT_PERCENT] ?? 0);
   feedReplacementPercent = Number.isFinite(storedPercent)
@@ -1384,9 +1399,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // request from before the pause strand the clean page waiting for its
       // callback; its generation is already stale and cannot render.
       rankingInFlight = false;
-      void safeStorageGet([STORAGE_KEYS.MODE]).then((result) => {
+      void safeStorageGet([
+        STORAGE_KEYS.MODE,
+        STORAGE_KEYS.ACTIVE_MODE_ID,
+        STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      ]).then((result) => {
         if (!isCurrentInstance() || !extensionEnabled) return;
         activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
+        activeDurableMode = resolveDurableModeContext(
+          result[STORAGE_KEYS.ACTIVE_MODE_ID],
+          result[STORAGE_KEYS.DURABLE_MODE_CATALOG] as DurableSemanticModeCatalog | null | undefined,
+        );
         showStatus(`Personal Algorithm: Active · ${activeMode}`, false, false);
         clearLegacyRecommendationShelf();
         triggerRank('manual');
@@ -1435,6 +1458,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   clearStableReplacements();
   rankGeneration += 1;
   activeMode = message.payload.mode;
+  activeDurableMode = typeof message.payload?.modeId === 'string'
+    && message.payload.modeId !== 'default'
+    && Number.isInteger(message.payload?.modeRevision)
+    ? {
+        id: message.payload.modeId,
+        label: message.payload.mode,
+        revision: message.payload.modeRevision,
+      }
+    : null;
+  latestModeSupplyPlan = null;
+  lastModeSupplySignature = '';
   cachedFeed = [];
   lastCandidateSignature = '';
   lastRankMode = '';
