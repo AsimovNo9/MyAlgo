@@ -456,6 +456,41 @@ test('stable replacement candidate survives score and trace refresh while still 
   }), true);
 });
 
+test('100 percent durable-mode replacement may use an eligible non-grounded fallback', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 5 };
+  const generic = {
+    external_id: 'replacement-generic',
+    title: 'Generic scored replacement',
+    score: 61,
+    visible: true,
+    suppressed: false,
+    traceId: 'trace-generic',
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: 3,
+      displayScore: 61,
+      graphRevision: 357,
+      acquisitionMechanism: 'rss',
+      contributions: [],
+      modeGrounding: null,
+    },
+  };
+
+  assert.equal(isStableReplacementCandidateEligible(generic, {
+    activeMode: mode,
+    minimumScore: 0,
+    nativeScore: 90,
+    feedReplacementPercent: 100,
+  }), true);
+
+  assert.equal(isStableReplacementCandidateEligible(generic, {
+    activeMode: mode,
+    minimumScore: 0,
+    nativeScore: 40,
+    feedReplacementPercent: 99,
+  }), false);
+});
+
 test('replacement identity evaluator stays perfect across ordinary score and trace churn', () => {
   const before = {
     'native-a': 'replacement-a',
@@ -690,7 +725,7 @@ test('mode supply requires exact mode revision and ordinary replacement eligibil
   assert.equal(plan.nativeModeSupply, 1);
   assert.equal(plan.poolModeSupply, 1);
   assert.equal(plan.shortfall, 1);
-  assert.equal(plan.fillLimit, 1);
+  assert.equal(plan.fillLimit, 2);
   assert.equal(plan.poolCandidates[0].external_id, 'pool-good');
 });
 
