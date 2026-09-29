@@ -192,7 +192,11 @@ Hard boundaries—navigation, active mode, graph-changing semantic materializati
 
 ### Overlay first-paint latency regression
 
-Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation.
+Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. The response also exposes `phaseTimings` for pool/settings hydration, cached metadata hydration, deterministic scoring, and response-context lookup, plus `cacheWarm` for the worker-local candidate/video/semantic stores.
+
+For the #211 instant-rank slice, capture at least one cold-worker rank and three warm-worker reranks on the same Home working set. Warm reranks should reuse the bounded worker-local stores, must preserve identical score/trace behavior, and should target the existing local-first latency budget of <=250 ms where the host/browser permits it. Cache persistence and compact trace persistence must occur after the rank response rather than extending first paint.
+
+While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation. Neural embedding, concept verification, metadata enrichment, and retrieval remain follow-up work and must not be awaited by the first rank response.
 
 
 ## Web search, mode, and classification validation
