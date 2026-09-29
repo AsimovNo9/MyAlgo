@@ -378,8 +378,25 @@ let conceptExtractionEpoch = 0;
 let candidatePoolMemory: CandidatePoolItem[] | null = null;
 let candidatePoolIndexMemory: Map<string, CandidatePoolItem> | null = null;
 let candidatePoolPersistQueue: Promise<void> = Promise.resolve();
+let candidatePoolMemoryRevision = 0;
 let videoStoreMemory: Record<string, VideoRecord> | null = null;
+let videoStoreMemoryRevision = 0;
 let semanticFeatureCacheMemory: Record<string, SemanticFeatureRecord> | null = null;
+let semanticFeatureCacheMemoryRevision = 0;
+let lastRankMemo: {
+  state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportStateForRead']>>;
+  mode: string;
+  sourceFiltersSignature: string;
+  activeModeId: string;
+  activeModeRevision: number | null;
+  durableModeSignature: string;
+  feedbackSignature: string;
+  candidateIdsSignature: string;
+  candidatePoolRevision: number;
+  videoStoreRevision: number;
+  semanticFeatureRevision: number;
+  feed: LocalFeedItem[];
+} | null = null;
 
 const getCandidatePoolCached = async (): Promise<CandidatePoolItem[]> => {
   if (candidatePoolMemory) return candidatePoolMemory;
@@ -387,6 +404,7 @@ const getCandidatePoolCached = async (): Promise<CandidatePoolItem[]> => {
     STORAGE_KEYS.FEED_CANDIDATE_POOL,
     [],
   );
+  candidatePoolMemoryRevision += 1;
   candidatePoolIndexMemory = new Map(
     candidatePoolMemory.map((candidate) => [candidate.external_id, candidate]),
   );
@@ -408,6 +426,8 @@ const persistCandidatePoolCached = async (
   awaitWrite = true,
 ): Promise<void> => {
   candidatePoolMemory = pool;
+  candidatePoolMemoryRevision += 1;
+  lastRankMemo = null;
   candidatePoolIndexMemory = new Map(
     pool.map((candidate) => [candidate.external_id, candidate]),
   );
@@ -423,11 +443,14 @@ const getVideoStoreCached = async (): Promise<Record<string, VideoRecord>> => {
     STORAGE_KEYS.VIDEO_STORE,
     {},
   );
+  videoStoreMemoryRevision += 1;
   return videoStoreMemory;
 };
 
 const persistVideoStoreCached = async (store: Record<string, VideoRecord>): Promise<void> => {
   videoStoreMemory = store;
+  videoStoreMemoryRevision += 1;
+  lastRankMemo = null;
   await setStorage(STORAGE_KEYS.VIDEO_STORE, store);
 };
 
@@ -437,6 +460,7 @@ const getSemanticFeatureCacheCached = async (): Promise<Record<string, SemanticF
     STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
     {},
   );
+  semanticFeatureCacheMemoryRevision += 1;
   return semanticFeatureCacheMemory;
 };
 
@@ -444,6 +468,8 @@ const persistSemanticFeatureCacheCached = async (
   cache: Record<string, SemanticFeatureRecord>,
 ): Promise<void> => {
   semanticFeatureCacheMemory = cache;
+  semanticFeatureCacheMemoryRevision += 1;
+  lastRankMemo = null;
   await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, cache);
 };
 
@@ -1838,6 +1864,34 @@ async function rankLocalCandidates(
     getSemanticFeatureCacheCached(),
   ]);
   const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const sourceFiltersSignature = JSON.stringify(sourceFilters);
+  const feedbackSignature = JSON.stringify(
+    feedbackEvents
+      .filter((event) => event.kind === 'feedback')
+      .map((event) => [event.recordedAt, event.payload]),
+  );
+  const candidateIdsSignature = candidates
+    .map((candidate) => candidate.external_id)
+    .sort()
+    .join('|');
+  const durableModeSignature = durableModeCatalogSignature(durableModeCatalog);
+  if (
+    lastRankMemo
+    && lastRankMemo.state === state
+    && lastRankMemo.mode === mode
+    && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
+    && lastRankMemo.activeModeId === activeModeId
+    && lastRankMemo.activeModeRevision === (activeDurableMode?.revision ?? null)
+    && lastRankMemo.durableModeSignature === durableModeSignature
+    && lastRankMemo.feedbackSignature === feedbackSignature
+    && lastRankMemo.candidateIdsSignature === candidateIdsSignature
+    && lastRankMemo.candidatePoolRevision === candidatePoolMemoryRevision
+    && lastRankMemo.videoStoreRevision === videoStoreMemoryRevision
+    && lastRankMemo.semanticFeatureRevision === semanticFeatureCacheMemoryRevision
+  ) {
+    return lastRankMemo.feed;
+  }
+
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
       .filter((event) => event.kind === 'feedback')
@@ -1892,7 +1946,7 @@ async function rankLocalCandidates(
     });
   }
 
-  return ranked.map(({ trace, ...item }) => {
+  const feed = ranked.map(({ trace, ...item }) => {
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
         contribution.modeId
@@ -1959,6 +2013,22 @@ async function rankLocalCandidates(
       },
     };
   });
+
+  lastRankMemo = {
+    state,
+    mode,
+    sourceFiltersSignature,
+    activeModeId,
+    activeModeRevision: activeDurableMode?.revision ?? null,
+    durableModeSignature,
+    feedbackSignature,
+    candidateIdsSignature,
+    candidatePoolRevision: candidatePoolMemoryRevision,
+    videoStoreRevision: videoStoreMemoryRevision,
+    semanticFeatureRevision: semanticFeatureCacheMemoryRevision,
+    feed,
+  };
+  return feed;
 }
 
 const scheduleRankSemanticRefresh = (
@@ -2206,8 +2276,12 @@ const handleRuntimeMessage = (
       candidatePoolMemory = null;
       candidatePoolIndexMemory = null;
       candidatePoolPersistQueue = Promise.resolve();
+      candidatePoolMemoryRevision = 0;
       videoStoreMemory = null;
+      videoStoreMemoryRevision = 0;
       semanticFeatureCacheMemory = null;
+      semanticFeatureCacheMemoryRevision = 0;
+      lastRankMemo = null;
       await chrome.storage.local.clear();
       await semanticEmbeddingCache.clear();
       // The store caches state in the service worker. Reset it after clearing
