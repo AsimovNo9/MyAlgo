@@ -12,6 +12,7 @@ export type PersonalScoringPolicy = { revision:string; baseScore?:number; nodeWe
 export type PersonalScoreTrace = { id:string; scorerRevision:string; policyRevision:string; graphRevision:number; evidenceRevision:string; candidateId:string; content:ContentIdentity; eligible:boolean; suppressed:boolean; policyOutcome:'eligible'|'ineligible'|'excluded'|'suppressed'; finalScore:number; baseScore:number; nodeContributions:ScoreContribution[]; edgeContributions:ScoreContribution[]; featureContributions:ScoreContribution[]; feedbackContributions:ScoreContribution[]; modeContributions:ScoreContribution[]; suppressionContributions:ScoreContribution[]; matchedPaths:ScoreMatchedPath[]; createdAt:string };
 export type PersonalScoreResult = { score:number; trace:PersonalScoreTrace };
 export type PersonalScoringRevisionContext = { evidenceRevision:string; feedbackRevision:string };
+export type PersonalScoringGraphIndex = { edgesByNodeId: Map<string, GraphEdge[]> };
 const SCORER_REVISION='3';
 const finite=(v:number|undefined|null,f=0)=>Number.isFinite(v)?Number(v):f;
 const SCORE_DECIMALS=6;
@@ -24,6 +25,26 @@ function hash(v:unknown){const s=JSON.stringify(v);let h=2166136261;for(let i=0;
 function evidenceRevision(e:EvidenceRecord[]){return hash(e.map(r=>({id:r.id,observedAt:r.evidence.observedAt,kind:r.evidence.kind,content:r.evidence.content,provenance:r.evidence.provenance})).sort((a,b)=>a.id.localeCompare(b.id)))}
 function ids(c:ScoreCandidate){return sorted([...(c.nodeIds??[]),...(c.creatorNodeId?[c.creatorNodeId]:[])])}
 function edges(g:PersonalAlgorithmGraph,ns:Set<string>){return g.edges.filter(e=>ns.has(e.sourceNodeId)&&ns.has(e.targetNodeId)).sort((a,b)=>a.id.localeCompare(b.id))}
+export function buildPersonalScoringGraphIndex(state:PersonalAlgorithmState):PersonalScoringGraphIndex{
+ const edgesByNodeId=new Map<string,GraphEdge[]>();
+ for(const edge of state.graph.edges){
+  for(const nodeId of new Set([edge.sourceNodeId,edge.targetNodeId])){
+   const list=edgesByNodeId.get(nodeId)??[];
+   list.push(edge);
+   edgesByNodeId.set(nodeId,list);
+  }
+ }
+ return {edgesByNodeId};
+}
+function indexedEdges(index:PersonalScoringGraphIndex,ns:Set<string>){
+ const byId=new Map<string,GraphEdge>();
+ for(const nodeId of ns){
+  for(const edge of index.edgesByNodeId.get(nodeId)??[]){
+   if(ns.has(edge.sourceNodeId)&&ns.has(edge.targetNodeId))byId.set(edge.id,edge);
+  }
+ }
+ return [...byId.values()].sort((a,b)=>a.id.localeCompare(b.id));
+}
 function contrib(id:string,kind:ScoreContributionKind,label:string,value:number,sourceId?:string,evidenceIds:string[]=[],sourceIds:string[]=[],metadata?:{modeId?:string;modeRevision?:number;canonicalId?:string}):ScoreContribution{return {id,kind,label,value:normalizedScore(value),...(sourceId?{sourceId}:{}),...(sourceIds.length?{sourceIds:sorted(sourceIds)}:{}),evidenceIds:sorted(evidenceIds),...(metadata?.modeId?{modeId:metadata.modeId}:{}),...(Number.isInteger(metadata?.modeRevision)?{modeRevision:metadata?.modeRevision}:{}),...(metadata?.canonicalId?{canonicalId:metadata.canonicalId}:{})}}
 function paths(c:ScoreCandidate,ns:GraphNode[],es:GraphEdge[]):ScoreMatchedPath[]{if(es.length)return es.map(e=>({nodeIds:sorted([e.sourceNodeId,e.targetNodeId]),edgeIds:[e.id],evidenceIds:sorted(e.evidenceIds)}));return [{nodeIds:ids(c),edgeIds:[],evidenceIds:[]}]}
 function feedbackMatch(s:ScoreFeedbackSignal,c:ScoreCandidate,n:Set<string>){return (s.contentId!=null&&(s.contentId===c.content.externalId||s.contentId===`${c.content.source}:${c.content.externalId}`))||(s.nodeId!=null&&n.has(s.nodeId))}
@@ -36,8 +57,8 @@ export function buildPersonalScoringRevisionContext(
   feedbackRevision:hash([...feedbackSignals].map((signal)=>({id:signal.id,contentId:signal.contentId??null,nodeId:signal.nodeId??null,value:signal.value,label:signal.label??null,evidenceIds:sorted(signal.evidenceIds??[])})).sort((a,b)=>a.id.localeCompare(b.id)))
  };
 }
-export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:ScoreCandidate,policy:PersonalScoringPolicy,mode='default',feedbackSignals:ScoreFeedbackSignal[]=policy.feedback??[],revisionContext?:PersonalScoringRevisionContext):PersonalScoreResult{
- const nids=ids(candidate), ns=new Set(nids), es=edges(state.graph,ns), rels=new Set(es.map(e=>e.relation)), ex=policy.exclusions??{};
+export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:ScoreCandidate,policy:PersonalScoringPolicy,mode='default',feedbackSignals:ScoreFeedbackSignal[]=policy.feedback??[],revisionContext?:PersonalScoringRevisionContext,graphIndex?:PersonalScoringGraphIndex):PersonalScoreResult{
+ const nids=ids(candidate), ns=new Set(nids), es=graphIndex?indexedEdges(graphIndex,ns):edges(state.graph,ns), rels=new Set(es.map(e=>e.relation)), ex=policy.exclusions??{};
  const excluded=(ex.contentIds??[]).includes(candidate.content.externalId)||(ex.contentIds??[]).includes(`${candidate.content.source}:${candidate.content.externalId}`)||nids.some(id=>(ex.nodeIds??[]).includes(id))||(candidate.creatorNodeId!=null&&(ex.creatorNodeIds??[]).includes(candidate.creatorNodeId))||es.some(e=>(ex.relations??[]).includes(e.relation));
  const eligible=!excluded&&(policy.eligibility?.requiredNodeIds??[]).every(id=>ns.has(id))&&(policy.eligibility?.requiredRelations??[]).every(r=>rels.has(r));
  const revisions=revisionContext??buildPersonalScoringRevisionContext(state,feedbackSignals), er=revisions.evidenceRevision, feedbackRevision=revisions.feedbackRevision, featureRevision=hash({
