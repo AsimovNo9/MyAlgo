@@ -768,3 +768,24 @@ test('derived graph projection removes only owned derived structure and preserve
   assert.equal(graph.edges.some((edge) => edge.id === 'edge:derived-about:local-llm'), false);
   assert.equal(graph.nodes.some((node) => node.id === 'topic:explicit:local-ai'), true);
 });
+
+
+test('read snapshots are reused until store mutation and invalidated afterward', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  const first = await store.exportStateForRead();
+  const second = await store.exportStateForRead();
+  assert.equal(first, second);
+
+  await store.upsertEvidence({ evidence: exposure }, 'snapshot-evidence');
+
+  const third = await store.exportStateForRead();
+  assert.notEqual(third, first);
+  assert.equal(third.evidence.length, 1);
+  assert.equal(await store.exportStateForRead(), third);
+
+  const exported = await store.exportState();
+  assert.notEqual(exported, third);
+  assert.deepEqual(exported, third);
+});
