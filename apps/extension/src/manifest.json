@@ -5,6 +5,7 @@
   "description": "Local, user-controlled scoring and feed controls for YouTube with inspectable Personal Algorithm evidence.",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "offscreen"
   ],
   "host_permissions": [
