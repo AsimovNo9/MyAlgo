@@ -343,6 +343,86 @@ test('candidate affinities preserve multiple qualified durable modes and source 
   assert.equal(affinities[1].affinity, 0.488);
 });
 
+test('selected dormant mode remains eligible for candidate affinity without enabling other dormant modes', () => {
+  const catalog = {
+    pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+    graphRevision: 9,
+    generatedAt: timestamp,
+    modes: [
+      {
+        id: 'mode:inferred:v1:lofi',
+        label: 'chill lofi',
+        revision: 7,
+        members: [{
+          canonicalId: 'canonical:chill-lofi',
+          label: 'chill lofi',
+          weight: 1,
+          sourceNodeIds: ['topic:chill-lofi'],
+          supportContentIds: ['content:youtube:lofi-a', 'content:youtube:lofi-b'],
+        }],
+        provenance: 'inferred',
+        pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+        graphRevision: 9,
+        createdAt: timestamp,
+        lastSupportedAt: timestamp,
+        active: false,
+        pinned: false,
+      },
+      {
+        id: 'mode:inferred:v1:other-dormant',
+        label: 'other dormant',
+        revision: 2,
+        members: [{
+          canonicalId: 'canonical:other',
+          label: 'other dormant',
+          weight: 1,
+          sourceNodeIds: ['topic:other'],
+          supportContentIds: ['content:youtube:other-a', 'content:youtube:other-b'],
+        }],
+        provenance: 'inferred',
+        pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
+        graphRevision: 9,
+        createdAt: timestamp,
+        lastSupportedAt: timestamp,
+        active: false,
+        pinned: false,
+      },
+    ],
+  };
+
+  const matches = [
+    {
+      node_id: 'topic:chill-lofi',
+      node_label: 'chill lofi',
+      canonical_id: 'canonical:chill-lofi',
+      source_node_ids: ['topic:chill-lofi'],
+      similarity: 0.7,
+      weight: 0.7,
+      taxonomy_only: false,
+    },
+    {
+      node_id: 'topic:other',
+      node_label: 'other dormant',
+      canonical_id: 'canonical:other',
+      source_node_ids: ['topic:other'],
+      similarity: 0.8,
+      weight: 0.8,
+      taxonomy_only: false,
+    },
+  ];
+
+  assert.deepEqual(buildCandidateModeAffinities(matches, catalog), []);
+
+  const selected = buildCandidateModeAffinities(matches, catalog, {
+    includeModeIds: ['mode:inferred:v1:lofi'],
+  });
+
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].modeId, 'mode:inferred:v1:lofi');
+  assert.equal(selected[0].modeRevision, 7);
+  assert.equal(selected[0].affinity, 0.7);
+});
+
 test('weak weighted durable-mode affinities abstain instead of exposing cross-domain matches', () => {
   const catalog = {
     pipelineId: DURABLE_SEMANTIC_MODE_PIPELINE_ID,
