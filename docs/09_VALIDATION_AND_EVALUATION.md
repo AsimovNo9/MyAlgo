@@ -196,6 +196,10 @@ Validate on a cold Home load and during active infinite scroll that badges can r
 
 For the #211 instant-rank slice, capture at least one cold-worker rank and three warm-worker reranks on the same Home working set. Warm reranks should reuse the bounded worker-local stores, must preserve identical score/trace behavior, and should target the existing local-first latency budget of <=250 ms where the host/browser permits it. Cache persistence and compact trace persistence must occur after the rank response rather than extending first paint.
 
+Also validate visual first paint independently of fresh scoring: after one successful Home rank, reload Home with the same active mode and confirm the mode-compatible persisted presentation cache can paint badges/replacements before the first fresh `RANK_PAGE` response. As YouTube appends/recycles Home cards, cached presentation should be coalesced into the next animation frame rather than waiting for the mutation-rank debounce.
+
+At exactly 100% feed replacement, every eligible Home native card is a replacement target. Durable-mode-grounded candidates are preferred first; if exact grounded supply is insufficient, remaining slots may use ordinary eligible scored candidates so 100% means full replacement rather than partial replacement capped by mode supply. Below 100%, durable-mode replacement remains exact-grounding-only and native mode matches continue to satisfy requested mode coverage.
+
 While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation. Neural embedding, concept verification, metadata enrichment, and retrieval remain follow-up work and must not be awaited by the first rank response.
 
 
