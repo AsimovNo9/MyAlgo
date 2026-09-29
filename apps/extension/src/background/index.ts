@@ -368,6 +368,54 @@ let semanticEpoch = 0;
 // concept generation.
 let conceptExtractionEpoch = 0;
 
+let candidatePoolMemory: CandidatePoolItem[] | null = null;
+let videoStoreMemory: Record<string, VideoRecord> | null = null;
+let semanticFeatureCacheMemory: Record<string, SemanticFeatureRecord> | null = null;
+
+const getCandidatePoolCached = async (): Promise<CandidatePoolItem[]> => {
+  if (candidatePoolMemory) return candidatePoolMemory;
+  candidatePoolMemory = await getStorage<CandidatePoolItem[]>(
+    STORAGE_KEYS.FEED_CANDIDATE_POOL,
+    [],
+  );
+  return candidatePoolMemory;
+};
+
+const persistCandidatePoolCached = async (pool: CandidatePoolItem[]): Promise<void> => {
+  candidatePoolMemory = pool;
+  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+};
+
+const getVideoStoreCached = async (): Promise<Record<string, VideoRecord>> => {
+  if (videoStoreMemory) return videoStoreMemory;
+  videoStoreMemory = await getStorage<Record<string, VideoRecord>>(
+    STORAGE_KEYS.VIDEO_STORE,
+    {},
+  );
+  return videoStoreMemory;
+};
+
+const persistVideoStoreCached = async (store: Record<string, VideoRecord>): Promise<void> => {
+  videoStoreMemory = store;
+  await setStorage(STORAGE_KEYS.VIDEO_STORE, store);
+};
+
+const getSemanticFeatureCacheCached = async (): Promise<Record<string, SemanticFeatureRecord>> => {
+  if (semanticFeatureCacheMemory) return semanticFeatureCacheMemory;
+  semanticFeatureCacheMemory = await getStorage<Record<string, SemanticFeatureRecord>>(
+    STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+    {},
+  );
+  return semanticFeatureCacheMemory;
+};
+
+const persistSemanticFeatureCacheCached = async (
+  cache: Record<string, SemanticFeatureRecord>,
+): Promise<void> => {
+  semanticFeatureCacheMemory = cache;
+  await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, cache);
+};
+
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
   privacyDisclosureReady = getStorage<unknown>(
@@ -441,7 +489,7 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
 
 async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (candidates.length === 0) return [];
-  const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const existing = await getVideoStoreCached();
   const now = Date.now();
   const missing = candidates
     .filter((candidate) => {
@@ -487,7 +535,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     const entries = Object.entries(existing)
       .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
       .slice(0, MAX_VIDEO_STORE_SIZE);
-    await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
+    await persistVideoStoreCached(Object.fromEntries(entries));
     return enriched;
   } finally {
     missing.forEach((candidate) => metadataEnrichmentInFlight.delete(candidate.external_id));
@@ -495,7 +543,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
 }
 
 async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<CandidatePoolItem[]> {
-  const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const store = await getVideoStoreCached();
   return pool.map((candidate) => {
     const record = store[candidate.external_id];
     if (!record) return candidate;
@@ -504,10 +552,7 @@ async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<Candidat
 }
 
 async function mergeCandidatePool(candidates: PageCandidate[]): Promise<CandidatePoolItem[]> {
-  const existing = await getStorage<CandidatePoolItem[]>(
-    STORAGE_KEYS.FEED_CANDIDATE_POOL,
-    [],
-  );
+  const existing = await getCandidatePoolCached();
 
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
@@ -584,7 +629,7 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
 
   if (pool.length !== existing.length) changed = true;
   if (changed) {
-    await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+    await persistCandidatePoolCached(pool);
   }
   return pool;
 }
@@ -958,10 +1003,7 @@ async function hydrateSemanticScoreFeatures(
   semanticModelIdentities: string[],
 ): Promise<CandidatePoolItem[]> {
   const [cache, durableModeCatalog] = await Promise.all([
-    getStorage<Record<string, SemanticFeatureRecord>>(
-      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-      {},
-    ),
+    getSemanticFeatureCacheCached(),
     getStorage<DurableSemanticModeCatalog | null>(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
@@ -1361,10 +1403,7 @@ async function refreshSemanticScoreFeatures(
 
   try {
     const startedAt = performance.now();
-    const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
-      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-      {},
-    );
+    const existing = await getSemanticFeatureCacheCached();
     const fallbackIdentity = semanticProviderIdentity('hash');
     const fallbackModelIdentity = `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`;
     let recentFallbackCoverageCount = 0;
@@ -1653,7 +1692,7 @@ async function refreshSemanticScoreFeatures(
       featureCacheSize: Object.keys(bounded).length,
       generatedAt: new Date().toISOString(),
     });
-    await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
+    await persistSemanticFeatureCacheCached(bounded);
 
     const remainingPendingCandidateCount = Math.max(
       0,
@@ -2043,6 +2082,9 @@ const handleRuntimeMessage = (
       conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
+      candidatePoolMemory = null;
+      videoStoreMemory = null;
+      semanticFeatureCacheMemory = null;
       await chrome.storage.local.clear();
       await semanticEmbeddingCache.clear();
       // The store caches state in the service worker. Reset it after clearing
