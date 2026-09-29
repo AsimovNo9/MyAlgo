@@ -369,6 +369,8 @@ let semanticEpoch = 0;
 let conceptExtractionEpoch = 0;
 
 let candidatePoolMemory: CandidatePoolItem[] | null = null;
+let candidatePoolIndexMemory: Map<string, CandidatePoolItem> | null = null;
+let candidatePoolPersistQueue: Promise<void> = Promise.resolve();
 let videoStoreMemory: Record<string, VideoRecord> | null = null;
 let semanticFeatureCacheMemory: Record<string, SemanticFeatureRecord> | null = null;
 
@@ -378,12 +380,34 @@ const getCandidatePoolCached = async (): Promise<CandidatePoolItem[]> => {
     STORAGE_KEYS.FEED_CANDIDATE_POOL,
     [],
   );
+  candidatePoolIndexMemory = new Map(
+    candidatePoolMemory.map((candidate) => [candidate.external_id, candidate]),
+  );
   return candidatePoolMemory;
 };
 
-const persistCandidatePoolCached = async (pool: CandidatePoolItem[]): Promise<void> => {
+const getCandidatePoolIndexCached = async (): Promise<Map<string, CandidatePoolItem>> => {
+  await getCandidatePoolCached();
+  if (!candidatePoolIndexMemory) {
+    candidatePoolIndexMemory = new Map(
+      (candidatePoolMemory ?? []).map((candidate) => [candidate.external_id, candidate]),
+    );
+  }
+  return candidatePoolIndexMemory;
+};
+
+const persistCandidatePoolCached = async (
+  pool: CandidatePoolItem[],
+  awaitWrite = true,
+): Promise<void> => {
   candidatePoolMemory = pool;
-  await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  candidatePoolIndexMemory = new Map(
+    pool.map((candidate) => [candidate.external_id, candidate]),
+  );
+  candidatePoolPersistQueue = candidatePoolPersistQueue
+    .catch(() => undefined)
+    .then(() => setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool));
+  if (awaitWrite) await candidatePoolPersistQueue;
 };
 
 const getVideoStoreCached = async (): Promise<Record<string, VideoRecord>> => {
@@ -551,14 +575,15 @@ async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<Candidat
   });
 }
 
-async function mergeCandidatePool(candidates: PageCandidate[]): Promise<CandidatePoolItem[]> {
+async function mergeCandidatePool(
+  candidates: PageCandidate[],
+  options: { deferPersistence?: boolean } = {},
+): Promise<CandidatePoolItem[]> {
   const existing = await getCandidatePoolCached();
+  const byId = await getCandidatePoolIndexCached();
 
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
-  const byId = new Map<string, CandidatePoolItem>(
-    existing.map((candidate) => [candidate.external_id, candidate]),
-  );
   let changed = false;
 
   const materialSignature = (candidate: PageCandidate | CandidatePoolItem) => JSON.stringify({
@@ -620,6 +645,8 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     changed = true;
   }
 
+  if (!changed) return existing;
+
   const pool = [...byId.values()]
     .sort(
       (a, b) =>
@@ -627,10 +654,12 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     )
     .slice(0, MAX_CANDIDATE_POOL_SIZE);
 
-  if (pool.length !== existing.length) changed = true;
-  if (changed) {
-    await persistCandidatePoolCached(pool);
+  if (pool.length !== byId.size) {
+    candidatePoolIndexMemory = new Map(
+      pool.map((candidate) => [candidate.external_id, candidate]),
+    );
   }
+  await persistCandidatePoolCached(pool, options.deferPersistence !== true);
   return pool;
 }
 
@@ -2100,6 +2129,8 @@ const handleRuntimeMessage = (
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
       candidatePoolMemory = null;
+      candidatePoolIndexMemory = null;
+      candidatePoolPersistQueue = Promise.resolve();
       videoStoreMemory = null;
       semanticFeatureCacheMemory = null;
       await chrome.storage.local.clear();
@@ -2310,7 +2341,7 @@ const handleRuntimeMessage = (
         // both storage operations concurrent on a cold service-worker start.
         const [sourceFilters, candidatePool] = await Promise.all([
           getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
-          mergeCandidatePool(incomingCandidates),
+          mergeCandidatePool(incomingCandidates, { deferPersistence: true }),
         ]);
         phaseTimings.poolAndSettingsMs = Math.round(performance.now() - phaseStartedAt);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
@@ -2417,6 +2448,10 @@ const handleRuntimeMessage = (
           setStorage('personal-algorithm-last-error', null),
         ]).catch((error) => {
           console.warn('[MyAlgo] deferred rank cache persistence failed', error);
+        });
+
+        await candidatePoolPersistQueue.catch((error) => {
+          console.warn('[MyAlgo] deferred candidate-pool persistence failed', error);
         });
 
         const senderTabId = _sender.tab?.id;
