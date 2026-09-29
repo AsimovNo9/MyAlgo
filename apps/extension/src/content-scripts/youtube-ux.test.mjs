@@ -474,8 +474,14 @@ test('provisional durable-mode relevance recognizes semantic category, mode simi
   assert.equal(isProvisionalDurableModeRelevantItem({
     external_id: 'mode-similarity',
     title: 'How companies really work',
-    semantic_mode_similarity: 0.51,
+    semantic_mode_similarity: 0.68,
   }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'weak-similarity',
+    title: 'Unrelated creator drama',
+    semantic_mode_similarity: 0.51,
+  }, mode), false);
 
   assert.equal(isProvisionalDurableModeRelevantItem({
     external_id: 'title-match',
