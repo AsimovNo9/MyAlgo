@@ -2593,6 +2593,13 @@ const handleRuntimeMessage = (
         // the already-computed deterministic rank.
         void Promise.all([
           setStorage(STORAGE_KEYS.FEED_CACHE, feedCache),
+          setStorage(STORAGE_KEYS.PRESENTATION_CACHE, {
+            mode: payload?.mode ?? 'default',
+            activeModeId,
+            activeModeRevision: activeDurableMode?.revision ?? null,
+            generatedAt: new Date().toISOString(),
+            feed: presentationFeed,
+          }),
           setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString()),
           setStorage('personal-algorithm-last-error', null),
         ]).catch((error) => {
