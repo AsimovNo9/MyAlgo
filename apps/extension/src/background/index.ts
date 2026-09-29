@@ -1004,24 +1004,20 @@ async function hydrateSemanticScoreFeatures(
   cache: Record<string, SemanticFeatureRecord> | null = null,
   durableModeCatalog: DurableSemanticModeCatalog | null = null,
 ): Promise<CandidatePoolItem[]> {
-  const [resolvedCache, resolvedCatalog] = cache && durableModeCatalog
-    ? [cache, durableModeCatalog]
-    : await Promise.all([
-        cache ? Promise.resolve(cache) : getSemanticFeatureCacheCached(),
-        durableModeCatalog
-          ? Promise.resolve(durableModeCatalog)
-          : getStorage<DurableSemanticModeCatalog | null>(
-              STORAGE_KEYS.DURABLE_MODE_CATALOG,
-              null,
-            ),
-      ]);
-  cache = resolvedCache;
-  durableModeCatalog = resolvedCatalog;
-  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
+  const [resolvedCache, resolvedCatalog] = await Promise.all([
+    cache ? Promise.resolve(cache) : getSemanticFeatureCacheCached(),
+    durableModeCatalog
+      ? Promise.resolve(durableModeCatalog)
+      : getStorage<DurableSemanticModeCatalog | null>(
+          STORAGE_KEYS.DURABLE_MODE_CATALOG,
+          null,
+        ),
+  ]);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(resolvedCatalog);
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
     const record = semanticModelIdentities
-      .map((semanticModelIdentity) => cache[semanticFeatureKey(
+      .map((semanticModelIdentity) => resolvedCache[semanticFeatureKey(
         candidate.external_id,
         inputHash,
         state.graph.currentRevision,
