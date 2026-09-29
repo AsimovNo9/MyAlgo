@@ -2299,14 +2299,24 @@ const handleRuntimeMessage = (
     void (async () => {
       const rankStartedAt = performance.now();
       try {
-        const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
+        const cacheWarm = {
+          candidatePool: candidatePoolMemory !== null,
+          videoStore: videoStoreMemory !== null,
+          semanticFeatures: semanticFeatureCacheMemory !== null,
+        };
+        const phaseTimings: Record<string, number> = {};
+        let phaseStartedAt = performance.now();
 
         // First paint must never wait on network enrichment. Merge the live DOM
         // candidates immediately and hydrate only from metadata already cached
-        // in local storage. Rich watch-page enrichment runs after the rank
-        // response and requests a follow-up rerank only when it produced data.
-        const candidatePool = await mergeCandidatePool(incomingCandidates);
+        // in local storage. Settings and pool hydration are independent, so keep
+        // both storage operations concurrent on a cold service-worker start.
+        const [sourceFilters, candidatePool] = await Promise.all([
+          getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
+          mergeCandidatePool(incomingCandidates),
+        ]);
+        phaseTimings.poolAndSettingsMs = Math.round(performance.now() - phaseStartedAt);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
 
         // Do not rescore the entire persistent reservoir on every YouTube DOM
@@ -2322,8 +2332,12 @@ const handleRuntimeMessage = (
           ))
           .slice(0, MAX_REPLACEMENT_WORKING_SET);
         const workingPool = [...currentPagePool, ...offPagePool].slice(0, MAX_RANK_WORKING_SET);
+        phaseStartedAt = performance.now();
         const hydratedWorkingPool = await hydrateCandidatePool(workingPool);
+        phaseTimings.metadataHydrationMs = Math.round(performance.now() - phaseStartedAt);
+        phaseStartedAt = performance.now();
         const ranked = await rankLocalCandidates(hydratedWorkingPool, sourceFilters, payload?.mode ?? 'default');
+        phaseTimings.scoringMs = Math.round(performance.now() - phaseStartedAt);
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
 
         // The popup cache is intentionally bounded to the top-ranked reservoir,
@@ -2359,18 +2373,16 @@ const handleRuntimeMessage = (
           ...replacementInventory,
         ];
 
-        await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
-        await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
-        await setStorage('personal-algorithm-last-error', null);
-        const activeModeId = await getStorage<string>(
-          STORAGE_KEYS.ACTIVE_MODE_ID,
-          'default',
-        );
-        const durableModeCatalog = await getStorage<DurableSemanticModeCatalog | null>(
-          STORAGE_KEYS.DURABLE_MODE_CATALOG,
-          null,
-        );
+        phaseStartedAt = performance.now();
+        const [activeModeId, durableModeCatalog] = await Promise.all([
+          getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+          getStorage<DurableSemanticModeCatalog | null>(
+            STORAGE_KEYS.DURABLE_MODE_CATALOG,
+            null,
+          ),
+        ]);
         const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+        phaseTimings.responseContextMs = Math.round(performance.now() - phaseStartedAt);
 
         sendResponse({
           ok: true,
@@ -2395,7 +2407,20 @@ const handleRuntimeMessage = (
           rankingWorkingSetSize: workingPool.length,
           enriched: 0,
           enrichmentPending: true,
+          cacheWarm,
+          phaseTimings,
           elapsedMs: Math.round(performance.now() - rankStartedAt),
+        });
+
+        // Cache persistence is not presentation work. Keep it off the response
+        // critical path; a failed write is diagnostic-only and does not discard
+        // the already-computed deterministic rank.
+        void Promise.all([
+          setStorage(STORAGE_KEYS.FEED_CACHE, feedCache),
+          setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString()),
+          setStorage('personal-algorithm-last-error', null),
+        ]).catch((error) => {
+          console.warn('[MyAlgo] deferred rank cache persistence failed', error);
         });
 
         const senderTabId = _sender.tab?.id;
