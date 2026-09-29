@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   DURABLE_MODE_DIAGNOSTICS: 'personal-algorithm-durable-mode-diagnostics',
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
+  PRESENTATION_CACHE: 'personal-algorithm-presentation-cache',
   FEED_CANDIDATE_POOL: 'personal-algorithm-feed-candidate-pool',
   VIDEO_STORE: 'personal-algorithm-video-store',
   LAST_SYNC: 'personal-algorithm-last-sync',
