@@ -363,6 +363,7 @@ export function isStableReplacementCandidateEligible(
     || !Number.isFinite(options.nativeScore)
     || (
       options.activeMode
+      && options.feedReplacementPercent < 100
       && !isDurableModeGroundedItem(item, options.activeMode)
     )
   ) {
@@ -438,7 +439,9 @@ export function buildModeSupplyPlan(input: {
     nativeModeSupply,
     poolModeSupply: poolCandidates.length,
     shortfall,
-    fillLimit: Math.min(shortfall, poolCandidates.length),
+    fillLimit: input.sliderPercent >= 100
+      ? eligibleNativeIds.size
+      : Math.min(shortfall, poolCandidates.length),
     poolCandidates,
   };
 }
