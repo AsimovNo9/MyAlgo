@@ -246,7 +246,9 @@ export function Popup() {
       </div>
       <p>Current mode: <strong>{mode === 'Default' ? 'All' : mode}</strong></p>
       <p style={{ marginTop: -6, fontSize: 12 }}>
-        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} durable inferred modes · graph revision {durableModeCatalog?.graphRevision ?? '—'}
+        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active
+        {' · '}{durableModeCatalog?.modes.length ?? 0} retained durable modes
+        {' · '}graph revision {durableModeCatalog?.graphRevision ?? '—'}
       </p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
