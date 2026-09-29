@@ -10,6 +10,7 @@ export type VideoCandidate = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Record<string, number>;
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   provenance?: {
@@ -364,18 +365,47 @@ export function isProvisionalDurableModeRelevantItem(
   if (labels.length === 0) return false;
 
   const category = normalizeModeText(item.semantic_category);
-  if (category && labels.some((label) => category === label || category.includes(label) || label.includes(category))) {
+  if (
+    category
+    && labels.some((label) => (
+      category === label
+      || category.includes(label)
+      || label.includes(category)
+    ))
+    && Number(item.semantic_category_confidence ?? 0) >= 0.35
+  ) {
     return true;
   }
 
-  const semanticModeSimilarity = Number(item.semantic_mode_similarity ?? 0);
-  if (semanticModeSimilarity >= 0.42) return true;
+  const categoryScores = item.semantic_category_scores ?? {};
+  for (const [rawCategory, rawScore] of Object.entries(categoryScores)) {
+    const categoryLabel = normalizeModeText(rawCategory);
+    const score = Number(rawScore ?? 0);
+    if (
+      Number.isFinite(score)
+      && score >= 0.35
+      && labels.some((label) => (
+        categoryLabel === label
+        || categoryLabel.includes(label)
+        || label.includes(categoryLabel)
+      ))
+    ) {
+      return true;
+    }
+  }
 
   const title = normalizeModeText(item.title);
-  return labels.some((label) => {
+  const lexicalMatch = labels.some((label) => {
     const significant = label.split(' ').filter((token) => token.length >= 4);
+    if (significant.length === 1) return title.includes(significant[0]);
     return significant.length >= 2 && significant.every((token) => title.includes(token));
   });
+  if (lexicalMatch) return true;
+
+  // Embedding similarity is useful only as a strong final corroborating signal.
+  // A lower threshold admitted unrelated high-scoring RSS candidates into modes
+  // such as Gaming and made full-feed replacement visually incoherent.
+  return Number(item.semantic_mode_similarity ?? 0) >= 0.62;
 }
 
 export function isStableReplacementCandidateEligible(
