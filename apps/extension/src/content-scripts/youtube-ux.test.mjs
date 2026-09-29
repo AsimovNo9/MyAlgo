@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -271,6 +272,210 @@ test('replacement text metadata always provides visible title and creator fallba
   );
 });
 
+
+test('soft rerank cleanup preserves replacement-owned presentation UI', () => {
+  assert.equal(
+    shouldPreserveReplacementOwnedPresentation(true, true),
+    true,
+  );
+  assert.equal(
+    shouldPreserveReplacementOwnedPresentation(true, false),
+    false,
+  );
+  assert.equal(
+    shouldPreserveReplacementOwnedPresentation(false, true),
+    false,
+  );
+});
+
+test('navigation finish does not double-invalidate when navigation start already cleared bindings', () => {
+  assert.equal(navigationFinishRerankReason(true), 'manual');
+  assert.equal(navigationFinishRerankReason(false), 'navigation');
+});
+
+test('ordinary rerank causes preserve stable replacement bindings', () => {
+  for (const reason of ['mutation', 'metadata', 'semantic', 'retrieval', 'manual']) {
+    assert.equal(
+      shouldInvalidateStableReplacementBindings(reason),
+      false,
+      `${reason} should preserve bindings`,
+    );
+  }
+
+  for (const reason of ['navigation', 'mode', 'feedback', 'graph', 'policy', 'feed_mix', 'lifecycle']) {
+    assert.equal(
+      shouldInvalidateStableReplacementBindings(reason),
+      true,
+      `${reason} should invalidate bindings`,
+    );
+  }
+});
+
+test('stable candidate ownership allows the incumbent source but blocks another source', () => {
+  const ownerByCandidateId = new Map([
+    ['replacement-a', 'native-a'],
+    ['replacement-b', 'native-b'],
+  ]);
+
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-a',
+      'native-a',
+      ownerByCandidateId,
+    ),
+    true,
+  );
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-a',
+      'native-b',
+      ownerByCandidateId,
+    ),
+    false,
+  );
+  assert.equal(
+    isStableReplacementCandidateAvailableToSource(
+      'replacement-c',
+      'native-c',
+      ownerByCandidateId,
+    ),
+    true,
+  );
+});
+
+test('policy-created source slots keep their own prebound stable candidate', () => {
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-a',
+      'replacement-a',
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-b',
+      'replacement-a',
+      true,
+    ),
+    false,
+  );
+  assert.equal(
+    isStableReplacementSourceSlotPrebound(
+      'replacement-a',
+      'replacement-a',
+      false,
+    ),
+    false,
+  );
+});
+
+test('stable replacement candidate survives score and trace refresh while still eligible', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 5 };
+  const refreshed = {
+    external_id: 'replacement-a',
+    title: 'Replacement A enriched',
+    score: 78,
+    visible: true,
+    suppressed: false,
+    traceId: 'trace-new',
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: 12.4,
+      displayScore: 78,
+      graphRevision: 357,
+      acquisitionMechanism: 'web_search',
+      contributions: [],
+      modeGrounding: {
+        modeId: mode.id,
+        modeRevision: mode.revision,
+        total: 8,
+        members: [{
+          canonicalId: 'canonical:lofi',
+          label: 'lofi',
+          value: 8,
+          sourceIds: ['topic:lofi'],
+          evidenceIds: [],
+        }],
+      },
+    },
+  };
+
+  assert.equal(isStableReplacementCandidateEligible(refreshed, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 70,
+    feedReplacementPercent: 50,
+  }), true);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    score: 54,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    policyOutcome: 'excluded',
+    visible: false,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    explanation: {
+      ...refreshed.explanation,
+      modeGrounding: {
+        ...refreshed.explanation.modeGrounding,
+        modeRevision: 4,
+      },
+    },
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 40,
+    feedReplacementPercent: 50,
+  }), false);
+
+  assert.equal(isStableReplacementCandidateEligible({
+    ...refreshed,
+    score: 60,
+  }, {
+    activeMode: mode,
+    minimumScore: 55,
+    nativeScore: 90,
+    feedReplacementPercent: 100,
+  }), true);
+});
+
+test('replacement identity evaluator stays perfect across ordinary score and trace churn', () => {
+  const before = {
+    'native-a': 'replacement-a',
+    'native-b': 'replacement-b',
+    'native-c': 'replacement-c',
+  };
+  const afterMetadataAndSemanticRerank = {
+    'native-a': 'replacement-a',
+    'native-b': 'replacement-b',
+    'native-c': 'replacement-c',
+  };
+
+  const metrics = evaluateReplacementStability(
+    before,
+    afterMetadataAndSemanticRerank,
+  );
+  assert.equal(metrics.commonSourceCount, 3);
+  assert.equal(metrics.changedSourceCount, 0);
+  assert.equal(metrics.stabilityRate, 1);
+});
 
 test('replacement candidate selection is stable for the same route', () => {
   const items = Array.from({ length: 8 }, (_, index) => ({

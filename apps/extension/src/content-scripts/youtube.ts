@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, keepOutermostElements, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters } from './youtube-ux';
-import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
 import type { DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics } from '@repo/shared-types';
@@ -46,10 +46,14 @@ let pendingWatchExposure: { videoId: string; exposureId: string | null; observed
 let watchedVideo: HTMLVideoElement | null = null;
 let watchSession: WatchSessionState | null = null;
 let watchSessionSequence = 0;
+let replacementBindingRevision = 0;
+let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
+let navigationInvalidationPending = false;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
   routeKey: string;
+  bindingRevision: number;
 }>();
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -58,7 +62,11 @@ document.documentElement.setAttribute(instanceAttribute, instanceId);
 
 const isCurrentInstance = () => document.documentElement.getAttribute(instanceAttribute) === instanceId;
 const getRouteKey = () => `${location.pathname}${location.search}`;
-const clearStableReplacements = () => stableReplacementBySourceId.clear();
+const invalidateStableReplacements = (reason: ReplacementRerankReason) => {
+  replacementBindingRevision += 1;
+  lastReplacementInvalidationReason = reason;
+  stableReplacementBySourceId.clear();
+};
 
 const logStaleRender = (phase: string, requestGeneration: number) => {
   console.info('[MyAlgo] skipped stale render', {
@@ -205,7 +213,13 @@ const clearExtensionPresentation = (
     ) return;
     element.remove();
   });
-  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => badge.remove());
+  document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => {
+    if (shouldPreserveReplacementOwnedPresentation(
+      preserveReplacements,
+      Boolean(badge.closest('[data-personal-algorithm-replacement]')),
+    )) return;
+    badge.remove();
+  });
   document.querySelectorAll<HTMLElement>(
     '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
   ).forEach((container) => {
@@ -228,6 +242,7 @@ const clearExtensionPresentation = (
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
     delete element.dataset.personalAlgorithmReplacementCandidateId;
+    delete element.dataset.personalAlgorithmSourceScore;
   });
   if (showPaused) {
     showStatus('Personal Algorithm: Paused', false, true);
@@ -241,6 +256,7 @@ const createThumbnail = (
   aspectRatio = youtubeConnector.presentation.horizontalAspectRatio,
 ): HTMLElement => {
   const media = item.thumbnail_url ? document.createElement('img') : document.createElement('div');
+  media.dataset.personalAlgorithmThumbnail = 'true';
   if (media instanceof HTMLImageElement) {
     media.src = item.thumbnail_url ?? '';
     media.alt = '';
@@ -281,6 +297,8 @@ const createReplacementCard = (
   card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
   card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
   card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementBindingRevision = String(replacementBindingRevision);
+  card.dataset.personalAlgorithmReplacementInvalidationReason = lastReplacementInvalidationReason;
   card.dataset.personalAlgorithmReplacementMode = metadata.mode;
   const modeGrounding = item.explanation?.modeGrounding;
   if (modeGrounding) {
@@ -327,6 +345,7 @@ const createReplacementCard = (
   card.appendChild(link);
 
   const meta = document.createElement('div');
+  meta.dataset.personalAlgorithmReplacementSummary = 'true';
   meta.textContent = contentLabel
     ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
     : `MyAlgo · ${item.score ?? 0}/100`;
@@ -378,6 +397,111 @@ const createReplacementCard = (
   card.appendChild(explanation);
 
   return card;
+};
+
+const refreshReplacementCardPresentation = (
+  card: HTMLElement,
+  item: RankedFeedItem,
+  target: HTMLElement,
+  slotId: string,
+  sourceVideoId: string,
+  generation: number,
+) => {
+  const metadata = getReplacementPresentationMetadata(
+    { slot: { slotId, sourceVideoId }, item },
+    generation,
+    activeMode,
+  );
+  const displayMetadata = getReplacementTextMetadata(item);
+  const contentLabel = getContentPresentationLabel(item);
+
+  card.dataset.personalAlgorithmVideoId = metadata.replacementVideoId;
+  card.dataset.personalAlgorithmTraceId = metadata.traceId;
+  card.dataset.personalAlgorithmReplacementSlot = metadata.slotId;
+  card.dataset.personalAlgorithmReplacementSourceVideoId = metadata.sourceVideoId;
+  card.dataset.personalAlgorithmReplacementGeneration = String(metadata.generation);
+  card.dataset.personalAlgorithmReplacementBindingRevision = String(replacementBindingRevision);
+  card.dataset.personalAlgorithmReplacementInvalidationReason = lastReplacementInvalidationReason;
+  card.dataset.personalAlgorithmReplacementMode = metadata.mode;
+  card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
+  const modeGrounding = item.explanation?.modeGrounding;
+  if (modeGrounding) {
+    card.dataset.personalAlgorithmReplacementModeId = modeGrounding.modeId;
+    card.dataset.personalAlgorithmReplacementModeRevision = String(modeGrounding.modeRevision);
+  } else {
+    delete card.dataset.personalAlgorithmReplacementModeId;
+    delete card.dataset.personalAlgorithmReplacementModeRevision;
+  }
+  card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
+
+  const badge = card.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
+  if (badge) {
+    badge.textContent = contentLabel
+      ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
+      : `MyAlgo replacement · ${metadata.score}`;
+  }
+
+  const link = card.querySelector<HTMLAnchorElement>('a[data-personal-algorithm-video-id]');
+  if (link) {
+    link.href = youtubeConnector.getCanonicalUrl(item.external_id ?? '');
+    link.dataset.personalAlgorithmVideoId = item.external_id ?? '';
+    link.setAttribute('aria-label', item.title ?? 'MyAlgo recommended video');
+
+    const currentThumbnail = link.querySelector<HTMLElement>(
+      '[data-personal-algorithm-thumbnail]',
+    );
+    const wantsImage = Boolean(item.thumbnail_url);
+    const hasImage = currentThumbnail instanceof HTMLImageElement;
+    if (currentThumbnail && wantsImage === hasImage) {
+      if (currentThumbnail instanceof HTMLImageElement) {
+        currentThumbnail.src = item.thumbnail_url ?? '';
+      }
+    } else if (currentThumbnail) {
+      const targetFlags = getVideoSourceFlags(target);
+      const aspectRatio = targetFlags.is_short
+        ? youtubeConnector.presentation.verticalAspectRatio
+        : youtubeConnector.presentation.horizontalAspectRatio;
+      currentThumbnail.replaceWith(createThumbnail(item, aspectRatio));
+    }
+  }
+  const title = card.querySelector<HTMLElement>('[data-personal-algorithm-title]');
+  if (title) title.textContent = displayMetadata.title;
+  const creator = card.querySelector<HTMLElement>('[data-personal-algorithm-creator]');
+  if (creator) creator.textContent = displayMetadata.creator;
+  const summary = card.querySelector<HTMLElement>('[data-personal-algorithm-replacement-summary]');
+  if (summary) {
+    summary.textContent = contentLabel
+      ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
+      : `MyAlgo · ${item.score ?? 0}/100`;
+  }
+
+  const why = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation]');
+  if (why) why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  const explanation = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel]');
+  if (!explanation) return;
+  explanation.replaceChildren();
+
+  const explanationData = item.explanation;
+  const scoreLine = document.createElement('div');
+  scoreLine.textContent = explanationData
+    ? `Score ${explanationData.displayScore}/100 · raw ${explanationData.rawScore} · graph r${explanationData.graphRevision}`
+    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
+  explanation.appendChild(scoreLine);
+
+  if (explanationData?.acquisitionMechanism) {
+    const acquired = document.createElement('div');
+    acquired.textContent = `Acquired via ${explanationData.acquisitionMechanism} · acquisition is not preference evidence`;
+    acquired.style.cssText = 'margin-top:4px;color:#cbd5e1;';
+    explanation.appendChild(acquired);
+  }
+
+  for (const contribution of explanationData?.contributions ?? []) {
+    const row = document.createElement('div');
+    const sign = contribution.value > 0 ? '+' : '';
+    row.textContent = `${contribution.label}: ${sign}${contribution.value}`;
+    row.style.cssText = 'margin-top:4px;';
+    explanation.appendChild(row);
+  }
 };
 
 const clearLegacyRecommendationShelf = () => {
@@ -670,6 +794,18 @@ const applyRankedFeed = () => {
   const allNativeIds = nativeCards
     .map((card) => card.id)
     .filter((id) => id && !id.startsWith('title:'));
+  const nativeIds = new Set(allNativeIds);
+  const currentRouteKey = getRouteKey();
+  const retainedBindingItems = [...stableReplacementBySourceId.values()]
+    .filter((binding) => (
+      binding.routeKey === currentRouteKey
+      && binding.bindingRevision === replacementBindingRevision
+    ))
+    .map((binding) => binding.item);
+  const modeSupplyFeed = dedupeCandidatesById([
+    ...cachedFeed,
+    ...retainedBindingItems,
+  ]);
   const eligibleModeNativeIds = activeDurableMode && homePage
     ? nativeCards
         .filter((card) => (
@@ -685,7 +821,7 @@ const applyRankedFeed = () => {
         sliderPercent: feedReplacementPercent,
         nativeIds: allNativeIds,
         eligibleNativeIds: eligibleModeNativeIds,
-        feedItems: cachedFeed,
+        feedItems: modeSupplyFeed,
         minimumReplacementScore: replacementMinimumScore,
       })
     : null;
@@ -702,6 +838,8 @@ const applyRankedFeed = () => {
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmReplacementCandidateId;
+    delete element.dataset.personalAlgorithmSourceScore;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
 
     const item = feedById.get(id) ?? feedByTitle.get(title);
@@ -727,7 +865,32 @@ const applyRankedFeed = () => {
           nativeIndex,
           sourceVideoId,
         );
+        const sourceScore = Number.isFinite(item?.score ?? NaN)
+          ? Number(item?.score)
+          : 0;
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+        element.dataset.personalAlgorithmSourceScore = String(sourceScore);
+
+        const sticky = stableReplacementBySourceId.get(sourceVideoId);
+        const stickyItem = sticky
+          ? feedById.get(sticky.candidateId) ?? sticky.item
+          : undefined;
+        if (
+          sticky
+          && sticky.routeKey === currentRouteKey
+          && sticky.bindingRevision === replacementBindingRevision
+          && !nativeIds.has(sticky.candidateId)
+          && isStableReplacementCandidateEligible(stickyItem, {
+            activeMode: activeDurableMode,
+            minimumScore: replacementMinimumScore,
+            nativeScore: sourceScore,
+            feedReplacementPercent,
+          })
+        ) {
+          element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
+        } else if (sticky) {
+          stableReplacementBySourceId.delete(sourceVideoId);
+        }
       }
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = decision.reason;
@@ -787,12 +950,18 @@ const applyRankedFeed = () => {
   let opportunisticSelectedTargets = 0;
   let opportunisticUpliftQualified = 0;
 
+  for (const sourceId of stableReplacementBySourceId.keys()) {
+    if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
+  }
+
   if (remainingReplacementCapacity > 0) {
-    const routeKey = getRouteKey();
-    const nativeIds = new Set(allNativeIds);
-    const usedCandidateIds = new Set<string>();
-    for (const sourceId of stableReplacementBySourceId.keys()) {
-      if (!nativeIds.has(sourceId)) stableReplacementBySourceId.delete(sourceId);
+    const routeKey = currentRouteKey;
+    const usedCandidateOwnerById = new Map<string, string>();
+    for (const { element, id } of nativeCards) {
+      const candidateId = element.dataset.personalAlgorithmReplacementCandidateId?.trim();
+      if (candidateId && !usedCandidateOwnerById.has(candidateId)) {
+        usedCandidateOwnerById.set(candidateId, id);
+      }
     }
 
     // Keep a rendered replacement stable across ordinary YouTube DOM churn
@@ -808,20 +977,32 @@ const applyRankedFeed = () => {
       }
       const item = feedById.get(sticky.candidateId) ?? sticky.item;
       const nativeScore = Number(element.dataset.personalAlgorithmScore);
-      const candidateScore = item?.score ?? -Infinity;
+      const sourceCandidateId = element.dataset.personalAlgorithmReplacementCandidateId?.trim();
+      const sourceHidden = element.style.getPropertyValue('display') === 'none';
+      if (isStableReplacementSourceSlotPrebound(
+        sourceCandidateId,
+        sticky.candidateId,
+        sourceHidden,
+      )) {
+        usedCandidateOwnerById.set(sticky.candidateId, id);
+        continue;
+      }
       const valid = Boolean(
-        item
-        && (!activeDurableMode || isDurableModeGroundedItem(item, activeDurableMode))
+        sticky.bindingRevision === replacementBindingRevision
         && !nativeIds.has(sticky.candidateId)
-        && !usedCandidateIds.has(sticky.candidateId)
-        && item.visible !== false
-        && item.suppressed !== true
-        && (item.policyOutcome == null || item.policyOutcome === 'eligible')
-        && candidateScore >= replacementMinimumScore
-        && Number.isFinite(nativeScore)
-        && (feedReplacementPercent === 100 || candidateScore >= nativeScore)
+        && isStableReplacementCandidateAvailableToSource(
+          sticky.candidateId,
+          id,
+          usedCandidateOwnerById,
+        )
         && element.parentElement
         && element.style.getPropertyValue('display') !== 'none'
+        && isStableReplacementCandidateEligible(item, {
+          activeMode: activeDurableMode,
+          minimumScore: replacementMinimumScore,
+          nativeScore,
+          feedReplacementPercent,
+        })
       );
       if (!valid) {
         stableReplacementBySourceId.delete(id);
@@ -838,9 +1019,10 @@ const applyRankedFeed = () => {
       );
       element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
       element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
+      element.dataset.personalAlgorithmSourceScore = String(nativeScore);
       element.style.setProperty('display', 'none', 'important');
       element.dataset.personalAlgorithmScore = 'replacement_slot';
-      usedCandidateIds.add(sticky.candidateId);
+      usedCandidateOwnerById.set(sticky.candidateId, id);
       stableReplacementAssignments += 1;
       remainingReplacementCapacity -= 1;
     }
@@ -852,7 +1034,7 @@ const applyRankedFeed = () => {
       // source list is already constrained to exact grounded mode matches.
       const replacementCandidates = getReplacementCandidates(
         replacementSource,
-        [...nativeIds, ...usedCandidateIds],
+        [...nativeIds, ...usedCandidateOwnerById.keys()],
         Math.max(24, remainingReplacementCapacity * 6),
         replacementMinimumScore,
         replacementSelectionSeed,
@@ -897,10 +1079,31 @@ const applyRankedFeed = () => {
           selected.externalId,
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
-        element.dataset.personalAlgorithmReplacementCandidateId = assignment.item.external_id ?? '';
+        const replacementCandidateId = assignment.item.external_id ?? '';
+        element.dataset.personalAlgorithmReplacementCandidateId = replacementCandidateId;
+        if (replacementCandidateId) {
+          usedCandidateOwnerById.set(replacementCandidateId, selected.externalId);
+        }
+        element.dataset.personalAlgorithmSourceScore = String(selected.score);
         element.style.setProperty('display', 'none', 'important');
         element.dataset.personalAlgorithmScore = 'replacement_slot';
       }
+    }
+  }
+
+  // A binding that is no longer represented by a source slot in the current
+  // presentation has lost its replacement intent (for example because mode
+  // supply now satisfies the quota natively or capacity contracted). Do not
+  // keep it latent and resurrect it on a later soft rerank.
+  const reboundCandidateBySource = new Map(
+    nativeCards.map(({ element, id }) => [
+      id,
+      element.dataset.personalAlgorithmReplacementCandidateId?.trim() ?? '',
+    ]),
+  );
+  for (const [sourceId, binding] of stableReplacementBySourceId) {
+    if (reboundCandidateBySource.get(sourceId) !== binding.candidateId) {
+      stableReplacementBySourceId.delete(sourceId);
     }
   }
 
@@ -925,6 +1128,9 @@ const applyRankedFeed = () => {
       '[data-personal-algorithm-source-layout-hidden]',
     ).length,
     stableReplacementAssignments,
+    stableBindingCount: stableReplacementBySourceId.size,
+    replacementBindingRevision,
+    lastReplacementInvalidationReason,
     opportunisticReplacementCandidates,
     opportunisticNativeTargets,
     opportunisticSelectedTargets,
@@ -1007,15 +1213,26 @@ const renderReplacementSlots = (generation: number) => {
   const boundAssignments = slots.flatMap((slot) => {
     const target = targetBySlot.get(slot.slotId);
     const candidateId = target?.dataset.personalAlgorithmReplacementCandidateId?.trim();
-    const item = candidateId ? feedById.get(candidateId) : undefined;
+    const sticky = stableReplacementBySourceId.get(slot.sourceVideoId);
+    const retainedItem = sticky
+      && sticky.candidateId === candidateId
+      && sticky.routeKey === getRouteKey()
+      && sticky.bindingRevision === replacementBindingRevision
+      ? sticky.item
+      : undefined;
+    const item = candidateId
+      ? feedById.get(candidateId) ?? retainedItem
+      : undefined;
+    const nativeScore = Number(target?.dataset.personalAlgorithmSourceScore);
     if (
       !item
       || blockedIds.has(candidateId ?? '')
-      || item.visible === false
-      || item.suppressed === true
-      || (item.policyOutcome != null && item.policyOutcome !== 'eligible')
-      || (activeDurableMode && !isDurableModeGroundedItem(item, activeDurableMode))
-      || (item.score ?? 0) < replacementMinimumScore
+      || !isStableReplacementCandidateEligible(item, {
+        activeMode: activeDurableMode,
+        minimumScore: replacementMinimumScore,
+        nativeScore,
+        feedReplacementPercent,
+      })
     ) {
       return [];
     }
@@ -1062,17 +1279,20 @@ const renderReplacementSlots = (generation: number) => {
 
     const existing = existingBySourceId.get(assignment.slot.sourceVideoId);
     const replacementVideoId = assignment.item.external_id ?? '';
-    const replacementScore = String(assignment.item.score ?? 0);
-    const replacementTraceId = assignment.item.traceId ?? '';
+    target.dataset.personalAlgorithmReplacementCandidateId = replacementVideoId;
     if (
       existing
       && existing.isConnected
       && existing.dataset.personalAlgorithmVideoId === replacementVideoId
-      && existing.dataset.personalAlgorithmTraceId === replacementTraceId
-      && existing.dataset.personalAlgorithmReplacementScore === replacementScore
     ) {
-      existing.dataset.personalAlgorithmReplacementSlot = assignment.slot.slotId;
-      existing.dataset.personalAlgorithmReplacementGeneration = String(generation);
+      refreshReplacementCardPresentation(
+        existing,
+        assignment.item,
+        target,
+        assignment.slot.slotId,
+        assignment.slot.sourceVideoId,
+        generation,
+      );
       if (existing.parentElement !== target.parentElement || target.previousElementSibling !== existing) {
         target.parentElement.insertBefore(existing, target);
       }
@@ -1097,6 +1317,7 @@ const renderReplacementSlots = (generation: number) => {
       candidateId: replacementVideoId,
       item: assignment.item,
       routeKey: getRouteKey(),
+      bindingRevision: replacementBindingRevision,
     });
   }
 
@@ -1111,6 +1332,9 @@ const renderReplacementSlots = (generation: number) => {
     eligibleSlots: slots.length,
     filled,
     reused,
+    stableBindingCount: stableReplacementBySourceId.size,
+    replacementBindingRevision,
+    lastReplacementInvalidationReason,
     unfilled: Math.max(0, slots.length - filled),
     qualifiedBeforeBlocking: replacementQualifiedBeforeBlocking,
     assignableAfterBlocking: assignments.length,
@@ -1265,30 +1489,42 @@ const rankCurrentPage = async (requestGeneration: number) => {
 };
 
 const triggerRank = (
-  reason: 'navigation' | 'mutation' | 'metadata' | 'semantic' | 'mode' | 'feedback' | 'graph' | 'manual' = 'manual',
+  reason: ReplacementRerankReason = 'manual',
 ) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
 
-  if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
-    if (reason === 'navigation' || reason === 'mode' || reason === 'feedback' || reason === 'graph') {
-      clearStableReplacements();
-    }
-    document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]').forEach((element) => element.remove());
+  const invalidateBindings = shouldInvalidateStableReplacementBindings(reason);
+  if (invalidateBindings) {
+    invalidateStableReplacements(reason);
+    // A hard invalidation removes the incumbent replacement intent entirely.
+    // Restore hidden native targets immediately rather than leaving blank slots
+    // while the fresh policy/graph/mode rank is in flight.
+    clearExtensionPresentation(false);
   }
 
-  if (reason === 'metadata' || reason === 'semantic') {
-    // Force a new score pass because cached watch metadata changed, but keep
-    // stable replacement assignments until the new scores actually render.
+  if (
+    reason === 'metadata'
+    || reason === 'semantic'
+    || reason === 'retrieval'
+    || reason === 'graph'
+  ) {
+    // Soft reranks keep valid bindings; graph changes invalidate them. Both
+    // still require a fresh score pass rather than the same-signature cache
+    // shortcut.
     lastCandidateSignature = '';
   }
 
   if (rankingInFlight) {
     rankQueued = true;
-    // Ordinary feed churn must not invalidate the response already in flight;
-    // otherwise a continuously mutating YouTube Home page can starve MyAlgo
-    // indefinitely and never paint badges/replacements. Hard semantic/lifecycle
-    // changes still invalidate the active generation.
-    if (reason !== 'mutation' && reason !== 'metadata' && reason !== 'semantic') {
+    // Ordinary mutation/metadata/semantic/retrieval churn must not invalidate
+    // the response already in flight. Hard intent/policy changes do.
+    if (
+      reason !== 'mutation'
+      && reason !== 'metadata'
+      && reason !== 'semantic'
+      && reason !== 'retrieval'
+      && reason !== 'manual'
+    ) {
       rankGeneration += 1;
     }
     return;
@@ -1297,7 +1533,7 @@ const triggerRank = (
   const generation = ++rankGeneration;
   const delayMs = reason === 'mutation'
     ? 320
-    : reason === 'metadata' || reason === 'semantic'
+    : reason === 'metadata' || reason === 'semantic' || reason === 'retrieval'
       ? 120
       : 60;
   scheduleRankGeneration(generation, delayMs);
@@ -1362,20 +1598,18 @@ const sourceFiltersEqual = (left: FeedSourceFilters, right: FeedSourceFilters) =
 const applySourceFilters = (nextFilters: FeedSourceFilters) => {
   if (!isCurrentInstance() || sourceFiltersEqual(sourceFilters, nextFilters)) return;
   sourceFilters = nextFilters;
+  invalidateStableReplacements('policy');
   rankGeneration += 1;
 
   // Keep the last valid scored generation available for the optimistic local
-  // presentation pass. Source controls are presentation policy, so clearing
-  // cachedFeed here would remove mode/score badges until a later rank response
-  // wins the generation race.
+  // presentation pass, but do not reuse a binding created under the old source
+  // policy.
   clearExtensionPresentation(false);
   applyRankedFeed();
 
-  // Force a fresh score/trace request after the immediate presentation update.
-  // The generation guard prevents older in-flight work from replacing it.
   lastCandidateSignature = '';
   lastRankMode = '';
-  triggerRank('mode');
+  triggerRank('manual');
 };
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -1391,11 +1625,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'YOUTUBE_SEMANTICS_ENRICHED') {
-    if (extensionEnabled) triggerRank('semantic');
+    if (extensionEnabled) {
+      triggerRank(message.payload?.conceptGraphChanged === true ? 'graph' : 'semantic');
+    }
     return;
   }
   if (message?.type === 'EXTENSION_ENABLED' && typeof message.payload?.enabled === 'boolean') {
     extensionEnabled = message.payload.enabled;
+    invalidateStableReplacements('lifecycle');
     rankGeneration += 1;
     if (rankTimer !== undefined) window.clearTimeout(rankTimer);
     rankTimer = undefined;
@@ -1447,7 +1684,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const next = Number(message.payload?.percent);
     if (!Number.isFinite(next) || next === feedReplacementPercent) return;
     feedReplacementPercent = Math.max(0, Math.min(100, next));
-    clearStableReplacements();
+    invalidateStableReplacements('feed_mix');
     rankGeneration += 1;
     clearExtensionPresentation(false);
     applyRankedFeed();
@@ -1456,17 +1693,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   if (message?.type === 'PERSONAL_ALGORITHM_CHANGED') {
-    clearStableReplacements();
-    rankGeneration += 1;
+    const reason = String(message.payload?.reason ?? 'rebuild');
+    if (reason === 'retrieval') {
+      lastCandidateSignature = '';
+      triggerRank('retrieval');
+      return;
+    }
+
     cachedFeed = [];
     lastCandidateSignature = '';
     lastRankMode = '';
     clearExtensionPresentation(false);
-    triggerRank('graph');
+    triggerRank(reason === 'feedback' ? 'feedback' : 'graph');
     return;
   }
   if (message?.type !== 'MODE_CHANGED' || typeof message.payload?.mode !== 'string') return;
-  clearStableReplacements();
   rankGeneration += 1;
   activeMode = message.payload.mode;
   activeDurableMode = typeof message.payload?.modeId === 'string'
@@ -1681,7 +1922,8 @@ window.addEventListener('load', () => {
   attachTemporalWatchObserver();
 });
 window.addEventListener('yt-navigate-start', () => {
-  clearStableReplacements();
+  invalidateStableReplacements('navigation');
+  navigationInvalidationPending = true;
   if (mutationRankTimer !== undefined) {
     window.clearTimeout(mutationRankTimer);
     mutationRankTimer = undefined;
@@ -1699,10 +1941,15 @@ window.addEventListener('yt-navigate-finish', () => {
   const currentVideoId = youtubeConnector.getExternalId(window.location.href);
     if (currentVideoId) sendActivity(currentVideoId, 'revisited');
   if (isYouTubeHistoryPage(location.pathname)) {
+    navigationInvalidationPending = false;
     scheduleHistoryObservation();
   } else {
     clearLegacyRecommendationShelf();
-    triggerRank('navigation');
+    const rerankReason = navigationFinishRerankReason(
+      navigationInvalidationPending,
+    );
+    navigationInvalidationPending = false;
+    triggerRank(rerankReason);
     scheduleHomeRecommendationObservation();
   }
 });

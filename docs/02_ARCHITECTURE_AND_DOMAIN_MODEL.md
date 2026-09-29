@@ -410,7 +410,11 @@ Opportunistic replacements bind the selected off-page candidate to the native sl
 
 ### Replacement stability across SPA churn
 
-A successfully rendered opportunistic replacement is held stable for 45 seconds across ordinary in-route YouTube DOM/page-data churn. The hold is keyed by the native source video ID and replacement candidate, is bounded by the replacement limit, and survives only while the target still exists and the candidate remains eligible and at least as relevant as the native card. Actual navigation, mode changes, graph/feedback invalidation, suppression, or expiry clear the hold. `yt-page-data-updated` is treated as an in-route mutation refresh because YouTube emits it during normal Home updates; hard route invalidation remains attached to `yt-navigate-start`.
+Replacement identity is keyed by native source video ID → replacement candidate ID. Rank generation and generation-scoped slot IDs prevent stale renders but do not define candidate identity.
+
+PR #227 removes the obsolete time-based hold model. A valid binding has no arbitrary 45-second expiry. It survives ordinary in-route mutation/page-data churn, metadata enrichment, non-graph semantic enrichment, retrieval-reservoir expansion, and manual rerank/retry. The candidate may receive a new score, trace, or richer metadata during those reranks; if the source→candidate mapping remains valid, the rendered replacement node is refreshed in place.
+
+Hard invalidation is explicit: navigation/route, active mode, graph-changing semantic materialization, feedback/rebuild, source policy, feed-mix slider, and lifecycle/model resets clear the binding context. An individual binding also ends when the source disappears or the candidate fails current eligibility/score/mode/native-duplication checks. `yt-page-data-updated` remains an in-route mutation refresh because YouTube emits it during normal Home updates. Retrieval expansion is intentionally soft: newly acquired supply may fill empty capacity but does not displace a valid incumbent merely for scoring slightly higher.
 
 
 ### First-paint overlay path

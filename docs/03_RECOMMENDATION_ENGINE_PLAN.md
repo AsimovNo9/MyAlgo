@@ -560,9 +560,43 @@ PR #226 implements this retrieval/supply slice without creating a parallel mode 
 - Default/All retains the prior general replacement behavior;
 - one bounded latest mode-supply snapshot records slider percent, eligible native slots, requested slots, native supply, pool supply, shortfall, fulfilled slots, and whether shortfall status fired.
 
-Acquisition mechanism remains score-neutral. PR #226 does not yet claim final source→replacement stability across ordinary reranks; that remains the following #214 slice.
+Acquisition mechanism remains score-neutral. PR #226 is merged and live-validated. Mode-supply diagnostics are mode-scoped state: switching mode clears a snapshot whose mode ID/revision no longer matches, and asynchronous RSS/search or content-script writes are reconciled against the current selection before persistence. Production web search reserves its bounded acquisition slots for the goal plus highest-priority durable canonical members before ordinary fallback lanes.
 
-Live validation tightened two implementation details. First, mode-supply diagnostics are mode-scoped state: switching mode clears a snapshot whose mode ID/revision no longer matches, and asynchronous RSS/search or content-script writes are reconciled against the current selection before persistence. Second, the production web-search budget reserves durable-member coverage instead of blindly taking the first four generic planner rows. The bounded acquisition selector keeps the goal query first, then chooses one query for each highest-priority durable canonical member while capacity remains, then falls back to ordinary creator/topic/freshness lanes. Default mode preserves the pre-existing planner ordering.
+### Replacement binding stability (#214 / PR #227)
+
+A replacement **binding** is the source native video ID → replacement candidate ID relationship. Rank generation and slot IDs are render-safety metadata; they are not replacement identity.
+
+Valid bindings survive ordinary rerank causes:
+- in-route YouTube DOM/page-data mutation;
+- watch-page metadata enrichment;
+- semantic feature enrichment when the concept graph did not change;
+- source-neutral RSS/search reservoir expansion;
+- ordinary manual rerank/retry.
+
+These events may change score, trace ID, presentation text, or the available candidate reservoir. They must not rotate a still-valid source→candidate binding merely because a new rank generation was produced or a newly acquired candidate scores slightly higher.
+
+Bindings are invalidated on meaningful intent/policy boundaries:
+- route/navigation change;
+- active mode ID/revision change;
+- graph revision change, including concept verification/materialization that actually mutates the graph;
+- explicit feedback/rebuild;
+- source-filter policy change;
+- feed-mix slider change;
+- extension/model lifecycle reset.
+
+A binding also ends locally when:
+- its source native card disappears;
+- its replacement candidate becomes excluded, suppressed, ineligible, below the current replacement threshold, or no longer matches the exact active durable mode revision;
+- the replacement candidate becomes a current native Home card;
+- at less than 100% replacement, the candidate falls below the native card it would replace.
+
+PR #227 makes these invalidation causes explicit. Retrieval expansion is treated as soft churn rather than a graph/policy event, so newly acquired candidates cannot rotate a valid rendered replacement. A semantic update with `conceptGraphChanged: true` is instead promoted to a hard graph invalidation.
+
+When the same binding remains valid but score/trace/metadata change, the existing rendered replacement DOM node is updated in place rather than destroyed and recreated. The node carries a binding revision and last hard invalidation reason for live inspection. The existing #162 `evaluateReplacementStability` contract remains the metric: common source IDs should retain the same replacement candidate across soft reranks; sources legitimately removed by YouTube are excluded from churn.
+
+A retained incumbent is also part of the local presentation stability reservoir even if a later bounded ranking working set no longer includes that off-page candidate. Soft retrieval expansion therefore cannot evict a valid incumbent merely by changing which 180 off-page items were rescored. The retained item remains subject to the last valid policy/mode context and current source/native relevance check; hard graph/policy/mode changes clear that context before it can be reused. If current mode demand contracts so the source is no longer rebound to a replacement slot, the latent binding is deleted rather than resurrected later.
+
+There is no arbitrary time-to-live for a valid binding. Stability ends because its contract becomes invalid, not because 45 seconds elapsed.
 
 ### Evaluation-first rule
 

@@ -185,7 +185,9 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 
 ### Replacement stability regression
 
-For live replacement validation, render at least one replacement and then allow ordinary Home mutations and `yt-page-data-updated` events to occur for at least 45 seconds. The same replacement should remain present while its source card and candidate stay valid. Confirm that `yt-navigate-start`, mode changes, feedback/graph invalidation, suppression, and stability expiry correctly permit teardown/reselection.
+Replacement stability is validity-scoped rather than time-scoped. Capture source-native-ID → replacement-candidate-ID mappings before and after ordinary in-route mutation, metadata enrichment, non-graph semantic enrichment, retrieval expansion, and manual rerank. Common valid sources must retain the same candidate with `evaluateReplacementStability(...).stabilityRate === 1`; there is no 45-second expiry requirement.
+
+Hard boundaries—navigation, active mode, graph-changing semantic materialization, feedback/rebuild, source policy, feed-mix slider, and lifecycle/model reset—must invalidate the binding context. Candidate-level exclusion/suppression/ineligibility, threshold/native-relevance failure, exact-mode grounding loss, native duplication, or source disappearance must release the affected binding. Generation or trace changes alone are not invalidation.
 
 
 ### Overlay first-paint latency regression
@@ -296,25 +298,29 @@ Record labelled examples of obvious correct, obvious incorrect, and ambiguous ca
 
 ### Home replacement stability
 
-For one unchanged Home route, record source native video ID → replacement video ID mappings across at least:
+For one unchanged Home route/mode/feed-mix context, record source native video ID → replacement video ID mappings across at least:
 
-- ordinary MutationObserver reranks;
+- ordinary MutationObserver / `yt-page-data-updated` reranks;
 - metadata-enrichment reranks;
-- semantic-enrichment reranks;
-- more than 45 seconds of idle/normal DOM churn.
+- semantic-enrichment reranks where `conceptGraphChanged !== true`;
+- retrieval-reservoir expansion;
+- ordinary manual retry/rerank.
 
-A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Ordinary rank-generation increments must not rotate equal/near-equal candidates.
+A valid mapping must remain unchanged while its source card and replacement candidate remain eligible. Rank-generation, score, trace, or presentation-metadata changes alone must not rotate equal/near-equal candidates or recreate a retained replacement DOM node.
 
 Then deliberately trigger meaningful invalidations and confirm reselection is allowed:
 
 - route/navigation change;
-- mode change;
-- graph/feedback/policy change;
+- durable mode ID/revision change;
+- graph-changing semantic materialization;
+- explicit feedback/rebuild;
+- source-filter policy change;
 - feed replacement percentage change;
+- extension/model lifecycle reset;
 - source native card removal;
-- replacement candidate becoming ineligible/suppressed.
+- replacement candidate becoming native, ineligible/suppressed, below threshold/native relevance, or stale-mode grounded.
 
-This distinguishes YouTube DOM recycling from MyAlgo-owned candidate cycling. Diagnostics should report the stable/bound replacement counts without logging private candidate text.
+This distinguishes YouTube DOM recycling and derived-cache churn from MyAlgo-owned intent/policy changes. Diagnostics should report stable/bound counts, binding revision, and invalidation reason without logging private candidate text.
 
 
 ## P0: labelled semantic-mode evaluation inside PR #215 (#162)
@@ -522,6 +528,34 @@ The same run exposed two corrective regressions before PR readiness:
 2. The diagnostic planner contained durable canonical-member queries, but production web acquisition consumed only the first four plans. In the observed ordering those were the mode goal followed by creator lanes, so member-topic queries could be truncated before acquisition. Production selection now builds a larger bounded candidate plan set and reserves the four acquisition slots as: goal first, then one query per highest-priority durable member while available, then ordinary fallback lanes. Default retains the existing first-N planner ordering.
 
 For follow-up live validation, inspect `GET_RETRIEVAL_PLAN.acquisitionPlans` rather than assuming the first four diagnostic `plans` are the search requests that will execute.
+
+PR #226 subsequently passed that follow-up gate and is merged. PR #227 adds the replacement-stability gate. Validation must distinguish **soft rerank churn** from **hard invalidation**.
+
+For a fixed Home route/mode/feed-mix context, capture the rendered source-native-ID → replacement-candidate-ID snapshot before and after each soft cause:
+- mutation/page-data update;
+- metadata enrichment;
+- semantic enrichment with no graph change;
+- retrieval-reservoir expansion;
+- ordinary manual rerank.
+
+Common source IDs must retain the same candidate ID, so `evaluateReplacementStability(before, after).stabilityRate === 1`. Score, trace ID, generation, or presentation text may legitimately change. For a retained binding, the rendered replacement element should also remain the same DOM node while its trace/score metadata is refreshed in place. Replacement-owned presentation UI (badge, title/creator/thumbnail, summary, Why-this control/panel) must remain present after the cleanup/reuse pass rather than being removed by generic native-card cleanup.
+
+Then exercise hard invalidation independently:
+- route change;
+- durable mode change/revision change;
+- graph-changing semantic materialization;
+- explicit feedback/rebuild;
+- source-filter change;
+- feed-mix slider change;
+- extension/model lifecycle reset.
+
+A hard invalidation must advance the replacement binding revision and may choose a new candidate after the new policy/rank completes. One SPA navigation transition should advance the binding-context revision once: `yt-navigate-start` owns the invalidation, while the corresponding finish reranks without a second clear; a finish observed without a start may still invalidate defensively. Candidate-level invalidation must also release only the affected binding when the candidate becomes excluded/suppressed/ineligible, falls below threshold/native relevance, loses exact durable-mode grounding, becomes native on the current page, or its source card disappears.
+
+Affected-only source-removal validation must also cover policy-created replacement slots. A candidate already prebound to its own source is not a cross-source collision: same-source ownership must remain reusable while a candidate owned by a different source stays blocked. Removing one source must not cause an unrelated surviving policy-created source to discard its incumbent merely because that source's hidden slot already advertises the incumbent candidate.
+
+Generation changes alone are not churn. Live diagnostics should record source ID, candidate ID, rank generation, binding revision, trace ID, score, and last hard invalidation reason so identity can be compared separately from ordinary score/trace updates.
+
+Include one retrieval-expansion case where the incumbent replacement is no longer present in the newly bounded off-page scoring working set. If its binding context is still valid, it should remain rendered from the retained stability reservoir rather than rotate solely because newer acquired candidates displaced it from that bounded working set. Conversely, if current mode demand contracts and the source is no longer rebound to a replacement slot, the old binding should disappear rather than remain latent.
 
 
 ## PR #220 local concept verification validation (#219)
