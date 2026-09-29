@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
 import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -129,7 +129,12 @@ const resolveDurableModeContext = (
   if (!id || id === 'default') return null;
   const mode = catalog?.modes.find((entry) => entry.id === id);
   return mode
-    ? { id: mode.id, label: mode.label, revision: mode.revision }
+    ? {
+        id: mode.id,
+        label: mode.label,
+        revision: mode.revision,
+        memberLabels: mode.members.map((member) => member.label),
+      }
     : null;
 };
 
@@ -1050,20 +1055,36 @@ const applyRankedFeed = () => {
           )
         : [];
       const groundedCandidateIds = groundedCandidates.map((item) => item.external_id);
-      const fallbackCandidates = activeDurableMode && feedReplacementPercent >= 100
+      const provisionalModeCandidates = activeDurableMode && feedReplacementPercent >= 100
         ? getReplacementCandidates(
-            cachedFeed,
+            cachedFeed.filter((item) => (
+              isProvisionalDurableModeRelevantItem(item, activeDurableMode)
+              && !isDurableModeGroundedItem(item, activeDurableMode)
+            )),
             [...blockedReplacementIds, ...groundedCandidateIds],
             Math.max(0, candidateLimit - groundedCandidates.length),
             replacementMinimumScore,
             replacementSelectionSeed,
           )
         : [];
-      // Durable modes remain exact-grounding-first. At 100% only, any remaining
-      // slots may fall back to ordinary eligible scored candidates so the slider
-      // literally means full replacement rather than "up to available mode supply".
+      const provisionalCandidateIds = provisionalModeCandidates.map((item) => item.external_id);
+      const fallbackCandidates = activeDurableMode && feedReplacementPercent >= 100
+        ? getReplacementCandidates(
+            cachedFeed,
+            [...blockedReplacementIds, ...groundedCandidateIds, ...provisionalCandidateIds],
+            Math.max(
+              0,
+              candidateLimit - groundedCandidates.length - provisionalModeCandidates.length,
+            ),
+            replacementMinimumScore,
+            replacementSelectionSeed,
+          )
+        : [];
+      // Durable modes remain exact-grounding-first. At 100%, provisional
+      // semantic matches lead any remaining generic fallback so switching modes
+      // is visible immediately while exact graph grounding catches up.
       const replacementCandidates = latestModeSupplyPlan
-        ? [...groundedCandidates, ...fallbackCandidates]
+        ? [...groundedCandidates, ...provisionalModeCandidates, ...fallbackCandidates]
         : getReplacementCandidates(
             cachedFeed,
             blockedReplacementIds,
@@ -1477,6 +1498,9 @@ const rankCurrentPage = async (requestGeneration: number) => {
             id: response.activeDurableMode.id,
             label: response.activeDurableMode.label ?? activeMode,
             revision: response.activeDurableMode.revision,
+            memberLabels: Array.isArray(response.activeDurableMode.memberLabels)
+              ? response.activeDurableMode.memberLabels
+              : [],
           }
         : null;
       console.info('[MyAlgo] rank response', {
@@ -1775,6 +1799,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         id: message.payload.modeId,
         label: message.payload.mode,
         revision: message.payload.modeRevision,
+        memberLabels: Array.isArray(message.payload?.memberLabels)
+          ? message.payload.memberLabels
+          : [],
       }
     : null;
   latestModeSupplyPlan = null;
