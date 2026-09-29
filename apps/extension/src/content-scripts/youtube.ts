@@ -1067,24 +1067,12 @@ const applyRankedFeed = () => {
             replacementSelectionSeed,
           )
         : [];
-      const provisionalCandidateIds = provisionalModeCandidates.map((item) => item.external_id);
-      const fallbackCandidates = activeDurableMode && feedReplacementPercent >= 100
-        ? getReplacementCandidates(
-            cachedFeed,
-            [...blockedReplacementIds, ...groundedCandidateIds, ...provisionalCandidateIds],
-            Math.max(
-              0,
-              candidateLimit - groundedCandidates.length - provisionalModeCandidates.length,
-            ),
-            replacementMinimumScore,
-            replacementSelectionSeed,
-          )
-        : [];
       // Durable modes remain exact-grounding-first. At 100%, provisional
-      // semantic matches lead any remaining generic fallback so switching modes
-      // is visible immediately while exact graph grounding catches up.
+      // semantic matches may fill while exact graph grounding catches up, but
+      // unrelated generic candidates never dilute the selected mode merely to
+      // satisfy the percentage target.
       const replacementCandidates = latestModeSupplyPlan
-        ? [...groundedCandidates, ...provisionalModeCandidates, ...fallbackCandidates]
+        ? [...groundedCandidates, ...provisionalModeCandidates]
         : getReplacementCandidates(
             cachedFeed,
             blockedReplacementIds,
