@@ -2196,6 +2196,10 @@ const handleRuntimeMessage = (
       semanticEpoch += 1;
       conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
       conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
