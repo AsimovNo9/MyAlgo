@@ -363,6 +363,13 @@ const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 const semanticRefreshInFlight = new Set<string>();
 let conceptExtractionRefreshInFlight: Promise<ConceptExtractionRefreshResult> | null = null;
 let semanticEpoch = 0;
+let rankSemanticRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let rankSemanticRefreshQueuedAt = 0;
+let rankSemanticRefreshPending: {
+  candidates: CandidatePoolItem[];
+  mode: string;
+  senderTabId: number | null;
+} | null = null;
 // Concept proposals are keyed by candidate input + model/pipeline identity, not
 // graph revision. Only lifecycle/model-boundary changes invalidate in-flight
 // concept generation.
@@ -1954,6 +1961,66 @@ async function rankLocalCandidates(
   });
 }
 
+const scheduleRankSemanticRefresh = (
+  candidates: CandidatePoolItem[],
+  mode: string,
+  senderTabId: number | null,
+): void => {
+  const now = Date.now();
+  if (!rankSemanticRefreshPending) rankSemanticRefreshQueuedAt = now;
+  rankSemanticRefreshPending = { candidates, mode, senderTabId };
+  if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+
+  const queuedFor = now - rankSemanticRefreshQueuedAt;
+  const delayMs = queuedFor >= 1500 ? 0 : 300;
+  rankSemanticRefreshTimer = setTimeout(() => {
+    const pending = rankSemanticRefreshPending;
+    rankSemanticRefreshPending = null;
+    rankSemanticRefreshTimer = null;
+    rankSemanticRefreshQueuedAt = 0;
+    if (!pending) return;
+
+    void refreshSemanticScoreFeatures(pending.candidates, pending.mode).then(async (semanticRefresh) => {
+      const pendingCandidateCount = Number(
+        semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+      );
+      if (pending.senderTabId && semanticRefresh.changed > 0) {
+        await chrome.tabs.sendMessage(pending.senderTabId, {
+          type: 'YOUTUBE_SEMANTICS_ENRICHED',
+          payload: {
+            count: semanticRefresh.changed,
+            modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+              ? semanticRefresh.diagnostics.modelVersion
+              : null,
+            pendingCandidateCount,
+          },
+        }).catch(() => undefined);
+      }
+
+      if (
+        semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+        && pendingCandidateCount === 0
+      ) {
+        void refreshSemanticConceptGraph(true).then(async (materialization) => {
+          if (!materialization.changed || !pending.senderTabId) return;
+          await chrome.tabs.sendMessage(pending.senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: 0,
+              conceptGraphChanged: true,
+              graphRevision: materialization.diagnostics.graphRevision ?? null,
+            },
+          }).catch(() => undefined);
+        }).catch((error) => {
+          console.warn('[MyAlgo] deferred concept verification failed', error);
+        });
+      }
+    }).catch((error) => {
+      console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
+    });
+  }, delayMs);
+};
+
 async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', payload: unknown): Promise<void> {
   const events = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []);
   await setStorage('personal-algorithm-local-events', [
@@ -2071,6 +2138,10 @@ const handleRuntimeMessage = (
       semanticEpoch += 1;
       conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
       conceptExtractionRefreshInFlight = null;
       await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, semanticModelMode);
       await semanticEmbeddingCache.clear();
@@ -2454,50 +2525,13 @@ const handleRuntimeMessage = (
           console.warn('[MyAlgo] deferred candidate-pool persistence failed', error);
         });
 
-        const senderTabId = _sender.tab?.id;
+        const senderTabId = _sender.tab?.id ?? null;
         const activeRankMode = payload?.mode ?? 'default';
-        void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
-          const pendingCandidateCount = Number(
-            semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
-          );
-          if (senderTabId && semanticRefresh.changed > 0) {
-            await chrome.tabs.sendMessage(senderTabId, {
-              type: 'YOUTUBE_SEMANTICS_ENRICHED',
-              payload: {
-                count: semanticRefresh.changed,
-                modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
-                  ? semanticRefresh.diagnostics.modelVersion
-                  : null,
-                pendingCandidateCount,
-              },
-            }).catch(() => undefined);
-          }
-
-          // Run the DeBERTa verifier only after the current neural semantic
-          // working set is caught up. If it changes the graph, request a fresh
-          // rank against the new graph revision; otherwise leave the already
-          // valid affinity-bearing feed untouched.
-          if (
-            semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
-            && pendingCandidateCount === 0
-          ) {
-            void refreshSemanticConceptGraph(true).then(async (materialization) => {
-              if (!materialization.changed || !senderTabId) return;
-              await chrome.tabs.sendMessage(senderTabId, {
-                type: 'YOUTUBE_SEMANTICS_ENRICHED',
-                payload: {
-                  count: 0,
-                  conceptGraphChanged: true,
-                  graphRevision: materialization.diagnostics.graphRevision ?? null,
-                },
-              }).catch(() => undefined);
-            }).catch((error) => {
-              console.warn('[MyAlgo] deferred concept verification failed', error);
-            });
-          }
-        }).catch((error) => {
-          console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
-        });
+        scheduleRankSemanticRefresh(
+          hydratedWorkingPool,
+          activeRankMode,
+          senderTabId,
+        );
 
         void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
           if (enrichedCandidates.length === 0) return;
