@@ -10,6 +10,7 @@ export type VideoCandidate = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
@@ -256,6 +257,7 @@ export type DurableModePresentationContext = {
   id: string;
   label: string;
   revision: number;
+  memberLabels?: string[];
 };
 
 export type ReplacementRerankReason =
@@ -343,6 +345,37 @@ export function isDurableModeGroundedItem(
     && grounding.total > 0
     && grounding.members.length > 0
   );
+}
+
+const normalizeModeText = (value: string | null | undefined): string => (
+  value ?? ''
+).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+
+export function isProvisionalDurableModeRelevantItem(
+  item: RankedFeedItem | undefined,
+  mode: DurableModePresentationContext | null | undefined,
+): boolean {
+  if (!item || !mode) return false;
+  if (isDurableModeGroundedItem(item, mode)) return true;
+
+  const labels = [mode.label, ...(mode.memberLabels ?? [])]
+    .map(normalizeModeText)
+    .filter(Boolean);
+  if (labels.length === 0) return false;
+
+  const category = normalizeModeText(item.semantic_category);
+  if (category && labels.some((label) => category === label || category.includes(label) || label.includes(category))) {
+    return true;
+  }
+
+  const semanticModeSimilarity = Number(item.semantic_mode_similarity ?? 0);
+  if (semanticModeSimilarity >= 0.42) return true;
+
+  const title = normalizeModeText(item.title);
+  return labels.some((label) => {
+    const significant = label.split(' ').filter((token) => token.length >= 4);
+    return significant.length >= 2 && significant.every((token) => title.includes(token));
+  });
 }
 
 export function isStableReplacementCandidateEligible(
