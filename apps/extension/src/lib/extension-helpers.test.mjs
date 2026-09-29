@@ -71,6 +71,7 @@ test('buildDurableModeOptions uses persisted stable mode IDs instead of feed cat
     [
       { id: 'default', label: 'All', revision: null, active: true },
       { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
     ],
   );
 
