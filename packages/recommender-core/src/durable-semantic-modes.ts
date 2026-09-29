@@ -14,7 +14,7 @@ import {
 } from './canonical-semantic.ts';
 
 export const DURABLE_SEMANTIC_MODE_PIPELINE_ID = 'durable-semantic-mode-cluster-v1';
-export const DURABLE_MODE_AFFINITY_PIPELINE_ID = 'durable-mode-affinity-v2';
+export const DURABLE_MODE_AFFINITY_PIPELINE_ID = 'durable-mode-affinity-v3';
 
 export type DurableSemanticModeProposal = {
   label: string;
@@ -417,6 +417,7 @@ export function buildCandidateModeAffinities(
     minimumModeAffinity?: number;
     maxAffinities?: number;
     includeDormant?: boolean;
+    includeModeIds?: readonly string[];
   } = {},
 ): CandidateModeAffinity[] {
   const minimumMemberSimilarity = Math.max(
@@ -435,12 +436,15 @@ export function buildCandidateModeAffinities(
   );
   const maxAffinities = Math.max(1, Math.floor(options.maxAffinities ?? 4));
   const includeDormant = options.includeDormant === true;
+  const includedModeIds = new Set(
+    (options.includeModeIds ?? []).map((id) => id.trim()).filter(Boolean),
+  );
   const usableMatches = (matches ?? [])
     .filter((match) => !match.taxonomy_only && Number.isFinite(match.similarity));
 
   const affinities: CandidateModeAffinity[] = [];
   for (const mode of catalog?.modes ?? []) {
-    if (!mode.active && !includeDormant) continue;
+    if (!mode.active && !includeDormant && !includedModeIds.has(mode.id)) continue;
     const memberHits: Array<{
       canonicalId: string;
       label: string;
