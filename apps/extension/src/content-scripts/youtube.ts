@@ -21,6 +21,14 @@ import {
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
+type PresentationCache = {
+  mode: string;
+  activeModeId: string;
+  activeModeRevision: number | null;
+  generatedAt: string;
+  feed: RankedFeedItem[];
+};
+
 let cachedFeed: RankedFeedItem[] = [];
 let rankingInFlight = false;
 let activeMode = 'Default';
@@ -32,6 +40,7 @@ let statusDismissTimer: number | undefined;
 let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
+let optimisticPresentationFrame: number | undefined;
 let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
@@ -1029,23 +1038,47 @@ const applyRankedFeed = () => {
 
     if (remainingReplacementCapacity > 0) {
       const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
-      const replacementSource = latestModeSupplyPlan?.poolCandidates ?? cachedFeed;
-      // Retrieved candidates receive no provenance bonus. In durable mode, the
-      // source list is already constrained to exact grounded mode matches.
-      const replacementCandidates = getReplacementCandidates(
-        replacementSource,
-        [...nativeIds, ...usedCandidateOwnerById.keys()],
-        Math.max(24, remainingReplacementCapacity * 6),
-        replacementMinimumScore,
-        replacementSelectionSeed,
-      );
+      const blockedReplacementIds = [...nativeIds, ...usedCandidateOwnerById.keys()];
+      const candidateLimit = Math.max(24, remainingReplacementCapacity * 6);
+      const groundedCandidates = latestModeSupplyPlan
+        ? getReplacementCandidates(
+            latestModeSupplyPlan.poolCandidates,
+            blockedReplacementIds,
+            candidateLimit,
+            replacementMinimumScore,
+            replacementSelectionSeed,
+          )
+        : [];
+      const groundedCandidateIds = groundedCandidates.map((item) => item.external_id);
+      const fallbackCandidates = activeDurableMode && feedReplacementPercent >= 100
+        ? getReplacementCandidates(
+            cachedFeed,
+            [...blockedReplacementIds, ...groundedCandidateIds],
+            Math.max(0, candidateLimit - groundedCandidates.length),
+            replacementMinimumScore,
+            replacementSelectionSeed,
+          )
+        : [];
+      // Durable modes remain exact-grounding-first. At 100% only, any remaining
+      // slots may fall back to ordinary eligible scored candidates so the slider
+      // literally means full replacement rather than "up to available mode supply".
+      const replacementCandidates = latestModeSupplyPlan
+        ? [...groundedCandidates, ...fallbackCandidates]
+        : getReplacementCandidates(
+            cachedFeed,
+            blockedReplacementIds,
+            candidateLimit,
+            replacementMinimumScore,
+            replacementSelectionSeed,
+          );
       const nativeTargets = nativeCards.flatMap(({ element, id, title }, nativeIndex) => {
         if (element.style.getPropertyValue('display') === 'none') return [];
         const score = Number(element.dataset.personalAlgorithmScore);
         if (!id || id.startsWith('title:') || !Number.isFinite(score)) return [];
         const nativeItem = feedById.get(id) ?? feedByTitle.get(title);
         if (
-          activeDurableMode
+          feedReplacementPercent < 100
+          && activeDurableMode
           && isDurableModeGroundedItem(nativeItem, activeDurableMode)
         ) {
           return [];
@@ -1240,7 +1273,7 @@ const renderReplacementSlots = (generation: number) => {
   });
   const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
   const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
-  const replacementSource = activeDurableMode
+  const replacementSource = activeDurableMode && feedReplacementPercent < 100
     ? cachedFeed.filter((item) => isDurableModeGroundedItem(item, activeDurableMode))
     : cachedFeed;
   const fallbackAssignments = planReplacementAssignments(
@@ -1325,7 +1358,12 @@ const renderReplacementSlots = (generation: number) => {
     if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
-  persistModeSupplyDiagnostics(latestModeSupplyPlan, filled);
+  const filledGroundedModeSlots = activeDurableMode
+    ? assignments.filter((assignment) => (
+        isDurableModeGroundedItem(assignment.item, activeDurableMode)
+      )).length
+    : filled;
+  persistModeSupplyDiagnostics(latestModeSupplyPlan, filledGroundedModeSlots);
 
   console.info('[MyAlgo] replacement slots', {
     generation,
@@ -1560,6 +1598,7 @@ safeStorageGet([
   STORAGE_KEYS.ENABLED,
   STORAGE_KEYS.SOURCE_FILTERS,
   STORAGE_KEYS.FEED_REPLACEMENT_PERCENT,
+  STORAGE_KEYS.PRESENTATION_CACHE,
   STORAGE_KEYS.PRIVACY_DISCLOSURE_ACCEPTED_VERSION,
 ]).then((result) => {
   activeMode = (result[STORAGE_KEYS.MODE] as string) ?? activeMode;
@@ -1581,9 +1620,26 @@ safeStorageGet([
     return;
   }
 
-  // Apply persisted presentation controls before the initial rank request so
-  // Home starts in the user's chosen shape instead of flashing unfiltered UI.
+  const presentationCache = result[STORAGE_KEYS.PRESENTATION_CACHE] as PresentationCache | undefined;
+  const selectedActiveModeId = typeof result[STORAGE_KEYS.ACTIVE_MODE_ID] === 'string'
+    ? String(result[STORAGE_KEYS.ACTIVE_MODE_ID])
+    : 'default';
+  const cacheMatchesMode = Boolean(
+    presentationCache
+    && Array.isArray(presentationCache.feed)
+    && presentationCache.mode === activeMode
+    && presentationCache.activeModeId === selectedActiveModeId
+    && presentationCache.activeModeRevision === (activeDurableMode?.revision ?? null)
+  );
+  if (cacheMatchesMode) {
+    cachedFeed = presentationCache!.feed;
+    lastRankMode = activeMode;
+  }
+
+  // Paint from the last mode-compatible ranked presentation immediately. Fresh
+  // scoring reconciles it in place; it no longer has to gate first visual fill.
   applyRankedFeed();
+  renderReplacementSlots(rankGeneration);
   showStatus('Personal Algorithm: Active', false, false);
   clearLegacyRecommendationShelf();
   scheduleInitialRank();
@@ -1930,6 +1986,10 @@ window.addEventListener('yt-navigate-start', () => {
     window.clearTimeout(mutationRankTimer);
     mutationRankTimer = undefined;
   }
+  if (optimisticPresentationFrame !== undefined) {
+    window.cancelAnimationFrame(optimisticPresentationFrame);
+    optimisticPresentationFrame = undefined;
+  }
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
@@ -1973,6 +2033,22 @@ window.addEventListener('resize', () => {
   }, 120);
 });
 
+const scheduleOptimisticPresentation = () => {
+  if (
+    optimisticPresentationFrame !== undefined
+    || !extensionEnabled
+    || cachedFeed.length === 0
+    || !isYouTubeHomePage(location.pathname)
+  ) return;
+
+  optimisticPresentationFrame = window.requestAnimationFrame(() => {
+    optimisticPresentationFrame = undefined;
+    if (!isCurrentInstance() || !extensionEnabled || cachedFeed.length === 0) return;
+    applyRankedFeed();
+    renderReplacementSlots(rankGeneration);
+  });
+};
+
 const pageObserver = new MutationObserver((records) => {
   const hasNativeVideoMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
@@ -1982,14 +2058,9 @@ const pageObserver = new MutationObserver((records) => {
   }));
 
   if (hasNativeVideoMutation) {
-    if (
-      sourceFilters.includeShorts === false
-      || sourceFilters.includeLive === false
-    ) {
-      // Keep explicit source controls responsive while YouTube recycles or
-      // appends native cards; fresh scoring can follow asynchronously.
-      applyRankedFeed();
-    }
+    // Reuse the last valid ranked presentation immediately as YouTube recycles
+    // or appends Home cards. Fresh scoring still follows asynchronously.
+    scheduleOptimisticPresentation();
 
     // YouTube can emit dozens of subtree mutations for one visual feed update.
     // Coalesce them before collecting/scoring the DOM rather than invoking
