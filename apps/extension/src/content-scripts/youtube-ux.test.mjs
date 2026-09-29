@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -454,6 +454,40 @@ test('stable replacement candidate survives score and trace refresh while still 
     nativeScore: 90,
     feedReplacementPercent: 100,
   }), true);
+});
+
+test('provisional durable-mode relevance recognizes semantic category, mode similarity, and member-label title matches', () => {
+  const mode = {
+    id: 'mode:corporate',
+    label: 'corporate culture',
+    revision: 4,
+    memberLabels: ['corporate culture', 'workplace culture'],
+  };
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'category-match',
+    title: 'Inside a tech company',
+    semantic_category: 'corporate culture',
+    semantic_category_confidence: 0.6,
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'mode-similarity',
+    title: 'How companies really work',
+    semantic_mode_similarity: 0.51,
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'title-match',
+    title: 'Why workplace culture is changing',
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'unrelated',
+    title: 'Three hour lofi study mix',
+    semantic_category: 'lofi beats',
+    semantic_mode_similarity: 0.08,
+  }, mode), false);
 });
 
 test('100 percent durable-mode replacement may use an eligible non-grounded fallback', () => {
