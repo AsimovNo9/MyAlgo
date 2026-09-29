@@ -1788,7 +1788,7 @@ async function rankLocalCandidates(
     semanticContext,
     semanticFeatureCache,
   ] = await Promise.all([
-    personalAlgorithmStore.exportState(),
+    personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
       'personal-algorithm-local-events',
       [],
