@@ -173,6 +173,26 @@ type LocalScoringIndex = {
   evidenceIdsByNodeId: Map<string, string[]>;
 };
 
+type PreparedLocalScoringState = {
+  policy: PersonalScoringPolicy;
+  scoringIndex: LocalScoringIndex;
+  graphIndex: ReturnType<typeof buildPersonalScoringGraphIndex>;
+  revisionContextByFeedbackKey: Map<string, ReturnType<typeof buildPersonalScoringRevisionContext>>;
+};
+
+const preparedLocalScoringState = new WeakMap<PersonalAlgorithmState, PreparedLocalScoringState>();
+
+const feedbackRevisionKey = (signals: readonly ScoreFeedbackSignal[]): string => JSON.stringify(
+  signals.map((signal) => ({
+    id: signal.id,
+    contentId: signal.contentId ?? null,
+    nodeId: signal.nodeId ?? null,
+    value: signal.value,
+    label: signal.label ?? null,
+    evidenceIds: [...(signal.evidenceIds ?? [])].sort(),
+  })).sort((left, right) => left.id.localeCompare(right.id)),
+);
+
 function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringIndex {
   const contentNodes = new Map<string, PersonalAlgorithmState['graph']['nodes'][number]>();
   const creatorByLabel = new Map<string, string>();
@@ -1035,10 +1055,27 @@ export function scoreLocalCandidates(
   sourceFilters: FeedSourceFilters = {},
   activeDurableMode?: LocalDurableModeScoringContext | null,
 ): LocalRuntimeRankedCandidate[] {
-  const policy = buildLocalScoringPolicy(state);
-  const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
-  const graphIndex = buildPersonalScoringGraphIndex(state);
-  const scoringIndex = buildLocalScoringIndex(state);
+  let prepared = preparedLocalScoringState.get(state);
+  if (!prepared) {
+    prepared = {
+      policy: buildLocalScoringPolicy(state),
+      scoringIndex: buildLocalScoringIndex(state),
+      graphIndex: buildPersonalScoringGraphIndex(state),
+      revisionContextByFeedbackKey: new Map(),
+    };
+    preparedLocalScoringState.set(state, prepared);
+  }
+  const feedbackKey = feedbackRevisionKey(feedbackSignals);
+  let revisionContext = prepared.revisionContextByFeedbackKey.get(feedbackKey);
+  if (!revisionContext) {
+    revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
+    prepared.revisionContextByFeedbackKey.set(feedbackKey, revisionContext);
+  }
+  const {
+    policy,
+    scoringIndex,
+    graphIndex,
+  } = prepared;
 
   return candidates
     .map((candidate) => {
