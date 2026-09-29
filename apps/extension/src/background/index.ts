@@ -338,20 +338,35 @@ const refreshDurableModeCatalog = async (
 
 const resolveModeSelection = async (
   requested: string | null | undefined,
-): Promise<{ modeId: string; label: string; revision: number | null }> => {
+): Promise<{
+  modeId: string;
+  label: string;
+  revision: number | null;
+  memberLabels: string[];
+}> => {
   const value = requested?.trim() || 'default';
   if (value.toLowerCase() === 'default') {
-    return { modeId: 'default', label: 'Default', revision: null };
+    return { modeId: 'default', label: 'Default', revision: null, memberLabels: [] };
   }
   const catalog = await getStorage<DurableSemanticModeCatalog | null>(
     STORAGE_KEYS.DURABLE_MODE_CATALOG,
     null,
   );
   const byId = resolveDurableMode(catalog, value);
-  if (byId) return { modeId: byId.id, label: byId.label, revision: byId.revision };
+  if (byId) return {
+    modeId: byId.id,
+    label: byId.label,
+    revision: byId.revision,
+    memberLabels: byId.members.map((member) => member.label),
+  };
   const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
-  if (byLabel) return { modeId: byLabel.id, label: byLabel.label, revision: byLabel.revision };
-  return { modeId: value, label: value, revision: null };
+  if (byLabel) return {
+    modeId: byLabel.id,
+    label: byLabel.label,
+    revision: byLabel.revision,
+    memberLabels: byLabel.members.map((member) => member.label),
+  };
+  return { modeId: value, label: value, revision: null, memberLabels: [] };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
@@ -2567,6 +2582,7 @@ const handleRuntimeMessage = (
                 id: activeDurableMode.id,
                 label: activeDurableMode.label,
                 revision: activeDurableMode.revision,
+                memberLabels: activeDurableMode.members.map((member) => member.label),
               }
             : null,
           feed: presentationFeed,
@@ -2676,6 +2692,7 @@ const handleRuntimeMessage = (
             mode: selection.label,
             modeId: selection.modeId,
             modeRevision: selection.revision,
+            memberLabels: selection.memberLabels,
           },
         }).catch(() => undefined)
         : undefined));
