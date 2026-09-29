@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 const manifestPath = fileURLToPath(new URL('./manifest.json', import.meta.url));
 
-test('MV3 manifest requests only storage, offscreen worker support, and YouTube host access', async () => {
+test('MV3 manifest requests local storage capacity, offscreen worker support, and YouTube host access', async () => {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(new Set(manifest.permissions), new Set(['storage', 'offscreen']));
+  assert.deepEqual(new Set(manifest.permissions), new Set(['storage', 'unlimitedStorage', 'offscreen']));
   assert.equal(manifest.permissions.includes('scripting'), false);
   assert.equal(manifest.permissions.includes('identity'), false);
   assert.equal(manifest.permissions.includes('identity.email'), false);
