@@ -1,6 +1,7 @@
 import type { CandidateAcquisitionProvenance, CandidateModeAffinity, FeedSourceFilters, PersonalAlgorithmState, SemanticCategoryId } from '@repo/shared-types';
 import {
   buildCanonicalSemanticConcepts,
+  buildPersonalScoringGraphIndex,
   buildPersonalScoringRevisionContext,
   isScoreTraceConsistent,
   scorePersonalAlgorithm,
@@ -1036,13 +1037,14 @@ export function scoreLocalCandidates(
 ): LocalRuntimeRankedCandidate[] {
   const policy = buildLocalScoringPolicy(state);
   const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
+  const graphIndex = buildPersonalScoringGraphIndex(state);
   const scoringIndex = buildLocalScoringIndex(state);
 
   return candidates
     .map((candidate) => {
       const classification = classifyCandidateContent(candidate);
       const context = candidateContext(state, candidate, scoringIndex, mode, activeDurableMode);
-      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext);
+      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext, graphIndex);
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
         || (candidate.is_live && sourceFilters.includeLive === false)
