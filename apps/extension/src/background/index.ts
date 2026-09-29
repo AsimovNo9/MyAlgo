@@ -1855,7 +1855,9 @@ async function rankLocalCandidates(
   const traceSignature = traces.map((item) => `${item.traceId}:${item.score}`).join('|');
   if (traceSignature !== lastPersistedTraceSignature) {
     lastPersistedTraceSignature = traceSignature;
-    await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces);
+    void setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces).catch((error) => {
+      console.warn('[MyAlgo] deferred trace persistence failed', error);
+    });
   }
 
   return ranked.map(({ trace, ...item }) => {
