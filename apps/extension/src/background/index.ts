@@ -2046,6 +2046,76 @@ async function rankLocalCandidates(
   return feed;
 }
 
+const normalizeModeRefreshText = (value: string | null | undefined): string => (
+  value ?? ''
+).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+
+const prioritizeCandidatesForSelectedMode = (
+  candidates: CandidatePoolItem[],
+  labels: readonly string[],
+): CandidatePoolItem[] => {
+  const normalizedLabels = labels.map(normalizeModeRefreshText).filter(Boolean);
+  if (normalizedLabels.length === 0) return candidates;
+
+  const relevance = (candidate: CandidatePoolItem): number => {
+    const text = normalizeModeRefreshText([
+      candidate.title,
+      candidate.creator,
+      ...(candidate.topics ?? []),
+    ].filter(Boolean).join(' '));
+    let score = 0;
+    for (const label of normalizedLabels) {
+      if (text.includes(label)) score += 10;
+      for (const token of label.split(' ').filter((part) => part.length >= 4)) {
+        if (text.includes(token)) score += 1;
+      }
+    }
+    return score;
+  };
+
+  return [...candidates].sort((left, right) => (
+    relevance(right) - relevance(left)
+    || right.lastSeenAt.localeCompare(left.lastSeenAt)
+    || left.external_id.localeCompare(right.external_id)
+  ));
+};
+
+const refreshSelectedModeSemantics = async (
+  selection: { modeId: string; label: string; revision: number | null; memberLabels: string[] },
+  tabs: chrome.tabs.Tab[],
+): Promise<void> => {
+  if (selection.modeId === 'default') return;
+
+  const pool = await getCandidatePoolCached();
+  const prioritized = prioritizeCandidatesForSelectedMode(
+    pool,
+    [selection.label, ...selection.memberLabels],
+  ).slice(0, MAX_RANK_WORKING_SET);
+  const hydrated = await hydrateCandidatePool(prioritized);
+
+  // Drain a few neural slices immediately on explicit user selection. This is
+  // bounded so mode activation is responsive without monopolizing the worker;
+  // ordinary rank-driven semantic refresh continues the remaining tail.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const refresh = await refreshSemanticScoreFeatures(hydrated, selection.label);
+    const pending = Number(refresh.diagnostics?.pendingCandidateCount ?? 0);
+    if (refresh.changed > 0) {
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: refresh.changed,
+              modeSelectionRefresh: true,
+              pendingCandidateCount: pending,
+            },
+          }).catch(() => undefined)
+        : undefined));
+    }
+    if (pending <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  }
+};
+
 const scheduleRankSemanticRefresh = (
   candidates: CandidatePoolItem[],
   mode: string,
@@ -2675,16 +2745,20 @@ const handleRuntimeMessage = (
         setStorage(STORAGE_KEYS.MODE, selection.label),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
       ]);
-      const settings = await getStorage<RetrievalSettings>(
-        STORAGE_KEYS.RETRIEVAL_SETTINGS,
-        DEFAULT_RETRIEVAL_SETTINGS,
-      );
-      if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
-          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
-        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
-      }
-      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      lastRankMemo = null;
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
+
+      const [settings, tabs] = await Promise.all([
+        getStorage<RetrievalSettings>(
+          STORAGE_KEYS.RETRIEVAL_SETTINGS,
+          DEFAULT_RETRIEVAL_SETTINGS,
+        ),
+        chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] }),
+      ]);
+
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
@@ -2696,6 +2770,18 @@ const handleRuntimeMessage = (
           },
         }).catch(() => undefined)
         : undefined));
+
+      // Selection takes effect immediately; re-grounding and acquisition happen
+      // automatically behind it rather than requiring a manual refresh.
+      void refreshSelectedModeSemantics(selection, tabs).catch((error) => {
+        console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
+      });
+      if (settings.webSearchEnabled) {
+        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
+          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
+        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
+      }
+
       sendResponse({
         ok: true,
         mode: selection.label,
