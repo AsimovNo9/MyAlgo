@@ -1314,6 +1314,7 @@ async function refreshSemanticScoreFeatures(
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
   const durableModeCatalog = await refreshDurableModeCatalog(state);
+  const activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default');
   const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
@@ -1600,6 +1601,9 @@ async function refreshSemanticScoreFeatures(
         modeAffinities: buildCandidateModeAffinities(
           candidate.semantic_graph_matches,
           durableModeCatalog,
+          {
+            includeModeIds: activeModeId === 'default' ? [] : [activeModeId],
+          },
         ),
         modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
         modeCatalogSignature: expectedModeCatalogSignature,
