@@ -1001,14 +1001,22 @@ async function hydrateSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
   semanticModelIdentities: string[],
+  cache: Record<string, SemanticFeatureRecord> | null = null,
+  durableModeCatalog: DurableSemanticModeCatalog | null = null,
 ): Promise<CandidatePoolItem[]> {
-  const [cache, durableModeCatalog] = await Promise.all([
-    getSemanticFeatureCacheCached(),
-    getStorage<DurableSemanticModeCatalog | null>(
-      STORAGE_KEYS.DURABLE_MODE_CATALOG,
-      null,
-    ),
-  ]);
+  const [resolvedCache, resolvedCatalog] = cache && durableModeCatalog
+    ? [cache, durableModeCatalog]
+    : await Promise.all([
+        cache ? Promise.resolve(cache) : getSemanticFeatureCacheCached(),
+        durableModeCatalog
+          ? Promise.resolve(durableModeCatalog)
+          : getStorage<DurableSemanticModeCatalog | null>(
+              STORAGE_KEYS.DURABLE_MODE_CATALOG,
+              null,
+            ),
+      ]);
+  cache = resolvedCache;
+  durableModeCatalog = resolvedCatalog;
   const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
@@ -1776,8 +1784,15 @@ async function rankLocalCandidates(
   sourceFilters: FeedSourceFilters,
   mode: string,
 ): Promise<LocalFeedItem[]> {
-  const state = await personalAlgorithmStore.exportState();
-  const [feedbackEvents, activeModeId, durableModeCatalog] = await Promise.all([
+  const [
+    state,
+    feedbackEvents,
+    activeModeId,
+    durableModeCatalog,
+    semanticContext,
+    semanticFeatureCache,
+  ] = await Promise.all([
+    personalAlgorithmStore.exportState(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
       'personal-algorithm-local-events',
       [],
@@ -1787,6 +1802,8 @@ async function rankLocalCandidates(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
     ),
+    getSemanticProviderContext(),
+    getSemanticFeatureCacheCached(),
   ]);
   const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
   const feedbackSignals = buildLocalFeedbackSignals(
@@ -1798,7 +1815,7 @@ async function rankLocalCandidates(
       })),
     state,
   );
-  const { semanticModelMode, semanticModelIdentity } = await getSemanticProviderContext();
+  const { semanticModelMode, semanticModelIdentity } = semanticContext;
   const fallbackIdentity = semanticProviderIdentity('hash');
   const semanticModelIdentities = semanticModelMode === 'neural'
     ? [
@@ -1811,6 +1828,8 @@ async function rankLocalCandidates(
     candidates,
     mode,
     semanticModelIdentities,
+    semanticFeatureCache,
+    durableModeCatalog,
   );
   const ranked = scoreLocalCandidates(
     state,
