@@ -171,6 +171,7 @@ export class LocalPersonalAlgorithmStore {
   private readonly storage: LocalStateStorage;
   private readonly key: string;
   private state: PersonalAlgorithmState | null = null;
+  private readSnapshot: PersonalAlgorithmState | null = null;
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(storage: LocalStateStorage, key = DEFAULT_STATE_KEY) {
@@ -202,6 +203,7 @@ export class LocalPersonalAlgorithmStore {
   private async mutate<T>(fn: (state: PersonalAlgorithmState) => T): Promise<T> {
     const state = await this.getState();
     const result = fn(state);
+    this.readSnapshot = null;
     await this.persist();
     return result;
   }
@@ -517,7 +519,19 @@ export class LocalPersonalAlgorithmStore {
   async reset(): Promise<void> {
     await this.getState();
     this.state = createEmptyState();
+    this.readSnapshot = null;
     await this.persist();
+  }
+
+  /**
+   * Stable read-only-by-convention snapshot for hot scoring paths. The snapshot
+   * is cloned once after each store mutation and then reused until the next
+   * mutation. Callers must not mutate the returned object.
+   */
+  async exportStateForRead(): Promise<PersonalAlgorithmState> {
+    const state = await this.getState();
+    if (!this.readSnapshot) this.readSnapshot = structuredClone(state);
+    return this.readSnapshot;
   }
 
   async exportState(): Promise<PersonalAlgorithmState> {
