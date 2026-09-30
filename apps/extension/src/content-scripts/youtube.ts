@@ -430,6 +430,22 @@ const renderExplanationContent = (
   });
   shell.appendChild(graph);
 
+  if (view.pathLines.length > 0) {
+    const reasons = document.createElement('div');
+    reasons.style.cssText = 'padding:10px 14px 8px;border-bottom:1px solid #303030;background:#141414;';
+    const heading = document.createElement('div');
+    heading.textContent = 'Why it matched';
+    heading.style.cssText = 'font:700 11px/1.2 Roboto,Arial,sans-serif;color:#f8fafc;text-transform:uppercase;letter-spacing:.04em;';
+    reasons.appendChild(heading);
+    for (const pathLine of view.pathLines.slice(0, 2)) {
+      const row = document.createElement('div');
+      row.textContent = pathLine.replace(/^Graph path:\s*/i, '');
+      row.style.cssText = 'margin-top:6px;color:#cbd5e1;font:500 11px/1.35 Roboto,Arial,sans-serif;white-space:normal;';
+      reasons.appendChild(row);
+    }
+    shell.appendChild(reasons);
+  }
+
   const contributions = document.createElement('div');
   contributions.style.cssText = 'padding:0 14px;';
   for (const contribution of view.contributions) {
