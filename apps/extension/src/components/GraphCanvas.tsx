@@ -201,8 +201,40 @@ export function GraphCanvas({
     const lineageMode = layoutMode === 'lineage' && !compact;
     const lineageContextNodeIds = new Set<string>();
     if (lineageMode) {
+      const nonContentIds = new Set(nodes.filter((node) => node.kind !== 'content').map((node) => node.id));
+      const higherLevelConnectedIds = new Set<string>();
+      for (const edge of edges) {
+        if (!nonContentIds.has(edge.sourceNodeId) || !nonContentIds.has(edge.targetNodeId)) continue;
+        higherLevelConnectedIds.add(edge.sourceNodeId);
+        higherLevelConnectedIds.add(edge.targetNodeId);
+      }
+
+      const isolatedCreators = nodes
+        .filter((node) => (
+          node.kind === 'creator'
+          && !higherLevelConnectedIds.has(node.id)
+        ))
+        .sort((left, right) => (
+          (degreeByNode.get(right.id) ?? 0) - (degreeByNode.get(left.id) ?? 0)
+          || right.supportCount - left.supportCount
+          || left.label.localeCompare(right.label)
+          || left.id.localeCompare(right.id)
+        ))
+        .slice(0, 18);
+
       for (const node of nodes) {
-        if (node.kind !== 'content' || focusNodeIds.has(node.id)) lineageContextNodeIds.add(node.id);
+        if (node.kind === 'content') {
+          if (focusNodeIds.has(node.id)) lineageContextNodeIds.add(node.id);
+          continue;
+        }
+        if (
+          node.kind !== 'creator'
+          || higherLevelConnectedIds.has(node.id)
+          || isolatedCreators.some((creator) => creator.id === node.id)
+          || focusNodeIds.has(node.id)
+        ) {
+          lineageContextNodeIds.add(node.id);
+        }
       }
     }
     const candidateNodes = focusIsActive && focusNodeIds.size > 0
@@ -273,7 +305,7 @@ export function GraphCanvas({
         group.push(node);
         levelGroups.set(level, group);
       }
-      const yByLevel = [80, 230, 410, 590];
+      const yByLevel = [72, 205, 350, 590];
       for (const [level, group] of levelGroups.entries()) {
         const sorted = [...group].sort((left, right) => (
           Number(memberIds.has(right.id)) - Number(memberIds.has(left.id))
@@ -281,8 +313,15 @@ export function GraphCanvas({
           || left.label.localeCompare(right.label)
           || left.id.localeCompare(right.id)
         ));
-        const spacing = WIDTH / (Math.max(1, sorted.length) + 1);
+        const maxPerRow = level === 2 ? 6 : level === 1 ? 8 : 10;
+        const rowCount = Math.max(1, Math.ceil(sorted.length / maxPerRow));
         sorted.forEach((node, index) => {
+          const row = Math.floor(index / maxPerRow);
+          const rowStart = row * maxPerRow;
+          const rowSize = Math.min(maxPerRow, sorted.length - rowStart);
+          const indexInRow = index - rowStart;
+          const spacing = WIDTH / (rowSize + 1);
+          const rowOffset = level === 2 ? row * 62 : row * 52;
           const searchMatch = Boolean(normalizedQuery) && (
             node.label.toLowerCase().includes(normalizedQuery)
             || node.id.toLowerCase().includes(normalizedQuery)
@@ -290,8 +329,8 @@ export function GraphCanvas({
           );
           positioned.set(node.id, {
             ...node,
-            x: spacing * (index + 1),
-            y: yByLevel[Math.min(level, yByLevel.length - 1)],
+            x: spacing * (indexInRow + 1),
+            y: yByLevel[Math.min(level, yByLevel.length - 1)] + rowOffset - ((rowCount - 1) * 10),
             degree: degreeByNode.get(node.id) ?? 0,
             modeMember: memberIds.has(node.id),
             modeConnected: connectedIds.has(node.id),
