@@ -2438,6 +2438,16 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'PERSONAL_ALGORITHM_INSPECT') {
+    void personalAlgorithmStore.exportState()
+      .then((state) => sendResponse({ ok: true, state }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unable to inspect Personal Algorithm Graph.',
+      }));
+    return true;
+  }
+
   if (type === 'PERSONAL_ALGORITHM_REVIEW') {
     void ensureHistoryReconciled().then(() => personalAlgorithmStore.reviewGraph())
       .then((review) => sendResponse({ ok: true, review }))
