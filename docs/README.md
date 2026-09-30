@@ -40,11 +40,13 @@ This separation is a compliance design decision, not merely an implementation de
 
 ## Current implementation status
 
-The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. The semantic/runtime sequence through PR #228 is also merged: evidence-backed concept materialization, canonical semantic neighbourhoods, durable inferred modes, graph-grounded mode scoring, mode-aware retrieval/supply, stable source→replacement bindings, and the measured warm-path performance slice.
+The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. The semantic/runtime sequence through PR #229 is merged: evidence-backed concept materialization, canonical semantic neighbourhoods, durable inferred modes, graph-grounded mode scoring, mode-aware retrieval/supply, stable source→replacement bindings, bounded warm-path ranking, and measured post-canonical score calibration.
 
-The active implementation task is **#210 score calibration**. The runtime now has a stable post-canonical scoring contract, so calibration must be driven by observed raw/display distributions rather than by hiding scorer defects. The next trust-UX phase is **#153 + #170**: exact Why-this explanations linked to graph/evidence provenance and a read-only Personal Algorithm Graph inspector.
+PR #229 found no top-end display-score saturation that justified retuning the existing deterministic mapping. It also corrected effective replacement-threshold diagnostics and validated prepared candidate-context reuse across large Home reranks.
 
-#211 remains open only for long-session/browser stress validation and measured follow-up; it is not the primary architecture task. #214's runtime work is complete and its remaining work is documentation alignment/closure.
+The active implementation task is **#153 trust UX**: extend exact trace explanations to native cards and carry symbolic graph-path/evidence provenance through the live explanation contract. **#170** follows with a read-only Personal Algorithm Graph inspector.
+
+#211 remains open only for long-session/browser stress validation and measured follow-up; it is not the primary architecture task. #214's runtime/documentation work is complete.
 
 ## MVP product
 

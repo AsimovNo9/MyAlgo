@@ -36,7 +36,23 @@ export type RankedFeedItem = {
     displayScore: number;
     graphRevision: number;
     acquisitionMechanism: string | null;
-    contributions: Array<{ label: string; value: number; kind: string }>;
+    contributions: Array<{
+      label: string;
+      value: number;
+      kind: string;
+      sourceId?: string;
+      sourceIds?: string[];
+      evidenceIds?: string[];
+      modeId?: string;
+      modeRevision?: number;
+      canonicalId?: string;
+    }>;
+    matchedPaths?: Array<{
+      nodeIds: string[];
+      nodeLabels: string[];
+      edgeIds: string[];
+      evidenceIds: string[];
+    }>;
     modeGrounding?: {
       modeId: string;
       modeRevision: number;
@@ -72,6 +88,48 @@ export type RankedFeedItem = {
   }>;
 };
 
+
+export type ExplanationViewModel = {
+  scoreLine: string;
+  acquisitionLine: string | null;
+  pathLines: string[];
+  contributionLines: string[];
+};
+
+export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
+  const explanation = item.explanation;
+  const scoreLine = explanation
+    ? `Score ${explanation.displayScore}/100 · raw ${explanation.rawScore} · graph r${explanation.graphRevision}`
+    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
+  const mechanismLabel = explanation?.acquisitionMechanism === 'observed_dom'
+    ? 'Observed on the current YouTube page'
+    : explanation?.acquisitionMechanism === 'web_search'
+      ? 'Discovered via YouTube search'
+      : explanation?.acquisitionMechanism === 'rss'
+        ? 'Discovered via RSS'
+        : explanation?.acquisitionMechanism
+          ? `Acquired via ${explanation.acquisitionMechanism}`
+          : null;
+  const acquisitionLine = mechanismLabel
+    ? `${mechanismLabel} · source is not preference evidence`
+    : null;
+  const pathLines = (explanation?.matchedPaths ?? [])
+    .slice(0, 3)
+    .map((path) => {
+      const labels = path.nodeLabels.filter(Boolean);
+      const pathLabel = labels.length > 0 ? labels.join(' ↔ ') : path.nodeIds.join(' ↔ ');
+      const evidenceCount = path.evidenceIds.length;
+      return evidenceCount > 0
+        ? `Graph path: ${pathLabel} · ${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`
+        : `Graph path: ${pathLabel}`;
+    });
+  const contributionLines = (explanation?.contributions ?? []).map((contribution) => {
+    const sign = contribution.value > 0 ? '+' : '';
+    return `${contribution.label}: ${sign}${contribution.value}`;
+  });
+  return { scoreLine, acquisitionLine, pathLines, contributionLines };
+}
+
 export function getContentPresentationLabel(
   item: RankedFeedItem,
   minimumConfidence = 0.35,
@@ -95,6 +153,7 @@ export const MYALGO_INJECTED_SELECTOR = [
   '[data-personal-algorithm-replacement]',
   '[data-personal-algorithm-status]',
   '[data-personal-algorithm-explanation]',
+  '[data-personal-algorithm-explanation-panel]',
   '[data-personal-algorithm-control]',
 ].join(', ');
 

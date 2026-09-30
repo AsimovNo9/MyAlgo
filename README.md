@@ -49,12 +49,12 @@ Current execution order:
 4. **Complete — #214 / PR #226 mode-aware retrieval + slider-relative supply:** stable mode members change production retrieval plans, native exact-mode supply counts against slider demand, and only measured shortfall is filled from the governed scored reservoir.
 5. **Complete — #214 / PR #227 replacement stability:** valid source→replacement bindings and rendered replacement nodes survive ordinary mutation/metadata/semantic/retrieval reranks; rotation is limited to explicit hard invalidation or source/candidate invalidity.
 6. **Complete — #211 / PR #228 ranking/presentation performance slice:** the warm MV3 path now uses prepared graph/lexical indexes, bounded per-candidate score reuse, batched/signature-gated persistence, compact presentation caching, shared Home DOM snapshots, and presentation-stable replacement targeting. Long-session/browser stress remains tracked in #211.
-7. **Active P1 — #210 score calibration:** measure the post-canonical raw/display distribution, saturation/tie pressure, and replacement-threshold headroom before changing the deterministic 0–100 mapping.
-8. **Next P1 — #153 + #170 trust UX:** complete exact Why-this, graph-path, evidence-provenance, and graph inspection over the stable trace contract.
+7. **Complete — #210 / PR #229 post-canonical calibration measurement:** live batches showed no 95–100 saturation, corrected effective replacement-threshold diagnostics, and validated prepared candidate-context reuse across large Home reranks; the existing deterministic display curve remains unchanged because the measurements do not justify retuning.
+8. **Active P1 — #153 trust UX, then #170 graph inspection:** extend exact trace explanations to native cards, carry symbolic graph paths/evidence provenance, then add the read-only Personal Algorithm Graph inspector.
 9. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
 10. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #223/#221, PR #224, PR #225, PR #226, and PR #227 are merged and live-validated. Canonical semantic neighbourhoods feed durable modes whose scoring and retrieval resolve through stable mode revisions to exact graph provenance, slider-relative supply is bounded by the existing scored reservoir, and source→replacement identity survives ordinary DOM/metadata/semantic/retrieval churn. PR #228 is merged. Cached presentation is decoupled from fresh ranking, unchanged candidates can reuse deterministic score/trace results under the same state/feedback/mode context, and Home presentation avoids repeated full DOM discovery on scroll. #210 is now the active measured slice: instrument the corrected score distribution first, then retune calibration/replacement thresholds only when the captured distribution justifies it.
+PR #223/#221 through PR #229 are merged. Canonical semantic neighbourhoods feed durable modes whose scoring and retrieval resolve through stable mode revisions to exact graph provenance, slider-relative supply is bounded by the existing scored reservoir, and source→replacement identity survives ordinary DOM/metadata/semantic/retrieval churn. PR #228 established the bounded warm ranking/presentation path. PR #229 then measured the corrected post-canonical score distribution, found no top-end saturation that would justify changing the deterministic display curve, corrected effective replacement-threshold diagnostics, and live-validated prepared-context reuse on a 295-candidate Home working set. #153 is now the active trust-surface slice.
 
 The intended hierarchy is:
 
@@ -73,7 +73,7 @@ interaction-supported candidate metadata
 
 A visible video badge remains conservative and may show one label or none. Internal semantic classification is multi-label. User-facing modes are stable clusters over multiple canonical graph nodes rather than transient one-node labels derived from the current feed cache.
 
-Do not mix display-score recalibration into durable-mode identity work. #221 has removed the duplicate semantic-score defect, so #210 is now unblocked, but the P0 sequence completes durable mode identity and graph-grounded mode behavior first.
+Display-score calibration remains a presentation layer, not preference authority. #229 measured the post-canonical distribution after the durable-mode stack and retained the existing mapping because the observed batches showed no unnecessary 95–100 saturation.
 
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 

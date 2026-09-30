@@ -738,3 +738,18 @@ Validation sequence:
 7. raw scores, contribution reconciliation, trace IDs for unchanged scoring inputs, hard exclusions, and explicit-feedback authority must remain unchanged by a presentation-calibration change.
 
 Do not infer success from a prettier numeric spread alone. The gate is improved usable ordering/resolution without changing the underlying Personal Algorithm semantics.
+
+### PR #229 measured result
+
+Representative post-canonical Home batches showed raw medians around 11 and display medians around 68, with no observed saturation at 95, 97, or 99. The existing deterministic calibration therefore remains unchanged.
+
+The live cache validation also separated exact trace invalidation from expensive prepared candidate work. On a 295-candidate Home working set, prepared-context reuse reached 295/295 on a repeated generation and 271/295 after the next page change, while replacement bindings remained stable at 119/119 on the repeated presentation. Full score/trace cache hits may still be zero when evidence revision changes because trace provenance must refresh.
+
+For #153 explanation validation, require:
+1. every scored native card and every replacement card exposes a `Why this?` entry point;
+2. the explanation shows the exact display/raw score and graph revision associated with the trace;
+3. displayed contribution values are copied from the scorer trace without recomputation;
+4. matched graph paths preserve node IDs, user-facing node labels, edge IDs, and evidence IDs from the trace;
+5. acquisition mechanism is shown separately and explicitly not presented as preference evidence;
+6. repeated presentation refreshes update the explanation for the current trace without duplicating controls or changing native card identity.
+
