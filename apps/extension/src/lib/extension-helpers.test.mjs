@@ -200,6 +200,55 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
   assert.equal(view.revisions[0].revision, 7);
 });
 
+test('graph inspector attaches strongest semantic mode or topic grouping to retained content', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      currentRevision: 1,
+      userEdits: [],
+      revisions: [],
+      nodes: [{
+        id: 'content:youtube:video-a',
+        kind: 'content',
+        label: 'Video A',
+        content: { source: 'youtube', externalId: 'video-a' },
+        provenance: 'explicit',
+        confidence: null,
+        attributes: {},
+        createdAt: '2026-09-30T08:00:00.000Z',
+        updatedAt: '2026-09-30T08:00:00.000Z',
+      }],
+      edges: [],
+    },
+  };
+
+  const modeView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: 'AI tooling',
+    categoryConfidence: 0.81,
+    modeAffinities: [
+      { modeId: 'mode:systems', label: 'Systems', affinity: 0.62 },
+      { modeId: 'mode:ai', label: 'AI work', affinity: 0.84 },
+    ],
+  }]);
+  assert.equal(modeView.nodes[0].semanticClusterId, 'mode:mode:ai');
+  assert.equal(modeView.nodes[0].semanticClusterLabel, 'AI work');
+  assert.equal(modeView.nodes[0].semanticClusterKind, 'mode');
+  assert.equal(modeView.nodes[0].semanticClusterAffinity, 0.84);
+
+  const topicView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: 'AI tooling',
+    categoryConfidence: 0.44,
+    modeAffinities: [],
+  }]);
+  assert.equal(topicView.nodes[0].semanticClusterId, 'topic:ai tooling');
+  assert.equal(topicView.nodes[0].semanticClusterLabel, 'AI tooling');
+  assert.equal(topicView.nodes[0].semanticClusterKind, 'topic');
+  assert.equal(topicView.nodes[0].semanticClusterAffinity, 0.44);
+});
+
 test('graph inspector parses exported JSON without mutating live state and rejects invalid snapshots', () => {
   const empty = {
     schemaVersion: 2,
