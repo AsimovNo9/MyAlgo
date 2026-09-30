@@ -224,33 +224,15 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #216/#162 established replay/evaluation, PR #218/#217 established evidence-backed semantic graph materialization, and PR #220/#219 established local zero-shot topic verification.
+PR #223/#221, PR #224, PR #225, PR #226, PR #227, and PR #228 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, and the bounded warm ranking/presentation path are now foundations rather than active architecture work.
 
-1. **P0 — #221 / PR #223 canonical concepts + bounded semantic scoring — in review.** Deterministically reconcile near-duplicate verified/materialized labels into canonical neighbourhoods while retaining source-node/evidence provenance. Candidate scoring awards one reconciled lexical/embedding contribution per semantic neighbourhood; broad content-type taxonomy is kept separate from specific preference concepts.
-2. **P0 — #214 durable inferred modes.** Cluster canonical concepts into stable local mode IDs/revisions, retain multi-label candidate↔mode affinity, and persist mode identity independently of current feed-cache churn.
-3. **P0 — #214 graph-grounded mode retrieval/supply.** Resolve active-mode score changes to exact member nodes, derive bounded retrieval terms from cluster members, compute slider-relative native supply, and fill only eligible shortfalls from the existing acquired reservoir.
-4. **P1 — #210 + #153 + #170 trust/calibration UX.** Recalibrate 0–100 display scores only after duplicate semantic evidence is removed, then expose exact graph/provenance paths and trace contributions.
-5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
-7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
-
-Live post-#220 validation makes the dependency explicit. The verifier can successfully keep or abstain from bounded metadata labels, but semantically redundant labels can all survive verification because they are genuinely entailed. Broad graph concepts can also independently match the same candidate. The current additive scorer treats those matches as separate positive terms, inflating raw scores and compressing useful differences in the display score.
-
-```text
-verified/materialized graph labels
-    ↓
-deterministic canonical concept neighbourhoods
-    ↓
-one bounded semantic contribution per neighbourhood
-    ↓
-durable mode clusters
-    ↓
-multi-label candidate affinities
-    ↓
-graph-grounded mode scoring + retrieval/supply
-```
-
-Canonicalization must preserve every source graph node and its evidence/provenance. It is a derived reconciliation layer, not permission to delete explicit/user-authored distinctions.
+1. **Active P1 — #210 score calibration.** Capture post-canonical raw/display quantiles, tie rate, saturation at 95/97/99, and replacement-threshold context on real rank batches. Do not change `calibrateLocalScore()` or replacement thresholds until those measurements show a concrete problem.
+2. **Next P1 — #153 + #170 trust UX.** Build the complete trace→graph→evidence explanation and graph/provenance inspection flow from the now-stable trace contract.
+3. **P1/P2 — #155 + #154 + #178 correction/provenance/history controls.** Let users forget evidence, reduce/prefer/mute graph terms, and explicitly choose history clusters.
+4. **P2 — remaining #161 + #158.** Add user-authored/versioned modes and explicit graph nodes once inspection/correction semantics are established.
+5. **P3 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot.
+6. **Release-validation track — #169 + #211.** Validate signed-out/offline behavior plus long/infinite-scroll/service-worker-restart stability without blocking the primary product loop unless a measured regression appears.
+7. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
 
 
 ## Phase 1 scope discipline

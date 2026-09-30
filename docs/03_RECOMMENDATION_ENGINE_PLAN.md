@@ -113,6 +113,19 @@ calibrated display score  → bounded 0-100 UI and replacement comparison
 
 Calibration must be deterministic and monotonic. Replacement should require a configurable minimum uplift once score resolution is sufficient, rather than using equal-score churn as normal behavior.
 
+### Post-canonical calibration measurement (#210)
+
+Final calibration tuning is measurement-gated. Each production rank batch should expose a compact deterministic summary of the scored working set:
+
+- raw-score min/p25/p50/p75/p90/p95/max;
+- display-score min/p25/p50/p75/p90/p95/max;
+- distinct display-score count and tie rate;
+- saturation rates at 95, 97, and 99;
+- configured replacement minimum score/uplift;
+- fraction of the working set clearing the replacement minimum and median headroom over that threshold.
+
+These diagnostics are observational only: they do not affect scoring, ranking, replacement eligibility, traces, or graph state. Change the 0–100 mapping or replacement thresholds only after live post-canonical measurements demonstrate saturation, poor resolution, or threshold mismatch.
+
 ### Replacement-card metadata
 
 A MyAlgo replacement must read like a real video card, not a debugging surface. Title and creator/channel are first-class visible metadata and must remain present even when thumbnail metadata is absent. MyAlgo provenance/score/Why-this controls are secondary annotations.

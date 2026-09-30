@@ -7,7 +7,9 @@ import {
   calibrateLocalScore,
   classifyCandidateContent,
   extractLocalCandidateFeatures,
+  getLocalScoringDiagnostics,
   scoreLocalCandidates,
+  summarizeLocalScoreCalibration,
 } from './personal-algorithm-runtime.ts';
 
 const state = {
@@ -579,6 +581,71 @@ test('calibrated scores are deterministic, monotonic, and bounded', () => {
   assert.ok(calibrateLocalScore(-20) < calibrateLocalScore(-10));
   assert.ok(calibrateLocalScore(1000) <= 100);
   assert.ok(calibrateLocalScore(-1000) >= 0);
+});
+
+
+test('score calibration diagnostics expose post-canonical distribution and threshold pressure', () => {
+  const rawScores = [-30, -10, 0, 5, 10, 20, 30, 40, 60, 90];
+  const diagnostics = summarizeLocalScoreCalibration(
+    rawScores.map((rawScore) => ({
+      rawScore,
+      score: calibrateLocalScore(rawScore),
+    })),
+    55,
+    5,
+    50,
+  );
+
+  assert.equal(diagnostics.count, 10);
+  assert.equal(diagnostics.raw.min, -30);
+  assert.equal(diagnostics.raw.p50, 10);
+  assert.equal(diagnostics.raw.p95, 90);
+  assert.equal(diagnostics.raw.max, 90);
+  assert.equal(diagnostics.display.min, calibrateLocalScore(-30));
+  assert.equal(diagnostics.display.p50, calibrateLocalScore(10));
+  assert.equal(diagnostics.display.max, calibrateLocalScore(90));
+  assert.ok(diagnostics.display.saturation95Rate > 0);
+  assert.equal(diagnostics.replacement.baseMinimumScore, 55);
+  assert.equal(diagnostics.replacement.effectiveMinimumScore, 27.5);
+  assert.equal(diagnostics.replacement.minimumUplift, 5);
+  assert.equal(diagnostics.replacement.replacementPercent, 50);
+  assert.ok(diagnostics.replacement.qualifiedRate > 0);
+  assert.equal(
+    diagnostics.replacement.medianHeadroom,
+    calibrateLocalScore(10) - 27.5,
+  );
+});
+
+test('score calibration diagnostics are empty-safe and deterministic', () => {
+  assert.deepEqual(
+    summarizeLocalScoreCalibration([], 55, 5),
+    {
+      count: 0,
+      raw: { min: 0, p25: 0, p50: 0, p75: 0, p90: 0, p95: 0, max: 0 },
+      display: {
+        min: 0,
+        p25: 0,
+        p50: 0,
+        p75: 0,
+        p90: 0,
+        p95: 0,
+        max: 0,
+        distinct: 0,
+        tieRate: 0,
+        saturation95Rate: 0,
+        saturation97Rate: 0,
+        saturation99Rate: 0,
+      },
+      replacement: {
+        baseMinimumScore: 55,
+        effectiveMinimumScore: 55,
+        minimumUplift: 5,
+        replacementPercent: 0,
+        qualifiedRate: 0,
+        medianHeadroom: 0,
+      },
+    },
+  );
 });
 
 
@@ -1224,4 +1291,103 @@ test('incremental scoring reuses unchanged candidate traces and invalidates mate
     title: 'Local AI systems updated',
   }], 'Default')[0];
   assert.notEqual(changed.trace, first.trace);
+});
+
+
+test('exposure-only evidence churn reuses candidate preparation but refreshes exact trace revision', () => {
+  const candidate = {
+    external_id: 'exposure-cache-video',
+    title: 'Local AI systems',
+    channel_name: 'Example creator',
+    firstSeenAt: '2026-09-30T00:00:00.000Z',
+    lastSeenAt: '2026-09-30T00:00:00.000Z',
+    topics: ['local ai'],
+  };
+  const baselineState = structuredClone(state);
+  baselineState.evidence.push({
+    id: 'exposure:one',
+    evidence: {
+      kind: 'exposure',
+      source: 'youtube',
+      externalId: 'exposure-cache-video',
+      observedAt: '2026-09-30T00:00:00.000Z',
+      provenance: {
+        connector: 'youtube',
+        mechanism: 'home_dom',
+      },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:00:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+
+  const first = scoreLocalCandidates(baselineState, [candidate], 'Default')[0];
+  const nextState = structuredClone(baselineState);
+  nextState.evidence[0].evidence.observedAt = '2026-09-30T00:01:00.000Z';
+  nextState.evidence[0].retainedAt = '2026-09-30T00:01:00.000Z';
+
+  const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
+  const diagnostics = getLocalScoringDiagnostics();
+
+  assert.equal(second.rawScore, first.rawScore);
+  assert.notEqual(second.trace.id, first.trace.id);
+  assert.equal(diagnostics.cacheHits, 0);
+  assert.equal(diagnostics.cacheMisses, 1);
+  assert.equal(diagnostics.contextHits, 1);
+  assert.equal(diagnostics.contextMisses, 0);
+});
+
+
+test('created-by exposure support churn keeps scoring state stable but refreshes trace evidence', () => {
+  const candidate = {
+    external_id: 'video-a',
+    title: 'Video A',
+    channel_name: 'Creator A',
+    firstSeenAt: '2026-09-30T00:00:00.000Z',
+    lastSeenAt: '2026-09-30T00:00:00.000Z',
+  };
+  const baselineState = structuredClone(state);
+  baselineState.evidence.push({
+    id: 'e1',
+    evidence: {
+      kind: 'interaction',
+      source: 'youtube',
+      externalId: 'video-a',
+      observedAt: '2026-09-30T00:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:00:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+
+  const first = scoreLocalCandidates(baselineState, [candidate], 'Default')[0];
+  const nextState = structuredClone(baselineState);
+  nextState.evidence.push({
+    id: 'exposure:two',
+    evidence: {
+      kind: 'exposure',
+      source: 'youtube',
+      externalId: 'video-a',
+      observedAt: '2026-09-30T00:01:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'home_dom' },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:01:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+  nextState.graph.edges[0].evidenceIds = ['e1', 'exposure:two'];
+
+  const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
+  const diagnostics = getLocalScoringDiagnostics();
+  const edgeContribution = second.trace.edgeContributions
+    .find((item) => item.id === 'edge:edge:created_by:video-a');
+
+  assert.equal(second.rawScore, first.rawScore);
+  assert.equal(diagnostics.contextHits, 1);
+  assert.equal(diagnostics.contextMisses, 0);
+  assert.deepEqual(edgeContribution?.evidenceIds, ['e1', 'exposure:two']);
 });

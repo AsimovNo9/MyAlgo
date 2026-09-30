@@ -40,9 +40,11 @@ This separation is a compliance design decision, not merely an implementation de
 
 ## Current implementation status
 
-The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. Creator relationships are maintained incrementally and can be deterministically rebuilt from retained evidence. The Chrome privacy gate is implemented and has been manually validated in a clean browser profile.
+The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. The semantic/runtime sequence through PR #228 is also merged: evidence-backed concept materialization, canonical semantic neighbourhoods, durable inferred modes, graph-grounded mode scoring, mode-aware retrieval/supply, stable source→replacement bindings, and the measured warm-path performance slice.
 
-The #168 repository/runtime audit found no YouTube Data API integration in the launch path and added CI guardrails for that boundary. PR #204 completed native-card enforcement/stale-loop hardening, PR #205 completed safe native-slot replacement plus first-batch source controls (#160), PR #212 completed source-neutral RSS/YouTube-search acquisition (#202/#206), PR #213 added rebuildable local semantic embeddings, PR #218 added evidence-backed semantic topic/concept materialization, and PR #220 added packaged local zero-shot topic verification. The active architecture work is now #214: canonicalize fragmented semantic graph concepts before clustering durable modes, and prevent redundant/broad semantic matches from stacking as independent additive preference evidence.
+The active implementation task is **#210 score calibration**. The runtime now has a stable post-canonical scoring contract, so calibration must be driven by observed raw/display distributions rather than by hiding scorer defects. The next trust-UX phase is **#153 + #170**: exact Why-this explanations linked to graph/evidence provenance and a read-only Personal Algorithm Graph inspector.
+
+#211 remains open only for long-session/browser stress validation and measured follow-up; it is not the primary architecture task. #214's runtime work is complete and its remaining work is documentation alignment/closure.
 
 ## MVP product
 

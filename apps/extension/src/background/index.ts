@@ -10,7 +10,7 @@ import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behav
 import { toNormalizedInteraction } from '../content-scripts/youtube-interactions';
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
-import { buildLocalFeedbackSignals, getLocalScoringDiagnostics, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { buildLocalFeedbackSignals, getLocalScoringDiagnostics, scoreLocalCandidates, summarizeLocalScoreCalibration } from './personal-algorithm-runtime';
 import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
@@ -2588,9 +2588,10 @@ const handleRuntimeMessage = (
         // candidates immediately and hydrate only from metadata already cached
         // in local storage. Settings and pool hydration are independent, so keep
         // both storage operations concurrent on a cold service-worker start.
-        const [sourceFilters, candidatePool] = await Promise.all([
+        const [sourceFilters, candidatePool, feedReplacementPercent] = await Promise.all([
           getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
           mergeCandidatePool(incomingCandidates, { deferPersistence: true }),
+          getStorage<number>(STORAGE_KEYS.FEED_REPLACEMENT_PERCENT, 0),
         ]);
         phaseTimings.poolAndSettingsMs = Math.round(performance.now() - phaseStartedAt);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
@@ -2648,6 +2649,12 @@ const handleRuntimeMessage = (
           ...currentPageFeed,
           ...replacementInventory,
         ];
+        const scoreCalibration = summarizeLocalScoreCalibration(
+          ranked,
+          youtubeConnector.presentation.replacementMinimumScore,
+          youtubeConnector.presentation.replacementMinimumUplift,
+          feedReplacementPercent,
+        );
 
         phaseStartedAt = performance.now();
         const [activeModeId, durableModeCatalog] = await Promise.all([
@@ -2687,6 +2694,7 @@ const handleRuntimeMessage = (
           cacheWarm,
           phaseTimings,
           scoreCache: getLocalScoringDiagnostics(),
+          scoreCalibration,
           elapsedMs: Math.round(performance.now() - rankStartedAt),
         });
 
