@@ -198,11 +198,17 @@ export function GraphCanvas({
       || Boolean(selectedNodeId)
       || Boolean(selectedEdgeId)
     );
-    const lineageOverview = layoutMode === 'lineage' && !compact && !focusIsActive;
+    const lineageMode = layoutMode === 'lineage' && !compact;
+    const lineageContextNodeIds = new Set<string>();
+    if (lineageMode) {
+      for (const node of nodes) {
+        if (node.kind !== 'content' || focusNodeIds.has(node.id)) lineageContextNodeIds.add(node.id);
+      }
+    }
     const candidateNodes = focusIsActive && focusNodeIds.size > 0
       ? nodes.filter((node) => focusNodeIds.has(node.id))
-      : lineageOverview
-        ? nodes.filter((node) => node.kind !== 'content')
+      : lineageMode
+        ? nodes.filter((node) => lineageContextNodeIds.has(node.id))
         : nodes;
     const candidateNodeIds = new Set(candidateNodes.map((node) => node.id));
     const candidateEdges = focusIsActive && focusNodeIds.size > 0
@@ -211,7 +217,7 @@ export function GraphCanvas({
           && focusNodeIds.has(edge.targetNodeId)
           && (focusEdgeIds.size === 0 || focusEdgeIds.has(edge.id))
         ))
-      : lineageOverview
+      : lineageMode
         ? edges.filter((edge) => candidateNodeIds.has(edge.sourceNodeId) && candidateNodeIds.has(edge.targetNodeId))
         : edges;
 
