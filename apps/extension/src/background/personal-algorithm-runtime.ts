@@ -98,7 +98,8 @@ const SEMANTIC_MATCH_MINIMUM_SIMILARITY = 0.24;
 const SEMANTIC_MATCH_RELATIVE_TO_BEST = 0.7;
 
 const MAX_CANDIDATE_SCORE_CACHE = 900;
-const MAX_FEEDBACK_REVISION_CACHE = 8;
+const MAX_CANDIDATE_CONTEXT_CACHE = 900;
+const MAX_PREPARED_SCORING_STATES = 4;
 
 const SEMANTIC_REGION_GENERIC_TOKENS = new Set([
   'ai', 'artificial', 'blog', 'blogs', 'daily', 'education', 'entertainment',
@@ -199,21 +200,62 @@ type CachedCandidateScore = {
   signature: string;
   modeKey: string;
   feedbackKey: string;
+  evidenceRevision: string;
   rawScore: number;
   score: number;
   classification: ReturnType<typeof classifyCandidateContent>;
   trace: PersonalScoreTrace;
 };
 
+type CachedCandidateContext = {
+  signature: string;
+  modeKey: string;
+  classification: ReturnType<typeof classifyCandidateContent>;
+  context: ScoreCandidate;
+};
+
 type PreparedLocalScoringState = {
   policy: PersonalScoringPolicy;
   scoringIndex: LocalScoringIndex;
   graphIndex: ReturnType<typeof buildPersonalScoringGraphIndex>;
-  revisionContextByFeedbackKey: Map<string, ReturnType<typeof buildPersonalScoringRevisionContext>>;
+  candidateContextCache: Map<string, CachedCandidateContext>;
   candidateScoreCache: Map<string, CachedCandidateScore>;
 };
 
-const preparedLocalScoringState = new WeakMap<PersonalAlgorithmState, PreparedLocalScoringState>();
+const preparedLocalScoringState = new Map<string, PreparedLocalScoringState>();
+
+const hashScoringMaterial = (value: unknown): string => {
+  const input = JSON.stringify(value);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+const graphScoringKey = (state: PersonalAlgorithmState): string => hashScoringMaterial({
+  revision: state.graph.currentRevision,
+  nodes: state.graph.nodes.map((node) => ({
+    id: node.id,
+    kind: node.kind,
+    label: node.label,
+    provenance: node.provenance,
+    confidence: node.confidence ?? null,
+    content: node.content ?? null,
+    attributes: node.attributes ?? {},
+  })),
+  edges: state.graph.edges.map((edge) => ({
+    id: edge.id,
+    sourceNodeId: edge.sourceNodeId,
+    targetNodeId: edge.targetNodeId,
+    relation: edge.relation,
+    provenance: edge.provenance,
+    confidence: edge.confidence ?? null,
+    evidenceIds: [...(edge.evidenceIds ?? [])].sort(),
+    attributes: edge.attributes ?? {},
+  })),
+});
 
 const feedbackRevisionKey = (signals: readonly ScoreFeedbackSignal[]): string => JSON.stringify(
   signals.map((signal) => ({
@@ -294,16 +336,26 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
 const getPreparedLocalScoringState = (
   state: PersonalAlgorithmState,
 ): PreparedLocalScoringState => {
-  let prepared = preparedLocalScoringState.get(state);
-  if (prepared) return prepared;
+  const key = graphScoringKey(state);
+  let prepared = preparedLocalScoringState.get(key);
+  if (prepared) {
+    preparedLocalScoringState.delete(key);
+    preparedLocalScoringState.set(key, prepared);
+    return prepared;
+  }
   prepared = {
     policy: buildLocalScoringPolicy(state),
     scoringIndex: buildLocalScoringIndex(state),
     graphIndex: buildPersonalScoringGraphIndex(state),
-    revisionContextByFeedbackKey: new Map(),
+    candidateContextCache: new Map(),
     candidateScoreCache: new Map(),
   };
-  preparedLocalScoringState.set(state, prepared);
+  preparedLocalScoringState.set(key, prepared);
+  while (preparedLocalScoringState.size > MAX_PREPARED_SCORING_STATES) {
+    const oldestKey = preparedLocalScoringState.keys().next().value;
+    if (oldestKey == null) break;
+    preparedLocalScoringState.delete(oldestKey);
+  }
   return prepared;
 };
 
@@ -1255,12 +1307,18 @@ export type LocalScoringDiagnostics = {
   cacheHits: number;
   cacheMisses: number;
   cacheSize: number;
+  contextHits: number;
+  contextMisses: number;
+  contextCacheSize: number;
 };
 
 let lastLocalScoringDiagnostics: LocalScoringDiagnostics = {
   cacheHits: 0,
   cacheMisses: 0,
   cacheSize: 0,
+  contextHits: 0,
+  contextMisses: 0,
+  contextCacheSize: 0,
 };
 
 export const getLocalScoringDiagnostics = (): LocalScoringDiagnostics => ({
@@ -1277,16 +1335,11 @@ export function scoreLocalCandidates(
 ): LocalRuntimeRankedCandidate[] {
   const prepared = getPreparedLocalScoringState(state);
   const feedbackKey = feedbackRevisionKey(feedbackSignals);
-  let revisionContext = prepared.revisionContextByFeedbackKey.get(feedbackKey);
-  if (!revisionContext) {
-    revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
-    prepared.revisionContextByFeedbackKey.set(feedbackKey, revisionContext);
-    while (prepared.revisionContextByFeedbackKey.size > MAX_FEEDBACK_REVISION_CACHE) {
-      const oldestKey = prepared.revisionContextByFeedbackKey.keys().next().value;
-      if (oldestKey == null) break;
-      prepared.revisionContextByFeedbackKey.delete(oldestKey);
-    }
-  }
+  // Evidence revisions are part of exact trace identity and may change on Home
+  // exposure reconciliation even when graph scoring material is unchanged.
+  // Recompute only the lightweight revision context while retaining prepared
+  // graph indexes and candidate feature contexts.
+  const revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
   const {
     policy,
     scoringIndex,
@@ -1296,6 +1349,8 @@ export function scoreLocalCandidates(
   const modeKey = durableModeScoringKey(mode, activeDurableMode);
   let cacheHits = 0;
   let cacheMisses = 0;
+  let contextHits = 0;
+  let contextMisses = 0;
   const ranked = candidates
     .map((candidate) => {
       const signature = candidateScoringSignature(candidate);
@@ -1310,17 +1365,45 @@ export function scoreLocalCandidates(
         || scoreResult.signature !== signature
         || scoreResult.modeKey !== modeKey
         || scoreResult.feedbackKey !== feedbackKey
+        || scoreResult.evidenceRevision !== revisionContext.evidenceRevision
       ) {
         cacheMisses += 1;
-        const classification = classifyCandidateContent(candidate);
-        const context = candidateContext(
-          state,
-          candidate,
-          scoringIndex,
-          mode,
-          activeDurableMode,
-          classification,
-        );
+        const cachedContext = prepared.candidateContextCache.get(candidate.external_id);
+        let classification: ReturnType<typeof classifyCandidateContent>;
+        let context: ScoreCandidate;
+        if (
+          cachedContext
+          && cachedContext.signature === signature
+          && cachedContext.modeKey === modeKey
+        ) {
+          contextHits += 1;
+          classification = cachedContext.classification;
+          context = cachedContext.context;
+          prepared.candidateContextCache.delete(candidate.external_id);
+          prepared.candidateContextCache.set(candidate.external_id, cachedContext);
+        } else {
+          contextMisses += 1;
+          classification = classifyCandidateContent(candidate);
+          context = candidateContext(
+            state,
+            candidate,
+            scoringIndex,
+            mode,
+            activeDurableMode,
+            classification,
+          );
+          prepared.candidateContextCache.set(candidate.external_id, {
+            signature,
+            modeKey,
+            classification,
+            context,
+          });
+          while (prepared.candidateContextCache.size > MAX_CANDIDATE_CONTEXT_CACHE) {
+            const oldestCandidateId = prepared.candidateContextCache.keys().next().value;
+            if (oldestCandidateId == null) break;
+            prepared.candidateContextCache.delete(oldestCandidateId);
+          }
+        }
         const result = scorePersonalAlgorithm(
           state,
           context,
@@ -1337,6 +1420,7 @@ export function scoreLocalCandidates(
           signature,
           modeKey,
           feedbackKey,
+          evidenceRevision: revisionContext.evidenceRevision,
           rawScore: result.score,
           score: calibrateLocalScore(result.score),
           classification,
@@ -1376,6 +1460,9 @@ export function scoreLocalCandidates(
     cacheHits,
     cacheMisses,
     cacheSize: prepared.candidateScoreCache.size,
+    contextHits,
+    contextMisses,
+    contextCacheSize: prepared.candidateContextCache.size,
   };
   return ranked;
 }
