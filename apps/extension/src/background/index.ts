@@ -129,6 +129,12 @@ type LocalFeedItem = CandidatePoolItem & {
       modeRevision?: number;
       canonicalId?: string;
     }>;
+    matchedPaths: Array<{
+      nodeIds: string[];
+      nodeLabels: string[];
+      edgeIds: string[];
+      evidenceIds: string[];
+    }>;
     modeGrounding: {
       modeId: string;
       modeRevision: number;
@@ -1998,6 +2004,14 @@ async function rankLocalCandidates(
         }
       : null;
 
+    const nodeLabelById = new Map(state.graph.nodes.map((node) => [node.id, node.label]));
+    const matchedPaths = trace.matchedPaths.map((path) => ({
+      nodeIds: path.nodeIds,
+      nodeLabels: path.nodeIds.map((nodeId) => nodeLabelById.get(nodeId) ?? nodeId),
+      edgeIds: path.edgeIds,
+      evidenceIds: path.evidenceIds,
+    }));
+
     const contributions = [
       ...trace.featureContributions,
       ...trace.nodeContributions,
@@ -2033,6 +2047,7 @@ async function rankLocalCandidates(
         policyRevision: trace.policyRevision,
         acquisitionMechanism: item.provenance?.mechanism ?? null,
         contributions,
+        matchedPaths,
         modeGrounding,
       },
     };
@@ -2731,6 +2746,7 @@ const handleRuntimeMessage = (
                 graphRevision: item.explanation.graphRevision,
                 acquisitionMechanism: item.explanation.acquisitionMechanism,
                 contributions: [],
+                matchedPaths: item.explanation.matchedPaths,
                 modeGrounding: item.explanation.modeGrounding,
               }
             : undefined,
