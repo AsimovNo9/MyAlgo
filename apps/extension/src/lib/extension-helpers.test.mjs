@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDurableModeOptions, buildGraphInspectorView, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
+import { buildDurableModeOptions, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -202,4 +202,95 @@ test('graph inspector parses exported JSON without mutating live state and rejec
     () => buildGraphInspectorView({ schemaVersion: 1, evidence: [], graph: {} }),
     /not a valid MyAlgo Personal Algorithm export/,
   );
+});
+
+
+test('graph mode overlay highlights exact mode members and their immediate graph neighbourhood', () => {
+  const view = {
+    schemaVersion: 2,
+    graphRevision: 8,
+    evidenceCount: 0,
+    nodeCount: 4,
+    edgeCount: 3,
+    nodesByKind: [],
+    edgesByRelation: [],
+    revisions: [],
+    nodes: [
+      { id: 'concept:ai', label: 'AI', kind: 'concept', provenance: 'inferred', confidence: 1, supportCount: 2 },
+      { id: 'topic:systems', label: 'Systems', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2 },
+      { id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 1 },
+      { id: 'content:a', label: 'Video A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1 },
+    ],
+    edges: [
+      {
+        id: 'edge:ai-systems', relation: 'related_to', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'concept:ai', sourceLabel: 'AI', targetNodeId: 'topic:systems', targetLabel: 'Systems',
+        evidenceIds: [], evidence: [],
+      },
+      {
+        id: 'edge:systems-creator', relation: 'influences', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'topic:systems', sourceLabel: 'Systems', targetNodeId: 'creator:a', targetLabel: 'Creator A',
+        evidenceIds: [], evidence: [],
+      },
+      {
+        id: 'edge:creator-content', relation: 'created_by', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'content:a', sourceLabel: 'Video A', targetNodeId: 'creator:a', targetLabel: 'Creator A',
+        evidenceIds: [], evidence: [],
+      },
+    ],
+  };
+  const catalog = {
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 8,
+    generatedAt: '2026-09-30T09:00:00.000Z',
+    modes: [{
+      id: 'mode:systems',
+      label: 'Systems mode',
+      revision: 4,
+      provenance: 'inferred',
+      pipelineId: 'durable-semantic-mode-cluster-v1',
+      graphRevision: 8,
+      createdAt: '2026-09-30T08:00:00.000Z',
+      lastSupportedAt: '2026-09-30T09:00:00.000Z',
+      active: true,
+      pinned: false,
+      members: [{
+        canonicalId: 'canonical:systems',
+        label: 'Systems',
+        weight: 1,
+        sourceNodeIds: ['topic:systems'],
+        supportContentIds: ['content:a'],
+      }],
+    }],
+  };
+
+  const overlay = buildGraphModeOverlay(view, catalog, 'mode:systems');
+  assert.deepEqual(overlay.memberNodeIds, ['topic:systems']);
+  assert.deepEqual(overlay.connectedNodeIds, ['concept:ai', 'creator:a', 'topic:systems']);
+  assert.deepEqual(overlay.connectedEdgeIds, ['edge:ai-systems', 'edge:systems-creator']);
+  assert.equal(overlay.modeRevision, 4);
+});
+
+test('graph mode overlay returns the full-graph sentinel without inventing membership', () => {
+  const overlay = buildGraphModeOverlay({
+    schemaVersion: 2,
+    graphRevision: 0,
+    evidenceCount: 0,
+    nodeCount: 0,
+    edgeCount: 0,
+    nodesByKind: [],
+    edgesByRelation: [],
+    nodes: [],
+    edges: [],
+    revisions: [],
+  }, null, 'all');
+
+  assert.deepEqual(overlay, {
+    modeId: 'all',
+    modeLabel: 'All graph',
+    modeRevision: null,
+    memberNodeIds: [],
+    connectedNodeIds: [],
+    connectedEdgeIds: [],
+  });
 });
