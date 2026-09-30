@@ -123,6 +123,7 @@ export function GraphCanvas({
 }: GraphCanvasProps) {
   const [zoom, setZoom] = React.useState(compact ? 1.25 : 1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
+  const [focusedSemanticClusterId, setFocusedSemanticClusterId] = React.useState<string | null>(null);
   const dragRef = React.useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   const layout = React.useMemo(() => {
@@ -202,11 +203,27 @@ export function GraphCanvas({
       }
     }
 
-    const focusIsActive = focusOnly && (
+    if (focusedSemanticClusterId) {
+      const clusterContentIds = new Set(
+        nodes
+          .filter((node) => node.semanticClusterId === focusedSemanticClusterId)
+          .map((node) => node.id),
+      );
+      for (const nodeId of clusterContentIds) focusNodeIds.add(nodeId);
+      for (const edge of edges) {
+        if (!clusterContentIds.has(edge.sourceNodeId) && !clusterContentIds.has(edge.targetNodeId)) continue;
+        focusEdgeIds.add(edge.id);
+        focusNodeIds.add(edge.sourceNodeId);
+        focusNodeIds.add(edge.targetNodeId);
+      }
+    }
+
+    const focusIsActive = (focusOnly || Boolean(focusedSemanticClusterId)) && (
       modeActive
       || normalizedQuery.length > 0
       || Boolean(selectedNodeId)
       || Boolean(selectedEdgeId)
+      || Boolean(focusedSemanticClusterId)
     );
     const lineageMode = layoutMode === 'lineage' && !compact;
     let hiddenIsolatedCreatorCount = 0;
@@ -534,7 +551,7 @@ export function GraphCanvas({
       hiddenIsolatedCreatorCount,
       semanticClusters,
     };
-  }, [compact, edges, focusOnly, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
+  }, [compact, edges, focusOnly, focusedSemanticClusterId, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
   React.useEffect(() => {
     if (!selectedNodeId) return;
@@ -549,6 +566,7 @@ export function GraphCanvas({
   const resetView = () => {
     setZoom(compact ? 1.25 : 1);
     setPan({ x: 0, y: 0 });
+    setFocusedSemanticClusterId(null);
   };
 
   const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -622,6 +640,9 @@ export function GraphCanvas({
           <button type="button" onClick={() => setZoom((value) => Math.min(3.5, value * 1.18))}>+</button>
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value / 1.18))}>−</button>
           <button type="button" onClick={resetView}>Reset</button>
+          {focusedSemanticClusterId ? (
+            <button type="button" onClick={() => setFocusedSemanticClusterId(null)}>All groups</button>
+          ) : null}
         </div>
       ) : null}
       <svg
@@ -641,30 +662,56 @@ export function GraphCanvas({
           </marker>
         </defs>
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-          {!compact && layoutMode === 'network' ? layout.semanticClusters.map((cluster) => (
-            <g key={cluster.id} pointerEvents="none">
-              <circle
-                cx={cluster.x}
-                cy={cluster.y}
-                r={cluster.radius}
-                fill={cluster.kind === 'mode' ? '#1e293b' : '#0f2530'}
-                fillOpacity="0.2"
-                stroke={cluster.kind === 'mode' ? '#f59e0b' : '#22d3ee'}
-                strokeOpacity="0.5"
-                strokeDasharray="6 5"
-              />
-              <text
-                x={cluster.x}
-                y={cluster.y - cluster.radius - 8}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill={cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
+          {!compact && layoutMode === 'network' ? layout.semanticClusters.map((cluster) => {
+            const focused = focusedSemanticClusterId === cluster.id;
+            return (
+              <g
+                key={cluster.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Focus semantic group ${cluster.label}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setFocusedSemanticClusterId((current) => current === cluster.id ? null : cluster.id);
+                  setPan({ x: 0, y: 0 });
+                  setZoom(1);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setFocusedSemanticClusterId((current) => current === cluster.id ? null : cluster.id);
+                  setPan({ x: 0, y: 0 });
+                  setZoom(1);
+                }}
+                style={{ cursor: 'pointer', outline: 'none' }}
               >
-                {cluster.kind === 'mode' ? 'Mode' : 'Topic'} · {cluster.label} · {cluster.count}
-              </text>
-            </g>
-          )) : null}
+                <circle
+                  cx={cluster.x}
+                  cy={cluster.y}
+                  r={cluster.radius}
+                  fill={cluster.kind === 'mode' ? '#1e293b' : '#0f2530'}
+                  fillOpacity={focused ? 0.34 : 0.2}
+                  stroke={focused ? '#facc15' : cluster.kind === 'mode' ? '#f59e0b' : '#22d3ee'}
+                  strokeWidth={focused ? 3 : 1.5}
+                  strokeOpacity={focused ? 0.95 : 0.5}
+                  strokeDasharray={focused ? undefined : '6 5'}
+                />
+                <text
+                  x={cluster.x}
+                  y={cluster.y - cluster.radius - 8}
+                  textAnchor="middle"
+                  fontSize="12"
+                  fontWeight="700"
+                  fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
+                  pointerEvents="none"
+                >
+                  {cluster.kind === 'mode' ? 'Mode' : 'Topic'} · {cluster.label} · {cluster.count}
+                </text>
+              </g>
+            );
+          }) : null}
           {layout.edges.map((edge) => {
             const source = layout.nodeById.get(edge.sourceNodeId);
             const target = layout.nodeById.get(edge.targetNodeId);
