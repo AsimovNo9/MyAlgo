@@ -381,6 +381,18 @@ export function buildGraphInspectorView(
               semanticClusterAffinity: categoryConfidence,
             };
           }
+
+          const strongestMode = [...(semantic?.modeAffinities ?? [])]
+            .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
+            .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
+          if (strongestMode) {
+            return {
+              semanticClusterId: `mode:${strongestMode.modeId}`,
+              semanticClusterLabel: strongestMode.label,
+              semanticClusterKind: 'mode' as const,
+              semanticClusterAffinity: strongestMode.affinity,
+            };
+          }
           return {
             semanticClusterId: null,
             semanticClusterLabel: null,
