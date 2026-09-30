@@ -40,6 +40,7 @@ export function Options() {
   const [graphQuery, setGraphQuery] = React.useState('');
   const [graphModeId, setGraphModeId] = React.useState('all');
   const [graphFocusOnly, setGraphFocusOnly] = React.useState(true);
+  const [graphLayoutMode, setGraphLayoutMode] = React.useState<'network' | 'lineage'>('network');
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
   const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
@@ -126,6 +127,7 @@ export function Options() {
     setGraphInspectorSource(null);
     setGraphModeId('all');
     setGraphFocusOnly(true);
+    setGraphLayoutMode('network');
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setOfflineGraphJson('');
@@ -468,6 +470,24 @@ export function Options() {
                 borderRadius: 12,
                 background: '#111827',
               }}>
+                <label htmlFor="graph-layout-mode">
+                  <strong>Layout</strong>
+                  <select
+                    id="graph-layout-mode"
+                    value={graphLayoutMode}
+                    onChange={(event) => setGraphLayoutMode(event.target.value === 'lineage' ? 'lineage' : 'network')}
+                    style={{ display: 'block', width: '100%', marginTop: 6, padding: 8 }}
+                  >
+                    <option value="network">Network</option>
+                    <option value="lineage">Lineage / family tree</option>
+                  </select>
+                </label>
+
+                <p style={{ margin: '6px 0 14px', color: '#94a3b8', fontSize: 11 }}>
+                  Lineage layers content/history toward the leaves, then creators/topics/concepts, then objectives/user-level nodes.
+                  It uses only stored graph edges; it does not invent ancestry.
+                </p>
+
                 <label htmlFor="graph-mode-overlay">
                   <strong>Mode overlay</strong>
                   <select
@@ -622,6 +642,7 @@ export function Options() {
                   }}
                   height={640}
                   focusOnly={graphFocusOnly}
+                  layoutMode={graphLayoutMode}
                 />
 
                 <div style={{
