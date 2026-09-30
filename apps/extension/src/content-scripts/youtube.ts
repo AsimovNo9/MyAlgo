@@ -952,6 +952,7 @@ const applyRankedFeed = (
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmSlotHeight;
     delete element.dataset.personalAlgorithmReplacementCandidateId;
     delete element.dataset.personalAlgorithmSourceScore;
     element.querySelector('[data-personal-algorithm-badge]')?.remove();
@@ -965,12 +966,15 @@ const applyRankedFeed = (
 
     if (decision.action === 'hide') {
       const sourceVideoId = id;
-      const slotWidth = element.getBoundingClientRect().width;
+      const slotRect = nativeCards[nativeIndex]?.rect ?? element.getBoundingClientRect();
+      const slotWidth = slotRect.width;
+      const slotHeight = slotRect.height;
       if (
         replacementLimit > 0
         && isReplacementEligibleNativeDecision(decision)
         && !sourceVideoId.startsWith('title:')
         && slotWidth >= 120
+        && slotHeight >= 80
         && element.parentElement
       ) {
         element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
@@ -983,6 +987,7 @@ const applyRankedFeed = (
           ? Number(item?.score)
           : 0;
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+        element.dataset.personalAlgorithmSlotHeight = String(Math.round(slotHeight));
         element.dataset.personalAlgorithmSourceScore = String(sourceScore);
 
         const sticky = stableReplacementBySourceId.get(sourceVideoId);
