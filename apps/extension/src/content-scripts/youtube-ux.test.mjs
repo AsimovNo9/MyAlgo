@@ -55,7 +55,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.deepEqual(
     view.contributionLines,
     [
-      'semantic neighbourhood: local AI: +10',
+      'Concept: local AI: +10',
       'explicit feedback: not interested: -5',
     ],
   );
