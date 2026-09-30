@@ -521,11 +521,7 @@ export function selectFeedMixAssignments(
 ): OpportunisticReplacementAssignment[] {
   const targets = [...nativeTargets]
     .filter((target) => target.externalId && !target.externalId.startsWith('title:'))
-    .sort((left, right) => (
-      (left.viewportPriority ?? 2) - (right.viewportPriority ?? 2)
-      || left.score - right.score
-      || left.nativeIndex - right.nativeIndex
-    ));
+    .sort((left, right) => left.score - right.score || left.nativeIndex - right.nativeIndex);
   const candidates = replacementCandidates.filter((item) => (
     Boolean(item.external_id && item.title && item.traceId)
     && item.visible !== false && item.suppressed !== true
@@ -615,7 +611,6 @@ export type OpportunisticReplacementTarget = {
   externalId: string;
   score: number;
   nativeIndex: number;
-  viewportPriority?: number;
 };
 
 export function selectOpportunisticReplacementTargets(
