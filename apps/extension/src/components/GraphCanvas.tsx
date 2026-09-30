@@ -245,34 +245,78 @@ export function GraphCanvas({
     }
 
     const positioned = new Map<string, PositionedNode>();
-    for (const [ring, group] of groups.entries()) {
-      const sorted = [...group].sort((left, right) => (
-        left.label.localeCompare(right.label) || left.id.localeCompare(right.id)
-      ));
-      const baseRadius = compact
-        ? [24, 82, 132, 178][Math.min(ring, 3)]
-        : [42, 126, 220, 314][Math.min(ring, 3)];
-      sorted.forEach((node, index) => {
-        const count = Math.max(1, sorted.length);
-        const phase = (hashString(`${ring}:${count}`) % 1000) / 1000 * Math.PI * 2;
-        const angle = phase + (Math.PI * 2 * index) / count;
-        const jitter = ((hashString(node.id) % 41) - 20) * (compact ? 0.45 : 1);
-        const radius = Math.max(12, baseRadius + jitter);
-        const searchMatch = Boolean(normalizedQuery) && (
-          node.label.toLowerCase().includes(normalizedQuery)
-          || node.id.toLowerCase().includes(normalizedQuery)
-          || node.kind.toLowerCase().includes(normalizedQuery)
-        );
-        positioned.set(node.id, {
-          ...node,
-          x: CENTER_X + Math.cos(angle) * radius,
-          y: CENTER_Y + Math.sin(angle) * radius,
-          degree: degreeByNode.get(node.id) ?? 0,
-          modeMember: memberIds.has(node.id),
-          modeConnected: connectedIds.has(node.id),
-          searchMatch,
+    if (layoutMode === 'lineage' && !compact) {
+      const levelByKind = new Map<string, number>([
+        ['user', 0],
+        ['objective', 0],
+        ['concept', 1],
+        ['topic', 1],
+        ['creator', 2],
+        ['content', 3],
+      ]);
+      const levelGroups = new Map<number, GraphInspectorNode[]>();
+      for (const node of prioritized) {
+        const level = levelByKind.get(node.kind) ?? 2;
+        const group = levelGroups.get(level) ?? [];
+        group.push(node);
+        levelGroups.set(level, group);
+      }
+      const yByLevel = [80, 230, 410, 590];
+      for (const [level, group] of levelGroups.entries()) {
+        const sorted = [...group].sort((left, right) => (
+          Number(memberIds.has(right.id)) - Number(memberIds.has(left.id))
+          || (degreeByNode.get(right.id) ?? 0) - (degreeByNode.get(left.id) ?? 0)
+          || left.label.localeCompare(right.label)
+          || left.id.localeCompare(right.id)
+        ));
+        const spacing = WIDTH / (Math.max(1, sorted.length) + 1);
+        sorted.forEach((node, index) => {
+          const searchMatch = Boolean(normalizedQuery) && (
+            node.label.toLowerCase().includes(normalizedQuery)
+            || node.id.toLowerCase().includes(normalizedQuery)
+            || node.kind.toLowerCase().includes(normalizedQuery)
+          );
+          positioned.set(node.id, {
+            ...node,
+            x: spacing * (index + 1),
+            y: yByLevel[Math.min(level, yByLevel.length - 1)],
+            degree: degreeByNode.get(node.id) ?? 0,
+            modeMember: memberIds.has(node.id),
+            modeConnected: connectedIds.has(node.id),
+            searchMatch,
+          });
         });
-      });
+      }
+    } else {
+      for (const [ring, group] of groups.entries()) {
+        const sorted = [...group].sort((left, right) => (
+          left.label.localeCompare(right.label) || left.id.localeCompare(right.id)
+        ));
+        const baseRadius = compact
+          ? [24, 82, 132, 178][Math.min(ring, 3)]
+          : [42, 126, 220, 314][Math.min(ring, 3)];
+        sorted.forEach((node, index) => {
+          const count = Math.max(1, sorted.length);
+          const phase = (hashString(`${ring}:${count}`) % 1000) / 1000 * Math.PI * 2;
+          const angle = phase + (Math.PI * 2 * index) / count;
+          const jitter = ((hashString(node.id) % 41) - 20) * (compact ? 0.45 : 1);
+          const radius = Math.max(12, baseRadius + jitter);
+          const searchMatch = Boolean(normalizedQuery) && (
+            node.label.toLowerCase().includes(normalizedQuery)
+            || node.id.toLowerCase().includes(normalizedQuery)
+            || node.kind.toLowerCase().includes(normalizedQuery)
+          );
+          positioned.set(node.id, {
+            ...node,
+            x: CENTER_X + Math.cos(angle) * radius,
+            y: CENTER_Y + Math.sin(angle) * radius,
+            degree: degreeByNode.get(node.id) ?? 0,
+            modeMember: memberIds.has(node.id),
+            modeConnected: connectedIds.has(node.id),
+            searchMatch,
+          });
+        });
+      }
     }
 
     return {
