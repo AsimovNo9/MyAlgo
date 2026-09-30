@@ -30,25 +30,27 @@ test('replacement candidates require current trace and eligible policy outcome',
   );
 });
 
-test('feed mix replacement prioritizes visible viewport targets before lower-scoring offscreen targets', () => {
-  const assignments = selectFeedMixAssignments(
-    [
-      { externalId: 'offscreen-low', score: 10, nativeIndex: 0, viewportPriority: 2 },
-      { externalId: 'visible-high', score: 80, nativeIndex: 1, viewportPriority: 0 },
-      { externalId: 'visible-low', score: 20, nativeIndex: 2, viewportPriority: 0 },
-    ],
-    [
-      { external_id: 'candidate-a', title: 'A', score: 90, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
-      { external_id: 'candidate-b', title: 'B', score: 85, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
-    ],
-    2,
-    100,
-    5,
-  );
+test('feed mix replacement ordering is stable and does not depend on viewport layout state', () => {
+  const targets = [
+    { externalId: 'offscreen-low', score: 10, nativeIndex: 0 },
+    { externalId: 'visible-high', score: 80, nativeIndex: 1 },
+    { externalId: 'visible-low', score: 20, nativeIndex: 2 },
+  ];
+  const candidates = [
+    { external_id: 'candidate-a', title: 'A', score: 90, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'candidate-b', title: 'B', score: 85, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+  ];
+
+  const first = selectFeedMixAssignments(targets, candidates, 2, 100, 5);
+  const second = selectFeedMixAssignments([...targets].reverse(), candidates, 2, 100, 5);
 
   assert.deepEqual(
-    assignments.map((assignment) => assignment.target.externalId),
-    ['visible-low', 'visible-high'],
+    first.map((assignment) => assignment.target.externalId),
+    ['offscreen-low', 'visible-low'],
+  );
+  assert.deepEqual(
+    second.map((assignment) => assignment.target.externalId),
+    ['offscreen-low', 'visible-low'],
   );
 });
 
