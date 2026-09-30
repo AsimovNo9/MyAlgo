@@ -1310,6 +1310,9 @@ export type LocalScoringDiagnostics = {
   contextHits: number;
   contextMisses: number;
   contextCacheSize: number;
+  graphRevision: number;
+  scoringStateKey: string;
+  evidenceRevision: string;
 };
 
 let lastLocalScoringDiagnostics: LocalScoringDiagnostics = {
@@ -1319,6 +1322,9 @@ let lastLocalScoringDiagnostics: LocalScoringDiagnostics = {
   contextHits: 0,
   contextMisses: 0,
   contextCacheSize: 0,
+  graphRevision: 0,
+  scoringStateKey: '',
+  evidenceRevision: '',
 };
 
 export const getLocalScoringDiagnostics = (): LocalScoringDiagnostics => ({
@@ -1333,6 +1339,7 @@ export function scoreLocalCandidates(
   sourceFilters: FeedSourceFilters = {},
   activeDurableMode?: LocalDurableModeScoringContext | null,
 ): LocalRuntimeRankedCandidate[] {
+  const scoringStateKey = graphScoringKey(state);
   const prepared = getPreparedLocalScoringState(state);
   const feedbackKey = feedbackRevisionKey(feedbackSignals);
   // Evidence revisions are part of exact trace identity and may change on Home
@@ -1463,6 +1470,9 @@ export function scoreLocalCandidates(
     contextHits,
     contextMisses,
     contextCacheSize: prepared.candidateContextCache.size,
+    graphRevision: state.graph.currentRevision,
+    scoringStateKey,
+    evidenceRevision: revisionContext.evidenceRevision,
   };
   return ranked;
 }
