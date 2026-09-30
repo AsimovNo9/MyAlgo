@@ -17,6 +17,7 @@ type GraphCanvasProps = {
   height?: number;
   compact?: boolean;
   focusOnly?: boolean;
+  layoutMode?: 'network' | 'lineage';
 };
 
 type PositionedNode = GraphInspectorNode & {
@@ -108,6 +109,7 @@ export function GraphCanvas({
   height = 620,
   compact = false,
   focusOnly = false,
+  layoutMode = 'network',
 }: GraphCanvasProps) {
   const [zoom, setZoom] = React.useState(compact ? 1.25 : 1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
@@ -280,7 +282,7 @@ export function GraphCanvas({
       modeActive,
       focusIsActive,
     };
-  }, [compact, edges, focusOnly, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
+  }, [compact, edges, focusOnly, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
   React.useEffect(() => {
     if (!selectedNodeId) return;
