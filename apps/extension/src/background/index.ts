@@ -2507,11 +2507,18 @@ const handleRuntimeMessage = (
           externalId: record.externalId,
           category: record.category,
           categoryConfidence: record.categoryConfidence,
-          modeAffinities: (record.modeAffinities ?? []).map((affinity) => ({
-            modeId: affinity.modeId,
-            label: affinity.label,
-            affinity: affinity.affinity,
-          })),
+          modeAffinities: (record.modeAffinities ?? [])
+            .filter((affinity) => (
+              durableModeCatalog?.modes.some((mode) => (
+                mode.id === affinity.modeId
+                && mode.revision === affinity.modeRevision
+              )) === true
+            ))
+            .map((affinity) => ({
+              modeId: affinity.modeId,
+              label: affinity.label,
+              affinity: affinity.affinity,
+            })),
         })),
       }))
       .catch((error) => sendResponse({
