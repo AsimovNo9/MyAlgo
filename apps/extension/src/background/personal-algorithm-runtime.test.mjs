@@ -7,6 +7,7 @@ import {
   calibrateLocalScore,
   classifyCandidateContent,
   extractLocalCandidateFeatures,
+  getLocalScoringDiagnostics,
   scoreLocalCandidates,
   summarizeLocalScoreCalibration,
 } from './personal-algorithm-runtime.ts';
@@ -1290,4 +1291,49 @@ test('incremental scoring reuses unchanged candidate traces and invalidates mate
     title: 'Local AI systems updated',
   }], 'Default')[0];
   assert.notEqual(changed.trace, first.trace);
+});
+
+
+test('exposure-only evidence churn reuses candidate preparation but refreshes exact trace revision', () => {
+  const candidate = {
+    external_id: 'exposure-cache-video',
+    title: 'Local AI systems',
+    channel_name: 'Example creator',
+    firstSeenAt: '2026-09-30T00:00:00.000Z',
+    lastSeenAt: '2026-09-30T00:00:00.000Z',
+    topics: ['local ai'],
+  };
+  const baselineState = structuredClone(state);
+  baselineState.evidence.push({
+    id: 'exposure:one',
+    evidence: {
+      kind: 'exposure',
+      source: 'youtube',
+      externalId: 'exposure-cache-video',
+      observedAt: '2026-09-30T00:00:00.000Z',
+      provenance: {
+        connector: 'youtube',
+        mechanism: 'home_dom',
+      },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:00:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+
+  const first = scoreLocalCandidates(baselineState, [candidate], 'Default')[0];
+  const nextState = structuredClone(baselineState);
+  nextState.evidence[0].evidence.observedAt = '2026-09-30T00:01:00.000Z';
+  nextState.evidence[0].retainedAt = '2026-09-30T00:01:00.000Z';
+
+  const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
+  const diagnostics = getLocalScoringDiagnostics();
+
+  assert.equal(second.rawScore, first.rawScore);
+  assert.notEqual(second.trace.id, first.trace.id);
+  assert.equal(diagnostics.cacheHits, 0);
+  assert.equal(diagnostics.cacheMisses, 1);
+  assert.equal(diagnostics.contextHits, 1);
+  assert.equal(diagnostics.contextMisses, 0);
 });
