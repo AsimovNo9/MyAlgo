@@ -194,6 +194,10 @@ export type GraphInspectorNode = {
   provenance: 'explicit' | 'inferred';
   confidence: number | null;
   supportCount: number;
+  contentSource: string | null;
+  contentExternalId: string | null;
+  creatorName: string | null;
+  thumbnailUrl: string | null;
 };
 
 export type GraphInspectorEdge = {
@@ -282,14 +286,26 @@ export function buildGraphInspectorView(input: unknown): GraphInspectorView {
   };
 
   const nodes = state.graph.nodes
-    .map((node) => ({
-      id: node.id,
-      label: node.label,
-      kind: node.kind,
-      provenance: node.provenance,
-      confidence: node.confidence,
-      supportCount: supportByNodeId.get(node.id)?.size ?? 0,
-    }))
+    .map((node) => {
+      const metadata = node.attributes?.metadata && typeof node.attributes.metadata === 'object'
+        ? node.attributes.metadata as {
+            creatorName?: string | null;
+            thumbnailUrl?: string | null;
+          }
+        : null;
+      return {
+        id: node.id,
+        label: node.label,
+        kind: node.kind,
+        provenance: node.provenance,
+        confidence: node.confidence,
+        supportCount: supportByNodeId.get(node.id)?.size ?? 0,
+        contentSource: node.content?.source ?? null,
+        contentExternalId: node.content?.externalId ?? null,
+        creatorName: metadata?.creatorName ?? null,
+        thumbnailUrl: metadata?.thumbnailUrl ?? null,
+      };
+    })
     .sort((left, right) => (
       left.kind.localeCompare(right.kind)
       || left.label.localeCompare(right.label)
