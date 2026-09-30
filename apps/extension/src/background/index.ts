@@ -97,6 +97,9 @@ type ConceptExtractionRefreshResult = {
 };
 
 type LocalFeedItem = CandidatePoolItem & {
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_model_version?: string | null;
   id: string;
   rawScore: number;
   score: number;
