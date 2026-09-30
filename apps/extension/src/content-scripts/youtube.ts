@@ -468,27 +468,7 @@ const createReplacementCard = (
   explanation.hidden = true;
   explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
 
-  const explanationData = item.explanation;
-  const scoreLine = document.createElement('div');
-  scoreLine.textContent = explanationData
-    ? `Score ${explanationData.displayScore}/100 · raw ${explanationData.rawScore} · graph r${explanationData.graphRevision}`
-    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
-  explanation.appendChild(scoreLine);
-
-  if (explanationData?.acquisitionMechanism) {
-    const acquired = document.createElement('div');
-    acquired.textContent = `Acquired via ${explanationData.acquisitionMechanism} · acquisition is not preference evidence`;
-    acquired.style.cssText = 'margin-top:4px;color:#cbd5e1;';
-    explanation.appendChild(acquired);
-  }
-
-  for (const contribution of explanationData?.contributions ?? []) {
-    const row = document.createElement('div');
-    const sign = contribution.value > 0 ? '+' : '';
-    row.textContent = `${contribution.label}: ${sign}${contribution.value}`;
-    row.style.cssText = 'margin-top:4px;';
-    explanation.appendChild(row);
-  }
+  renderExplanationContent(explanation, item);
 
   why.addEventListener('click', (event) => {
     event.preventDefault();
@@ -593,27 +573,7 @@ const refreshReplacementCardPresentation = (
   if (!explanation) return;
   explanation.replaceChildren();
 
-  const explanationData = item.explanation;
-  const scoreLine = document.createElement('div');
-  scoreLine.textContent = explanationData
-    ? `Score ${explanationData.displayScore}/100 · raw ${explanationData.rawScore} · graph r${explanationData.graphRevision}`
-    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
-  explanation.appendChild(scoreLine);
-
-  if (explanationData?.acquisitionMechanism) {
-    const acquired = document.createElement('div');
-    acquired.textContent = `Acquired via ${explanationData.acquisitionMechanism} · acquisition is not preference evidence`;
-    acquired.style.cssText = 'margin-top:4px;color:#cbd5e1;';
-    explanation.appendChild(acquired);
-  }
-
-  for (const contribution of explanationData?.contributions ?? []) {
-    const row = document.createElement('div');
-    const sign = contribution.value > 0 ? '+' : '';
-    row.textContent = `${contribution.label}: ${sign}${contribution.value}`;
-    row.style.cssText = 'margin-top:4px;';
-    explanation.appendChild(row);
-  }
+  renderExplanationContent(explanation, item);
 };
 
 const clearLegacyRecommendationShelf = () => {
@@ -1077,6 +1037,7 @@ const applyRankedFeed = (
     badge.textContent = contentLabel
       ? `${contentLabel} · ${score}`
       : `MyAlgo · ${score}`;
+    ensureNativeExplanationControl(element, item);
   });
 
   // Default mode preserves the general feed-replacement behavior. A durable
