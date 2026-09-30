@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDurableModeOptions, summarizeFeed } from './extension-helpers.ts';
+import { buildDurableModeOptions, buildGraphInspectorView, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -109,4 +109,97 @@ test('summarizeFeed discovers recurring mode categories from soft semantic score
     { category: 'AI tooling', count: 3 },
     { category: 'Personal finance', count: 2 },
   ]);
+});
+
+
+test('graph inspector summarizes nodes, edges, revisions, and supporting evidence', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [
+      {
+        id: 'e1',
+        evidence: {
+          kind: 'interaction',
+          content: { source: 'youtube', externalId: 'video-a' },
+          exposureId: null,
+          interaction: 'watched',
+          observedAt: '2026-09-30T08:00:00.000Z',
+          provenance: { connector: 'youtube', mechanism: 'player_watch' },
+          metadata: { title: 'Video A', creatorName: 'Creator A' },
+        },
+        confidence: 1,
+        retainedAt: '2026-09-30T08:00:00.000Z',
+        retention: { policy: 'default', expiresAt: null },
+      },
+    ],
+    graph: {
+      currentRevision: 7,
+      userEdits: [],
+      revisions: [
+        { id: 'r6', revision: 6, reason: 'older', createdAt: '2026-09-30T07:00:00.000Z' },
+        { id: 'r7', revision: 7, reason: 'derived_graph_reconcile:test', createdAt: '2026-09-30T08:01:00.000Z' },
+      ],
+      nodes: [
+        {
+          id: 'content:youtube:video-a', kind: 'content', label: 'Video A',
+          content: { source: 'youtube', externalId: 'video-a' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+        {
+          id: 'creator:youtube:creator-a', kind: 'creator', label: 'Creator A',
+          provenance: 'inferred', confidence: 1, attributes: {},
+          createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge:created_by:a',
+          sourceNodeId: 'content:youtube:video-a',
+          targetNodeId: 'creator:youtube:creator-a',
+          relation: 'created_by',
+          provenance: 'inferred',
+          confidence: 1,
+          evidenceIds: ['e1'],
+          attributes: {},
+          createdAt: '2026-09-30T08:00:00.000Z',
+          updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+      ],
+    },
+  };
+
+  const view = buildGraphInspectorView(state);
+  assert.equal(view.graphRevision, 7);
+  assert.equal(view.evidenceCount, 1);
+  assert.deepEqual(view.nodesByKind, [
+    { key: 'content', count: 1 },
+    { key: 'creator', count: 1 },
+  ]);
+  assert.deepEqual(view.edgesByRelation, [{ key: 'created_by', count: 1 }]);
+  assert.equal(view.nodes.find((node) => node.id === 'creator:youtube:creator-a').supportCount, 1);
+  assert.deepEqual(view.edges[0].evidence, [{
+    id: 'e1',
+    kind: 'interaction',
+    interaction: 'watched',
+    connector: 'youtube',
+    mechanism: 'player_watch',
+    observedAt: '2026-09-30T08:00:00.000Z',
+    contentLabel: 'Video A',
+  }]);
+  assert.equal(view.revisions[0].revision, 7);
+});
+
+test('graph inspector parses exported JSON without mutating live state and rejects invalid snapshots', () => {
+  const empty = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: { nodes: [], edges: [], userEdits: [], revisions: [], currentRevision: 0 },
+  };
+  assert.equal(parseGraphInspectorExport(JSON.stringify(empty)).nodeCount, 0);
+  assert.throws(() => parseGraphInspectorExport('{'), /not valid JSON/);
+  assert.throws(
+    () => buildGraphInspectorView({ schemaVersion: 1, evidence: [], graph: {} }),
+    /not a valid MyAlgo Personal Algorithm export/,
+  );
 });
