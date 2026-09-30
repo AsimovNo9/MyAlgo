@@ -2060,7 +2060,7 @@ const prioritizeCandidatesForSelectedMode = (
   const relevance = (candidate: CandidatePoolItem): number => {
     const text = normalizeModeRefreshText([
       candidate.title,
-      candidate.creator,
+      candidate.channel_name,
       ...(candidate.topics ?? []),
     ].filter(Boolean).join(' '));
     let score = 0;
