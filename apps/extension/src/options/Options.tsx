@@ -39,6 +39,7 @@ export function Options() {
   const [graphInspectorSource, setGraphInspectorSource] = React.useState<'live' | 'offline' | null>(null);
   const [graphQuery, setGraphQuery] = React.useState('');
   const [graphModeId, setGraphModeId] = React.useState('all');
+  const [graphFocusOnly, setGraphFocusOnly] = React.useState(true);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
   const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
@@ -124,6 +125,7 @@ export function Options() {
     setGraphInspector(null);
     setGraphInspectorSource(null);
     setGraphModeId('all');
+    setGraphFocusOnly(true);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setOfflineGraphJson('');
@@ -187,6 +189,7 @@ export function Options() {
       setGraphInspector(view);
       setGraphInspectorSource('live');
       setGraphModeId('all');
+      setGraphFocusOnly(true);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
       setStatus(null);
@@ -201,6 +204,7 @@ export function Options() {
       setGraphInspector(view);
       setGraphInspectorSource('offline');
       setGraphModeId('all');
+      setGraphFocusOnly(true);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
       setStatus(null);
@@ -498,6 +502,25 @@ export function Options() {
                   />
                 </label>
 
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 12,
+                  color: '#cbd5e1',
+                  fontSize: 12,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={graphFocusOnly}
+                    onChange={(event) => setGraphFocusOnly(event.target.checked)}
+                  />
+                  Focus only on selected mode/search/selection
+                </label>
+                <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 11 }}>
+                  Turn this off to keep unrelated graph context visible.
+                </p>
+
                 {graphSearchResults.length > 0 ? (
                   <div style={{ marginTop: 8, maxHeight: 210, overflow: 'auto' }}>
                     {graphSearchResults.map((result) => (
@@ -598,6 +621,7 @@ export function Options() {
                     setSelectedNodeId(null);
                   }}
                   height={640}
+                  focusOnly={graphFocusOnly}
                 />
 
                 <div style={{
