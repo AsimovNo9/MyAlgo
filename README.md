@@ -95,3 +95,8 @@ The read-only #170 explorer supports both Network and Lineage / family-tree proj
 ### Progressive lineage
 
 The lineage/family-tree explorer keeps retained content leaves collapsed by default so the high-level graph remains readable. A selected/search/mode branch reveals only related content leaves; turning Focus only off restores wider high-level context without expanding unrelated content. Visible content leaves may use miniature thumbnails only from thumbnail URLs already observed and retained from YouTube; the explorer does not create a new thumbnail-fetch pipeline. Clicking a node opens its inspectable card and connected relationships, with edge selection continuing into retained evidence provenance.
+
+
+### Exact Why-this from graph nodes
+
+The graph explorer does not reconstruct recommendation reasons from adjacency. Clicking a retained content node can request the exact current local scorer explanation from the same candidate reservoir/graph/feedback/mode/semantic pipeline used by Home. The node inspector renders a compact trace subgraph from the explanation's stable node/edge IDs plus the scorer's additive contribution rows. Preference mutation controls remain deferred until revisioned undo/restore semantics are implemented.
