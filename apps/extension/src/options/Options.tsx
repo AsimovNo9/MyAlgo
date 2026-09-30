@@ -239,8 +239,9 @@ export function Options() {
     || edge.targetLabel.toLowerCase().includes(normalizedGraphQuery)
     || edge.id.toLowerCase().includes(normalizedGraphQuery)
   )).slice(0, 80);
+  const graphModeCatalog = graphInspectorSource === 'live' ? durableModeCatalog : null;
   const graphModeOverlay = graphInspector
-    ? buildGraphModeOverlay(graphInspector, durableModeCatalog, graphModeId)
+    ? buildGraphModeOverlay(graphInspector, graphModeCatalog, graphModeId)
     : buildGraphModeOverlay({
         schemaVersion: 2,
         graphRevision: 0,
@@ -468,6 +469,7 @@ export function Options() {
                   <select
                     id="graph-mode-overlay"
                     value={graphModeId}
+                    disabled={graphInspectorSource !== 'live'}
                     onChange={(event) => {
                       setGraphModeId(event.target.value);
                       setSelectedNodeId(null);
@@ -476,7 +478,7 @@ export function Options() {
                     style={{ display: 'block', width: '100%', marginTop: 6, padding: 8 }}
                   >
                     <option value="all">All graph</option>
-                    {(durableModeCatalog?.modes ?? []).map((entry) => (
+                    {(graphModeCatalog?.modes ?? []).map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.label} · r{entry.revision}{entry.active ? '' : ' · dormant'}
                       </option>
@@ -528,6 +530,12 @@ export function Options() {
                       </button>
                     ))}
                   </div>
+                ) : null}
+
+                {graphInspectorSource !== 'live' ? (
+                  <p style={{ marginTop: 10, color: '#94a3b8', fontSize: 12 }}>
+                    Mode overlays are disabled for pasted snapshots because the durable mode catalog is stored separately from graph exports.
+                  </p>
                 ) : null}
 
                 <div style={{ marginTop: 16, color: '#cbd5e1', fontSize: 12 }}>
