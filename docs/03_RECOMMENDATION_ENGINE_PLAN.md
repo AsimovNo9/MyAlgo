@@ -126,6 +126,14 @@ Final calibration tuning is measurement-gated. Each production rank batch should
 
 These diagnostics are observational only: they do not affect scoring, ranking, replacement eligibility, traces, or graph state. Change the 0–100 mapping or replacement thresholds only after live post-canonical measurements demonstrate saturation, poor resolution, or threshold mismatch.
 
+### Post-canonical calibration result (#210 / PR #229)
+
+Live post-canonical batches showed no unnecessary top-end compression: observed display scores did not saturate at 95/97/99, so the deterministic 0–100 mapping remains unchanged. PR #229 also corrected replacement diagnostics to report the slider-adjusted effective minimum score rather than only the connector base threshold.
+
+The measured performance follow-up distinguishes exact trace freshness from expensive candidate preparation. Evidence-revision churn may require a new trace identity while prepared graph/candidate context is safely reused when score-relevant graph material is unchanged. This preserves replay/provenance correctness without treating incidental Home exposure support as a numeric scoring-state change.
+
+The next recommendation-engine trust boundary is #153: the user-facing explanation must carry the scorer's matched symbolic graph paths and evidence IDs to both native and replacement cards. Acquisition provenance remains separate from ranking reasons.
+
 ### Replacement-card metadata
 
 A MyAlgo replacement must read like a real video card, not a debugging surface. Title and creator/channel are first-class visible metadata and must remain present even when thumbnail metadata is absent. MyAlgo provenance/score/Why-this controls are secondary annotations.
