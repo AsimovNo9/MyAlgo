@@ -65,9 +65,6 @@ const stableReplacementBySourceId = new Map<string, {
   bindingRevision: number;
 }>();
 
-const viewportPriorityByElement = new WeakMap<HTMLElement, number>();
-const observedNativeElements = new Set<HTMLElement>();
-let nativeViewportObserver: IntersectionObserver | null = null;
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
@@ -643,67 +640,10 @@ type NativeCardSnapshot = {
   cardByElement: Map<HTMLElement, NativeCardSnapshotEntry>;
 };
 
-const ensureNativeViewportObserver = () => {
-  if (nativeViewportObserver || typeof IntersectionObserver === 'undefined') return;
-  nativeViewportObserver = new IntersectionObserver((entries) => {
-    let changed = false;
-    const viewportHeight = Math.max(1, window.innerHeight);
-    for (const entry of entries) {
-      const element = entry.target as HTMLElement;
-      const rect = entry.boundingClientRect;
-      const priority = rect.bottom > 0 && rect.top < viewportHeight
-        ? 0
-        : rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
-          ? 1
-          : 2;
-      if (viewportPriorityByElement.get(element) !== priority) {
-        viewportPriorityByElement.set(element, priority);
-        changed = true;
-      }
-    }
-    // Intersection changes are passive presentation hints. Do not immediately
-    // rerun presentation from the observer callback: hiding/inserting replacement
-    // cards changes intersection geometry and can otherwise create an observer →
-    // presentation → geometry → observer oscillation. The next normal
-    // mutation/rank/optimistic presentation consumes the updated priorities.
-    void changed;
-  }, {
-    root: null,
-    rootMargin: '100% 0px 100% 0px',
-    threshold: [0, 0.01, 0.5],
-  });
-};
-
-const syncNativeViewportObservation = (elements: readonly HTMLElement[]) => {
-  if (!isYouTubeHomePage(location.pathname)) return;
-  ensureNativeViewportObserver();
-  if (!nativeViewportObserver) return;
-  const next = new Set(elements);
-  for (const element of observedNativeElements) {
-    if (!next.has(element) || !element.isConnected) {
-      nativeViewportObserver.unobserve(element);
-      observedNativeElements.delete(element);
-      viewportPriorityByElement.delete(element);
-    }
-  }
-  for (const element of elements) {
-    if (observedNativeElements.has(element)) continue;
-    observedNativeElements.add(element);
-    nativeViewportObserver.observe(element);
-  }
-};
-
-const clearNativeViewportObservation = () => {
-  nativeViewportObserver?.disconnect();
-  nativeViewportObserver = null;
-  observedNativeElements.clear();
-};
-
 const createNativeCardSnapshot = (
   options: { diagnoseInjected?: boolean; measureGeometry?: boolean } = {},
 ): NativeCardSnapshot => {
   const elements = getVideoElements(options.diagnoseInjected === true);
-  syncNativeViewportObservation(elements);
   const cards = elements.map((element) => ({
     element,
     id: getVideoId(element),
@@ -1205,15 +1145,7 @@ const applyRankedFeed = (
         ) {
           return [];
         }
-        const rect = nativeCards[nativeIndex]?.rect;
-        const viewportHeight = Math.max(1, window.innerHeight);
-        const viewportPriority = viewportPriorityByElement.get(element)
-          ?? (rect && rect.bottom > 0 && rect.top < viewportHeight
-            ? 0
-            : rect && rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
-              ? 1
-              : 2);
-        return [{ externalId: id, score, nativeIndex, viewportPriority }];
+        return [{ externalId: id, score, nativeIndex }];
       });
 
       const selectedAssignments = selectFeedMixAssignments(
@@ -1861,8 +1793,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     rankTimer = undefined;
     rankQueued = false;
     cachedFeed = [];
-    clearNativeViewportObservation();
-    lastCandidateSignature = '';
+      lastCandidateSignature = '';
     lastRankMode = '';
     clearExtensionPresentation(!extensionEnabled);
 
@@ -2158,7 +2089,6 @@ window.addEventListener('yt-navigate-start', () => {
     window.cancelAnimationFrame(optimisticPresentationFrame);
     optimisticPresentationFrame = undefined;
   }
-  clearNativeViewportObservation();
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
