@@ -199,6 +199,7 @@ export function GraphCanvas({
       || Boolean(selectedEdgeId)
     );
     const lineageMode = layoutMode === 'lineage' && !compact;
+    let hiddenIsolatedCreatorCount = 0;
     const lineageContextNodeIds = new Set<string>();
     if (lineageMode) {
       const nonContentIds = new Set(nodes.filter((node) => node.kind !== 'content').map((node) => node.id));
@@ -209,7 +210,7 @@ export function GraphCanvas({
         higherLevelConnectedIds.add(edge.targetNodeId);
       }
 
-      const isolatedCreators = nodes
+      const allIsolatedCreators = nodes
         .filter((node) => (
           node.kind === 'creator'
           && !higherLevelConnectedIds.has(node.id)
@@ -219,8 +220,9 @@ export function GraphCanvas({
           || right.supportCount - left.supportCount
           || left.label.localeCompare(right.label)
           || left.id.localeCompare(right.id)
-        ))
-        .slice(0, 18);
+        ));
+      const isolatedCreators = allIsolatedCreators.slice(0, 18);
+      hiddenIsolatedCreatorCount = Math.max(0, allIsolatedCreators.length - isolatedCreators.length);
 
       for (const node of nodes) {
         if (node.kind === 'content') {
@@ -376,6 +378,7 @@ export function GraphCanvas({
       nodeById: positioned,
       modeActive,
       focusIsActive,
+      hiddenIsolatedCreatorCount,
     };
   }, [compact, edges, focusOnly, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
@@ -550,6 +553,7 @@ export function GraphCanvas({
               selected
               || node.modeMember
               || node.searchMatch
+              || (layoutMode === 'lineage' && node.kind !== 'content')
             );
             return (
               <g
