@@ -1113,6 +1113,7 @@ export function buildLocalFeedbackSignals(
 
 const candidateScoringSignature = (candidate: LocalRuntimeCandidate): string => JSON.stringify({
   external_id: candidate.external_id,
+  lastSeenAt: candidate.lastSeenAt,
   title: candidate.title,
   channel_name: candidate.channel_name ?? null,
   channel_id: candidate.channel_id ?? null,
@@ -1144,6 +1145,22 @@ const durableModeScoringKey = (
   ? `${activeDurableMode.id}@${activeDurableMode.revision}`
   : `legacy:${mode.trim().toLowerCase() || 'default'}`;
 
+export type LocalScoringDiagnostics = {
+  cacheHits: number;
+  cacheMisses: number;
+  cacheSize: number;
+};
+
+let lastLocalScoringDiagnostics: LocalScoringDiagnostics = {
+  cacheHits: 0,
+  cacheMisses: 0,
+  cacheSize: 0,
+};
+
+export const getLocalScoringDiagnostics = (): LocalScoringDiagnostics => ({
+  ...lastLocalScoringDiagnostics,
+});
+
 export function scoreLocalCandidates(
   state: PersonalAlgorithmState,
   candidates: LocalRuntimeCandidate[],
@@ -1171,7 +1188,9 @@ export function scoreLocalCandidates(
   } = prepared;
 
   const modeKey = durableModeScoringKey(mode, activeDurableMode);
-  return candidates
+  let cacheHits = 0;
+  let cacheMisses = 0;
+  const ranked = candidates
     .map((candidate) => {
       const signature = candidateScoringSignature(candidate);
       const cached = prepared.candidateScoreCache.get(candidate.external_id);
@@ -1186,6 +1205,7 @@ export function scoreLocalCandidates(
         || scoreResult.modeKey !== modeKey
         || scoreResult.feedbackKey !== feedbackKey
       ) {
+        cacheMisses += 1;
         const classification = classifyCandidateContent(candidate);
         const context = candidateContext(
           state,
@@ -1222,6 +1242,8 @@ export function scoreLocalCandidates(
           if (oldestCandidateId == null) break;
           prepared.candidateScoreCache.delete(oldestCandidateId);
         }
+      } else {
+        cacheHits += 1;
       }
 
       const visible = !(
@@ -1244,6 +1266,12 @@ export function scoreLocalCandidates(
       };
     })
     .sort((left, right) => right.score - left.score || right.rawScore - left.rawScore || left.external_id.localeCompare(right.external_id));
+  lastLocalScoringDiagnostics = {
+    cacheHits,
+    cacheMisses,
+    cacheSize: prepared.candidateScoreCache.size,
+  };
+  return ranked;
 }
 
 export function traceForLocalCandidate(
