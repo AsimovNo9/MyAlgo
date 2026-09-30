@@ -592,6 +592,7 @@ test('score calibration diagnostics expose post-canonical distribution and thres
     })),
     55,
     5,
+    50,
   );
 
   assert.equal(diagnostics.count, 10);
@@ -603,12 +604,14 @@ test('score calibration diagnostics expose post-canonical distribution and thres
   assert.equal(diagnostics.display.p50, calibrateLocalScore(10));
   assert.equal(diagnostics.display.max, calibrateLocalScore(90));
   assert.ok(diagnostics.display.saturation95Rate > 0);
-  assert.equal(diagnostics.replacement.minimumScore, 55);
+  assert.equal(diagnostics.replacement.baseMinimumScore, 55);
+  assert.equal(diagnostics.replacement.effectiveMinimumScore, 27.5);
   assert.equal(diagnostics.replacement.minimumUplift, 5);
+  assert.equal(diagnostics.replacement.replacementPercent, 50);
   assert.ok(diagnostics.replacement.qualifiedRate > 0);
   assert.equal(
     diagnostics.replacement.medianHeadroom,
-    calibrateLocalScore(10) - 55,
+    calibrateLocalScore(10) - 27.5,
   );
 });
 
@@ -633,8 +636,10 @@ test('score calibration diagnostics are empty-safe and deterministic', () => {
         saturation99Rate: 0,
       },
       replacement: {
-        minimumScore: 55,
+        baseMinimumScore: 55,
+        effectiveMinimumScore: 55,
         minimumUplift: 5,
+        replacementPercent: 0,
         qualifiedRate: 0,
         medianHeadroom: 0,
       },
