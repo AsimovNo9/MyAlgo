@@ -132,12 +132,34 @@ const contributionAction = (nodeKind: WhyThisMiniNode['kind']): WhyThisDisplayCo
   return null;
 };
 
-const humanContributionLabel = (label: string): string => (
-  label
-    .replace(/^creator:\s*/i, 'Creator: ')
-    .replace(/^topic:\s*/i, 'Topic: ')
-    .replace(/^format:\s*/i, 'Format: ')
-);
+const humanizeGraphLabel = (value: string): string => {
+  const trimmed = value.trim();
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    decoded = trimmed;
+  }
+  return decoded
+    .replace(/^(?:creator|content|topic|concept|feature|canonical):(?:youtube:)?/i, '')
+    .replace(/^youtube:/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const humanContributionLabel = (label: string): string => {
+  const raw = label.trim();
+  const prefix = /^([^:]+):\s*(.+)$/.exec(raw);
+  if (!prefix) return humanizeGraphLabel(raw);
+  const [, kind, value] = prefix;
+  const readable = humanizeGraphLabel(value);
+  if (/^creator$/i.test(kind)) return `Creator: ${readable}`;
+  if (/^topic$/i.test(kind)) return `Topic: ${readable}`;
+  if (/^format$/i.test(kind)) return `Format: ${readable}`;
+  if (/^(concept|semantic)/i.test(kind)) return `Concept: ${readable}`;
+  return humanizeGraphLabel(raw);
+};
 
 export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
   const explanation = item.explanation;
@@ -159,8 +181,13 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
   const pathLines = (explanation?.matchedPaths ?? [])
     .slice(0, 3)
     .map((path) => {
-      const labels = path.nodeLabels.filter(Boolean);
-      const pathLabel = labels.length > 0 ? labels.join(' ↔ ') : path.nodeIds.join(' ↔ ');
+      const labels = path.nodeLabels
+        .filter(Boolean)
+        .map(humanizeGraphLabel)
+        .filter(Boolean);
+      const pathLabel = labels.length > 0
+        ? labels.join(' ↔ ')
+        : path.nodeIds.map(humanizeGraphLabel).filter(Boolean).join(' ↔ ');
       const evidenceCount = path.evidenceIds.length;
       return evidenceCount > 0
         ? `Graph path: ${pathLabel} · ${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`
@@ -174,7 +201,7 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
       const nodeKind = contributionKind(entry.label, entry.kind);
       return {
         label: humanContributionLabel(entry.label),
-        shortLabel: entry.label.replace(/^[^:]+:\s*/, '').trim() || entry.label,
+        shortLabel: humanizeGraphLabel(entry.label.replace(/^[^:]+:\s*/, '').trim() || entry.label),
         value: entry.value,
         kind: nodeKind,
         evidenceCount: entry.evidenceIds?.length ?? 0,
@@ -185,13 +212,43 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
     const sign = contribution.value > 0 ? '+' : '';
     return `${contribution.label}: ${sign}${contribution.value}`;
   });
-  const miniNodes: WhyThisMiniNode[] = [
-    { id: item.external_id ?? 'video', label: 'This video', kind: 'video' },
-    ...contributions.slice(0, 3).map((contribution, index) => ({
+  const miniCandidates: WhyThisMiniNode[] = [];
+  const seenMiniLabels = new Set<string>();
+  const addMiniNode = (node: WhyThisMiniNode) => {
+    const normalized = node.label.trim().toLowerCase();
+    if (!normalized || normalized === 'this video' || seenMiniLabels.has(normalized)) return;
+    if (/^(created by|related to|influences|matched path)$/i.test(node.label.trim())) return;
+    seenMiniLabels.add(normalized);
+    miniCandidates.push(node);
+  };
+
+  contributions.forEach((contribution, index) => {
+    if (contribution.kind === 'other') return;
+    addMiniNode({
       id: `contribution:${index}:${contribution.shortLabel}`,
       label: contribution.shortLabel,
-      kind: contribution.kind,
-    })),
+      kind: contribution.kind as WhyThisMiniNode['kind'],
+    });
+  });
+  for (const path of explanation?.matchedPaths ?? []) {
+    path.nodeLabels
+      .map(humanizeGraphLabel)
+      .filter(Boolean)
+      .forEach((label, index) => {
+        if (label === item.title || label === 'This video') return;
+        const kind: WhyThisMiniNode['kind'] = item.channel_name && label === item.channel_name
+          ? 'creator'
+          : contributionKind(label, 'path');
+        addMiniNode({
+          id: `path:${path.edgeIds.join('|')}:${index}:${label}`,
+          label,
+          kind,
+        });
+      });
+  }
+  const miniNodes: WhyThisMiniNode[] = [
+    { id: item.external_id ?? 'video', label: 'This video', kind: 'video' },
+    ...miniCandidates.slice(0, 3),
   ];
   return {
     scoreLine,
