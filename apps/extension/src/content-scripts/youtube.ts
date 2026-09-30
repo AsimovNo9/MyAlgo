@@ -41,7 +41,6 @@ let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
 let optimisticPresentationFrame: number | undefined;
-let viewportPresentationFrame: number | undefined;
 let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
@@ -662,9 +661,12 @@ const ensureNativeViewportObserver = () => {
         changed = true;
       }
     }
-    if (changed && extensionEnabled && cachedFeed.length > 0) {
-      scheduleViewportPresentation();
-    }
+    // Intersection changes are passive presentation hints. Do not immediately
+    // rerun presentation from the observer callback: hiding/inserting replacement
+    // cards changes intersection geometry and can otherwise create an observer →
+    // presentation → geometry → observer oscillation. The next normal
+    // mutation/rank/optimistic presentation consumes the updated priorities.
+    void changed;
   }, {
     root: null,
     rootMargin: '100% 0px 100% 0px',
@@ -2156,10 +2158,6 @@ window.addEventListener('yt-navigate-start', () => {
     window.cancelAnimationFrame(optimisticPresentationFrame);
     optimisticPresentationFrame = undefined;
   }
-  if (viewportPresentationFrame !== undefined) {
-    window.cancelAnimationFrame(viewportPresentationFrame);
-    viewportPresentationFrame = undefined;
-  }
   clearNativeViewportObservation();
   watchedVideo = null;
   watchSession = null;
@@ -2203,22 +2201,6 @@ window.addEventListener('resize', () => {
     clearLegacyRecommendationShelf();
   }, 120);
 });
-
-const scheduleViewportPresentation = () => {
-  if (
-    viewportPresentationFrame !== undefined
-    || !extensionEnabled
-    || !isYouTubeHomePage(location.pathname)
-    || cachedFeed.length === 0
-  ) return;
-  viewportPresentationFrame = window.requestAnimationFrame(() => {
-    viewportPresentationFrame = undefined;
-    if (!isCurrentInstance() || !extensionEnabled || cachedFeed.length === 0) return;
-    // Viewport priority is maintained by IntersectionObserver. Re-present only
-    // when observed cards cross priority bands, rather than on every scroll.
-    applyRankedPresentation(rankGeneration);
-  });
-};
 
 const scheduleOptimisticPresentation = () => {
   if (
