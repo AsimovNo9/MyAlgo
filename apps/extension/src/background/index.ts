@@ -2507,6 +2507,13 @@ const handleRuntimeMessage = (
           externalId: record.externalId,
           category: record.category,
           categoryConfidence: record.categoryConfidence,
+          categoryScores: record.categoryScores,
+          graphMatches: record.graphMatches.map((match) => ({
+            nodeId: match.node_id,
+            nodeLabel: match.node_label,
+            similarity: match.similarity,
+            taxonomyOnly: match.taxonomy_only === true,
+          })),
           modeAffinities: (record.modeAffinities ?? [])
             .filter((affinity) => (
               durableModeCatalog?.modes.some((mode) => (
