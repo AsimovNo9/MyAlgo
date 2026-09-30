@@ -144,6 +144,7 @@ export const MYALGO_INJECTED_SELECTOR = [
   '[data-personal-algorithm-replacement]',
   '[data-personal-algorithm-status]',
   '[data-personal-algorithm-explanation]',
+  '[data-personal-algorithm-explanation-panel]',
   '[data-personal-algorithm-control]',
 ].join(', ');
 
