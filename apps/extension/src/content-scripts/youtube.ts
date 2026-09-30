@@ -356,6 +356,52 @@ const createExplanationPortal = (
   return panel;
 };
 
+const ensureExplanationPortalForTrigger = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+): HTMLElement => {
+  if (trigger.id) {
+    const firstWithId = document.getElementById(trigger.id);
+    if (firstWithId && firstWithId !== trigger) {
+      trigger.removeAttribute('id');
+      trigger.removeAttribute('aria-controls');
+    }
+  }
+
+  const controlledPanelId = trigger.getAttribute('aria-controls');
+  let panel = controlledPanelId
+    ? document.getElementById(controlledPanelId) as HTMLElement | null
+    : null;
+  const ownsPanel = Boolean(
+    panel
+    && trigger.id
+    && panel.dataset.personalAlgorithmExplanationTriggerId === trigger.id
+    && getExplanationTrigger(panel) === trigger
+  );
+  if (!ownsPanel) {
+    trigger.removeAttribute('aria-controls');
+    panel = createExplanationPortal(trigger, kind);
+  }
+  return panel!;
+};
+
+const bindExplanationTrigger = (trigger: HTMLButtonElement) => {
+  // Assign through onclick rather than a copied DOM marker. YouTube can clone
+  // renderer subtrees, which copies data attributes but not event listeners.
+  // Reassigning the property is idempotent for a live element and repairs clones.
+  delete trigger.dataset.personalAlgorithmExplanationBound;
+  trigger.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const panelId = trigger.getAttribute('aria-controls');
+    const panel = panelId ? document.getElementById(panelId) : null;
+    if (!panel) return;
+    const opening = panel.hidden;
+    if (opening) closeOtherExplanationPanels(panel);
+    setExplanationPanelOpen(panel, opening);
+  };
+};
+
 const whyNodeAccent = (kind: string): { border: string; background: string } => {
   if (kind === 'creator') return { border: '#fb923c', background: 'rgba(124,45,18,.86)' };
   if (kind === 'topic') return { border: '#34d399', background: 'rgba(6,78,59,.86)' };
@@ -368,6 +414,10 @@ const renderExplanationContent = (
   container: HTMLElement,
   item: RankedFeedItem,
 ) => {
+  const technicalDetailsOpen = container
+    .querySelector<HTMLDetailsElement>('[data-personal-algorithm-technical-details]')
+    ?.open === true;
+  const previousScrollTop = container.scrollTop;
   const view = buildExplanationViewModel(item);
   container.replaceChildren();
   container.style.padding = '0';
@@ -503,6 +553,8 @@ const renderExplanationContent = (
   const footer = document.createElement('div');
   footer.style.cssText = 'padding:10px 14px 12px;';
   const details = document.createElement('details');
+  details.dataset.personalAlgorithmTechnicalDetails = 'true';
+  details.open = technicalDetailsOpen;
   const summary = document.createElement('summary');
   summary.textContent = 'Technical details';
   summary.style.cssText = 'cursor:pointer;color:#cbd5e1;font-weight:600;';
@@ -533,28 +585,10 @@ const renderExplanationContent = (
   details.appendChild(detailBody);
   footer.appendChild(details);
 
-  const strength = document.createElement('div');
-  strength.style.cssText = 'display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-top:12px;color:#e2e8f0;font-size:11px;';
-  const light = document.createElement('span');
-  light.textContent = 'Light touch';
-  strength.appendChild(light);
-  const slider = document.createElement('input');
-  slider.type = 'range';
-  slider.min = '0';
-  slider.max = '100';
-  slider.value = '50';
-  slider.disabled = true;
-  slider.title = 'Preference strength becomes available with revisioned preference controls.';
-  slider.style.cssText = 'width:100%;accent-color:#64748b;';
-  strength.appendChild(slider);
-  const strict = document.createElement('span');
-  strict.textContent = 'Strict';
-  strength.appendChild(strict);
-  footer.appendChild(strength);
-
   shell.appendChild(footer);
 
   container.appendChild(shell);
+  container.scrollTop = previousScrollTop;
 };
 
 const ensureNativeExplanationControl = (
@@ -585,26 +619,8 @@ const ensureNativeExplanationControl = (
     why.style.cssText = 'position:absolute;z-index:1000;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
     host.appendChild(why);
   }
-  const controlledPanelId = why.getAttribute('aria-controls');
-  let panel = controlledPanelId
-    ? document.getElementById(controlledPanelId)
-    : null;
-  if (!panel) {
-    panel = createExplanationPortal(why, 'native');
-  }
-  if (why.dataset.personalAlgorithmExplanationBound !== 'true') {
-    why.dataset.personalAlgorithmExplanationBound = 'true';
-    why.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const nextPanelId = why!.getAttribute('aria-controls');
-      const nextPanel = nextPanelId ? document.getElementById(nextPanelId) : null;
-      if (!nextPanel) return;
-      const opening = nextPanel.hidden;
-      if (opening) closeOtherExplanationPanels(nextPanel);
-      setExplanationPanelOpen(nextPanel, opening);
-    });
-  }
+  const panel = ensureExplanationPortalForTrigger(why, 'native');
+  bindExplanationTrigger(why);
 
   why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
   renderExplanationContent(panel, item);
@@ -724,19 +740,9 @@ const createReplacementCard = (
   why.style.cssText = 'position:absolute;z-index:35;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
   why.setAttribute('aria-expanded', 'false');
   card.appendChild(why);
-  const explanation = createExplanationPortal(why, 'replacement');
+  const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
   renderExplanationContent(explanation, item);
-
-  why.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const panelId = why.getAttribute('aria-controls');
-    const panel = panelId ? document.getElementById(panelId) : null;
-    if (!panel) return;
-    const opening = panel.hidden;
-    if (opening) closeOtherExplanationPanels(panel);
-    setExplanationPanelOpen(panel, opening);
-  });
+  bindExplanationTrigger(why);
 
   return card;
 };
