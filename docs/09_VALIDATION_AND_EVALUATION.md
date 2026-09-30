@@ -805,3 +805,10 @@ The feed-card explanation surface should default to a product explanation, not a
 ### Interaction regressions from live validation
 
 Validate that expanded Why-this is not clipped by the thumbnail or native card paint boundary: the full explanation remains reachable/scrollable while the closed card retains its normal geometry, and opening/closing restores prior overflow/contain styles. In the graph explorer, lineage thumbnail nodes must be clickable with a generous hit target, must not initiate canvas panning on pointer-down, must support Enter/Space activation, and must reveal/focus the node inspector immediately after selection.
+
+
+### Why-this portal and mode-hydration regressions
+
+Validate that expanded Why-this is rendered as a body-level fixed portal anchored to its trigger, remains open while interacting with Technical details/contribution content, survives ordinary rerank cleanup without duplicate click bindings, and does not cause MyAlgo-only DOM mutations to schedule Home observation/rerank feedback. The visible explanation must include human-readable matched graph paths/evidence counts while raw trace/revision material remains under Technical details.
+
+Loading the live graph must also hydrate the durable-mode catalog and active mode ID from the same background inspection response so persisted mode overlays appear immediately and do not depend on a storage-listener race.
