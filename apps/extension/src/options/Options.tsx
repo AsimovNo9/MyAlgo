@@ -49,6 +49,19 @@ export function Options() {
   const [contentExplanationLoading, setContentExplanationLoading] = React.useState(false);
   const [contentExplanationError, setContentExplanationError] = React.useState<string | null>(null);
   const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
+  const graphInspectorDetailRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!selectedNodeId && !selectedEdgeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      graphInspectorDetailRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+      graphInspectorDetailRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedNodeId, selectedEdgeId]);
 
   React.useEffect(() => {
     chrome.storage.local.get([
@@ -700,13 +713,18 @@ export function Options() {
                   layoutMode={graphLayoutMode}
                 />
 
-                <div style={{
+                <div
+                  ref={graphInspectorDetailRef}
+                  tabIndex={-1}
+                  aria-live="polite"
+                  style={{
                   marginTop: 12,
                   padding: 12,
                   border: '1px solid #263244',
                   borderRadius: 12,
                   background: '#111827',
                   minHeight: 110,
+                  outline: 'none',
                 }}>
                   {selectedGraphNode ? (
                     <>
