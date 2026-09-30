@@ -41,6 +41,7 @@ let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
 let optimisticPresentationFrame: number | undefined;
+let viewportPresentationTimer: number | undefined;
 let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
