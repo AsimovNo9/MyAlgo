@@ -451,6 +451,14 @@ const refreshReplacementCardPresentation = (
   }
   card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
 
+  const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
+  const targetHeight = Number(target.dataset.personalAlgorithmSlotHeight ?? 0);
+  card.style.width = '100%';
+  card.style.maxWidth = targetWidth > 0 ? `${targetWidth}px` : '100%';
+  card.style.height = targetHeight > 0 ? `${targetHeight}px` : 'auto';
+  card.style.overflow = 'hidden';
+  card.style.contain = 'layout paint';
+
   const badge = card.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
   if (badge) {
     badge.textContent = contentLabel
@@ -474,14 +482,7 @@ const refreshReplacementCardPresentation = (
         currentThumbnail.src = item.thumbnail_url ?? '';
       }
     } else if (currentThumbnail) {
-      const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
-  const targetHeight = Number(target.dataset.personalAlgorithmSlotHeight ?? 0);
-  card.style.width = '100%';
-  card.style.maxWidth = targetWidth > 0 ? `${targetWidth}px` : '100%';
-  card.style.height = targetHeight > 0 ? `${targetHeight}px` : 'auto';
-  card.style.overflow = 'hidden';
-  card.style.contain = 'layout paint';
-  const targetFlags = getVideoSourceFlags(target);
+      const targetFlags = getVideoSourceFlags(target);
       const aspectRatio = targetFlags.is_short
         ? youtubeConnector.presentation.verticalAspectRatio
         : youtubeConnector.presentation.horizontalAspectRatio;
