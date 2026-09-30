@@ -44,6 +44,11 @@ export async function setStorage<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
 }
 
+export async function setStorageBatch(values: Record<string, unknown>): Promise<void> {
+  if (Object.keys(values).length === 0) return;
+  await chrome.storage.local.set(values);
+}
+
 export async function removeStorage(keys: string[]): Promise<void> {
   await chrome.storage.local.remove(keys);
 }
