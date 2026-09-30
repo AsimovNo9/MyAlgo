@@ -90,3 +90,8 @@ Graph visualization is read-only. Future graph-edit controls (#158/#154/#155) mu
 ### Graph explorer layouts
 
 The read-only #170 explorer supports both Network and Lineage / family-tree projections over the same canonical graph. Network is for cross-link exploration; Lineage layers content toward the leaves, creator/topic/concept nodes through the middle, and objective/user-level nodes toward the root. Neither layout creates or changes graph state. Search/mode focus can hide unrelated material entirely, and trackpad zoom is pointer-centered rather than SVG-origin-centered.
+
+
+### Progressive lineage
+
+The lineage/family-tree explorer keeps retained content leaves collapsed by default so the high-level graph remains readable. A selected/search/mode branch reveals only related content leaves; turning Focus only off restores wider high-level context without expanding unrelated content. Visible content leaves may use miniature thumbnails only from thumbnail URLs already observed and retained from YouTube; the explorer does not create a new thumbnail-fetch pipeline. Clicking a node opens its inspectable card and connected relationships, with edge selection continuing into retained evidence provenance.
