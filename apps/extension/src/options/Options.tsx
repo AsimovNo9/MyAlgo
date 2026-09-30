@@ -200,6 +200,8 @@ export function Options() {
     const response = await chrome.runtime.sendMessage({ type: 'PERSONAL_ALGORITHM_INSPECT' }) as {
       ok?: boolean;
       state?: unknown;
+      durableModeCatalog?: DurableSemanticModeCatalog | null;
+      activeModeId?: string;
       error?: string;
     };
     if (!response?.ok || !response.state) {
@@ -210,6 +212,8 @@ export function Options() {
       const view = buildGraphInspectorView(response.state);
       setGraphInspector(view);
       setGraphInspectorSource('live');
+      if (response.durableModeCatalog) setDurableModeCatalog(response.durableModeCatalog);
+      if (response.activeModeId) setActiveModeId(response.activeModeId);
       setGraphModeId('all');
       setGraphFocusOnly(true);
       setSelectedNodeId(null);
