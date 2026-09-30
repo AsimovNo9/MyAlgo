@@ -779,7 +779,10 @@ Validate all of the following:
 16. miniature content thumbnails are rendered only from thumbnail URLs already observed and retained from YouTube metadata; graph inspection must not synthesize bulk thumbnail URLs or introduce a new thumbnail-fetch pipeline;
 17. clicking a content/creator/topic/concept node populates an inspectable detail card with stable identity, provenance/support, and connected relationships, and relationship selection continues into retained evidence drill-down;
 18. lineage overview uses a bounded creator-branch overview when many creators have only downward content edges: all higher-level-connected creators remain visible, only a deterministic top subset of isolated creators is shown across multiple rows, hidden-branch count is disclosed, and any hidden creator remains searchable/selectable without mutating graph state;
-19. each visible creator branch includes only a small deterministic sample of real content children; preview content leaves are anchored directly under their actual creator and connected with the stored `created_by` edge rather than redistributed into a global content row.
+19. each visible creator branch includes only a small deterministic sample of real content children; preview content leaves are anchored directly under their actual creator and connected with the stored `created_by` edge rather than redistributed into a global content row;
+20. clicking a visible node opens a rich inspector card with stable identity, provenance/support, and connected relationships; retained content shows thumbnail/title/creator where available;
+21. content-node Why-this is scorer-backed, not adjacency-derived: it must return the current display/raw score, trace ID, graph revision, policy outcome, matched paths, and additive contributions from the same local scoring path used by Home;
+22. the compact Why-this graph contains only the selected content node, trace-matched/contributing nodes, and real stored edges among those nodes; it must not invent explanation edges or silently mutate graph/scoring state.
 
 The first slice deliberately avoids graph mutation, scoring, preference inference, and a heavyweight graph-rendering dependency. The follow-on #153 mini graph must render only the current trace subgraph and preserve the same trace/graph revision as the textual Why-this explanation.
 
