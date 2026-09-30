@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
 import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -265,6 +265,90 @@ const clearExtensionPresentation = (
   } else {
     document.querySelector('[data-personal-algorithm-status]')?.remove();
   }
+};
+
+const renderExplanationContent = (
+  container: HTMLElement,
+  item: RankedFeedItem,
+) => {
+  const view = buildExplanationViewModel(item);
+  container.replaceChildren();
+
+  const scoreLine = document.createElement('div');
+  scoreLine.textContent = view.scoreLine;
+  scoreLine.style.cssText = 'font-weight:700;';
+  container.appendChild(scoreLine);
+
+  if (item.traceId) {
+    const traceLine = document.createElement('div');
+    traceLine.textContent = `Trace ${item.traceId}`;
+    traceLine.style.cssText = 'margin-top:3px;color:#94a3b8;font-size:11px;overflow-wrap:anywhere;';
+    container.appendChild(traceLine);
+  }
+
+  if (view.acquisitionLine) {
+    const acquired = document.createElement('div');
+    acquired.textContent = view.acquisitionLine;
+    acquired.style.cssText = 'margin-top:5px;color:#cbd5e1;';
+    container.appendChild(acquired);
+  }
+
+  for (const pathLine of view.pathLines) {
+    const row = document.createElement('div');
+    row.textContent = pathLine;
+    row.style.cssText = 'margin-top:6px;color:#e2e8f0;';
+    container.appendChild(row);
+  }
+
+  for (const contributionLine of view.contributionLines) {
+    const row = document.createElement('div');
+    row.textContent = contributionLine;
+    row.style.cssText = 'margin-top:4px;';
+    container.appendChild(row);
+  }
+};
+
+const ensureNativeExplanationControl = (
+  card: HTMLElement,
+  item: RankedFeedItem,
+) => {
+  const host = card.querySelector<HTMLElement>(
+    '#thumbnail, ytd-thumbnail, yt-thumbnail-view-model, a#thumbnail',
+  ) ?? card;
+  const computedPosition = getComputedStyle(host).position;
+  if (computedPosition === 'static') {
+    host.style.position = 'relative';
+    host.dataset.personalAlgorithmPositionPatched = 'true';
+  }
+
+  let why = host.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation="native"]');
+  let panel = host.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel="native"]');
+  if (!why) {
+    why = document.createElement('button');
+    why.type = 'button';
+    why.dataset.personalAlgorithmExplanation = 'native';
+    why.textContent = 'Why this?';
+    why.setAttribute('aria-label', 'Why MyAlgo scored this video');
+    why.setAttribute('aria-expanded', 'false');
+    why.style.cssText = 'position:absolute;z-index:1000;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
+    host.appendChild(why);
+  }
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.dataset.personalAlgorithmExplanationPanel = 'native';
+    panel.hidden = true;
+    panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
+    host.appendChild(panel);
+    why.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      panel!.hidden = !panel!.hidden;
+      why!.setAttribute('aria-expanded', String(!panel!.hidden));
+    });
+  }
+
+  why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  renderExplanationContent(panel, item);
 };
 
 const createThumbnail = (
