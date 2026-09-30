@@ -58,6 +58,7 @@ let watchSessionSequence = 0;
 let replacementBindingRevision = 0;
 let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
 let navigationInvalidationPending = false;
+let explanationPanelSequence = 0;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
@@ -267,27 +268,44 @@ const clearExtensionPresentation = (
   }
 };
 
-const setExplanationPanelOpen = (panel: HTMLElement, open: boolean) => {
-  const owner = panel.parentElement;
-  if (owner) {
-    if (open) {
-      if (owner.dataset.personalAlgorithmExplanationPreviousOverflow == null) {
-        owner.dataset.personalAlgorithmExplanationPreviousOverflow = owner.style.overflow || '';
-      }
-      if (owner.dataset.personalAlgorithmExplanationPreviousContain == null) {
-        owner.dataset.personalAlgorithmExplanationPreviousContain = owner.style.contain || '';
-      }
-      owner.style.overflow = 'visible';
-      owner.style.contain = 'none';
-    } else {
-      owner.style.overflow = owner.dataset.personalAlgorithmExplanationPreviousOverflow ?? '';
-      owner.style.contain = owner.dataset.personalAlgorithmExplanationPreviousContain ?? '';
-      delete owner.dataset.personalAlgorithmExplanationPreviousOverflow;
-      delete owner.dataset.personalAlgorithmExplanationPreviousContain;
-    }
+const getExplanationTrigger = (panel: HTMLElement): HTMLElement | null => {
+  const triggerId = panel.dataset.personalAlgorithmExplanationTriggerId;
+  return triggerId ? document.getElementById(triggerId) : null;
+};
+
+const positionExplanationPanel = (trigger: HTMLElement, panel: HTMLElement) => {
+  const rect = trigger.getBoundingClientRect();
+  const margin = 8;
+  const width = Math.min(520, Math.max(300, window.innerWidth - margin * 2));
+  const left = Math.min(
+    window.innerWidth - width - margin,
+    Math.max(margin, rect.right - width),
+  );
+  const belowSpace = window.innerHeight - rect.bottom - margin;
+  const aboveSpace = rect.top - margin;
+  const openBelow = belowSpace >= Math.min(360, aboveSpace);
+  const maxHeight = Math.max(220, Math.min(560, openBelow ? belowSpace : aboveSpace));
+  panel.style.position = 'fixed';
+  panel.style.zIndex = '2147483646';
+  panel.style.left = `${left}px`;
+  panel.style.width = `${width}px`;
+  panel.style.maxWidth = `calc(100vw - ${margin * 2}px)`;
+  panel.style.maxHeight = `${maxHeight}px`;
+  panel.style.right = 'auto';
+  if (openBelow) {
+    panel.style.top = `${Math.min(window.innerHeight - maxHeight - margin, rect.bottom + margin)}px`;
+    panel.style.bottom = 'auto';
+  } else {
+    panel.style.bottom = `${Math.max(margin, window.innerHeight - rect.top + margin)}px`;
+    panel.style.top = 'auto';
   }
+};
+
+const setExplanationPanelOpen = (panel: HTMLElement, open: boolean) => {
+  const trigger = getExplanationTrigger(panel);
+  if (open && trigger) positionExplanationPanel(trigger, panel);
   panel.hidden = !open;
-  owner?.querySelector<HTMLElement>('[data-personal-algorithm-explanation]')?.setAttribute('aria-expanded', String(open));
+  trigger?.setAttribute('aria-expanded', String(open));
 };
 
 const closeOtherExplanationPanels = (keep: HTMLElement) => {
@@ -295,6 +313,26 @@ const closeOtherExplanationPanels = (keep: HTMLElement) => {
     if (panel === keep || panel.hidden) return;
     setExplanationPanelOpen(panel, false);
   });
+};
+
+const createExplanationPortal = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+): HTMLElement => {
+  explanationPanelSequence += 1;
+  const suffix = `${instanceId}-${explanationPanelSequence}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+  if (!trigger.id) trigger.id = `myalgo-explanation-trigger-${suffix}`;
+  const panel = document.createElement('div');
+  panel.id = `myalgo-explanation-panel-${suffix}`;
+  panel.dataset.personalAlgorithmExplanationPanel = kind;
+  panel.dataset.personalAlgorithmExplanationTriggerId = trigger.id;
+  panel.hidden = true;
+  panel.style.cssText = 'position:fixed;z-index:2147483646;overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 12px 40px rgba(0,0,0,.65);';
+  panel.addEventListener('pointerdown', (event) => event.stopPropagation());
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  trigger.setAttribute('aria-controls', panel.id);
+  document.body.appendChild(panel);
+  return panel;
 };
 
 const whyNodeAccent = (kind: string): { border: string; background: string } => {
@@ -500,7 +538,6 @@ const ensureNativeExplanationControl = (
   }
 
   let why = host.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation="native"]');
-  let panel = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel="native"]');
   if (!why) {
     why = document.createElement('button');
     why.type = 'button';
@@ -511,18 +548,21 @@ const ensureNativeExplanationControl = (
     why.style.cssText = 'position:absolute;z-index:1000;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
     host.appendChild(why);
   }
+  const controlledPanelId = why.getAttribute('aria-controls');
+  let panel = controlledPanelId
+    ? document.getElementById(controlledPanelId)
+    : null;
   if (!panel) {
-    panel = document.createElement('div');
-    panel.dataset.personalAlgorithmExplanationPanel = 'native';
-    panel.hidden = true;
-    panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:min(520px,72vh);overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 8px 28px rgba(0,0,0,.55);';
-    card.appendChild(panel);
+    panel = createExplanationPortal(why, 'native');
     why.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const opening = panel!.hidden;
-      if (opening) closeOtherExplanationPanels(panel!);
-      setExplanationPanelOpen(panel!, opening);
+      const nextPanelId = why!.getAttribute('aria-controls');
+      const nextPanel = nextPanelId ? document.getElementById(nextPanelId) : null;
+      if (!nextPanel) return;
+      const opening = nextPanel.hidden;
+      if (opening) closeOtherExplanationPanels(nextPanel);
+      setExplanationPanelOpen(nextPanel, opening);
     });
   }
 
@@ -642,23 +682,21 @@ const createReplacementCard = (
   // Replacement cards intentionally use a fixed native slot height + overflow
   // clipping, so a normal-flow control appended below metadata can disappear.
   why.style.cssText = 'position:absolute;z-index:35;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
-  const explanation = document.createElement('div');
-  explanation.dataset.personalAlgorithmExplanationPanel = 'true';
-  explanation.hidden = true;
-  explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:min(520px,72vh);overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 8px 28px rgba(0,0,0,.55);';
-
+  why.setAttribute('aria-expanded', 'false');
+  card.appendChild(why);
+  const explanation = createExplanationPortal(why, 'replacement');
   renderExplanationContent(explanation, item);
 
   why.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const opening = explanation.hidden;
-    if (opening) closeOtherExplanationPanels(explanation);
-    setExplanationPanelOpen(explanation, opening);
+    const panelId = why.getAttribute('aria-controls');
+    const panel = panelId ? document.getElementById(panelId) : null;
+    if (!panel) return;
+    const opening = panel.hidden;
+    if (opening) closeOtherExplanationPanels(panel);
+    setExplanationPanelOpen(panel, opening);
   });
-  why.setAttribute('aria-expanded', 'false');
-  card.appendChild(why);
-  card.appendChild(explanation);
 
   return card;
 };
@@ -748,11 +786,11 @@ const refreshReplacementCardPresentation = (
   }
 
   const why = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation]');
-  if (why) why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
-  const explanation = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel]');
+  if (!why) return;
+  why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
+  const panelId = why.getAttribute('aria-controls');
+  const explanation = panelId ? document.getElementById(panelId) : null;
   if (!explanation) return;
-  explanation.replaceChildren();
-
   renderExplanationContent(explanation, item);
 };
 
