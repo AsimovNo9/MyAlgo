@@ -198,16 +198,22 @@ export function GraphCanvas({
       || Boolean(selectedNodeId)
       || Boolean(selectedEdgeId)
     );
+    const lineageOverview = layoutMode === 'lineage' && !compact && !focusIsActive;
     const candidateNodes = focusIsActive && focusNodeIds.size > 0
       ? nodes.filter((node) => focusNodeIds.has(node.id))
-      : nodes;
+      : lineageOverview
+        ? nodes.filter((node) => node.kind !== 'content')
+        : nodes;
+    const candidateNodeIds = new Set(candidateNodes.map((node) => node.id));
     const candidateEdges = focusIsActive && focusNodeIds.size > 0
       ? edges.filter((edge) => (
           focusNodeIds.has(edge.sourceNodeId)
           && focusNodeIds.has(edge.targetNodeId)
           && (focusEdgeIds.size === 0 || focusEdgeIds.has(edge.id))
         ))
-      : edges;
+      : lineageOverview
+        ? edges.filter((edge) => candidateNodeIds.has(edge.sourceNodeId) && candidateNodeIds.has(edge.targetNodeId))
+        : edges;
 
     const capacity = compact ? 24 : 320;
     const prioritized = [...candidateNodes]
@@ -519,18 +525,45 @@ export function GraphCanvas({
                     strokeOpacity="0.8"
                   />
                 ) : null}
-                <circle
-                  r={radius}
-                  fill={nodeFill(node.kind, selected, node.modeMember)}
-                  fillOpacity={dimmed ? 0.18 : node.modeConnected || node.modeMember || !layout.modeActive ? 0.95 : 0.55}
-                  stroke={node.provenance === 'explicit' ? '#f8fafc' : '#0f172a'}
-                  strokeWidth={node.provenance === 'explicit' ? 1.8 : 1}
-                >
-                  <title>{node.label} · {node.kind} · {node.provenance}</title>
-                </circle>
+                {layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? (
+                  <>
+                    <rect
+                      x="-30"
+                      y="-17"
+                      width="60"
+                      height="34"
+                      rx="5"
+                      fill="#111827"
+                      stroke={selected ? '#facc15' : node.provenance === 'explicit' ? '#f8fafc' : '#334155'}
+                      strokeWidth={selected ? 2.5 : 1.4}
+                    />
+                    <image
+                      href={node.thumbnailUrl}
+                      x="-28"
+                      y="-15"
+                      width="56"
+                      height="30"
+                      preserveAspectRatio="xMidYMid slice"
+                      opacity={dimmed ? 0.25 : 0.92}
+                      pointerEvents="none"
+                    >
+                      <title>{node.label} · content · {node.provenance}</title>
+                    </image>
+                  </>
+                ) : (
+                  <circle
+                    r={radius}
+                    fill={nodeFill(node.kind, selected, node.modeMember)}
+                    fillOpacity={dimmed ? 0.18 : node.modeConnected || node.modeMember || !layout.modeActive ? 0.95 : 0.55}
+                    stroke={node.provenance === 'explicit' ? '#f8fafc' : '#0f172a'}
+                    strokeWidth={node.provenance === 'explicit' ? 1.8 : 1}
+                  >
+                    <title>{node.label} · {node.kind} · {node.provenance}</title>
+                  </circle>
+                )}
                 {showLabel ? (
                   <text
-                    x={radius + 5}
+                    x={layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? 35 : radius + 5}
                     y="4"
                     fontSize={selected ? '13' : '11'}
                     fontWeight={selected ? '700' : '500'}
