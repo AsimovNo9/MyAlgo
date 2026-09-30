@@ -101,8 +101,17 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
   const scoreLine = explanation
     ? `Score ${explanation.displayScore}/100 · raw ${explanation.rawScore} · graph r${explanation.graphRevision}`
     : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
-  const acquisitionLine = explanation?.acquisitionMechanism
-    ? `Acquired via ${explanation.acquisitionMechanism} · acquisition is not preference evidence`
+  const mechanismLabel = explanation?.acquisitionMechanism === 'observed_dom'
+    ? 'Observed on the current YouTube page'
+    : explanation?.acquisitionMechanism === 'web_search'
+      ? 'Discovered via YouTube search'
+      : explanation?.acquisitionMechanism === 'rss'
+        ? 'Discovered via RSS'
+        : explanation?.acquisitionMechanism
+          ? `Acquired via ${explanation.acquisitionMechanism}`
+          : null;
+  const acquisitionLine = mechanismLabel
+    ? `${mechanismLabel} · source is not preference evidence`
     : null;
   const pathLines = (explanation?.matchedPaths ?? [])
     .slice(0, 3)
