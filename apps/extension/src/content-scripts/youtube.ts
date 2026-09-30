@@ -1645,6 +1645,7 @@ const rankCurrentPage = async (requestGeneration: number) => {
         backgroundElapsedMs: response.elapsedMs ?? null,
         phaseTimings: response.phaseTimings ?? null,
         cacheWarm: response.cacheWarm ?? null,
+        scoreCache: response.scoreCache ?? null,
         rankingWorkingSetSize: response.rankingWorkingSetSize ?? null,
         replacementInventorySize: response.replacementInventorySize ?? null,
         searchCandidatesScored: response.searchCandidatesScored ?? null,
