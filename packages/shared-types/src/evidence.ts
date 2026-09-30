@@ -20,6 +20,7 @@ export type ContentMetadata = {
   language?: string | null;
   format?: string | null;
   contentType?: string | null;
+  thumbnailUrl?: string | null;
 };
 
 export type ExposureEvidence = {
@@ -69,6 +70,7 @@ export type EvidenceConnector = {
     language?: string | null;
     format?: string | null;
     contentType?: string | null;
+    thumbnailUrl?: string | null;
   }): ContentMetadata;
   createExposure(input: {
     exposureId: string;
