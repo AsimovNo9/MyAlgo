@@ -276,45 +276,159 @@ const closeOtherExplanationPanels = (keep: HTMLElement) => {
   });
 };
 
+const whyNodeAccent = (kind: string): { border: string; background: string } => {
+  if (kind === 'creator') return { border: '#fb923c', background: 'rgba(124,45,18,.86)' };
+  if (kind === 'topic') return { border: '#34d399', background: 'rgba(6,78,59,.86)' };
+  if (kind === 'format') return { border: '#a78bfa', background: 'rgba(76,29,149,.86)' };
+  if (kind === 'concept' || kind === 'mode') return { border: '#60a5fa', background: 'rgba(30,64,175,.86)' };
+  return { border: '#94a3b8', background: 'rgba(51,65,85,.9)' };
+};
+
 const renderExplanationContent = (
   container: HTMLElement,
   item: RankedFeedItem,
 ) => {
   const view = buildExplanationViewModel(item);
   container.replaceChildren();
+  container.style.padding = '0';
+  container.style.overflow = 'auto';
 
+  const shell = document.createElement('div');
+  shell.style.cssText = 'display:block;background:#171717;color:#f8fafc;font:500 12px/1.4 Roboto,Arial,sans-serif;';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #353535;';
+  const identity = document.createElement('div');
+  identity.style.cssText = 'min-width:0;';
+  const title = document.createElement('div');
+  title.textContent = item.title?.trim() || 'This video';
+  title.style.cssText = 'font:700 15px/1.25 Roboto,Arial,sans-serif;color:#fff;white-space:normal;';
+  identity.appendChild(title);
+  if (item.channel_name?.trim()) {
+    const creator = document.createElement('div');
+    creator.textContent = item.channel_name.trim();
+    creator.style.cssText = 'margin-top:3px;color:#cbd5e1;font:500 12px/1.3 Roboto,Arial,sans-serif;';
+    identity.appendChild(creator);
+  }
+  header.appendChild(identity);
+  const score = document.createElement('span');
+  score.textContent = String(item.score ?? item.explanation?.displayScore ?? 0);
+  score.setAttribute('aria-label', view.scoreLine);
+  score.style.cssText = 'flex:0 0 auto;padding:5px 9px;border-radius:999px;background:#0f172a;color:#fff;font:700 12px/1 Roboto,Arial,sans-serif;';
+  header.appendChild(score);
+  shell.appendChild(header);
+
+  const graph = document.createElement('div');
+  graph.dataset.personalAlgorithmExplanationGraph = 'true';
+  graph.style.cssText = 'position:relative;height:180px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+  const positions = [
+    { x: 24, y: 28 },
+    { x: 76, y: 28 },
+    { x: 50, y: 82 },
+  ];
+  view.miniNodes.slice(1, 4).forEach((_, index) => {
+    const position = positions[index];
+    if (!position) return;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', '50');
+    line.setAttribute('y1', '53');
+    line.setAttribute('x2', String(position.x));
+    line.setAttribute('y2', String(position.y));
+    line.setAttribute('stroke', '#64748b');
+    line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+  });
+  graph.appendChild(svg);
+
+  const centerNode = document.createElement('div');
+  centerNode.textContent = 'This video';
+  centerNode.style.cssText = 'position:absolute;left:50%;top:53%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  graph.appendChild(centerNode);
+
+  view.miniNodes.slice(1, 4).forEach((node, index) => {
+    const position = positions[index];
+    if (!position) return;
+    const accent = whyNodeAccent(node.kind);
+    const pill = document.createElement('div');
+    pill.textContent = node.label;
+    pill.title = node.label;
+    pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    graph.appendChild(pill);
+  });
+  shell.appendChild(graph);
+
+  const contributions = document.createElement('div');
+  contributions.style.cssText = 'padding:0 14px;';
+  for (const contribution of view.contributions) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
+    const label = document.createElement('div');
+    label.style.cssText = 'min-width:0;font-weight:700;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    const accent = document.createElement('span');
+    const nodeKind = view.miniNodes.find((node) => node.label === contribution.shortLabel)?.kind ?? contribution.kind;
+    const accentStyle = whyNodeAccent(nodeKind);
+    accent.style.cssText = `display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:${accentStyle.border};`;
+    label.appendChild(accent);
+    label.append(document.createTextNode(contribution.label));
+    row.appendChild(label);
+
+    const value = document.createElement('strong');
+    value.textContent = `${contribution.value > 0 ? '+' : ''}${contribution.value}`;
+    value.style.cssText = 'color:#e2e8f0;font-variant-numeric:tabular-nums;';
+    row.appendChild(value);
+
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.textContent = contribution.actionLabel ?? 'Inspect';
+    action.disabled = true;
+    action.title = contribution.actionLabel
+      ? 'Available after revisioned preference controls land.'
+      : 'No direct preference action for this contribution yet.';
+    action.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.72;';
+    row.appendChild(action);
+    contributions.appendChild(row);
+  }
+  shell.appendChild(contributions);
+
+  const footer = document.createElement('div');
+  footer.style.cssText = 'padding:10px 14px 12px;';
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Technical details';
+  summary.style.cssText = 'cursor:pointer;color:#cbd5e1;font-weight:600;';
+  details.appendChild(summary);
+  const detailBody = document.createElement('div');
+  detailBody.style.cssText = 'margin-top:8px;padding:8px 10px;border-radius:8px;background:#0f172a;color:#cbd5e1;font-size:11px;overflow-wrap:anywhere;';
   const scoreLine = document.createElement('div');
   scoreLine.textContent = view.scoreLine;
-  scoreLine.style.cssText = 'font-weight:700;';
-  container.appendChild(scoreLine);
-
-  if (item.traceId) {
-    const traceLine = document.createElement('div');
-    traceLine.textContent = `Trace ${item.traceId}`;
-    traceLine.style.cssText = 'margin-top:3px;color:#94a3b8;font-size:11px;overflow-wrap:anywhere;';
-    container.appendChild(traceLine);
+  detailBody.appendChild(scoreLine);
+  if (view.traceId) {
+    const trace = document.createElement('div');
+    trace.textContent = `Trace ${view.traceId}`;
+    trace.style.marginTop = '4px';
+    detailBody.appendChild(trace);
   }
-
   if (view.acquisitionLine) {
     const acquired = document.createElement('div');
     acquired.textContent = view.acquisitionLine;
-    acquired.style.cssText = 'margin-top:5px;color:#cbd5e1;';
-    container.appendChild(acquired);
+    acquired.style.marginTop = '4px';
+    detailBody.appendChild(acquired);
   }
-
   for (const pathLine of view.pathLines) {
-    const row = document.createElement('div');
-    row.textContent = pathLine;
-    row.style.cssText = 'margin-top:6px;color:#e2e8f0;';
-    container.appendChild(row);
+    const path = document.createElement('div');
+    path.textContent = pathLine;
+    path.style.marginTop = '4px';
+    detailBody.appendChild(path);
   }
+  details.appendChild(detailBody);
+  footer.appendChild(details);
+  shell.appendChild(footer);
 
-  for (const contributionLine of view.contributionLines) {
-    const row = document.createElement('div');
-    row.textContent = contributionLine;
-    row.style.cssText = 'margin-top:4px;';
-    container.appendChild(row);
-  }
+  container.appendChild(shell);
 };
 
 const ensureNativeExplanationControl = (
@@ -346,7 +460,7 @@ const ensureNativeExplanationControl = (
     panel = document.createElement('div');
     panel.dataset.personalAlgorithmExplanationPanel = 'native';
     panel.hidden = true;
-    panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
+    panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:min(520px,72vh);overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 8px 28px rgba(0,0,0,.55);';
     host.appendChild(panel);
     why.addEventListener('click', (event) => {
       event.preventDefault();
@@ -477,7 +591,7 @@ const createReplacementCard = (
   const explanation = document.createElement('div');
   explanation.dataset.personalAlgorithmExplanationPanel = 'true';
   explanation.hidden = true;
-  explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
+  explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:min(520px,72vh);overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 8px 28px rgba(0,0,0,.55);';
 
   renderExplanationContent(explanation, item);
 
