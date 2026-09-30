@@ -311,11 +311,21 @@ const renderExplanationContent = (
     identity.appendChild(creator);
   }
   header.appendChild(identity);
+  const headerMeta = document.createElement('div');
+  headerMeta.style.cssText = 'display:flex;align-items:center;gap:6px;flex:0 0 auto;';
+  const categoryLabel = getContentPresentationLabel(item);
+  if (categoryLabel) {
+    const chip = document.createElement('span');
+    chip.textContent = categoryLabel;
+    chip.style.cssText = 'padding:4px 8px;border-radius:999px;background:#052e16;color:#86efac;font:700 10px/1.1 Roboto,Arial,sans-serif;';
+    headerMeta.appendChild(chip);
+  }
   const score = document.createElement('span');
   score.textContent = String(item.score ?? item.explanation?.displayScore ?? 0);
   score.setAttribute('aria-label', view.scoreLine);
   score.style.cssText = 'flex:0 0 auto;padding:5px 9px;border-radius:999px;background:#0f172a;color:#fff;font:700 12px/1 Roboto,Arial,sans-serif;';
-  header.appendChild(score);
+  headerMeta.appendChild(score);
+  header.appendChild(headerMeta);
   shell.appendChild(header);
 
   const graph = document.createElement('div');
@@ -426,6 +436,26 @@ const renderExplanationContent = (
   }
   details.appendChild(detailBody);
   footer.appendChild(details);
+
+  const strength = document.createElement('div');
+  strength.style.cssText = 'display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-top:12px;color:#e2e8f0;font-size:11px;';
+  const light = document.createElement('span');
+  light.textContent = 'Light touch';
+  strength.appendChild(light);
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '0';
+  slider.max = '100';
+  slider.value = '50';
+  slider.disabled = true;
+  slider.title = 'Preference strength becomes available with revisioned preference controls.';
+  slider.style.cssText = 'width:100%;accent-color:#64748b;';
+  strength.appendChild(slider);
+  const strict = document.createElement('span');
+  strict.textContent = 'Strict';
+  strength.appendChild(strict);
+  footer.appendChild(strength);
+
   shell.appendChild(footer);
 
   container.appendChild(shell);
