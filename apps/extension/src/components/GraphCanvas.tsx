@@ -437,7 +437,6 @@ export function GraphCanvas({
               selected
               || node.modeMember
               || node.searchMatch
-              || node.degree >= 6
             );
             return (
               <g
