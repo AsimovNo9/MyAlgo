@@ -101,6 +101,7 @@ export interface PageProviderConnector extends EvidenceConnector {
     language?: string | null;
     format?: string | null;
     contentType?: string | null;
+    thumbnailUrl?: string | null;
   }): ContentMetadata;
   createExposure(input: {
     exposureId: string;
