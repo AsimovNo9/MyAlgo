@@ -777,7 +777,8 @@ Validate all of the following:
 14. lineage places content/history-like content toward leaves, creator/topic/concept nodes in intermediate layers, and objective/user-level nodes toward the root while retained evidence remains an edge drill-down until evidence itself becomes a first-class graph node;
 15. content leaves remain collapsed by default in lineage overview; selecting/searching a branch or choosing a mode reveals only related content leaves, and disabling Focus only restores higher-level context without expanding unrelated content;
 16. miniature content thumbnails are rendered only from thumbnail URLs already observed and retained from YouTube metadata; graph inspection must not synthesize bulk thumbnail URLs or introduce a new thumbnail-fetch pipeline;
-17. clicking a content/creator/topic/concept node populates an inspectable detail card with stable identity, provenance/support, and connected relationships, and relationship selection continues into retained evidence drill-down.
+17. clicking a content/creator/topic/concept node populates an inspectable detail card with stable identity, provenance/support, and connected relationships, and relationship selection continues into retained evidence drill-down;
+18. lineage overview uses a bounded creator-branch overview when many creators have only downward content edges: all higher-level-connected creators remain visible, only a deterministic top subset of isolated creators is shown across multiple rows, hidden-branch count is disclosed, and any hidden creator remains searchable/selectable without mutating graph state.
 
 The first slice deliberately avoids graph mutation, scoring, preference inference, and a heavyweight graph-rendering dependency. The follow-on #153 mini graph must render only the current trace subgraph and preserve the same trace/graph revision as the textual Why-this explanation.
 
