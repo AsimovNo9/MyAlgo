@@ -46,7 +46,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.equal(view.scoreLine, 'Score 72/100 · raw 14.5 · graph r12');
   assert.equal(
     view.acquisitionLine,
-    'Acquired via web_search · acquisition is not preference evidence',
+    'Discovered via YouTube search · source is not preference evidence',
   );
   assert.deepEqual(
     view.pathLines,
@@ -58,6 +58,24 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
       'semantic neighbourhood: local AI: +10',
       'explicit feedback: not_interested: -5',
     ],
+  );
+});
+
+test('explanation provenance uses user-facing labels without becoming a ranking reason', () => {
+  assert.equal(
+    buildExplanationViewModel({
+      score: 68,
+      explanation: {
+        rawScore: 11,
+        displayScore: 68,
+        graphRevision: 9,
+        acquisitionMechanism: 'observed_dom',
+        contributions: [],
+        matchedPaths: [],
+        modeGrounding: null,
+      },
+    }).acquisitionLine,
+    'Observed on the current YouTube page · source is not preference evidence',
   );
 });
 
