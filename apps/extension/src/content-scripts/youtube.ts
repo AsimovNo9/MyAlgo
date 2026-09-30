@@ -2377,6 +2377,15 @@ const scheduleOptimisticPresentation = () => {
 };
 
 const pageObserver = new MutationObserver((records) => {
+  const hasNonInjectedMutation = records.some((record) => {
+    const changedNodes = [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)];
+    return changedNodes.some((node) => {
+      if (!(node instanceof Element)) return false;
+      return !node.matches(MYALGO_INJECTED_SELECTOR)
+        && !node.closest(MYALGO_INJECTED_SELECTOR);
+    });
+  });
+
   const hasNativeVideoMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
     if (node.closest(MYALGO_INJECTED_SELECTOR)) return false;
@@ -2411,9 +2420,11 @@ const pageObserver = new MutationObserver((records) => {
     syncSourceFilteredContainers();
   }
 
-  if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
-  if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
-  attachTemporalWatchObserver();
+  if (hasNonInjectedMutation) {
+    if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
+    if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
+    attachTemporalWatchObserver();
+  }
 });
 pageObserver.observe(document.documentElement, { childList: true, subtree: true });
 
