@@ -21,6 +21,18 @@ import {
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
+const YOUTUBE_COMMENT_SURFACE_SELECTOR = [
+  '#comments',
+  'ytd-comment-thread-renderer',
+  'ytd-comment-view-model',
+  'yt-comment-thread-renderer',
+  'yt-comment-view-model',
+].join(', ');
+
+const isYouTubeCommentSurfaceElement = (element: Element | null): boolean => (
+  Boolean(element?.closest(YOUTUBE_COMMENT_SURFACE_SELECTOR))
+);
+
 type PresentationCache = {
   mode: string;
   activeModeId: string;
@@ -878,7 +890,7 @@ const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => 
 };
 
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
-  if (isMyAlgoInjectedElement(link)) return null;
+  if (isMyAlgoInjectedElement(link) || isYouTubeCommentSurfaceElement(link)) return null;
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
 
@@ -906,7 +918,10 @@ const getVideoElements = (diagnoseInjected = false) => {
     .filter((element): element is HTMLElement => Boolean(element));
   const uniqueElements = Array.from(new Set([...knownElements, ...linkElements]));
   const nativeElements = keepOutermostElements(
-    uniqueElements.filter((element) => !isMyAlgoInjectedElement(element)),
+    uniqueElements.filter((element) => (
+      !isMyAlgoInjectedElement(element)
+      && !isYouTubeCommentSurfaceElement(element)
+    )),
     (parent, child) => parent.contains(child),
   );
   const skippedInjected = uniqueElements.length - uniqueElements.filter(
@@ -975,7 +990,7 @@ const collectCandidates = () => {
     .slice(0, youtubeConnector.presentation.candidateLimit);
 
   const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
-    .filter((link) => !isMyAlgoInjectedElement(link))
+    .filter((link) => !isMyAlgoInjectedElement(link) && !isYouTubeCommentSurfaceElement(link))
     .map((link) => ({
       external_id: youtubeConnector.getExternalId(link.href) ?? '',
       title: normalizeText(youtubeConnector.getLinkTitle({
