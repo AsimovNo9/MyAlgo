@@ -36,7 +36,23 @@ export type RankedFeedItem = {
     displayScore: number;
     graphRevision: number;
     acquisitionMechanism: string | null;
-    contributions: Array<{ label: string; value: number; kind: string }>;
+    contributions: Array<{
+      label: string;
+      value: number;
+      kind: string;
+      sourceId?: string;
+      sourceIds?: string[];
+      evidenceIds?: string[];
+      modeId?: string;
+      modeRevision?: number;
+      canonicalId?: string;
+    }>;
+    matchedPaths?: Array<{
+      nodeIds: string[];
+      nodeLabels: string[];
+      edgeIds: string[];
+      evidenceIds: string[];
+    }>;
     modeGrounding?: {
       modeId: string;
       modeRevision: number;
@@ -71,6 +87,39 @@ export type RankedFeedItem = {
     acquired_at?: string | null;
   }>;
 };
+
+
+export type ExplanationViewModel = {
+  scoreLine: string;
+  acquisitionLine: string | null;
+  pathLines: string[];
+  contributionLines: string[];
+};
+
+export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
+  const explanation = item.explanation;
+  const scoreLine = explanation
+    ? `Score ${explanation.displayScore}/100 · raw ${explanation.rawScore} · graph r${explanation.graphRevision}`
+    : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
+  const acquisitionLine = explanation?.acquisitionMechanism
+    ? `Acquired via ${explanation.acquisitionMechanism} · acquisition is not preference evidence`
+    : null;
+  const pathLines = (explanation?.matchedPaths ?? [])
+    .slice(0, 3)
+    .map((path) => {
+      const labels = path.nodeLabels.filter(Boolean);
+      const pathLabel = labels.length > 0 ? labels.join(' ↔ ') : path.nodeIds.join(' ↔ ');
+      const evidenceCount = path.evidenceIds.length;
+      return evidenceCount > 0
+        ? `Graph path: ${pathLabel} · ${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`
+        : `Graph path: ${pathLabel}`;
+    });
+  const contributionLines = (explanation?.contributions ?? []).map((contribution) => {
+    const sign = contribution.value > 0 ? '+' : '';
+    return `${contribution.label}: ${sign}${contribution.value}`;
+  });
+  return { scoreLine, acquisitionLine, pathLines, contributionLines };
+}
 
 export function getContentPresentationLabel(
   item: RankedFeedItem,
