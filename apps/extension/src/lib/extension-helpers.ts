@@ -348,3 +348,69 @@ export function parseGraphInspectorExport(json: string): GraphInspectorView {
   }
   return buildGraphInspectorView(parsed);
 }
+
+
+export type GraphModeOverlay = {
+  modeId: string;
+  modeLabel: string;
+  modeRevision: number | null;
+  memberNodeIds: string[];
+  connectedNodeIds: string[];
+  connectedEdgeIds: string[];
+};
+
+export function buildGraphModeOverlay(
+  view: GraphInspectorView,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+  modeId: string,
+): GraphModeOverlay {
+  if (!modeId || modeId === 'all' || modeId === 'default') {
+    return {
+      modeId: 'all',
+      modeLabel: 'All graph',
+      modeRevision: null,
+      memberNodeIds: [],
+      connectedNodeIds: [],
+      connectedEdgeIds: [],
+    };
+  }
+
+  const mode = catalog?.modes.find((entry) => entry.id === modeId);
+  if (!mode) {
+    return {
+      modeId,
+      modeLabel: modeId,
+      modeRevision: null,
+      memberNodeIds: [],
+      connectedNodeIds: [],
+      connectedEdgeIds: [],
+    };
+  }
+
+  const availableNodeIds = new Set(view.nodes.map((node) => node.id));
+  const memberNodeIds = new Set<string>();
+  for (const member of mode.members) {
+    if (availableNodeIds.has(member.canonicalId)) memberNodeIds.add(member.canonicalId);
+    for (const sourceNodeId of member.sourceNodeIds) {
+      if (availableNodeIds.has(sourceNodeId)) memberNodeIds.add(sourceNodeId);
+    }
+  }
+
+  const connectedNodeIds = new Set(memberNodeIds);
+  const connectedEdgeIds = new Set<string>();
+  for (const edge of view.edges) {
+    if (!memberNodeIds.has(edge.sourceNodeId) && !memberNodeIds.has(edge.targetNodeId)) continue;
+    connectedEdgeIds.add(edge.id);
+    connectedNodeIds.add(edge.sourceNodeId);
+    connectedNodeIds.add(edge.targetNodeId);
+  }
+
+  return {
+    modeId: mode.id,
+    modeLabel: mode.label,
+    modeRevision: mode.revision,
+    memberNodeIds: [...memberNodeIds].sort(),
+    connectedNodeIds: [...connectedNodeIds].sort(),
+    connectedEdgeIds: [...connectedEdgeIds].sort(),
+  };
+}
