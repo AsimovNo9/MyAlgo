@@ -223,16 +223,42 @@ export function GraphCanvas({
         ));
       const isolatedCreators = allIsolatedCreators.slice(0, 18);
       hiddenIsolatedCreatorCount = Math.max(0, allIsolatedCreators.length - isolatedCreators.length);
+      const overviewCreatorIds = new Set(isolatedCreators.map((creator) => creator.id));
+      for (const creatorId of higherLevelConnectedIds) {
+        if (nodes.some((node) => node.id === creatorId && node.kind === 'creator')) {
+          overviewCreatorIds.add(creatorId);
+        }
+      }
+
+      const previewContentIds = new Set<string>();
+      for (const creatorId of overviewCreatorIds) {
+        const contentCandidates = edges
+          .filter((edge) => (
+            edge.relation === 'created_by'
+            && edge.targetNodeId === creatorId
+          ))
+          .map((edge) => nodes.find((node) => node.id === edge.sourceNodeId))
+          .filter((node): node is GraphInspectorNode => Boolean(node && node.kind === 'content'))
+          .sort((left, right) => (
+            right.supportCount - left.supportCount
+            || left.label.localeCompare(right.label)
+            || left.id.localeCompare(right.id)
+          ))
+          .slice(0, 3);
+        for (const content of contentCandidates) previewContentIds.add(content.id);
+      }
 
       for (const node of nodes) {
         if (node.kind === 'content') {
-          if (focusNodeIds.has(node.id)) lineageContextNodeIds.add(node.id);
+          if (focusNodeIds.has(node.id) || previewContentIds.has(node.id)) {
+            lineageContextNodeIds.add(node.id);
+          }
           continue;
         }
         if (
           node.kind !== 'creator'
           || higherLevelConnectedIds.has(node.id)
-          || isolatedCreators.some((creator) => creator.id === node.id)
+          || overviewCreatorIds.has(node.id)
           || focusNodeIds.has(node.id)
         ) {
           lineageContextNodeIds.add(node.id);
