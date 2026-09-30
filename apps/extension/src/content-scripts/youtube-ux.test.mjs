@@ -56,7 +56,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
     view.contributionLines,
     [
       'semantic neighbourhood: local AI: +10',
-      'explicit feedback: not_interested: -5',
+      'explicit feedback: not interested: -5',
     ],
   );
   assert.deepEqual(
@@ -64,13 +64,44 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
     [
       { id: 'video-a', label: 'This video', kind: 'video' },
       { id: 'contribution:0:local AI', label: 'local AI', kind: 'concept' },
-      { id: 'contribution:1:not_interested', label: 'not_interested', kind: 'other' },
+      { id: 'path:edge:created_by:a:1:Example Creator', label: 'Example Creator', kind: 'creator' },
     ],
   );
   assert.equal(view.contributions[0].evidenceCount, 1);
   assert.equal(view.contributions[0].actionLabel, 'Prefer');
   assert.equal(view.graphRevision, 12);
   assert.equal(view.traceId, 'trace-a');
+});
+
+test('explanation display humanizes encoded graph labels and omits relation names from the mini graph', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-x',
+    title: 'Example video',
+    channel_name: 'Angry Birds',
+    score: 68,
+    traceId: 'trace-x',
+    explanation: {
+      rawScore: 11,
+      displayScore: 68,
+      graphRevision: 4,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [
+        { label: 'creator: youtube:Angry%20Birds', value: 8, kind: 'node', evidenceIds: ['e1'] },
+        { label: 'created_by', value: 2, kind: 'edge', evidenceIds: ['e1'] },
+      ],
+      matchedPaths: [{
+        nodeIds: ['creator:youtube:Angry%20Birds', 'topic:games'],
+        nodeLabels: ['youtube:Angry%20Birds', 'Gaming'],
+        edgeIds: ['edge:games'],
+        evidenceIds: ['e1', 'e2'],
+      }],
+      modeGrounding: null,
+    },
+  });
+
+  assert.equal(view.pathLines[0], 'Graph path: Angry Birds ↔ Gaming · 2 evidence items');
+  assert.equal(view.miniNodes.some((node) => node.label === 'created by'), false);
+  assert.equal(view.miniNodes.some((node) => node.label === 'Angry Birds'), true);
 });
 
 test('explanation provenance uses user-facing labels without becoming a ranking reason', () => {
