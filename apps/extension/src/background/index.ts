@@ -2057,27 +2057,31 @@ const prioritizeCandidatesForSelectedMode = (
   const normalizedLabels = labels.map(normalizeModeRefreshText).filter(Boolean);
   if (normalizedLabels.length === 0) return candidates;
 
-  const relevance = (candidate: CandidatePoolItem): number => {
+  const labelSignals = normalizedLabels.map((label) => ({
+    label,
+    tokens: label.split(' ').filter((part) => part.length >= 4),
+  }));
+  const scored = candidates.map((candidate) => {
     const text = normalizeModeRefreshText([
       candidate.title,
       candidate.channel_name,
       ...(candidate.topics ?? []),
     ].filter(Boolean).join(' '));
-    let score = 0;
-    for (const label of normalizedLabels) {
-      if (text.includes(label)) score += 10;
-      for (const token of label.split(' ').filter((part) => part.length >= 4)) {
-        if (text.includes(token)) score += 1;
+    let relevance = 0;
+    for (const signal of labelSignals) {
+      if (text.includes(signal.label)) relevance += 10;
+      for (const token of signal.tokens) {
+        if (text.includes(token)) relevance += 1;
       }
     }
-    return score;
-  };
+    return { candidate, relevance };
+  });
 
-  return [...candidates].sort((left, right) => (
-    relevance(right) - relevance(left)
-    || right.lastSeenAt.localeCompare(left.lastSeenAt)
-    || left.external_id.localeCompare(right.external_id)
-  ));
+  return scored.sort((left, right) => (
+    right.relevance - left.relevance
+    || right.candidate.lastSeenAt.localeCompare(left.candidate.lastSeenAt)
+    || left.candidate.external_id.localeCompare(right.candidate.external_id)
+  )).map(({ candidate }) => candidate);
 };
 
 const refreshSelectedModeSemantics = async (
