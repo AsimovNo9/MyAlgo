@@ -267,12 +267,33 @@ const clearExtensionPresentation = (
   }
 };
 
+const setExplanationPanelOpen = (panel: HTMLElement, open: boolean) => {
+  const owner = panel.parentElement;
+  if (owner) {
+    if (open) {
+      if (owner.dataset.personalAlgorithmExplanationPreviousOverflow == null) {
+        owner.dataset.personalAlgorithmExplanationPreviousOverflow = owner.style.overflow || '';
+      }
+      if (owner.dataset.personalAlgorithmExplanationPreviousContain == null) {
+        owner.dataset.personalAlgorithmExplanationPreviousContain = owner.style.contain || '';
+      }
+      owner.style.overflow = 'visible';
+      owner.style.contain = 'none';
+    } else {
+      owner.style.overflow = owner.dataset.personalAlgorithmExplanationPreviousOverflow ?? '';
+      owner.style.contain = owner.dataset.personalAlgorithmExplanationPreviousContain ?? '';
+      delete owner.dataset.personalAlgorithmExplanationPreviousOverflow;
+      delete owner.dataset.personalAlgorithmExplanationPreviousContain;
+    }
+  }
+  panel.hidden = !open;
+  owner?.querySelector<HTMLElement>('[data-personal-algorithm-explanation]')?.setAttribute('aria-expanded', String(open));
+};
+
 const closeOtherExplanationPanels = (keep: HTMLElement) => {
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-explanation-panel]').forEach((panel) => {
     if (panel === keep || panel.hidden) return;
-    panel.hidden = true;
-    const host = panel.parentElement;
-    host?.querySelector<HTMLElement>('[data-personal-algorithm-explanation]')?.setAttribute('aria-expanded', 'false');
+    setExplanationPanelOpen(panel, false);
   });
 };
 
@@ -473,9 +494,13 @@ const ensureNativeExplanationControl = (
     host.style.position = 'relative';
     host.dataset.personalAlgorithmPositionPatched = 'true';
   }
+  if (getComputedStyle(card).position === 'static') {
+    card.style.position = 'relative';
+    card.dataset.personalAlgorithmPositionPatched = 'true';
+  }
 
   let why = host.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation="native"]');
-  let panel = host.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel="native"]');
+  let panel = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel="native"]');
   if (!why) {
     why = document.createElement('button');
     why.type = 'button';
@@ -491,14 +516,13 @@ const ensureNativeExplanationControl = (
     panel.dataset.personalAlgorithmExplanationPanel = 'native';
     panel.hidden = true;
     panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:min(520px,72vh);overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 8px 28px rgba(0,0,0,.55);';
-    host.appendChild(panel);
+    card.appendChild(panel);
     why.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       const opening = panel!.hidden;
       if (opening) closeOtherExplanationPanels(panel!);
-      panel!.hidden = !opening;
-      why!.setAttribute('aria-expanded', String(opening));
+      setExplanationPanelOpen(panel!, opening);
     });
   }
 
@@ -630,8 +654,7 @@ const createReplacementCard = (
     event.stopPropagation();
     const opening = explanation.hidden;
     if (opening) closeOtherExplanationPanels(explanation);
-    explanation.hidden = !opening;
-    why.setAttribute('aria-expanded', String(opening));
+    setExplanationPanelOpen(explanation, opening);
   });
   why.setAttribute('aria-expanded', 'false');
   card.appendChild(why);
