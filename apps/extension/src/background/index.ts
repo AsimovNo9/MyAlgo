@@ -2588,9 +2588,10 @@ const handleRuntimeMessage = (
         // candidates immediately and hydrate only from metadata already cached
         // in local storage. Settings and pool hydration are independent, so keep
         // both storage operations concurrent on a cold service-worker start.
-        const [sourceFilters, candidatePool] = await Promise.all([
+        const [sourceFilters, candidatePool, feedReplacementPercent] = await Promise.all([
           getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
           mergeCandidatePool(incomingCandidates, { deferPersistence: true }),
+          getStorage<number>(STORAGE_KEYS.FEED_REPLACEMENT_PERCENT, 0),
         ]);
         phaseTimings.poolAndSettingsMs = Math.round(performance.now() - phaseStartedAt);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
@@ -2652,6 +2653,7 @@ const handleRuntimeMessage = (
           ranked,
           youtubeConnector.presentation.replacementMinimumScore,
           youtubeConnector.presentation.replacementMinimumUplift,
+          feedReplacementPercent,
         );
 
         phaseStartedAt = performance.now();
