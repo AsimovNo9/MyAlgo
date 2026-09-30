@@ -227,6 +227,15 @@ const clearExtensionPresentation = (
         || element.closest('[data-personal-algorithm-replacement]')
       )
     ) return;
+
+    if (preserveReplacements && element.matches('[data-personal-algorithm-explanation-panel]') && !element.hidden) {
+      return;
+    }
+    if (preserveReplacements && element.matches('[data-personal-algorithm-explanation]')) {
+      const panelId = element.getAttribute('aria-controls');
+      const panel = panelId ? document.getElementById(panelId) : null;
+      if (panel && !panel.hidden) return;
+    }
     element.remove();
   });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => {
@@ -570,6 +579,9 @@ const ensureNativeExplanationControl = (
     : null;
   if (!panel) {
     panel = createExplanationPortal(why, 'native');
+  }
+  if (why.dataset.personalAlgorithmExplanationBound !== 'true') {
+    why.dataset.personalAlgorithmExplanationBound = 'true';
     why.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
