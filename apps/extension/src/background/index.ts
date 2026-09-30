@@ -1,5 +1,5 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
+import { STORAGE_KEYS, getStorage, setStorage, setStorageBatch } from '../lib/storage';
 import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
@@ -372,6 +372,8 @@ let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
 let lastPersistedTraceSignature = '';
+let lastPersistedRankCacheSignature = '';
+let rankSuccessStatePersisted = false;
 const metadataEnrichmentInFlight = new Set<string>();
 const metadataEnrichmentFailureUntil = new Map<string, number>();
 const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
@@ -2362,6 +2364,8 @@ const handleRuntimeMessage = (
       conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
+      lastPersistedRankCacheSignature = '';
+      rankSuccessStatePersisted = false;
       candidatePoolMemory = null;
       candidatePoolIndexMemory = null;
       candidatePoolPersistQueue = Promise.resolve();
@@ -2678,23 +2682,52 @@ const handleRuntimeMessage = (
           elapsedMs: Math.round(performance.now() - rankStartedAt),
         });
 
-        // Cache persistence is not presentation work. Keep it off the response
-        // critical path; a failed write is diagnostic-only and does not discard
-        // the already-computed deterministic rank.
-        void Promise.all([
-          setStorage(STORAGE_KEYS.FEED_CACHE, feedCache),
-          setStorage(STORAGE_KEYS.PRESENTATION_CACHE, {
-            mode: payload?.mode ?? 'default',
-            activeModeId,
-            activeModeRevision: activeDurableMode?.revision ?? null,
-            generatedAt: new Date().toISOString(),
-            feed: presentationFeed,
-          }),
-          setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString()),
-          setStorage('personal-algorithm-last-error', null),
-        ]).catch((error) => {
-          console.warn('[MyAlgo] deferred rank cache persistence failed', error);
+        // Cache persistence is not presentation work. Persist only when the
+        // presentation materially changes, and batch related keys into one
+        // chrome.storage transaction to reduce serialization/IPC churn.
+        const presentationCache = {
+          mode: payload?.mode ?? 'default',
+          activeModeId,
+          activeModeRevision: activeDurableMode?.revision ?? null,
+          generatedAt: new Date().toISOString(),
+          feed: presentationFeed,
+        };
+        const rankCacheSignature = JSON.stringify({
+          mode: presentationCache.mode,
+          activeModeId,
+          activeModeRevision: presentationCache.activeModeRevision,
+          feed: presentationFeed.map((item) => [
+            item.external_id,
+            item.score,
+            item.traceId,
+            item.visible,
+            item.suppressed,
+            item.policyOutcome,
+            item.title,
+            item.channel_name,
+            item.thumbnail_url,
+            item.semantic_category,
+            item.semantic_category_confidence,
+            item.explanation?.modeGrounding?.modeId ?? null,
+            item.explanation?.modeGrounding?.modeRevision ?? null,
+            item.explanation?.modeGrounding?.total ?? null,
+          ]),
         });
+        if (
+          rankCacheSignature !== lastPersistedRankCacheSignature
+          || !rankSuccessStatePersisted
+        ) {
+          lastPersistedRankCacheSignature = rankCacheSignature;
+          rankSuccessStatePersisted = true;
+          void setStorageBatch({
+            [STORAGE_KEYS.FEED_CACHE]: feedCache,
+            [STORAGE_KEYS.PRESENTATION_CACHE]: presentationCache,
+            [STORAGE_KEYS.LAST_SYNC]: new Date().toISOString(),
+            'personal-algorithm-last-error': null,
+          }).catch((error) => {
+            console.warn('[MyAlgo] deferred rank cache persistence failed', error);
+          });
+        }
 
         await candidatePoolPersistQueue.catch((error) => {
           console.warn('[MyAlgo] deferred candidate-pool persistence failed', error);
@@ -2724,6 +2757,7 @@ const handleRuntimeMessage = (
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
+        rankSuccessStatePersisted = false;
         await setStorage('personal-algorithm-last-error', message);
         console.error('Failed to rank current YouTube page', message);
         sendResponse({ ok: false, error: message });
