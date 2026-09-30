@@ -800,3 +800,8 @@ The feed-card explanation surface should default to a product explanation, not a
 4. Reduce/Mute/Prefer affordances and the Light touch ↔ Strict control remain visibly disabled until revisioned mutation/undo semantics ship;
 5. trace ID, graph revision, acquisition provenance, and matched paths are available under a collapsed Technical details disclosure rather than dominating the default UI;
 6. the same item/trace refresh updates the product card without duplicate controls or stale contribution rows.
+
+
+### Interaction regressions from live validation
+
+Validate that expanded Why-this is not clipped by the thumbnail or native card paint boundary: the full explanation remains reachable/scrollable while the closed card retains its normal geometry, and opening/closing restores prior overflow/contain styles. In the graph explorer, lineage thumbnail nodes must be clickable with a generous hit target, must not initiate canvas panning on pointer-down, must support Enter/Space activation, and must reveal/focus the node inspector immediately after selection.
