@@ -184,7 +184,7 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 8. Unchanged feed/presentation output does not rewrite the persisted rank cache; when it changes, related cache/sync/error keys are written as one storage batch.
 9. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
 10. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
-11. Scroll alone does not trigger repeated whole-page DOM discovery; viewport reprioritization comes from observed native-card intersection changes.
+11. Scroll alone does not trigger repeated whole-page DOM discovery or replacement reselection.
 12. One presentation generation shares native-card discovery and geometry between native presentation and replacement rendering.
 
 
@@ -206,7 +206,7 @@ Measure the three latency domains separately:
 2. **fresh deterministic rank latency** — `RANK_PAGE` request → deterministic response/render;
 3. **semantic convergence latency** — first valid presentation → embedding/verifier-grounded settled presentation.
 
-Also inspect `[MyAlgo] presentation timing` for `nativeCardCount`, `candidateDiscoveryMs`, `applyRankedFeedMs`, and `replacementRenderMs`. During sustained scroll, these logs should occur only when card membership/presentation changes or observed cards cross viewport-priority bands, not continuously for raw scroll events.
+Also inspect `[MyAlgo] presentation timing` for `nativeCardCount`, `candidateDiscoveryMs`, `applyRankedFeedMs`, and `replacementRenderMs`. During sustained scroll, these logs should occur only when card membership/presentation legitimately changes, not continuously for raw scroll events. Replacement targeting must not oscillate as a consequence of MyAlgo's own layout changes.
 
 Also validate visual first paint independently of fresh scoring: after one successful Home rank, reload Home with the same active mode and confirm the mode-compatible persisted presentation cache can paint badges/replacements before the first fresh `RANK_PAGE` response. As YouTube appends/recycles Home cards, cached presentation should be coalesced into the next animation frame rather than waiting for the mutation-rank debounce.
 
