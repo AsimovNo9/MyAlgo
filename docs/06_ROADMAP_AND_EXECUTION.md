@@ -280,6 +280,10 @@ Only expand retrieval or model complexity when a measured failure justifies it.
 
 Inspection/search/mode overlays move earlier into #170 because users need to understand the graph before editing it. Phase 4 is therefore mutation-focused:
 
+### Graph revision safety invariant
+
+Before the first explicit user mutation, preserve a durable original graph baseline. Every user-authored node/edge/control mutation creates a new graph revision with reversible before/after state. Undo restores the prior user revision; Restore original returns to the preserved baseline without erasing retained evidence. Forget remains an evidence operation, not a graph-edit undo.
+
 1. node editing
 2. edge/path editing
 3. deletion semantics
