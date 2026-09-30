@@ -1,5 +1,5 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { STORAGE_KEYS, getStorage, setStorage } from '../lib/storage';
+import { STORAGE_KEYS, getStorage, setStorage, setStorageBatch } from '../lib/storage';
 import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
@@ -10,7 +10,7 @@ import { correlateBehavior, getBehaviorForVideo } from '../content-scripts/behav
 import { toNormalizedInteraction } from '../content-scripts/youtube-interactions';
 import { toNormalizedExposure } from '../content-scripts/youtube-recommendations';
 import { createChromeLocalStateStorage, LocalPersonalAlgorithmStore } from '../lib/personal-algorithm-store';
-import { buildLocalFeedbackSignals, scoreLocalCandidates } from './personal-algorithm-runtime';
+import { buildLocalFeedbackSignals, getLocalScoringDiagnostics, scoreLocalCandidates } from './personal-algorithm-runtime';
 import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
@@ -97,6 +97,13 @@ type ConceptExtractionRefreshResult = {
 };
 
 type LocalFeedItem = CandidatePoolItem & {
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_mode_similarity?: number | null;
+  semantic_model_version?: string | null;
   id: string;
   rawScore: number;
   score: number;
@@ -338,35 +345,157 @@ const refreshDurableModeCatalog = async (
 
 const resolveModeSelection = async (
   requested: string | null | undefined,
-): Promise<{ modeId: string; label: string; revision: number | null }> => {
+): Promise<{
+  modeId: string;
+  label: string;
+  revision: number | null;
+  memberLabels: string[];
+}> => {
   const value = requested?.trim() || 'default';
   if (value.toLowerCase() === 'default') {
-    return { modeId: 'default', label: 'Default', revision: null };
+    return { modeId: 'default', label: 'Default', revision: null, memberLabels: [] };
   }
   const catalog = await getStorage<DurableSemanticModeCatalog | null>(
     STORAGE_KEYS.DURABLE_MODE_CATALOG,
     null,
   );
   const byId = resolveDurableMode(catalog, value);
-  if (byId) return { modeId: byId.id, label: byId.label, revision: byId.revision };
+  if (byId) return {
+    modeId: byId.id,
+    label: byId.label,
+    revision: byId.revision,
+    memberLabels: byId.members.map((member) => member.label),
+  };
   const byLabel = catalog?.modes.find((mode) => mode.label.toLowerCase() === value.toLowerCase());
-  if (byLabel) return { modeId: byLabel.id, label: byLabel.label, revision: byLabel.revision };
-  return { modeId: value, label: value, revision: null };
+  if (byLabel) return {
+    modeId: byLabel.id,
+    label: byLabel.label,
+    revision: byLabel.revision,
+    memberLabels: byLabel.members.map((member) => member.label),
+  };
+  return { modeId: value, label: value, revision: null, memberLabels: [] };
 };
 let historyReconciliationReady: Promise<void> | null = null;
 let privacyDisclosureAccepted = false;
 let privacyDisclosureReady: Promise<boolean> | null = null;
 let lastPersistedTraceSignature = '';
+let lastPersistedRankCacheSignature = '';
+let rankSuccessStatePersisted = false;
 const metadataEnrichmentInFlight = new Set<string>();
 const metadataEnrichmentFailureUntil = new Map<string, number>();
 const METADATA_ENRICHMENT_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 const semanticRefreshInFlight = new Set<string>();
 let conceptExtractionRefreshInFlight: Promise<ConceptExtractionRefreshResult> | null = null;
 let semanticEpoch = 0;
+let rankSemanticRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let rankSemanticRefreshQueuedAt = 0;
+let rankSemanticRefreshPending: {
+  candidates: CandidatePoolItem[];
+  mode: string;
+  senderTabId: number | null;
+} | null = null;
 // Concept proposals are keyed by candidate input + model/pipeline identity, not
 // graph revision. Only lifecycle/model-boundary changes invalidate in-flight
 // concept generation.
 let conceptExtractionEpoch = 0;
+
+let candidatePoolMemory: CandidatePoolItem[] | null = null;
+let candidatePoolIndexMemory: Map<string, CandidatePoolItem> | null = null;
+let candidatePoolPersistQueue: Promise<void> = Promise.resolve();
+let candidatePoolMemoryRevision = 0;
+let videoStoreMemory: Record<string, VideoRecord> | null = null;
+let videoStoreMemoryRevision = 0;
+let semanticFeatureCacheMemory: Record<string, SemanticFeatureRecord> | null = null;
+let semanticFeatureCacheMemoryRevision = 0;
+let lastRankMemo: {
+  state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportStateForRead']>>;
+  mode: string;
+  sourceFiltersSignature: string;
+  activeModeId: string;
+  activeModeRevision: number | null;
+  durableModeSignature: string;
+  feedbackSignature: string;
+  candidateIdsSignature: string;
+  candidatePoolRevision: number;
+  videoStoreRevision: number;
+  semanticFeatureRevision: number;
+  feed: LocalFeedItem[];
+} | null = null;
+
+const getCandidatePoolCached = async (): Promise<CandidatePoolItem[]> => {
+  if (candidatePoolMemory) return candidatePoolMemory;
+  candidatePoolMemory = await getStorage<CandidatePoolItem[]>(
+    STORAGE_KEYS.FEED_CANDIDATE_POOL,
+    [],
+  );
+  candidatePoolMemoryRevision += 1;
+  candidatePoolIndexMemory = new Map(
+    candidatePoolMemory.map((candidate) => [candidate.external_id, candidate]),
+  );
+  return candidatePoolMemory;
+};
+
+const getCandidatePoolIndexCached = async (): Promise<Map<string, CandidatePoolItem>> => {
+  await getCandidatePoolCached();
+  if (!candidatePoolIndexMemory) {
+    candidatePoolIndexMemory = new Map(
+      (candidatePoolMemory ?? []).map((candidate) => [candidate.external_id, candidate]),
+    );
+  }
+  return candidatePoolIndexMemory;
+};
+
+const persistCandidatePoolCached = async (
+  pool: CandidatePoolItem[],
+  awaitWrite = true,
+): Promise<void> => {
+  candidatePoolMemory = pool;
+  candidatePoolMemoryRevision += 1;
+  lastRankMemo = null;
+  candidatePoolIndexMemory = new Map(
+    pool.map((candidate) => [candidate.external_id, candidate]),
+  );
+  candidatePoolPersistQueue = candidatePoolPersistQueue
+    .catch(() => undefined)
+    .then(() => setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool));
+  if (awaitWrite) await candidatePoolPersistQueue;
+};
+
+const getVideoStoreCached = async (): Promise<Record<string, VideoRecord>> => {
+  if (videoStoreMemory) return videoStoreMemory;
+  videoStoreMemory = await getStorage<Record<string, VideoRecord>>(
+    STORAGE_KEYS.VIDEO_STORE,
+    {},
+  );
+  videoStoreMemoryRevision += 1;
+  return videoStoreMemory;
+};
+
+const persistVideoStoreCached = async (store: Record<string, VideoRecord>): Promise<void> => {
+  videoStoreMemory = store;
+  videoStoreMemoryRevision += 1;
+  lastRankMemo = null;
+  await setStorage(STORAGE_KEYS.VIDEO_STORE, store);
+};
+
+const getSemanticFeatureCacheCached = async (): Promise<Record<string, SemanticFeatureRecord>> => {
+  if (semanticFeatureCacheMemory) return semanticFeatureCacheMemory;
+  semanticFeatureCacheMemory = await getStorage<Record<string, SemanticFeatureRecord>>(
+    STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+    {},
+  );
+  semanticFeatureCacheMemoryRevision += 1;
+  return semanticFeatureCacheMemory;
+};
+
+const persistSemanticFeatureCacheCached = async (
+  cache: Record<string, SemanticFeatureRecord>,
+): Promise<void> => {
+  semanticFeatureCacheMemory = cache;
+  semanticFeatureCacheMemoryRevision += 1;
+  lastRankMemo = null;
+  await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, cache);
+};
 
 const ensurePrivacyDisclosureLoaded = (): Promise<boolean> => {
   if (privacyDisclosureReady) return privacyDisclosureReady;
@@ -441,7 +570,7 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
 
 async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (candidates.length === 0) return [];
-  const existing = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const existing = await getVideoStoreCached();
   const now = Date.now();
   const missing = candidates
     .filter((candidate) => {
@@ -487,7 +616,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
     const entries = Object.entries(existing)
       .sort(([, a], [, b]) => new Date(b.enrichedAt).getTime() - new Date(a.enrichedAt).getTime())
       .slice(0, MAX_VIDEO_STORE_SIZE);
-    await setStorage(STORAGE_KEYS.VIDEO_STORE, Object.fromEntries(entries));
+    await persistVideoStoreCached(Object.fromEntries(entries));
     return enriched;
   } finally {
     missing.forEach((candidate) => metadataEnrichmentInFlight.delete(candidate.external_id));
@@ -495,7 +624,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
 }
 
 async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<CandidatePoolItem[]> {
-  const store = await getStorage<Record<string, VideoRecord>>(STORAGE_KEYS.VIDEO_STORE, {});
+  const store = await getVideoStoreCached();
   return pool.map((candidate) => {
     const record = store[candidate.external_id];
     if (!record) return candidate;
@@ -503,17 +632,15 @@ async function hydrateCandidatePool(pool: CandidatePoolItem[]): Promise<Candidat
   });
 }
 
-async function mergeCandidatePool(candidates: PageCandidate[]): Promise<CandidatePoolItem[]> {
-  const existing = await getStorage<CandidatePoolItem[]>(
-    STORAGE_KEYS.FEED_CANDIDATE_POOL,
-    [],
-  );
+async function mergeCandidatePool(
+  candidates: PageCandidate[],
+  options: { deferPersistence?: boolean } = {},
+): Promise<CandidatePoolItem[]> {
+  const existing = await getCandidatePoolCached();
+  const byId = await getCandidatePoolIndexCached();
 
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
-  const byId = new Map<string, CandidatePoolItem>(
-    existing.map((candidate) => [candidate.external_id, candidate]),
-  );
   let changed = false;
 
   const materialSignature = (candidate: PageCandidate | CandidatePoolItem) => JSON.stringify({
@@ -575,6 +702,8 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     changed = true;
   }
 
+  if (!changed) return existing;
+
   const pool = [...byId.values()]
     .sort(
       (a, b) =>
@@ -582,10 +711,12 @@ async function mergeCandidatePool(candidates: PageCandidate[]): Promise<Candidat
     )
     .slice(0, MAX_CANDIDATE_POOL_SIZE);
 
-  if (pool.length !== existing.length) changed = true;
-  if (changed) {
-    await setStorage(STORAGE_KEYS.FEED_CANDIDATE_POOL, pool);
+  if (pool.length !== byId.size) {
+    candidatePoolIndexMemory = new Map(
+      pool.map((candidate) => [candidate.external_id, candidate]),
+    );
   }
+  await persistCandidatePoolCached(pool, options.deferPersistence !== true);
   return pool;
 }
 
@@ -956,22 +1087,23 @@ async function hydrateSemanticScoreFeatures(
   candidates: CandidatePoolItem[],
   mode: string,
   semanticModelIdentities: string[],
+  cache: Record<string, SemanticFeatureRecord> | null = null,
+  durableModeCatalog: DurableSemanticModeCatalog | null = null,
 ): Promise<CandidatePoolItem[]> {
-  const [cache, durableModeCatalog] = await Promise.all([
-    getStorage<Record<string, SemanticFeatureRecord>>(
-      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-      {},
-    ),
-    getStorage<DurableSemanticModeCatalog | null>(
-      STORAGE_KEYS.DURABLE_MODE_CATALOG,
-      null,
-    ),
+  const [resolvedCache, resolvedCatalog] = await Promise.all([
+    cache ? Promise.resolve(cache) : getSemanticFeatureCacheCached(),
+    durableModeCatalog
+      ? Promise.resolve(durableModeCatalog)
+      : getStorage<DurableSemanticModeCatalog | null>(
+          STORAGE_KEYS.DURABLE_MODE_CATALOG,
+          null,
+        ),
   ]);
-  const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
+  const expectedModeCatalogSignature = durableModeCatalogSignature(resolvedCatalog);
   return candidates.map((candidate) => {
     const inputHash = semanticInputHash(buildCandidateEmbeddingText(candidate));
     const record = semanticModelIdentities
-      .map((semanticModelIdentity) => cache[semanticFeatureKey(
+      .map((semanticModelIdentity) => resolvedCache[semanticFeatureKey(
         candidate.external_id,
         inputHash,
         state.graph.currentRevision,
@@ -1361,10 +1493,7 @@ async function refreshSemanticScoreFeatures(
 
   try {
     const startedAt = performance.now();
-    const existing = await getStorage<Record<string, SemanticFeatureRecord>>(
-      STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
-      {},
-    );
+    const existing = await getSemanticFeatureCacheCached();
     const fallbackIdentity = semanticProviderIdentity('hash');
     const fallbackModelIdentity = `${fallbackIdentity.modelId}@${fallbackIdentity.modelVersion}`;
     let recentFallbackCoverageCount = 0;
@@ -1653,7 +1782,7 @@ async function refreshSemanticScoreFeatures(
       featureCacheSize: Object.keys(bounded).length,
       generatedAt: new Date().toISOString(),
     });
-    await setStorage(STORAGE_KEYS.SEMANTIC_FEATURE_CACHE, bounded);
+    await persistSemanticFeatureCacheCached(bounded);
 
     const remainingPendingCandidateCount = Math.max(
       0,
@@ -1737,8 +1866,15 @@ async function rankLocalCandidates(
   sourceFilters: FeedSourceFilters,
   mode: string,
 ): Promise<LocalFeedItem[]> {
-  const state = await personalAlgorithmStore.exportState();
-  const [feedbackEvents, activeModeId, durableModeCatalog] = await Promise.all([
+  const [
+    state,
+    feedbackEvents,
+    activeModeId,
+    durableModeCatalog,
+    semanticContext,
+    semanticFeatureCache,
+  ] = await Promise.all([
+    personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
       'personal-algorithm-local-events',
       [],
@@ -1748,8 +1884,38 @@ async function rankLocalCandidates(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
     ),
+    getSemanticProviderContext(),
+    getSemanticFeatureCacheCached(),
   ]);
   const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const sourceFiltersSignature = JSON.stringify(sourceFilters);
+  const feedbackSignature = JSON.stringify(
+    feedbackEvents
+      .filter((event) => event.kind === 'feedback')
+      .map((event) => [event.recordedAt, event.payload]),
+  );
+  const candidateIdsSignature = candidates
+    .map((candidate) => candidate.external_id)
+    .sort()
+    .join('|');
+  const durableModeSignature = durableModeCatalogSignature(durableModeCatalog);
+  if (
+    lastRankMemo
+    && lastRankMemo.state === state
+    && lastRankMemo.mode === mode
+    && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
+    && lastRankMemo.activeModeId === activeModeId
+    && lastRankMemo.activeModeRevision === (activeDurableMode?.revision ?? null)
+    && lastRankMemo.durableModeSignature === durableModeSignature
+    && lastRankMemo.feedbackSignature === feedbackSignature
+    && lastRankMemo.candidateIdsSignature === candidateIdsSignature
+    && lastRankMemo.candidatePoolRevision === candidatePoolMemoryRevision
+    && lastRankMemo.videoStoreRevision === videoStoreMemoryRevision
+    && lastRankMemo.semanticFeatureRevision === semanticFeatureCacheMemoryRevision
+  ) {
+    return lastRankMemo.feed;
+  }
+
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
       .filter((event) => event.kind === 'feedback')
@@ -1759,7 +1925,7 @@ async function rankLocalCandidates(
       })),
     state,
   );
-  const { semanticModelMode, semanticModelIdentity } = await getSemanticProviderContext();
+  const { semanticModelMode, semanticModelIdentity } = semanticContext;
   const fallbackIdentity = semanticProviderIdentity('hash');
   const semanticModelIdentities = semanticModelMode === 'neural'
     ? [
@@ -1772,6 +1938,8 @@ async function rankLocalCandidates(
     candidates,
     mode,
     semanticModelIdentities,
+    semanticFeatureCache,
+    durableModeCatalog,
   );
   const ranked = scoreLocalCandidates(
     state,
@@ -1797,10 +1965,12 @@ async function rankLocalCandidates(
   const traceSignature = traces.map((item) => `${item.traceId}:${item.score}`).join('|');
   if (traceSignature !== lastPersistedTraceSignature) {
     lastPersistedTraceSignature = traceSignature;
-    await setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces);
+    void setStorage(STORAGE_KEYS.PERSONAL_ALGORITHM_LOCAL_TRACES, traces).catch((error) => {
+      console.warn('[MyAlgo] deferred trace persistence failed', error);
+    });
   }
 
-  return ranked.map(({ trace, ...item }) => {
+  const feed = ranked.map(({ trace, ...item }) => {
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
         contribution.modeId
@@ -1867,7 +2037,157 @@ async function rankLocalCandidates(
       },
     };
   });
+
+  lastRankMemo = {
+    state,
+    mode,
+    sourceFiltersSignature,
+    activeModeId,
+    activeModeRevision: activeDurableMode?.revision ?? null,
+    durableModeSignature,
+    feedbackSignature,
+    candidateIdsSignature,
+    candidatePoolRevision: candidatePoolMemoryRevision,
+    videoStoreRevision: videoStoreMemoryRevision,
+    semanticFeatureRevision: semanticFeatureCacheMemoryRevision,
+    feed,
+  };
+  return feed;
 }
+
+const normalizeModeRefreshText = (value: string | null | undefined): string => (
+  value ?? ''
+).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+
+const prioritizeCandidatesForSelectedMode = (
+  candidates: CandidatePoolItem[],
+  labels: readonly string[],
+): CandidatePoolItem[] => {
+  const normalizedLabels = labels.map(normalizeModeRefreshText).filter(Boolean);
+  if (normalizedLabels.length === 0) return candidates;
+
+  const labelSignals = normalizedLabels.map((label) => ({
+    label,
+    tokens: label.split(' ').filter((part) => part.length >= 4),
+  }));
+  const scored = candidates.map((candidate) => {
+    const text = normalizeModeRefreshText([
+      candidate.title,
+      candidate.channel_name,
+      ...(candidate.topics ?? []),
+    ].filter(Boolean).join(' '));
+    let relevance = 0;
+    for (const signal of labelSignals) {
+      if (text.includes(signal.label)) relevance += 10;
+      for (const token of signal.tokens) {
+        if (text.includes(token)) relevance += 1;
+      }
+    }
+    return { candidate, relevance };
+  });
+
+  return scored.sort((left, right) => (
+    right.relevance - left.relevance
+    || right.candidate.lastSeenAt.localeCompare(left.candidate.lastSeenAt)
+    || left.candidate.external_id.localeCompare(right.candidate.external_id)
+  )).map(({ candidate }) => candidate);
+};
+
+const refreshSelectedModeSemantics = async (
+  selection: { modeId: string; label: string; revision: number | null; memberLabels: string[] },
+  tabs: chrome.tabs.Tab[],
+): Promise<void> => {
+  if (selection.modeId === 'default') return;
+
+  const pool = await getCandidatePoolCached();
+  const prioritized = prioritizeCandidatesForSelectedMode(
+    pool,
+    [selection.label, ...selection.memberLabels],
+  ).slice(0, MAX_RANK_WORKING_SET);
+  const hydrated = await hydrateCandidatePool(prioritized);
+
+  // Drain a few neural slices immediately on explicit user selection. This is
+  // bounded so mode activation is responsive without monopolizing the worker;
+  // ordinary rank-driven semantic refresh continues the remaining tail.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const refresh = await refreshSemanticScoreFeatures(hydrated, selection.label);
+    const pending = Number(refresh.diagnostics?.pendingCandidateCount ?? 0);
+    if (refresh.changed > 0) {
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: refresh.changed,
+              modeSelectionRefresh: true,
+              pendingCandidateCount: pending,
+            },
+          }).catch(() => undefined)
+        : undefined));
+    }
+    if (pending <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  }
+};
+
+const scheduleRankSemanticRefresh = (
+  candidates: CandidatePoolItem[],
+  mode: string,
+  senderTabId: number | null,
+): void => {
+  const now = Date.now();
+  if (!rankSemanticRefreshPending) rankSemanticRefreshQueuedAt = now;
+  rankSemanticRefreshPending = { candidates, mode, senderTabId };
+  if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+
+  const queuedFor = now - rankSemanticRefreshQueuedAt;
+  const delayMs = queuedFor >= 1500 ? 0 : 300;
+  rankSemanticRefreshTimer = setTimeout(() => {
+    const pending = rankSemanticRefreshPending;
+    rankSemanticRefreshPending = null;
+    rankSemanticRefreshTimer = null;
+    rankSemanticRefreshQueuedAt = 0;
+    if (!pending) return;
+
+    void refreshSemanticScoreFeatures(pending.candidates, pending.mode).then(async (semanticRefresh) => {
+      const pendingCandidateCount = Number(
+        semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+      );
+      if (pending.senderTabId && semanticRefresh.changed > 0) {
+        await chrome.tabs.sendMessage(pending.senderTabId, {
+          type: 'YOUTUBE_SEMANTICS_ENRICHED',
+          payload: {
+            count: semanticRefresh.changed,
+            modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+              ? semanticRefresh.diagnostics.modelVersion
+              : null,
+            pendingCandidateCount,
+          },
+        }).catch(() => undefined);
+      }
+
+      if (
+        semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
+        && pendingCandidateCount === 0
+      ) {
+        void refreshSemanticConceptGraph(true).then(async (materialization) => {
+          if (!materialization.changed || !pending.senderTabId) return;
+          await chrome.tabs.sendMessage(pending.senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: 0,
+              conceptGraphChanged: true,
+              graphRevision: materialization.diagnostics.graphRevision ?? null,
+            },
+          }).catch(() => undefined);
+        }).catch((error) => {
+          console.warn('[MyAlgo] deferred concept verification failed', error);
+        });
+      }
+    }).catch((error) => {
+      console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
+    });
+  }, delayMs);
+};
 
 async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', payload: unknown): Promise<void> {
   const events = await getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []);
@@ -1986,6 +2306,10 @@ const handleRuntimeMessage = (
       semanticEpoch += 1;
       conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
       conceptExtractionRefreshInFlight = null;
       await setStorage(STORAGE_KEYS.SEMANTIC_MODEL_MODE, semanticModelMode);
       await semanticEmbeddingCache.clear();
@@ -2040,9 +2364,24 @@ const handleRuntimeMessage = (
       semanticEpoch += 1;
       conceptExtractionEpoch += 1;
       semanticRefreshInFlight.clear();
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
       conceptExtractionRefreshInFlight = null;
       metadataEnrichmentFailureUntil.clear();
       lastPersistedTraceSignature = '';
+      lastPersistedRankCacheSignature = '';
+      rankSuccessStatePersisted = false;
+      candidatePoolMemory = null;
+      candidatePoolIndexMemory = null;
+      candidatePoolPersistQueue = Promise.resolve();
+      candidatePoolMemoryRevision = 0;
+      videoStoreMemory = null;
+      videoStoreMemoryRevision = 0;
+      semanticFeatureCacheMemory = null;
+      semanticFeatureCacheMemoryRevision = 0;
+      lastRankMemo = null;
       await chrome.storage.local.clear();
       await semanticEmbeddingCache.clear();
       // The store caches state in the service worker. Reset it after clearing
@@ -2236,14 +2575,24 @@ const handleRuntimeMessage = (
     void (async () => {
       const rankStartedAt = performance.now();
       try {
-        const sourceFilters = await getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {});
         const incomingCandidates = (payload as { candidates?: PageCandidate[] }).candidates ?? [];
+        const cacheWarm = {
+          candidatePool: candidatePoolMemory !== null,
+          videoStore: videoStoreMemory !== null,
+          semanticFeatures: semanticFeatureCacheMemory !== null,
+        };
+        const phaseTimings: Record<string, number> = {};
+        let phaseStartedAt = performance.now();
 
         // First paint must never wait on network enrichment. Merge the live DOM
         // candidates immediately and hydrate only from metadata already cached
-        // in local storage. Rich watch-page enrichment runs after the rank
-        // response and requests a follow-up rerank only when it produced data.
-        const candidatePool = await mergeCandidatePool(incomingCandidates);
+        // in local storage. Settings and pool hydration are independent, so keep
+        // both storage operations concurrent on a cold service-worker start.
+        const [sourceFilters, candidatePool] = await Promise.all([
+          getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
+          mergeCandidatePool(incomingCandidates, { deferPersistence: true }),
+        ]);
+        phaseTimings.poolAndSettingsMs = Math.round(performance.now() - phaseStartedAt);
         const currentPageIds = new Set(incomingCandidates.map((candidate) => candidate.external_id).filter(Boolean));
 
         // Do not rescore the entire persistent reservoir on every YouTube DOM
@@ -2259,8 +2608,12 @@ const handleRuntimeMessage = (
           ))
           .slice(0, MAX_REPLACEMENT_WORKING_SET);
         const workingPool = [...currentPagePool, ...offPagePool].slice(0, MAX_RANK_WORKING_SET);
+        phaseStartedAt = performance.now();
         const hydratedWorkingPool = await hydrateCandidatePool(workingPool);
+        phaseTimings.metadataHydrationMs = Math.round(performance.now() - phaseStartedAt);
+        phaseStartedAt = performance.now();
         const ranked = await rankLocalCandidates(hydratedWorkingPool, sourceFilters, payload?.mode ?? 'default');
+        phaseTimings.scoringMs = Math.round(performance.now() - phaseStartedAt);
         const feedCache = ranked.slice(0, MAX_FEED_CACHE_SIZE);
 
         // The popup cache is intentionally bounded to the top-ranked reservoir,
@@ -2296,18 +2649,16 @@ const handleRuntimeMessage = (
           ...replacementInventory,
         ];
 
-        await setStorage(STORAGE_KEYS.FEED_CACHE, feedCache);
-        await setStorage(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
-        await setStorage('personal-algorithm-last-error', null);
-        const activeModeId = await getStorage<string>(
-          STORAGE_KEYS.ACTIVE_MODE_ID,
-          'default',
-        );
-        const durableModeCatalog = await getStorage<DurableSemanticModeCatalog | null>(
-          STORAGE_KEYS.DURABLE_MODE_CATALOG,
-          null,
-        );
+        phaseStartedAt = performance.now();
+        const [activeModeId, durableModeCatalog] = await Promise.all([
+          getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+          getStorage<DurableSemanticModeCatalog | null>(
+            STORAGE_KEYS.DURABLE_MODE_CATALOG,
+            null,
+          ),
+        ]);
         const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+        phaseTimings.responseContextMs = Math.round(performance.now() - phaseStartedAt);
 
         sendResponse({
           ok: true,
@@ -2316,6 +2667,7 @@ const handleRuntimeMessage = (
                 id: activeDurableMode.id,
                 label: activeDurableMode.label,
                 revision: activeDurableMode.revision,
+                memberLabels: activeDurableMode.members.map((member) => member.label),
               }
             : null,
           feed: presentationFeed,
@@ -2332,53 +2684,104 @@ const handleRuntimeMessage = (
           rankingWorkingSetSize: workingPool.length,
           enriched: 0,
           enrichmentPending: true,
+          cacheWarm,
+          phaseTimings,
+          scoreCache: getLocalScoringDiagnostics(),
           elapsedMs: Math.round(performance.now() - rankStartedAt),
         });
 
-        const senderTabId = _sender.tab?.id;
-        const activeRankMode = payload?.mode ?? 'default';
-        void refreshSemanticScoreFeatures(hydratedWorkingPool, activeRankMode).then(async (semanticRefresh) => {
-          const pendingCandidateCount = Number(
-            semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
-          );
-          if (senderTabId && semanticRefresh.changed > 0) {
-            await chrome.tabs.sendMessage(senderTabId, {
-              type: 'YOUTUBE_SEMANTICS_ENRICHED',
-              payload: {
-                count: semanticRefresh.changed,
-                modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
-                  ? semanticRefresh.diagnostics.modelVersion
-                  : null,
-                pendingCandidateCount,
-              },
-            }).catch(() => undefined);
-          }
-
-          // Run the DeBERTa verifier only after the current neural semantic
-          // working set is caught up. If it changes the graph, request a fresh
-          // rank against the new graph revision; otherwise leave the already
-          // valid affinity-bearing feed untouched.
-          if (
-            semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
-            && pendingCandidateCount === 0
-          ) {
-            void refreshSemanticConceptGraph(true).then(async (materialization) => {
-              if (!materialization.changed || !senderTabId) return;
-              await chrome.tabs.sendMessage(senderTabId, {
-                type: 'YOUTUBE_SEMANTICS_ENRICHED',
-                payload: {
-                  count: 0,
-                  conceptGraphChanged: true,
-                  graphRevision: materialization.diagnostics.graphRevision ?? null,
-                },
-              }).catch(() => undefined);
-            }).catch((error) => {
-              console.warn('[MyAlgo] deferred concept verification failed', error);
-            });
-          }
-        }).catch((error) => {
-          console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
+        // Cache persistence is not presentation work. Persist only when the
+        // presentation materially changes, and batch related keys into one
+        // chrome.storage transaction to reduce serialization/IPC churn.
+        const persistedPresentationFeed = presentationFeed.map((item) => ({
+          external_id: item.external_id,
+          title: item.title,
+          channel_name: item.channel_name ?? null,
+          thumbnail_url: item.thumbnail_url ?? null,
+          source_kind: item.source_kind ?? null,
+          is_short: item.is_short ?? false,
+          is_live: item.is_live ?? false,
+          rawScore: item.rawScore,
+          score: item.score,
+          visible: item.visible,
+          suppressed: item.suppressed,
+          policyOutcome: item.policyOutcome,
+          traceId: item.traceId,
+          content_label: item.content_label ?? null,
+          content_label_confidence: item.content_label_confidence ?? null,
+          semantic_category: item.semantic_category ?? null,
+          semantic_category_confidence: item.semantic_category_confidence ?? null,
+          semantic_category_scores: item.semantic_category_scores ?? {},
+          semantic_mode_similarity: item.semantic_mode_similarity ?? null,
+          semantic_model_version: item.semantic_model_version ?? null,
+          provenance: item.provenance,
+          acquisition_history: item.acquisition_history,
+          explanation: item.explanation
+            ? {
+                rawScore: item.explanation.rawScore,
+                displayScore: item.explanation.displayScore,
+                graphRevision: item.explanation.graphRevision,
+                acquisitionMechanism: item.explanation.acquisitionMechanism,
+                contributions: [],
+                modeGrounding: item.explanation.modeGrounding,
+              }
+            : undefined,
+        }));
+        const presentationCache = {
+          mode: payload?.mode ?? 'default',
+          activeModeId,
+          activeModeRevision: activeDurableMode?.revision ?? null,
+          generatedAt: new Date().toISOString(),
+          feed: persistedPresentationFeed,
+        };
+        const rankCacheSignature = JSON.stringify({
+          mode: presentationCache.mode,
+          activeModeId,
+          activeModeRevision: presentationCache.activeModeRevision,
+          feed: persistedPresentationFeed.map((item) => [
+            item.external_id,
+            item.score,
+            item.traceId,
+            item.visible,
+            item.suppressed,
+            item.policyOutcome,
+            item.title,
+            item.channel_name,
+            item.thumbnail_url,
+            item.semantic_category,
+            item.semantic_category_confidence,
+            item.explanation?.modeGrounding?.modeId ?? null,
+            item.explanation?.modeGrounding?.modeRevision ?? null,
+            item.explanation?.modeGrounding?.total ?? null,
+          ]),
         });
+        if (
+          rankCacheSignature !== lastPersistedRankCacheSignature
+          || !rankSuccessStatePersisted
+        ) {
+          lastPersistedRankCacheSignature = rankCacheSignature;
+          rankSuccessStatePersisted = true;
+          void setStorageBatch({
+            [STORAGE_KEYS.FEED_CACHE]: feedCache,
+            [STORAGE_KEYS.PRESENTATION_CACHE]: presentationCache,
+            [STORAGE_KEYS.LAST_SYNC]: new Date().toISOString(),
+            'personal-algorithm-last-error': null,
+          }).catch((error) => {
+            console.warn('[MyAlgo] deferred rank cache persistence failed', error);
+          });
+        }
+
+        await candidatePoolPersistQueue.catch((error) => {
+          console.warn('[MyAlgo] deferred candidate-pool persistence failed', error);
+        });
+
+        const senderTabId = _sender.tab?.id ?? null;
+        const activeRankMode = payload?.mode ?? 'default';
+        scheduleRankSemanticRefresh(
+          hydratedWorkingPool,
+          activeRankMode,
+          senderTabId,
+        );
 
         void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
           if (enrichedCandidates.length === 0) return;
@@ -2396,6 +2799,7 @@ const handleRuntimeMessage = (
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to rank page.';
+        rankSuccessStatePersisted = false;
         await setStorage('personal-algorithm-last-error', message);
         console.error('Failed to rank current YouTube page', message);
         sendResponse({ ok: false, error: message });
@@ -2421,16 +2825,20 @@ const handleRuntimeMessage = (
         setStorage(STORAGE_KEYS.MODE, selection.label),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
       ]);
-      const settings = await getStorage<RetrievalSettings>(
-        STORAGE_KEYS.RETRIEVAL_SETTINGS,
-        DEFAULT_RETRIEVAL_SETTINGS,
-      );
-      if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
-          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
-        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
-      }
-      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      lastRankMemo = null;
+      if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
+      rankSemanticRefreshTimer = null;
+      rankSemanticRefreshPending = null;
+      rankSemanticRefreshQueuedAt = 0;
+
+      const [settings, tabs] = await Promise.all([
+        getStorage<RetrievalSettings>(
+          STORAGE_KEYS.RETRIEVAL_SETTINGS,
+          DEFAULT_RETRIEVAL_SETTINGS,
+        ),
+        chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] }),
+      ]);
+
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
@@ -2438,9 +2846,22 @@ const handleRuntimeMessage = (
             mode: selection.label,
             modeId: selection.modeId,
             modeRevision: selection.revision,
+            memberLabels: selection.memberLabels,
           },
         }).catch(() => undefined)
         : undefined));
+
+      // Selection takes effect immediately; re-grounding and acquisition happen
+      // automatically behind it rather than requiring a manual refresh.
+      void refreshSelectedModeSemantics(selection, tabs).catch((error) => {
+        console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
+      });
+      if (settings.webSearchEnabled) {
+        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
+          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
+        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
+      }
+
       sendResponse({
         ok: true,
         mode: selection.label,

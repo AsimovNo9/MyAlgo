@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   DURABLE_MODE_DIAGNOSTICS: 'personal-algorithm-durable-mode-diagnostics',
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',
+  PRESENTATION_CACHE: 'personal-algorithm-presentation-cache',
   FEED_CANDIDATE_POOL: 'personal-algorithm-feed-candidate-pool',
   VIDEO_STORE: 'personal-algorithm-video-store',
   LAST_SYNC: 'personal-algorithm-last-sync',
@@ -41,6 +42,11 @@ export async function getStorage<T>(key: string, fallback: T): Promise<T> {
 
 export async function setStorage<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
+}
+
+export async function setStorageBatch(values: Record<string, unknown>): Promise<void> {
+  if (Object.keys(values).length === 0) return;
+  await chrome.storage.local.set(values);
 }
 
 export async function removeStorage(keys: string[]): Promise<void> {

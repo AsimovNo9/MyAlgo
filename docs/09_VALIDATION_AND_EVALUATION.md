@@ -179,8 +179,13 @@ Validate PR #208/#211 with sustained Home/infinite-scroll sessions, not only sho
 3. Unchanged observed candidates do not rewrite the full candidate pool inside the 30-second coalescing window.
 4. Metadata enrichment never exceeds the configured two-request concurrency.
 5. Rank latency is measured at small, medium, and maximum working-set sizes.
-6. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
-7. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
+6. Repeated ranks with unchanged candidate material + state/feedback/mode context reuse deterministic score/trace results; changing candidate semantic/metadata inputs invalidates only the affected candidate cache entry.
+7. Candidate-score and feedback-revision caches remain bounded during a 30+ minute Home session.
+8. Unchanged feed/presentation output does not rewrite the persisted rank cache; when it changes, related cache/sync/error keys are written as one storage batch.
+9. A 30+ minute Home session does not crash the extension or show monotonic MyAlgo-attributable renderer memory growth.
+10. A slot created with a preselected replacement candidate renders that same candidate; slot creation must not fall through to zero rendered replacements because of a second independent candidate-selection pass.
+11. Scroll alone does not trigger repeated whole-page DOM discovery or replacement reselection.
+12. One presentation generation shares native-card discovery and geometry between native presentation and replacement rendering.
 
 
 ### Replacement stability regression
@@ -192,7 +197,22 @@ Hard boundaries—navigation, active mode, graph-changing semantic materializati
 
 ### Overlay first-paint latency regression
 
-Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation.
+Validate on a cold Home load and during active infinite scroll that badges can render before watch-page enrichment completes. Inspect `[MyAlgo] rank response` and verify `backgroundElapsedMs` reflects local ranking latency rather than network fetch time. The response also exposes `phaseTimings` for pool/settings hydration, cached metadata hydration, deterministic scoring, and response-context lookup, plus `cacheWarm` for the worker-local candidate/video/semantic stores.
+
+For the #211 instant-rank slice, capture at least one cold-worker rank and three warm-worker reranks on the same Home working set. Warm reranks should reuse the bounded worker-local stores and per-candidate deterministic score cache, must preserve identical score/trace behavior, and should target the existing local-first latency budget of <=250 ms where the host/browser permits it. Cache persistence and compact trace persistence must occur after the rank response rather than extending first paint. An unchanged presentation should skip the persisted rank-cache write entirely. Inspect `scoreCache.cacheHits`, `scoreCache.cacheMisses`, and `scoreCache.cacheSize` in `[MyAlgo] rank response`: an unchanged warm working set should become hit-dominant after the first pass, while a targeted candidate metadata/semantic change should produce a miss only for the affected candidate(s).
+
+Measure the three latency domains separately:
+1. **cached presentation latency** — native Home DOM available → mode-compatible cached badges/replacements visible;
+2. **fresh deterministic rank latency** — `RANK_PAGE` request → deterministic response/render;
+3. **semantic convergence latency** — first valid presentation → embedding/verifier-grounded settled presentation.
+
+Also inspect `[MyAlgo] presentation timing` for `nativeCardCount`, `candidateDiscoveryMs`, `applyRankedFeedMs`, and `replacementRenderMs`. During sustained scroll, these logs should occur only when card membership/presentation legitimately changes, not continuously for raw scroll events. Replacement targeting must not oscillate as a consequence of MyAlgo's own layout changes.
+
+Also validate visual first paint independently of fresh scoring: after one successful Home rank, reload Home with the same active mode and confirm the mode-compatible persisted presentation cache can paint badges/replacements before the first fresh `RANK_PAGE` response. As YouTube appends/recycles Home cards, cached presentation should be coalesced into the next animation frame rather than waiting for the mutation-rank debounce.
+
+At exactly 100% feed replacement, every eligible Home native card is a replacement target, but a selected durable mode is never diluted with unrelated generic fallback merely to satisfy the percentage. Exact durable-mode-grounded candidates are preferred first, followed by strongly relevant provisional semantic matches while re-grounding catches up. If relevant supply is still insufficient, unmatched native cards remain until automatic mode refresh/discovery finds more relevant candidates. Below 100%, durable-mode replacement remains exact-grounding-only and native mode matches continue to satisfy requested mode coverage.
+
+While a rank is in flight, generate continued native DOM mutations and confirm the current response still renders, followed by at most one queued rerank. A continuously mutating page must not starve all overlay presentation. Neural embedding, concept verification, metadata enrichment, and retrieval remain follow-up work and must not be awaited by the first rank response.
 
 
 ## Web search, mode, and classification validation

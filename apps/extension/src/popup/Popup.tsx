@@ -246,7 +246,9 @@ export function Popup() {
       </div>
       <p>Current mode: <strong>{mode === 'Default' ? 'All' : mode}</strong></p>
       <p style={{ marginTop: -6, fontSize: 12 }}>
-        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} durable inferred modes · graph revision {durableModeCatalog?.graphRevision ?? '—'}
+        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active
+        {' · '}{durableModeCatalog?.modes.length ?? 0} retained durable modes
+        {' · '}graph revision {durableModeCatalog?.graphRevision ?? '—'}
       </p>
       <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
       <p>Cached feed items: <strong>{feedCount}</strong></p>
@@ -276,7 +278,7 @@ export function Popup() {
         <p style={{ margin: '4px 0 10px', fontSize: 12 }}>
           {activeModeId === 'default'
             ? '0 keeps native recommendations; 100 tries to fill every safe Home slot from MyAlgo\'s scored pool. Unfilled slots keep their native card.'
-            : 'For a durable mode, the slider requests mode coverage across eligible Home slots. Native mode matches count first; any shortfall may be filled only from eligible scored candidates already in MyAlgo\'s acquired pool.'}
+            : 'For a durable mode, the slider requests mode coverage across eligible Home slots. MyAlgo uses exact or strongly relevant mode candidates only; if supply is short, unmatched native cards stay until mode refresh/discovery finds more relevant replacements.'}
         </p>
         {retrievalDiagnostics.modeSupply?.modeId === activeModeId ? (
           <p role="status" style={{ margin: '4px 0 10px', fontSize: 12 }}>

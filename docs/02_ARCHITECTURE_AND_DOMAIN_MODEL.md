@@ -401,9 +401,11 @@ The full contract is defined in `docs/12_SOURCE_NEUTRAL_EVIDENCE_AND_CONNECTOR_C
 
 ## 9. Live-ranking performance boundary
 
-The persistent candidate/evidence stores are not the per-render scoring working set. PR #208/#211 now scores every current-page candidate plus a separately bounded off-page replacement subset, coalesces YouTube DOM mutation bursts, indexes graph lookups once per scoring batch, computes evidence/feedback revision hashes once per batch, and avoids rewriting unchanged candidate/trace state on every mutation.
+The persistent candidate/evidence stores are not the per-render scoring working set. PR #208/#211 scores every current-page candidate plus a separately bounded off-page replacement subset and coalesces YouTube DOM mutation bursts. PR #228 prepares graph/canonical/lexical lookup state once per immutable Personal Algorithm snapshot, reuses deterministic candidate score/trace results when candidate material + feedback + mode context are unchanged, and bounds those worker-local caches so long sessions cannot grow them without limit.
 
-Watch-page metadata enrichment runs in the MV3 service worker with bounded concurrency rather than inside the YouTube renderer. A dedicated Web Worker remains optional future work only if profiling shows the bounded service-worker scorer is still CPU-bound after indexing, batching, caching, and working-set reduction.
+The Home renderer follows the same incremental principle. One presentation pass discovers native cards and reads geometry once, then shares that snapshot between native-feed presentation and replacement rendering. Replacement targeting remains presentation-stable; viewport geometry is not allowed to feed back into target selection because replacement-induced layout changes can otherwise oscillate the Home presentation. Persisted first-paint presentation is compact, mode/revision scoped, and related storage keys are written in one signature-gated batch only when presentation state materially changes.
+
+Watch-page metadata enrichment runs in the MV3 service worker with bounded concurrency rather than inside the YouTube renderer. A dedicated scoring Web Worker remains optional future work only if profiling shows the bounded service-worker scorer is still CPU-bound after working-set reduction, incremental score reuse, prepared lexical/graph indexes, batched persistence, and renderer-side snapshot reuse.
 
 Opportunistic replacements bind the selected off-page candidate to the native slot when the slot is created. Rendering consumes that binding instead of independently selecting a second time; fallback selection is reserved for policy-created slots without a pre-bound candidate.
 

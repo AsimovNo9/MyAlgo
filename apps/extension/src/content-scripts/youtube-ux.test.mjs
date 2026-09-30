@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -27,6 +27,30 @@ test('replacement candidates require current trace and eligible policy outcome',
   assert.deepEqual(
     getReplacementCandidates(items, ['video-a'], 6, 52).map((item) => item.external_id),
     ['video-d'],
+  );
+});
+
+test('feed mix replacement ordering is stable and does not depend on viewport layout state', () => {
+  const targets = [
+    { externalId: 'offscreen-low', score: 10, nativeIndex: 0 },
+    { externalId: 'visible-high', score: 80, nativeIndex: 1 },
+    { externalId: 'visible-low', score: 20, nativeIndex: 2 },
+  ];
+  const candidates = [
+    { external_id: 'candidate-a', title: 'A', score: 90, visible: true, traceId: 'trace-a', policyOutcome: 'eligible' },
+    { external_id: 'candidate-b', title: 'B', score: 85, visible: true, traceId: 'trace-b', policyOutcome: 'eligible' },
+  ];
+
+  const first = selectFeedMixAssignments(targets, candidates, 2, 100, 5);
+  const second = selectFeedMixAssignments([...targets].reverse(), candidates, 2, 100, 5);
+
+  assert.deepEqual(
+    first.map((assignment) => assignment.target.externalId),
+    ['offscreen-low', 'visible-low'],
+  );
+  assert.deepEqual(
+    second.map((assignment) => assignment.target.externalId),
+    ['offscreen-low', 'visible-low'],
   );
 });
 
@@ -456,6 +480,81 @@ test('stable replacement candidate survives score and trace refresh while still 
   }), true);
 });
 
+test('provisional durable-mode relevance recognizes semantic category, mode similarity, and member-label title matches', () => {
+  const mode = {
+    id: 'mode:corporate',
+    label: 'corporate culture',
+    revision: 4,
+    memberLabels: ['corporate culture', 'workplace culture'],
+  };
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'category-match',
+    title: 'Inside a tech company',
+    semantic_category: 'corporate culture',
+    semantic_category_confidence: 0.6,
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'mode-similarity',
+    title: 'How companies really work',
+    semantic_mode_similarity: 0.68,
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'weak-similarity',
+    title: 'Unrelated creator drama',
+    semantic_mode_similarity: 0.51,
+  }, mode), false);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'title-match',
+    title: 'Why workplace culture is changing',
+  }, mode), true);
+
+  assert.equal(isProvisionalDurableModeRelevantItem({
+    external_id: 'unrelated',
+    title: 'Three hour lofi study mix',
+    semantic_category: 'lofi beats',
+    semantic_mode_similarity: 0.08,
+  }, mode), false);
+});
+
+test('100 percent durable-mode replacement may use an eligible non-grounded fallback', () => {
+  const mode = { id: 'mode:lofi', label: 'chill lofi', revision: 5 };
+  const generic = {
+    external_id: 'replacement-generic',
+    title: 'Generic scored replacement',
+    score: 61,
+    visible: true,
+    suppressed: false,
+    traceId: 'trace-generic',
+    policyOutcome: 'eligible',
+    explanation: {
+      rawScore: 3,
+      displayScore: 61,
+      graphRevision: 357,
+      acquisitionMechanism: 'rss',
+      contributions: [],
+      modeGrounding: null,
+    },
+  };
+
+  assert.equal(isStableReplacementCandidateEligible(generic, {
+    activeMode: mode,
+    minimumScore: 0,
+    nativeScore: 90,
+    feedReplacementPercent: 100,
+  }), true);
+
+  assert.equal(isStableReplacementCandidateEligible(generic, {
+    activeMode: mode,
+    minimumScore: 0,
+    nativeScore: 40,
+    feedReplacementPercent: 99,
+  }), false);
+});
+
 test('replacement identity evaluator stays perfect across ordinary score and trace churn', () => {
   const before = {
     'native-a': 'replacement-a',
@@ -690,7 +789,7 @@ test('mode supply requires exact mode revision and ordinary replacement eligibil
   assert.equal(plan.nativeModeSupply, 1);
   assert.equal(plan.poolModeSupply, 1);
   assert.equal(plan.shortfall, 1);
-  assert.equal(plan.fillLimit, 1);
+  assert.equal(plan.fillLimit, 2);
   assert.equal(plan.poolCandidates[0].external_id, 'pool-good');
 });
 

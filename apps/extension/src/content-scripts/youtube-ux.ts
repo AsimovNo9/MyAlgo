@@ -10,6 +10,8 @@ export type VideoCandidate = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Record<string, number>;
+  semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
@@ -57,6 +59,8 @@ export type RankedFeedItem = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Record<string, number>;
+  semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
@@ -256,6 +260,7 @@ export type DurableModePresentationContext = {
   id: string;
   label: string;
   revision: number;
+  memberLabels?: string[];
 };
 
 export type ReplacementRerankReason =
@@ -345,6 +350,66 @@ export function isDurableModeGroundedItem(
   );
 }
 
+const normalizeModeText = (value: string | null | undefined): string => (
+  value ?? ''
+).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+
+export function isProvisionalDurableModeRelevantItem(
+  item: RankedFeedItem | undefined,
+  mode: DurableModePresentationContext | null | undefined,
+): boolean {
+  if (!item || !mode) return false;
+  if (isDurableModeGroundedItem(item, mode)) return true;
+
+  const labels = [mode.label, ...(mode.memberLabels ?? [])]
+    .map(normalizeModeText)
+    .filter(Boolean);
+  if (labels.length === 0) return false;
+
+  const category = normalizeModeText(item.semantic_category);
+  if (
+    category
+    && labels.some((label) => (
+      category === label
+      || category.includes(label)
+      || label.includes(category)
+    ))
+    && Number(item.semantic_category_confidence ?? 0) >= 0.35
+  ) {
+    return true;
+  }
+
+  const categoryScores = item.semantic_category_scores ?? {};
+  for (const [rawCategory, rawScore] of Object.entries(categoryScores)) {
+    const categoryLabel = normalizeModeText(rawCategory);
+    const score = Number(rawScore ?? 0);
+    if (
+      Number.isFinite(score)
+      && score >= 0.35
+      && labels.some((label) => (
+        categoryLabel === label
+        || categoryLabel.includes(label)
+        || label.includes(categoryLabel)
+      ))
+    ) {
+      return true;
+    }
+  }
+
+  const title = normalizeModeText(item.title);
+  const lexicalMatch = labels.some((label) => {
+    const significant = label.split(' ').filter((token) => token.length >= 4);
+    if (significant.length === 1) return title.includes(significant[0]);
+    return significant.length >= 2 && significant.every((token) => title.includes(token));
+  });
+  if (lexicalMatch) return true;
+
+  // Embedding similarity is useful only as a strong final corroborating signal.
+  // A lower threshold admitted unrelated high-scoring RSS candidates into modes
+  // such as Gaming and made full-feed replacement visually incoherent.
+  return Number(item.semantic_mode_similarity ?? 0) >= 0.62;
+}
+
 export function isStableReplacementCandidateEligible(
   item: RankedFeedItem | undefined,
   options: {
@@ -363,6 +428,7 @@ export function isStableReplacementCandidateEligible(
     || !Number.isFinite(options.nativeScore)
     || (
       options.activeMode
+      && options.feedReplacementPercent < 100
       && !isDurableModeGroundedItem(item, options.activeMode)
     )
   ) {
@@ -438,7 +504,9 @@ export function buildModeSupplyPlan(input: {
     nativeModeSupply,
     poolModeSupply: poolCandidates.length,
     shortfall,
-    fillLimit: Math.min(shortfall, poolCandidates.length),
+    fillLimit: input.sliderPercent >= 100
+      ? eligibleNativeIds.size
+      : Math.min(shortfall, poolCandidates.length),
     poolCandidates,
   };
 }

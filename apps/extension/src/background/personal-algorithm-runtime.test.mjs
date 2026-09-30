@@ -1203,3 +1203,25 @@ test('taxonomy-only semantic matches share one collective bounded fallback contr
     'concept:people-blogs',
   ]);
 });
+
+
+test('incremental scoring reuses unchanged candidate traces and invalidates material changes', () => {
+  const candidate = {
+    external_id: 'incremental-cache-video',
+    title: 'Local AI systems',
+    channel_name: 'Example creator',
+    firstSeenAt: '2026-09-30T00:00:00.000Z',
+    lastSeenAt: '2026-09-30T00:00:00.000Z',
+    topics: ['local ai'],
+  };
+
+  const first = scoreLocalCandidates(state, [candidate], 'Default')[0];
+  const second = scoreLocalCandidates(state, [{ ...candidate }], 'Default')[0];
+  assert.equal(second.trace, first.trace);
+
+  const changed = scoreLocalCandidates(state, [{
+    ...candidate,
+    title: 'Local AI systems updated',
+  }], 'Default')[0];
+  assert.notEqual(changed.trace, first.trace);
+});

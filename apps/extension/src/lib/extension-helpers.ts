@@ -118,7 +118,7 @@ export function buildDurableModeOptions(
   currentModeId: string,
   catalog: DurableSemanticModeCatalog | null | undefined,
   currentModeLabel = 'Default',
-  limit = 5,
+  limit = 12,
 ): DurableModeOption[] {
   const result: DurableModeOption[] = [{
     id: 'default',
@@ -136,13 +136,13 @@ export function buildDurableModeOptions(
     ));
 
   for (const mode of modes) {
-    if (!mode.active || result.length > limit) continue;
+    if (result.length >= limit + 1) break;
     if (!mode.id.trim() || seen.has(mode.id)) continue;
     result.push({
       id: mode.id,
       label: mode.label,
       revision: mode.revision,
-      active: true,
+      active: mode.active,
     });
     seen.add(mode.id);
   }
