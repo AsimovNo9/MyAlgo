@@ -9,7 +9,7 @@ export type RecommendationObservation = {
   exposureId: string;
   title: string;
   creator: string | null;
-  thumbnailUrl: string | null;
+  thumbnailUrl?: string | null;
   position: number;
   section: string | null;
   observedAt: string;
