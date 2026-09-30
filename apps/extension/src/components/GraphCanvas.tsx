@@ -29,6 +29,16 @@ type PositionedNode = GraphInspectorNode & {
   searchMatch: boolean;
 };
 
+type SemanticClusterLayout = {
+  id: string;
+  label: string;
+  kind: 'mode' | 'topic';
+  x: number;
+  y: number;
+  radius: number;
+  count: number;
+};
+
 const WIDTH = 1000;
 const HEIGHT = 680;
 const CENTER_X = WIDTH / 2;
@@ -317,6 +327,7 @@ export function GraphCanvas({
     }
 
     const positioned = new Map<string, PositionedNode>();
+    const semanticClusters: SemanticClusterLayout[] = [];
     if (layoutMode === 'lineage' && !compact) {
       const levelByKind = new Map<string, number>([
         ['user', 0],
@@ -411,13 +422,85 @@ export function GraphCanvas({
         });
       }
     } else {
-      for (const [ring, group] of groups.entries()) {
+      const semanticGroupById = new Map<string, GraphInspectorNode[]>();
+      if (!compact) {
+        for (const node of prioritized) {
+          if (node.kind !== 'content' || !node.semanticClusterId || !node.semanticClusterLabel || !node.semanticClusterKind) continue;
+          const group = semanticGroupById.get(node.semanticClusterId) ?? [];
+          group.push(node);
+          semanticGroupById.set(node.semanticClusterId, group);
+        }
+      }
+
+      const semanticGroups = [...semanticGroupById.entries()]
+        .sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]))
+        .slice(0, 8);
+      const clusteredNodeIds = new Set<string>();
+      semanticGroups.forEach(([clusterId, group], clusterIndex) => {
+        const count = group.length;
+        if (count === 0) return;
+        const angle = semanticGroups.length === 1
+          ? -Math.PI / 2
+          : -Math.PI / 2 + (Math.PI * 2 * clusterIndex) / semanticGroups.length;
+        const centerRadius = semanticGroups.length === 1 ? 0 : semanticGroups.length <= 4 ? 205 : 245;
+        const centerX = CENTER_X + Math.cos(angle) * centerRadius;
+        const centerY = CENTER_Y + Math.sin(angle) * centerRadius;
+        const radius = Math.max(62, Math.min(128, 48 + Math.sqrt(count) * 18));
+        const representative = group[0];
+        semanticClusters.push({
+          id: clusterId,
+          label: representative.semanticClusterLabel ?? clusterId,
+          kind: representative.semanticClusterKind ?? 'topic',
+          x: centerX,
+          y: centerY,
+          radius,
+          count,
+        });
+
         const sorted = [...group].sort((left, right) => (
-          left.label.localeCompare(right.label) || left.id.localeCompare(right.id)
+          Number(right.semanticClusterAffinity ?? 0) - Number(left.semanticClusterAffinity ?? 0)
+          || right.supportCount - left.supportCount
+          || left.label.localeCompare(right.label)
+          || left.id.localeCompare(right.id)
         ));
+        sorted.forEach((node, index) => {
+          clusteredNodeIds.add(node.id);
+          const ringIndex = Math.floor(Math.sqrt(index));
+          const itemsBeforeRing = ringIndex * ringIndex;
+          const indexInRing = index - itemsBeforeRing;
+          const itemsInRing = Math.max(1, ringIndex * 2 + 1);
+          const nodeAngle = ((hashString(clusterId) % 360) / 180) * Math.PI
+            + (Math.PI * 2 * indexInRing) / itemsInRing;
+          const affinity = Math.max(0, Math.min(1, Number(node.semanticClusterAffinity ?? 0)));
+          const nodeRadius = index === 0 ? 10 : Math.min(radius - 14, 22 + ringIndex * 25 + (1 - affinity) * 14);
+          const searchMatch = Boolean(normalizedQuery) && (
+            node.label.toLowerCase().includes(normalizedQuery)
+            || node.id.toLowerCase().includes(normalizedQuery)
+            || node.kind.toLowerCase().includes(normalizedQuery)
+          );
+          positioned.set(node.id, {
+            ...node,
+            x: centerX + Math.cos(nodeAngle) * nodeRadius,
+            y: centerY + Math.sin(nodeAngle) * nodeRadius,
+            degree: degreeByNode.get(node.id) ?? 0,
+            modeMember: memberIds.has(node.id),
+            modeConnected: connectedIds.has(node.id),
+            searchMatch,
+          });
+        });
+      });
+
+      for (const [ring, group] of groups.entries()) {
+        const sorted = [...group]
+          .filter((node) => !clusteredNodeIds.has(node.id))
+          .sort((left, right) => (
+            left.label.localeCompare(right.label) || left.id.localeCompare(right.id)
+          ));
         const baseRadius = compact
           ? [24, 82, 132, 178][Math.min(ring, 3)]
-          : [42, 126, 220, 314][Math.min(ring, 3)];
+          : semanticClusters.length > 0
+            ? [36, 104, 166, 326][Math.min(ring, 3)]
+            : [42, 126, 220, 314][Math.min(ring, 3)];
         sorted.forEach((node, index) => {
           const count = Math.max(1, sorted.length);
           const phase = (hashString(`${ring}:${count}`) % 1000) / 1000 * Math.PI * 2;
@@ -449,6 +532,7 @@ export function GraphCanvas({
       modeActive,
       focusIsActive,
       hiddenIsolatedCreatorCount,
+      semanticClusters,
     };
   }, [compact, edges, focusOnly, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
@@ -557,6 +641,30 @@ export function GraphCanvas({
           </marker>
         </defs>
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
+          {!compact && layoutMode === 'network' ? layout.semanticClusters.map((cluster) => (
+            <g key={cluster.id} pointerEvents="none">
+              <circle
+                cx={cluster.x}
+                cy={cluster.y}
+                r={cluster.radius}
+                fill={cluster.kind === 'mode' ? '#1e293b' : '#0f2530'}
+                fillOpacity="0.2"
+                stroke={cluster.kind === 'mode' ? '#f59e0b' : '#22d3ee'}
+                strokeOpacity="0.5"
+                strokeDasharray="6 5"
+              />
+              <text
+                x={cluster.x}
+                y={cluster.y - cluster.radius - 8}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="700"
+                fill={cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
+              >
+                {cluster.kind === 'mode' ? 'Mode' : 'Topic'} · {cluster.label} · {cluster.count}
+              </text>
+            </g>
+          )) : null}
           {layout.edges.map((edge) => {
             const source = layout.nodeById.get(edge.sourceNodeId);
             const target = layout.nodeById.get(edge.targetNodeId);
@@ -734,6 +842,7 @@ export function GraphCanvas({
             fontSize: 11,
           }}>
             {layout.nodes.length}/{nodes.length} nodes · {layout.edges.length}/{edges.length} edges rendered
+            {layout.semanticClusters.length > 0 ? ` · ${layout.semanticClusters.length} semantic cluster${layout.semanticClusters.length === 1 ? '' : 's'}` : ''}
             {modeOverlay.modeId !== 'all' ? ` · ${modeOverlay.modeLabel} r${modeOverlay.modeRevision ?? '—'}` : ''}
           </div>
           <div style={{
