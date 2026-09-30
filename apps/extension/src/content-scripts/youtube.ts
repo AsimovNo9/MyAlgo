@@ -41,7 +41,7 @@ let resizeTimer: number | undefined;
 let historyObservationTimer: number | undefined;
 let recommendationObservationTimer: number | undefined;
 let optimisticPresentationFrame: number | undefined;
-let viewportPresentationTimer: number | undefined;
+let viewportPresentationFrame: number | undefined;
 let extensionEnabled = false;
 let lastCandidateSignature = '';
 let lastRankMode = '';
@@ -65,6 +65,10 @@ const stableReplacementBySourceId = new Map<string, {
   routeKey: string;
   bindingRevision: number;
 }>();
+
+const viewportPriorityByElement = new WeakMap<HTMLElement, number>();
+const observedNativeElements = new Set<HTMLElement>();
+let nativeViewportObserver: IntersectionObserver | null = null;
 
 const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const instanceAttribute = 'data-personal-algorithm-instance';
@@ -625,6 +629,94 @@ const getVideoElements = (diagnoseInjected = false) => {
   return nativeElements;
 };
 
+type NativeCardSnapshotEntry = {
+  element: HTMLElement;
+  id: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string | null;
+  flags: ReturnType<typeof getVideoSourceFlags>;
+  rect: DOMRectReadOnly | null;
+};
+
+type NativeCardSnapshot = {
+  cards: NativeCardSnapshotEntry[];
+  cardByElement: Map<HTMLElement, NativeCardSnapshotEntry>;
+};
+
+const ensureNativeViewportObserver = () => {
+  if (nativeViewportObserver || typeof IntersectionObserver === 'undefined') return;
+  nativeViewportObserver = new IntersectionObserver((entries) => {
+    let changed = false;
+    const viewportHeight = Math.max(1, window.innerHeight);
+    for (const entry of entries) {
+      const element = entry.target as HTMLElement;
+      const rect = entry.boundingClientRect;
+      const priority = rect.bottom > 0 && rect.top < viewportHeight
+        ? 0
+        : rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
+          ? 1
+          : 2;
+      if (viewportPriorityByElement.get(element) !== priority) {
+        viewportPriorityByElement.set(element, priority);
+        changed = true;
+      }
+    }
+    if (changed && extensionEnabled && cachedFeed.length > 0) {
+      scheduleViewportPresentation();
+    }
+  }, {
+    root: null,
+    rootMargin: '100% 0px 100% 0px',
+    threshold: [0, 0.01, 0.5],
+  });
+};
+
+const syncNativeViewportObservation = (elements: readonly HTMLElement[]) => {
+  if (!isYouTubeHomePage(location.pathname)) return;
+  ensureNativeViewportObserver();
+  if (!nativeViewportObserver) return;
+  const next = new Set(elements);
+  for (const element of observedNativeElements) {
+    if (!next.has(element) || !element.isConnected) {
+      nativeViewportObserver.unobserve(element);
+      observedNativeElements.delete(element);
+      viewportPriorityByElement.delete(element);
+    }
+  }
+  for (const element of elements) {
+    if (observedNativeElements.has(element)) continue;
+    observedNativeElements.add(element);
+    nativeViewportObserver.observe(element);
+  }
+};
+
+const clearNativeViewportObservation = () => {
+  nativeViewportObserver?.disconnect();
+  nativeViewportObserver = null;
+  observedNativeElements.clear();
+};
+
+const createNativeCardSnapshot = (
+  options: { diagnoseInjected?: boolean; measureGeometry?: boolean } = {},
+): NativeCardSnapshot => {
+  const elements = getVideoElements(options.diagnoseInjected === true);
+  syncNativeViewportObservation(elements);
+  const cards = elements.map((element) => ({
+    element,
+    id: getVideoId(element),
+    title: getVideoTitle(element),
+    channelName: getChannelName(element),
+    thumbnailUrl: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
+    flags: getVideoSourceFlags(element),
+    rect: options.measureGeometry === true ? element.getBoundingClientRect() : null,
+  }));
+  return {
+    cards,
+    cardByElement: new Map(cards.map((card) => [card.element, card])),
+  };
+};
+
 const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
   const path = location.pathname.toLowerCase();
   if (path === '/feed/subscriptions') return 'subscription';
@@ -635,14 +727,14 @@ const getPageSourceKind = (): 'subscription' | 'discovery' | 'liked' | null => {
 
 const collectCandidates = () => {
   const sourceKind = getPageSourceKind();
-  const cardCandidates = getVideoElements(true)
-    .map((element) => ({
-      external_id: getVideoId(element),
-      title: getVideoTitle(element),
-      channel_name: getChannelName(element),
-      thumbnail_url: element.querySelector<HTMLImageElement>('img[src]')?.src ?? null,
+  const cardCandidates = createNativeCardSnapshot({ diagnoseInjected: true }).cards
+    .map((card) => ({
+      external_id: card.id,
+      title: card.title,
+      channel_name: card.channelName,
+      thumbnail_url: card.thumbnailUrl,
       source_kind: sourceKind,
-      ...getVideoSourceFlags(element),
+      ...card.flags,
     }))
     .filter((candidate) => candidate.title)
     .slice(0, youtubeConnector.presentation.candidateLimit);
@@ -801,18 +893,15 @@ const syncSourceFilteredContainers = () => {
   });
 };
 
-const applyRankedFeed = () => {
+const applyRankedFeed = (
+  snapshot: NativeCardSnapshot = createNativeCardSnapshot({ measureGeometry: true }),
+) => {
   if (!isCurrentInstance()) return;
   const feedById = new Map(cachedFeed.map((item) => [item.external_id, item]));
   const feedByTitle = new Map(cachedFeed.map((item) => [normalizeText(item.title ?? ''), item]));
   const rankById = new Map(cachedFeed.map((item, index) => [item.external_id, index]));
-  const knownElements = getVideoElements();
-  const nativeCards = knownElements.map((element) => ({
-    element,
-    id: getVideoId(element),
-    title: getVideoTitle(element),
-    flags: getVideoSourceFlags(element),
-  }));
+  const nativeCards = snapshot.cards;
+  const knownElements = nativeCards.map((card) => card.element);
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
     * (1 - feedReplacementPercent / 100);
   const homePage = isYouTubeHomePage(location.pathname);
@@ -1034,7 +1123,7 @@ const applyRankedFeed = () => {
         continue;
       }
 
-      const slotRect = element.getBoundingClientRect();
+      const slotRect = nativeCards[nativeIndex]?.rect ?? element.getBoundingClientRect();
       const slotWidth = slotRect.width;
       const slotHeight = slotRect.height;
       if (slotWidth < 120 || slotHeight < 80) continue;
@@ -1109,13 +1198,14 @@ const applyRankedFeed = () => {
         ) {
           return [];
         }
-        const rect = element.getBoundingClientRect();
+        const rect = nativeCards[nativeIndex]?.rect;
         const viewportHeight = Math.max(1, window.innerHeight);
-        const viewportPriority = rect.bottom > 0 && rect.top < viewportHeight
-          ? 0
-          : rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
-            ? 1
-            : 2;
+        const viewportPriority = viewportPriorityByElement.get(element)
+          ?? (rect && rect.bottom > 0 && rect.top < viewportHeight
+            ? 0
+            : rect && rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
+              ? 1
+              : 2);
         return [{ externalId: id, score, nativeIndex, viewportPriority }];
       });
 
@@ -1136,7 +1226,7 @@ const applyRankedFeed = () => {
         const selected = assignment.target;
         const element = knownElements[selected.nativeIndex];
         if (!element?.parentElement || element.style.getPropertyValue('display') === 'none') continue;
-        const slotRect = element.getBoundingClientRect();
+        const slotRect = nativeCards[selected.nativeIndex]?.rect ?? element.getBoundingClientRect();
         const slotWidth = slotRect.width;
         const slotHeight = slotRect.height;
         if (slotWidth < 120 || slotHeight < 80) continue;
@@ -1222,7 +1312,10 @@ const applyRankedFeed = () => {
   });
 };
 
-const renderReplacementSlots = (generation: number) => {
+const renderReplacementSlots = (
+  generation: number,
+  snapshot: NativeCardSnapshot = createNativeCardSnapshot({ measureGeometry: true }),
+) => {
   const existingReplacements = Array.from(
     document.querySelectorAll<HTMLElement>('[data-personal-algorithm-replacement]'),
   );
@@ -1231,7 +1324,7 @@ const renderReplacementSlots = (generation: number) => {
     return;
   }
 
-  const nativeElements = getVideoElements();
+  const nativeElements = snapshot.cards.map((card) => card.element);
   const replacementMinimumScore = youtubeConnector.presentation.replacementMinimumScore
     * (1 - feedReplacementPercent / 100);
   const targets = nativeElements.filter((element) => (
@@ -1241,11 +1334,11 @@ const renderReplacementSlots = (generation: number) => {
   ));
   const slots = targets.map((element) => ({
     slotId: element.dataset.personalAlgorithmSlotId ?? '',
-    sourceVideoId: getVideoId(element),
+    sourceVideoId: snapshot.cardByElement.get(element)?.id ?? getVideoId(element),
   }));
 
   const blockedIds = new Set<string>();
-  nativeElements.map(getVideoId).forEach((id) => {
+  snapshot.cards.forEach(({ id }) => {
     if (id && !id.startsWith('title:')) blockedIds.add(id);
   });
   // Shelf candidates are separate visible placements and cannot be reused as
@@ -1461,6 +1554,25 @@ const scheduleLatestRank = () => {
   scheduleRankGeneration(rankGeneration, 120);
 };
 
+
+const applyRankedPresentation = (generation = rankGeneration) => {
+  const startedAt = performance.now();
+  const snapshot = createNativeCardSnapshot({ measureGeometry: true });
+  const discoveryMs = performance.now() - startedAt;
+  const applyStartedAt = performance.now();
+  applyRankedFeed(snapshot);
+  const applyMs = performance.now() - applyStartedAt;
+  const replacementStartedAt = performance.now();
+  renderReplacementSlots(generation, snapshot);
+  const replacementMs = performance.now() - replacementStartedAt;
+  console.info('[MyAlgo] presentation timing', {
+    nativeCardCount: snapshot.cards.length,
+    candidateDiscoveryMs: Math.round(discoveryMs),
+    applyRankedFeedMs: Math.round(applyMs),
+    replacementRenderMs: Math.round(replacementMs),
+  });
+};
+
 const rankCurrentPage = async (requestGeneration: number) => {
   if (!isCurrentInstance() || !extensionEnabled || isYouTubeHistoryPage(location.pathname)) return;
   if (rankingInFlight) {
@@ -1498,9 +1610,8 @@ const rankCurrentPage = async (requestGeneration: number) => {
       payload: { mode: requestMode, candidates },
     });
     rankingInFlight = false;
-    applyRankedFeed();
+    applyRankedPresentation(rankGeneration);
     clearLegacyRecommendationShelf();
-    renderReplacementSlots(rankGeneration);
     if (rankQueued) scheduleLatestRank();
     return;
   }
@@ -1551,9 +1662,8 @@ const rankCurrentPage = async (requestGeneration: number) => {
       // Hard lifecycle/policy changes remove replacements before reaching this
       // response path.
       clearExtensionPresentation(false, true);
-      applyRankedFeed();
+      applyRankedPresentation(requestGeneration);
       clearLegacyRecommendationShelf();
-      renderReplacementSlots(requestGeneration);
 
       const visibleCount = response.feed.filter((item: RankedFeedItem) => (
         item.visible !== false
@@ -1686,8 +1796,7 @@ safeStorageGet([
 
   // Paint from the last mode-compatible ranked presentation immediately. Fresh
   // scoring reconciles it in place; it no longer has to gate first visual fill.
-  applyRankedFeed();
-  renderReplacementSlots(rankGeneration);
+  applyRankedPresentation(rankGeneration);
   showStatus('Personal Algorithm: Active', false, false);
   clearLegacyRecommendationShelf();
   scheduleInitialRank();
@@ -1744,6 +1853,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     rankTimer = undefined;
     rankQueued = false;
     cachedFeed = [];
+    clearNativeViewportObservation();
     lastCandidateSignature = '';
     lastRankMode = '';
     clearExtensionPresentation(!extensionEnabled);
@@ -1793,8 +1903,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     invalidateStableReplacements('feed_mix');
     rankGeneration += 1;
     clearExtensionPresentation(false);
-    applyRankedFeed();
-    renderReplacementSlots(rankGeneration);
+    applyRankedPresentation(rankGeneration);
     triggerRank('manual');
     return;
   }
@@ -2041,10 +2150,11 @@ window.addEventListener('yt-navigate-start', () => {
     window.cancelAnimationFrame(optimisticPresentationFrame);
     optimisticPresentationFrame = undefined;
   }
-  if (viewportPresentationTimer !== undefined) {
-    window.clearTimeout(viewportPresentationTimer);
-    viewportPresentationTimer = undefined;
+  if (viewportPresentationFrame !== undefined) {
+    window.cancelAnimationFrame(viewportPresentationFrame);
+    viewportPresentationFrame = undefined;
   }
+  clearNativeViewportObservation();
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
@@ -2088,25 +2198,21 @@ window.addEventListener('resize', () => {
   }, 120);
 });
 
-window.addEventListener('scroll', () => {
+const scheduleViewportPresentation = () => {
   if (
-    !extensionEnabled
+    viewportPresentationFrame !== undefined
+    || !extensionEnabled
     || !isYouTubeHomePage(location.pathname)
     || cachedFeed.length === 0
   ) return;
-  if (viewportPresentationTimer !== undefined) {
-    window.clearTimeout(viewportPresentationTimer);
-  }
-  viewportPresentationTimer = window.setTimeout(() => {
-    viewportPresentationTimer = undefined;
-    if (!isCurrentInstance() || !extensionEnabled) return;
-    // Re-evaluate viewport priority after the user moves through Home. Stable
-    // bindings remain intact; newly visible unbound cards get first access to
-    // currently available mode-relevant candidates.
-    applyRankedFeed();
-    renderReplacementSlots(rankGeneration);
-  }, 90);
-}, { passive: true });
+  viewportPresentationFrame = window.requestAnimationFrame(() => {
+    viewportPresentationFrame = undefined;
+    if (!isCurrentInstance() || !extensionEnabled || cachedFeed.length === 0) return;
+    // Viewport priority is maintained by IntersectionObserver. Re-present only
+    // when observed cards cross priority bands, rather than on every scroll.
+    applyRankedPresentation(rankGeneration);
+  });
+};
 
 const scheduleOptimisticPresentation = () => {
   if (
@@ -2119,8 +2225,7 @@ const scheduleOptimisticPresentation = () => {
   optimisticPresentationFrame = window.requestAnimationFrame(() => {
     optimisticPresentationFrame = undefined;
     if (!isCurrentInstance() || !extensionEnabled || cachedFeed.length === 0) return;
-    applyRankedFeed();
-    renderReplacementSlots(rankGeneration);
+    applyRankedPresentation(rankGeneration);
   });
 };
 
