@@ -1337,6 +1337,7 @@ const renderReplacementSlots = (generation: number) => {
   const retainedReplacements = new Set<HTMLElement>();
   let filled = 0;
   let reused = 0;
+  let filledGroundedModeSlots = 0;
 
   for (const assignment of assignments) {
     const target = targetBySlot.get(assignment.slot.slotId);
@@ -1392,18 +1393,22 @@ const renderReplacementSlots = (generation: number) => {
       routeKey: getRouteKey(),
       bindingRevision: replacementBindingRevision,
     });
+    if (
+      activeDurableMode
+      && isDurableModeGroundedItem(assignment.item, activeDurableMode)
+    ) {
+      filledGroundedModeSlots += 1;
+    }
   }
 
   for (const replacement of existingReplacements) {
     if (!retainedReplacements.has(replacement)) replacement.remove();
   }
 
-  const filledGroundedModeSlots = activeDurableMode
-    ? assignments.filter((assignment) => (
-        isDurableModeGroundedItem(assignment.item, activeDurableMode)
-      )).length
-    : filled;
-  persistModeSupplyDiagnostics(latestModeSupplyPlan, filledGroundedModeSlots);
+  persistModeSupplyDiagnostics(
+    latestModeSupplyPlan,
+    activeDurableMode ? filledGroundedModeSlots : filled,
+  );
 
   console.info('[MyAlgo] replacement slots', {
     generation,
