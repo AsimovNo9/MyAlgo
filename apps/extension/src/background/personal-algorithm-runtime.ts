@@ -97,6 +97,9 @@ const SEMANTIC_MATCH_MINIMUM_RUNNER_UP_MARGIN = 0.04;
 const SEMANTIC_MATCH_MINIMUM_SIMILARITY = 0.24;
 const SEMANTIC_MATCH_RELATIVE_TO_BEST = 0.7;
 
+const MAX_CANDIDATE_SCORE_CACHE = 900;
+const MAX_FEEDBACK_REVISION_CACHE = 8;
+
 const SEMANTIC_REGION_GENERIC_TOKENS = new Set([
   'ai', 'artificial', 'blog', 'blogs', 'daily', 'education', 'entertainment',
   'game', 'games', 'gameplay', 'guide', 'learning', 'music', 'news', 'people',
@@ -1155,6 +1158,11 @@ export function scoreLocalCandidates(
   if (!revisionContext) {
     revisionContext = buildPersonalScoringRevisionContext(state, feedbackSignals);
     prepared.revisionContextByFeedbackKey.set(feedbackKey, revisionContext);
+    while (prepared.revisionContextByFeedbackKey.size > MAX_FEEDBACK_REVISION_CACHE) {
+      const oldestKey = prepared.revisionContextByFeedbackKey.keys().next().value;
+      if (oldestKey == null) break;
+      prepared.revisionContextByFeedbackKey.delete(oldestKey);
+    }
   }
   const {
     policy,
@@ -1167,6 +1175,10 @@ export function scoreLocalCandidates(
     .map((candidate) => {
       const signature = candidateScoringSignature(candidate);
       const cached = prepared.candidateScoreCache.get(candidate.external_id);
+      if (cached) {
+        prepared.candidateScoreCache.delete(candidate.external_id);
+        prepared.candidateScoreCache.set(candidate.external_id, cached);
+      }
       let scoreResult = cached;
       if (
         !scoreResult
@@ -1205,6 +1217,11 @@ export function scoreLocalCandidates(
           trace: result.trace,
         };
         prepared.candidateScoreCache.set(candidate.external_id, scoreResult);
+        while (prepared.candidateScoreCache.size > MAX_CANDIDATE_SCORE_CACHE) {
+          const oldestCandidateId = prepared.candidateScoreCache.keys().next().value;
+          if (oldestCandidateId == null) break;
+          prepared.candidateScoreCache.delete(oldestCandidateId);
+        }
       }
 
       const visible = !(
