@@ -79,6 +79,7 @@ const CONTENT_METADATA_KEYS: (keyof ContentMetadata)[] = [
   'language',
   'format',
   'contentType',
+  'thumbnailUrl',
 ];
 
 const getContentMetadata = (attributes: Record<string, unknown>): ContentMetadata | null => {
