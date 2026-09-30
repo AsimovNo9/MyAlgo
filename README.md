@@ -51,7 +51,7 @@ Current execution order:
 6. **Complete — #211 / PR #228 ranking/presentation performance slice:** the warm MV3 path now uses prepared graph/lexical indexes, bounded per-candidate score reuse, batched/signature-gated persistence, compact presentation caching, shared Home DOM snapshots, and presentation-stable replacement targeting. Long-session/browser stress remains tracked in #211.
 7. **Complete — #210 / PR #229 post-canonical calibration measurement:** live batches showed no 95–100 saturation, corrected effective replacement-threshold diagnostics, and validated prepared candidate-context reuse across large Home reranks; the existing deterministic display curve remains unchanged because the measurements do not justify retuning.
 8. **Complete first trust slice — #153 / PR #230:** scored native and replacement cards now share exact trace-grounded Why-this with graph paths, evidence support counts, trace/revision identity, and acquisition provenance separated from ranking reasons.
-9. **Active P1 — #170 graphical graph explorer:** add a read-only interactive Settings graph with pan/zoom, search, node/edge focus, durable-mode overlays, live/offline snapshots, revisions, provenance, and evidence drill-down. The renderer is intentionally reusable by the next #153 compact Why-this graph slice.
+9. **Active P1 — #170 graphical graph explorer:** add a read-only interactive Settings graph with pan/zoom, search, focus-only filtering, node/edge focus, durable-mode overlays, live/offline snapshots, revisions, provenance, and evidence drill-down. The renderer is intentionally reusable by the next #153 compact Why-this graph slice.
 10. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #153 remains open for direct graph actions/evidence navigation integration; #169 remains the offline/signed-out validation track.
 11. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
@@ -80,3 +80,8 @@ Display-score calibration remains a presentation layer, not preference authority
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
 Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.
+
+
+### Graph edit safety invariant
+
+Graph visualization is read-only. Future graph-edit controls (#158/#154/#155) must preserve an original pre-user-edit baseline before the first user mutation. Every user-authored node/edge/control change must create a versioned graph revision with reversible before/after state. Undo returns to the previous user revision; Restore original returns to the preserved baseline without deleting retained evidence. Filtering, moving, hiding, or selecting nodes in the explorer never changes recommendation state.
