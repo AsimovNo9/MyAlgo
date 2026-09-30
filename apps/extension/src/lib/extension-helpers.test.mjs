@@ -200,7 +200,7 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
   assert.equal(view.revisions[0].revision, 7);
 });
 
-test('graph inspector attaches strongest semantic mode or topic grouping to retained content', () => {
+test('graph inspector prefers semantic topic grouping and uses durable mode only as a fallback', () => {
   const state = {
     schemaVersion: 2,
     evidence: [],
@@ -223,30 +223,47 @@ test('graph inspector attaches strongest semantic mode or topic grouping to reta
     },
   };
 
-  const modeView = buildGraphInspectorView(state, [{
+  const graphMatchView = buildGraphInspectorView(state, [{
     externalId: 'video-a',
     category: 'AI tooling',
     categoryConfidence: 0.81,
-    modeAffinities: [
-      { modeId: 'mode:systems', label: 'Systems', affinity: 0.62 },
-      { modeId: 'mode:ai', label: 'AI work', affinity: 0.84 },
+    categoryScores: { 'AI tooling': 0.81, 'People & Blogs': 0.31 },
+    graphMatches: [
+      { nodeId: 'concept:agents', nodeLabel: 'AI agents', similarity: 0.72, taxonomyOnly: false },
+      { nodeId: 'concept:generic', nodeLabel: 'Technology', similarity: 0.91, taxonomyOnly: true },
     ],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
   }]);
-  assert.equal(modeView.nodes[0].semanticClusterId, 'mode:mode:ai');
-  assert.equal(modeView.nodes[0].semanticClusterLabel, 'AI work');
-  assert.equal(modeView.nodes[0].semanticClusterKind, 'mode');
-  assert.equal(modeView.nodes[0].semanticClusterAffinity, 0.84);
+  assert.equal(graphMatchView.nodes[0].semanticClusterId, 'topic:concept:agents');
+  assert.equal(graphMatchView.nodes[0].semanticClusterLabel, 'AI agents');
+  assert.equal(graphMatchView.nodes[0].semanticClusterKind, 'topic');
+  assert.equal(graphMatchView.nodes[0].semanticClusterAffinity, 0.72);
 
-  const topicView = buildGraphInspectorView(state, [{
+  const categoryView = buildGraphInspectorView(state, [{
     externalId: 'video-a',
     category: 'AI tooling',
     categoryConfidence: 0.44,
-    modeAffinities: [],
+    categoryScores: { 'AI tooling': 0.44, 'People & Blogs': 0.29 },
+    graphMatches: [],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
   }]);
-  assert.equal(topicView.nodes[0].semanticClusterId, 'topic:ai tooling');
-  assert.equal(topicView.nodes[0].semanticClusterLabel, 'AI tooling');
-  assert.equal(topicView.nodes[0].semanticClusterKind, 'topic');
-  assert.equal(topicView.nodes[0].semanticClusterAffinity, 0.44);
+  assert.equal(categoryView.nodes[0].semanticClusterId, 'topic:ai tooling');
+  assert.equal(categoryView.nodes[0].semanticClusterLabel, 'AI tooling');
+  assert.equal(categoryView.nodes[0].semanticClusterKind, 'topic');
+  assert.equal(categoryView.nodes[0].semanticClusterAffinity, 0.44);
+
+  const modeFallbackView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: null,
+    categoryConfidence: 0,
+    categoryScores: {},
+    graphMatches: [],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
+  }]);
+  assert.equal(modeFallbackView.nodes[0].semanticClusterId, 'mode:mode:ai');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterLabel, 'AI work');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterKind, 'mode');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterAffinity, 0.84);
 });
 
 test('graph inspector parses exported JSON without mutating live state and rejects invalid snapshots', () => {
