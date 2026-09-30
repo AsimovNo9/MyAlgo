@@ -217,7 +217,7 @@ const clearExtensionPresentation = (
 ) => {
   document.querySelector('[data-personal-algorithm-shelf]')?.remove();
   document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-control]',
+    '[data-personal-algorithm-replacement], [data-personal-algorithm-explanation], [data-personal-algorithm-explanation-panel], [data-personal-algorithm-control]',
   ).forEach((element) => {
     if (
       preserveReplacements
@@ -1022,7 +1022,7 @@ const applyRankedFeed = (
     if (!badge) {
       badge = document.createElement('span');
       badge.dataset.personalAlgorithmBadge = 'true';
-      badge.style.cssText = 'position:absolute;z-index:999;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+      badge.style.cssText = 'position:absolute;z-index:999;top:8px;left:8px;max-width:calc(100% - 112px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
       const badgeHost = element.querySelector<HTMLElement>(
         '#thumbnail, ytd-thumbnail, yt-thumbnail-view-model, a#thumbnail',
       ) ?? element;
