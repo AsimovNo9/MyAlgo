@@ -121,9 +121,33 @@ export function GraphCanvas({
     const memberIds = new Set(modeOverlay.memberNodeIds);
     const connectedIds = new Set(modeOverlay.connectedNodeIds);
     const modeActive = modeOverlay.modeId !== 'all';
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const priorityIds = new Set<string>();
+    if (selectedNodeId) priorityIds.add(selectedNodeId);
+    if (selectedEdgeId) {
+      const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
+      if (selectedEdge) {
+        priorityIds.add(selectedEdge.sourceNodeId);
+        priorityIds.add(selectedEdge.targetNodeId);
+      }
+    }
+    if (normalizedQuery) {
+      for (const node of nodes) {
+        if (
+          node.label.toLowerCase().includes(normalizedQuery)
+          || node.id.toLowerCase().includes(normalizedQuery)
+          || node.kind.toLowerCase().includes(normalizedQuery)
+        ) {
+          priorityIds.add(node.id);
+        }
+      }
+    }
     const capacity = compact ? 24 : 320;
     const prioritized = [...nodes]
-      .sort((left, right) => compareNodePriority(left, right, degreeByNode, memberIds, connectedIds))
+      .sort((left, right) => (
+        Number(priorityIds.has(right.id)) - Number(priorityIds.has(left.id))
+        || compareNodePriority(left, right, degreeByNode, memberIds, connectedIds)
+      ))
       .slice(0, capacity);
 
     const visibleIds = new Set(prioritized.map((node) => node.id));
@@ -136,7 +160,6 @@ export function GraphCanvas({
       ))
       .slice(0, compact ? 36 : 760);
 
-    const normalizedQuery = searchQuery.trim().toLowerCase();
     const groups = new Map<number, GraphInspectorNode[]>();
     for (const node of prioritized) {
       let ring = kindRing(node.kind);
@@ -191,7 +214,7 @@ export function GraphCanvas({
       nodeById: positioned,
       modeActive,
     };
-  }, [compact, edges, modeOverlay, nodes, searchQuery]);
+  }, [compact, edges, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
   React.useEffect(() => {
     if (!selectedNodeId) return;
