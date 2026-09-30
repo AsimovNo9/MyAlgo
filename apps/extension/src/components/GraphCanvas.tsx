@@ -16,6 +16,7 @@ type GraphCanvasProps = {
   onEdgeSelect?: (edgeId: string) => void;
   height?: number;
   compact?: boolean;
+  focusOnly?: boolean;
 };
 
 type PositionedNode = GraphInspectorNode & {
@@ -106,6 +107,7 @@ export function GraphCanvas({
   onEdgeSelect,
   height = 620,
   compact = false,
+  focusOnly = false,
 }: GraphCanvasProps) {
   const [zoom, setZoom] = React.useState(compact ? 1.25 : 1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
@@ -142,8 +144,71 @@ export function GraphCanvas({
         }
       }
     }
+    const searchMatchIds = new Set<string>();
+    if (normalizedQuery) {
+      for (const node of nodes) {
+        if (
+          node.label.toLowerCase().includes(normalizedQuery)
+          || node.id.toLowerCase().includes(normalizedQuery)
+          || node.kind.toLowerCase().includes(normalizedQuery)
+        ) {
+          searchMatchIds.add(node.id);
+        }
+      }
+    }
+
+    const focusNodeIds = new Set<string>();
+    const focusEdgeIds = new Set<string>();
+    if (modeActive) {
+      for (const nodeId of connectedIds) focusNodeIds.add(nodeId);
+      for (const edgeId of modeOverlay.connectedEdgeIds) focusEdgeIds.add(edgeId);
+    }
+    if (searchMatchIds.size > 0) {
+      for (const nodeId of searchMatchIds) focusNodeIds.add(nodeId);
+      for (const edge of edges) {
+        if (!searchMatchIds.has(edge.sourceNodeId) && !searchMatchIds.has(edge.targetNodeId)) continue;
+        focusEdgeIds.add(edge.id);
+        focusNodeIds.add(edge.sourceNodeId);
+        focusNodeIds.add(edge.targetNodeId);
+      }
+    }
+    if (selectedNodeId) {
+      focusNodeIds.add(selectedNodeId);
+      for (const edge of edges) {
+        if (edge.sourceNodeId !== selectedNodeId && edge.targetNodeId !== selectedNodeId) continue;
+        focusEdgeIds.add(edge.id);
+        focusNodeIds.add(edge.sourceNodeId);
+        focusNodeIds.add(edge.targetNodeId);
+      }
+    }
+    if (selectedEdgeId) {
+      const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
+      if (selectedEdge) {
+        focusEdgeIds.add(selectedEdge.id);
+        focusNodeIds.add(selectedEdge.sourceNodeId);
+        focusNodeIds.add(selectedEdge.targetNodeId);
+      }
+    }
+
+    const focusIsActive = focusOnly && (
+      modeActive
+      || normalizedQuery.length > 0
+      || Boolean(selectedNodeId)
+      || Boolean(selectedEdgeId)
+    );
+    const candidateNodes = focusIsActive && focusNodeIds.size > 0
+      ? nodes.filter((node) => focusNodeIds.has(node.id))
+      : nodes;
+    const candidateEdges = focusIsActive && focusNodeIds.size > 0
+      ? edges.filter((edge) => (
+          focusNodeIds.has(edge.sourceNodeId)
+          && focusNodeIds.has(edge.targetNodeId)
+          && (focusEdgeIds.size === 0 || focusEdgeIds.has(edge.id))
+        ))
+      : edges;
+
     const capacity = compact ? 24 : 320;
-    const prioritized = [...nodes]
+    const prioritized = [...candidateNodes]
       .sort((left, right) => (
         Number(priorityIds.has(right.id)) - Number(priorityIds.has(left.id))
         || compareNodePriority(left, right, degreeByNode, memberIds, connectedIds)
@@ -151,7 +216,7 @@ export function GraphCanvas({
       .slice(0, capacity);
 
     const visibleIds = new Set(prioritized.map((node) => node.id));
-    const visibleEdges = edges
+    const visibleEdges = candidateEdges
       .filter((edge) => visibleIds.has(edge.sourceNodeId) && visibleIds.has(edge.targetNodeId))
       .sort((left, right) => (
         Number(modeOverlay.connectedEdgeIds.includes(right.id)) - Number(modeOverlay.connectedEdgeIds.includes(left.id))
@@ -213,8 +278,9 @@ export function GraphCanvas({
       edges: visibleEdges,
       nodeById: positioned,
       modeActive,
+      focusIsActive,
     };
-  }, [compact, edges, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
+  }, [compact, edges, focusOnly, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
   React.useEffect(() => {
     if (!selectedNodeId) return;
