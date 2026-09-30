@@ -811,4 +811,8 @@ Validate that expanded Why-this is not clipped by the thumbnail or native card p
 
 Validate that expanded Why-this is rendered as a body-level fixed portal anchored to its trigger, remains open while interacting with Technical details/contribution content, survives ordinary rerank cleanup without duplicate click bindings, and does not cause MyAlgo-only DOM mutations to schedule Home observation/rerank feedback. The visible explanation must include human-readable matched graph paths/evidence counts while raw trace/revision material remains under Technical details.
 
+The Technical details disclosure must preserve its open/closed state across ordinary explanation rerenders, including score/semantic/metadata reranks, rather than collapsing because the portal body was rebuilt. The removed Light touch ↔ Strict placeholder slider must not appear in the feed-card explanation until there is a real revisioned preference-strength control.
+
+After Deactivated → Activated without a page reload, every newly rendered or recycled Why-this trigger must open its own portal. Binding must not rely on a copied data attribute because YouTube renderer cloning can preserve attributes while dropping event listeners; duplicate/cloned trigger IDs must not cause one card to target another card's portal.
+
 Loading the live graph must also hydrate the durable-mode catalog and active mode ID from the same background inspection response so persisted mode overlays appear immediately and do not depend on a storage-listener race.
