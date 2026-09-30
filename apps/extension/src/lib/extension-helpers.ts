@@ -1,4 +1,10 @@
-import type { DurableSemanticModeCatalog, FeedItem, FeedResponse, SemanticCategoryId } from '@repo/shared-types';
+import type {
+  DurableSemanticModeCatalog,
+  FeedItem,
+  FeedResponse,
+  PersonalAlgorithmState,
+  SemanticCategoryId,
+} from '@repo/shared-types';
 
 export function normalizeFeed(feed: FeedResponse): FeedItem[] {
   return (feed.items ?? []).map((item) => ({
@@ -168,4 +174,177 @@ export function buildDurableModeOptions(
   }
 
   return result;
+}
+
+
+export type GraphInspectorEvidence = {
+  id: string;
+  kind: 'exposure' | 'interaction';
+  interaction: string | null;
+  connector: string;
+  mechanism: string;
+  observedAt: string;
+  contentLabel: string;
+};
+
+export type GraphInspectorNode = {
+  id: string;
+  label: string;
+  kind: string;
+  provenance: 'explicit' | 'inferred';
+  confidence: number | null;
+  supportCount: number;
+};
+
+export type GraphInspectorEdge = {
+  id: string;
+  relation: string;
+  provenance: 'explicit' | 'inferred';
+  confidence: number | null;
+  sourceNodeId: string;
+  sourceLabel: string;
+  targetNodeId: string;
+  targetLabel: string;
+  evidenceIds: string[];
+  evidence: GraphInspectorEvidence[];
+};
+
+export type GraphInspectorView = {
+  schemaVersion: number;
+  graphRevision: number;
+  evidenceCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  nodesByKind: Array<{ key: string; count: number }>;
+  edgesByRelation: Array<{ key: string; count: number }>;
+  nodes: GraphInspectorNode[];
+  edges: GraphInspectorEdge[];
+  revisions: Array<{ revision: number; reason: string; createdAt: string }>;
+};
+
+const countBy = (values: readonly string[]): Array<{ key: string; count: number }> => (
+  [...values.reduce((counts, value) => {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>()).entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([key, count]) => ({ key, count }))
+);
+
+const isPersonalAlgorithmState = (value: unknown): value is PersonalAlgorithmState => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<PersonalAlgorithmState>;
+  return Number(candidate.schemaVersion) === 2
+    && Array.isArray(candidate.evidence)
+    && Boolean(candidate.graph)
+    && Array.isArray(candidate.graph?.nodes)
+    && Array.isArray(candidate.graph?.edges)
+    && Array.isArray(candidate.graph?.revisions)
+    && Number.isInteger(candidate.graph?.currentRevision);
+};
+
+export function buildGraphInspectorView(input: unknown): GraphInspectorView {
+  if (!isPersonalAlgorithmState(input)) {
+    throw new Error('This is not a valid MyAlgo Personal Algorithm export.');
+  }
+
+  const state = input;
+  const nodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
+  const supportByNodeId = new Map<string, Set<string>>();
+
+  for (const edge of state.graph.edges) {
+    for (const nodeId of [edge.sourceNodeId, edge.targetNodeId]) {
+      let support = supportByNodeId.get(nodeId);
+      if (!support) {
+        support = new Set<string>();
+        supportByNodeId.set(nodeId, support);
+      }
+      for (const evidenceId of edge.evidenceIds) support.add(evidenceId);
+    }
+  }
+
+  const toEvidence = (evidenceId: string): GraphInspectorEvidence | null => {
+    const record = evidenceById.get(evidenceId);
+    if (!record) return null;
+    const evidence = record.evidence;
+    const title = evidence.metadata?.title?.trim();
+    const contentLabel = title || evidence.content.externalId;
+    return {
+      id: record.id,
+      kind: evidence.kind,
+      interaction: evidence.kind === 'interaction' ? evidence.interaction : null,
+      connector: evidence.provenance.connector,
+      mechanism: evidence.provenance.mechanism,
+      observedAt: evidence.observedAt,
+      contentLabel,
+    };
+  };
+
+  const nodes = state.graph.nodes
+    .map((node) => ({
+      id: node.id,
+      label: node.label,
+      kind: node.kind,
+      provenance: node.provenance,
+      confidence: node.confidence,
+      supportCount: supportByNodeId.get(node.id)?.size ?? 0,
+    }))
+    .sort((left, right) => (
+      left.kind.localeCompare(right.kind)
+      || left.label.localeCompare(right.label)
+      || left.id.localeCompare(right.id)
+    ));
+
+  const edges = state.graph.edges
+    .map((edge) => ({
+      id: edge.id,
+      relation: edge.relation,
+      provenance: edge.provenance,
+      confidence: edge.confidence,
+      sourceNodeId: edge.sourceNodeId,
+      sourceLabel: nodeById.get(edge.sourceNodeId)?.label ?? edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId,
+      targetLabel: nodeById.get(edge.targetNodeId)?.label ?? edge.targetNodeId,
+      evidenceIds: [...edge.evidenceIds],
+      evidence: edge.evidenceIds
+        .map(toEvidence)
+        .filter((record): record is GraphInspectorEvidence => Boolean(record))
+        .sort((left, right) => right.observedAt.localeCompare(left.observedAt) || left.id.localeCompare(right.id)),
+    }))
+    .sort((left, right) => (
+      left.relation.localeCompare(right.relation)
+      || left.sourceLabel.localeCompare(right.sourceLabel)
+      || left.targetLabel.localeCompare(right.targetLabel)
+      || left.id.localeCompare(right.id)
+    ));
+
+  return {
+    schemaVersion: state.schemaVersion,
+    graphRevision: state.graph.currentRevision,
+    evidenceCount: state.evidence.length,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    nodesByKind: countBy(nodes.map((node) => node.kind)),
+    edgesByRelation: countBy(edges.map((edge) => edge.relation)),
+    nodes,
+    edges,
+    revisions: [...state.graph.revisions]
+      .sort((left, right) => right.revision - left.revision || right.createdAt.localeCompare(left.createdAt))
+      .map((revision) => ({
+        revision: revision.revision,
+        reason: revision.reason,
+        createdAt: revision.createdAt,
+      })),
+  };
+}
+
+export function parseGraphInspectorExport(json: string): GraphInspectorView {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error('The pasted graph export is not valid JSON.');
+  }
+  return buildGraphInspectorView(parsed);
 }
