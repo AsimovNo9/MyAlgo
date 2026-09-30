@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDurableModeOptions, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
+import { buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -303,4 +303,55 @@ test('graph mode overlay returns the full-graph sentinel without inventing membe
     connectedNodeIds: [],
     connectedEdgeIds: [],
   });
+});
+
+
+test('explanation graph view contains only exact trace nodes and stored connecting edges', () => {
+  const view = {
+    schemaVersion: 2,
+    graphRevision: 12,
+    evidenceCount: 2,
+    nodeCount: 4,
+    edgeCount: 3,
+    nodesByKind: [],
+    edgesByRelation: [],
+    revisions: [],
+    nodes: [
+      { id: 'content:a', label: 'Video A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1, contentSource: 'youtube', contentExternalId: 'a', creatorName: 'Creator A', thumbnailUrl: null },
+      { id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 1, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+      { id: 'topic:systems', label: 'Systems', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+      { id: 'topic:music', label: 'Music', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+    ],
+    edges: [
+      { id: 'edge:created', relation: 'created_by', provenance: 'inferred', confidence: 1, sourceNodeId: 'content:a', sourceLabel: 'Video A', targetNodeId: 'creator:a', targetLabel: 'Creator A', evidenceIds: ['e1'], evidence: [] },
+      { id: 'edge:systems', relation: 'related_to', provenance: 'inferred', confidence: 1, sourceNodeId: 'creator:a', sourceLabel: 'Creator A', targetNodeId: 'topic:systems', targetLabel: 'Systems', evidenceIds: ['e2'], evidence: [] },
+      { id: 'edge:music', relation: 'related_to', provenance: 'inferred', confidence: 1, sourceNodeId: 'creator:a', sourceLabel: 'Creator A', targetNodeId: 'topic:music', targetLabel: 'Music', evidenceIds: [], evidence: [] },
+    ],
+  };
+
+  const explanation = {
+    rawScore: 17,
+    displayScore: 76,
+    graphRevision: 12,
+    policyRevision: 'policy-v1',
+    acquisitionMechanism: 'observed_dom',
+    contributions: [
+      { label: 'Systems', value: 8, kind: 'node', sourceId: 'topic:systems', evidenceIds: ['e2'] },
+    ],
+    matchedPaths: [
+      { nodeIds: ['creator:a', 'topic:systems'], nodeLabels: ['Creator A', 'Systems'], edgeIds: ['edge:systems'], evidenceIds: ['e2'] },
+    ],
+    modeGrounding: null,
+  };
+
+  const subgraph = buildExplanationGraphView(view, 'content:a', explanation);
+  assert.deepEqual(
+    subgraph.nodes.map((node) => node.id).sort(),
+    ['content:a', 'creator:a', 'topic:systems'],
+  );
+  assert.deepEqual(
+    subgraph.edges.map((edge) => edge.id).sort(),
+    ['edge:created', 'edge:systems'],
+  );
+  assert.equal(subgraph.edges.some((edge) => edge.id === 'edge:music'), false);
 });
