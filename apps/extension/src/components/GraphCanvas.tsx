@@ -327,8 +327,24 @@ export function GraphCanvas({
   const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
     if (compact) return;
     event.preventDefault();
+
+    const svg = event.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const pointerX = ((event.clientX - rect.left) / rect.width) * WIDTH;
+    const pointerY = ((event.clientY - rect.top) / rect.height) * HEIGHT;
     const factor = event.deltaY < 0 ? 1.12 : 0.89;
-    setZoom((value) => Math.max(0.45, Math.min(3.5, value * factor)));
+    const nextZoom = Math.max(0.45, Math.min(3.5, zoom * factor));
+    if (nextZoom === zoom) return;
+
+    const graphX = (pointerX - pan.x) / zoom;
+    const graphY = (pointerY - pan.y) / zoom;
+    setPan({
+      x: pointerX - graphX * nextZoom,
+      y: pointerY - graphY * nextZoom,
+    });
+    setZoom(nextZoom);
   };
 
   return (
