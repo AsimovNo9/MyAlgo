@@ -262,6 +262,11 @@ export function Options() {
       }, durableModeCatalog, 'all');
   const selectedGraphNode = graphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedGraphEdge = graphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedGraphNodeEdges = selectedGraphNode
+    ? (graphInspector?.edges ?? []).filter((edge) => (
+        edge.sourceNodeId === selectedGraphNode.id || edge.targetNodeId === selectedGraphNode.id
+      )).slice(0, 16)
+    : [];
   const graphSearchResults = normalizedGraphQuery
     ? [
         ...filteredGraphNodes.slice(0, 8).map((node) => ({ id: node.id, label: node.label, kind: node.kind, type: 'node' as const })),
@@ -655,13 +660,77 @@ export function Options() {
                 }}>
                   {selectedGraphNode ? (
                     <>
-                      <h3 style={{ margin: '0 0 8px' }}>{selectedGraphNode.label}</h3>
-                      <p style={{ margin: '4px 0' }}>
-                        {selectedGraphNode.kind} · {selectedGraphNode.provenance}
-                        {' · '}{selectedGraphNode.supportCount} support item{selectedGraphNode.supportCount === 1 ? '' : 's'}
-                        {selectedGraphNode.confidence == null ? '' : ` · confidence ${selectedGraphNode.confidence.toFixed(2)}`}
-                      </p>
-                      <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        {selectedGraphNode.thumbnailUrl ? (
+                          <img
+                            src={selectedGraphNode.thumbnailUrl}
+                            alt=""
+                            width={160}
+                            height={90}
+                            style={{
+                              width: 160,
+                              height: 90,
+                              objectFit: 'cover',
+                              borderRadius: 10,
+                              border: '1px solid #334155',
+                              background: '#0f172a',
+                              flex: '0 0 auto',
+                            }}
+                          />
+                        ) : null}
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ margin: '0 0 6px' }}>{selectedGraphNode.label}</h3>
+                          {selectedGraphNode.creatorName ? (
+                            <p style={{ margin: '0 0 6px', color: '#cbd5e1' }}>{selectedGraphNode.creatorName}</p>
+                          ) : null}
+                          <p style={{ margin: '4px 0' }}>
+                            {selectedGraphNode.kind} · {selectedGraphNode.provenance}
+                            {' · '}{selectedGraphNode.supportCount} support item{selectedGraphNode.supportCount === 1 ? '' : 's'}
+                            {selectedGraphNode.confidence == null ? '' : ` · confidence ${selectedGraphNode.confidence.toFixed(2)}`}
+                          </p>
+                          <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 14, borderTop: '1px solid #263244', paddingTop: 10 }}>
+                        <strong>Connected relationships</strong>
+                        {selectedGraphNodeEdges.length > 0 ? (
+                          <div style={{ marginTop: 6 }}>
+                            {selectedGraphNodeEdges.map((edge) => {
+                              const outbound = edge.sourceNodeId === selectedGraphNode.id;
+                              const otherLabel = outbound ? edge.targetLabel : edge.sourceLabel;
+                              return (
+                                <button
+                                  key={edge.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEdgeId(edge.id);
+                                    setSelectedNodeId(null);
+                                  }}
+                                  style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    border: 0,
+                                    borderTop: '1px solid #263244',
+                                    padding: '8px 0',
+                                    background: 'transparent',
+                                    color: '#e2e8f0',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <strong>{outbound ? '→' : '←'} {otherLabel}</strong>
+                                  <div style={{ color: '#94a3b8', fontSize: 11 }}>
+                                    {edge.relation} · {edge.provenance} · {edge.evidenceIds.length} support item{edge.evidenceIds.length === 1 ? '' : 's'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p style={{ color: '#94a3b8' }}>No visible graph relationships for this node.</p>
+                        )}
+                      </div>
                     </>
                   ) : selectedGraphEdge ? (
                     <>
