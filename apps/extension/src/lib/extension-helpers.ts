@@ -187,6 +187,17 @@ export type GraphInspectorEvidence = {
   contentLabel: string;
 };
 
+export type GraphInspectorSemanticContext = {
+  externalId: string;
+  category: string | null;
+  categoryConfidence: number;
+  modeAffinities: Array<{
+    modeId: string;
+    label: string;
+    affinity: number;
+  }>;
+};
+
 export type GraphInspectorNode = {
   id: string;
   label: string;
@@ -198,6 +209,10 @@ export type GraphInspectorNode = {
   contentExternalId: string | null;
   creatorName: string | null;
   thumbnailUrl: string | null;
+  semanticClusterId: string | null;
+  semanticClusterLabel: string | null;
+  semanticClusterKind: 'mode' | 'topic' | null;
+  semanticClusterAffinity: number | null;
 };
 
 export type GraphInspectorEdge = {
@@ -247,7 +262,10 @@ const isPersonalAlgorithmState = (value: unknown): value is PersonalAlgorithmSta
     && Number.isInteger(candidate.graph?.currentRevision);
 };
 
-export function buildGraphInspectorView(input: unknown): GraphInspectorView {
+export function buildGraphInspectorView(
+  input: unknown,
+  semanticContext: readonly GraphInspectorSemanticContext[] = [],
+): GraphInspectorView {
   if (!isPersonalAlgorithmState(input)) {
     throw new Error('This is not a valid MyAlgo Personal Algorithm export.');
   }
@@ -255,6 +273,11 @@ export function buildGraphInspectorView(input: unknown): GraphInspectorView {
   const state = input;
   const nodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
   const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
+  const semanticByExternalId = new Map(
+    semanticContext
+      .filter((entry) => entry.externalId.trim())
+      .map((entry) => [entry.externalId, entry]),
+  );
   const supportByNodeId = new Map<string, Set<string>>();
 
   for (const edge of state.graph.edges) {
@@ -304,6 +327,38 @@ export function buildGraphInspectorView(input: unknown): GraphInspectorView {
         contentExternalId: node.content?.externalId ?? null,
         creatorName: metadata?.creatorName ?? null,
         thumbnailUrl: metadata?.thumbnailUrl ?? null,
+        ...(() => {
+          const semantic = node.content?.externalId
+            ? semanticByExternalId.get(node.content.externalId)
+            : undefined;
+          const strongestMode = [...(semantic?.modeAffinities ?? [])]
+            .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
+            .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
+          if (strongestMode) {
+            return {
+              semanticClusterId: `mode:${strongestMode.modeId}`,
+              semanticClusterLabel: strongestMode.label,
+              semanticClusterKind: 'mode' as const,
+              semanticClusterAffinity: strongestMode.affinity,
+            };
+          }
+          const category = semantic?.category?.trim();
+          const categoryConfidence = Number(semantic?.categoryConfidence ?? 0);
+          if (category && Number.isFinite(categoryConfidence) && categoryConfidence >= 0.22) {
+            return {
+              semanticClusterId: `topic:${category.toLowerCase()}`,
+              semanticClusterLabel: category,
+              semanticClusterKind: 'topic' as const,
+              semanticClusterAffinity: categoryConfidence,
+            };
+          }
+          return {
+            semanticClusterId: null,
+            semanticClusterLabel: null,
+            semanticClusterKind: null,
+            semanticClusterAffinity: null,
+          };
+        })(),
       };
     })
     .sort((left, right) => (
