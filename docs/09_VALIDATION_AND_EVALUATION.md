@@ -764,7 +764,7 @@ Validate all of the following:
 1. opening/reloading the live explorer does not change graph revision, evidence count, node count, edge count, or user-edit history;
 2. node-kind and edge-relation summaries reconcile to the inspected snapshot;
 3. the SVG graph remains stable across repeated loads of the same snapshot and uses bounded deterministic density rather than rendering unbounded history;
-4. pan, zoom, reset, node selection, edge selection, search/focus, and the focus-only toggle work on a bootstrap-sized graph without layout feedback into graph state;
+4. pan, zoom, reset, node selection, edge selection, search/focus, and the focus-only toggle work on a bootstrap-sized graph without layout feedback into graph state; trackpad/wheel zoom preserves the graph-space point under the pointer/gesture focal point rather than zooming toward the SVG origin;
 5. a searched or selected low-degree node remains renderable even when the graph exceeds the canvas density cap;
 6. explicit vs inferred provenance and evidence-support counts are visible without exposing raw storage objects as the primary UI;
 7. selecting an inferred edge shows retained supporting evidence records, including connector, mechanism, observed time, and content label;
@@ -772,7 +772,9 @@ Validate all of the following:
 9. mode overlays are disabled for pasted graph-only snapshots because durable mode catalog state is stored separately and must not be borrowed from the live graph;
 10. pasted export JSON is parsed only in the Settings page and does not overwrite/persist live graph state;
 11. malformed or wrong-schema pasted snapshots fail clearly and leave the previous live graph unchanged;
-12. the explorer uses current graph node/edge/evidence identifiers so #153 Why-this paths can reuse the same renderer without identifier translation.
+12. the explorer uses current graph node/edge/evidence identifiers so #153 Why-this paths can reuse the same renderer without identifier translation;
+13. Network and Lineage/family-tree layouts render the same graph state; lineage uses only stored graph edges and does not invent ancestry;
+14. lineage places content/history-like content toward leaves, creator/topic/concept nodes in intermediate layers, and objective/user-level nodes toward the root while retained evidence remains an edge drill-down until evidence itself becomes a first-class graph node.
 
 The first slice deliberately avoids graph mutation, scoring, preference inference, and a heavyweight graph-rendering dependency. The follow-on #153 mini graph must render only the current trace subgraph and preserve the same trace/graph revision as the textual Why-this explanation.
 
