@@ -191,6 +191,13 @@ export type GraphInspectorSemanticContext = {
   externalId: string;
   category: string | null;
   categoryConfidence: number;
+  categoryScores?: Record<string, number>;
+  graphMatches?: Array<{
+    nodeId: string;
+    nodeLabel: string;
+    similarity: number;
+    taxonomyOnly?: boolean;
+  }>;
   modeAffinities: Array<{
     modeId: string;
     label: string;
@@ -331,17 +338,39 @@ export function buildGraphInspectorView(
           const semantic = node.content?.externalId
             ? semanticByExternalId.get(node.content.externalId)
             : undefined;
-          const strongestMode = [...(semantic?.modeAffinities ?? [])]
-            .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
-            .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
-          if (strongestMode) {
+          const strongestGraphMatch = [...(semantic?.graphMatches ?? [])]
+            .filter((entry) => (
+              !entry.taxonomyOnly
+              && entry.nodeLabel.trim()
+              && Number.isFinite(entry.similarity)
+              && entry.similarity >= 0.35
+            ))
+            .sort((left, right) => (
+              right.similarity - left.similarity
+              || left.nodeLabel.localeCompare(right.nodeLabel)
+              || left.nodeId.localeCompare(right.nodeId)
+            ))[0];
+          if (strongestGraphMatch) {
             return {
-              semanticClusterId: `mode:${strongestMode.modeId}`,
-              semanticClusterLabel: strongestMode.label,
-              semanticClusterKind: 'mode' as const,
-              semanticClusterAffinity: strongestMode.affinity,
+              semanticClusterId: `topic:${strongestGraphMatch.nodeId}`,
+              semanticClusterLabel: strongestGraphMatch.nodeLabel,
+              semanticClusterKind: 'topic' as const,
+              semanticClusterAffinity: strongestGraphMatch.similarity,
             };
           }
+
+          const strongestCategory = Object.entries(semantic?.categoryScores ?? {})
+            .filter(([, score]) => Number.isFinite(score) && score >= 0.22)
+            .sort((left, right) => Number(right[1]) - Number(left[1]) || left[0].localeCompare(right[0]))[0];
+          if (strongestCategory) {
+            return {
+              semanticClusterId: `topic:${strongestCategory[0].toLowerCase()}`,
+              semanticClusterLabel: strongestCategory[0],
+              semanticClusterKind: 'topic' as const,
+              semanticClusterAffinity: Number(strongestCategory[1]),
+            };
+          }
+
           const category = semantic?.category?.trim();
           const categoryConfidence = Number(semantic?.categoryConfidence ?? 0);
           if (category && Number.isFinite(categoryConfidence) && categoryConfidence >= 0.22) {
