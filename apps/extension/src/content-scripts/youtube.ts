@@ -333,7 +333,7 @@ const createReplacementCard = (
   replacementBadge.textContent = contentLabel
     ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
     : `MyAlgo replacement · ${metadata.score}`;
-  replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+  replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 104px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
   card.appendChild(replacementBadge);
 
   const link = document.createElement('a');
@@ -375,11 +375,14 @@ const createReplacementCard = (
   why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
   why.textContent = 'Why this?';
   why.setAttribute('aria-label', 'Why MyAlgo showed this replacement');
-  why.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;margin-top:7px;padding:6px 10px;border-radius:999px;border:1px solid #475569;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;';
+  // Keep explanation affordance inside the preserved native-card footprint.
+  // Replacement cards intentionally use a fixed native slot height + overflow
+  // clipping, so a normal-flow control appended below metadata can disappear.
+  why.style.cssText = 'position:absolute;z-index:35;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
   const explanation = document.createElement('div');
   explanation.dataset.personalAlgorithmExplanationPanel = 'true';
   explanation.hidden = true;
-  explanation.style.cssText = 'margin-top:8px;padding:9px 10px;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:rgba(15,23,42,.88);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;';
+  explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
 
   const explanationData = item.explanation;
   const scoreLine = document.createElement('div');
