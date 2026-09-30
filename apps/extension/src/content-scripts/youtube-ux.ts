@@ -59,6 +59,8 @@ export type RankedFeedItem = {
   content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Record<string, number>;
+  semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   provenance?: {
     mechanism?: string | null;
