@@ -713,3 +713,28 @@ The corrective #223 runtime gate therefore validates three layers separately:
 
 Re-run the live browser trace after these changes and require that lofi/Silent-Hill-style examples collapse to one score-region contribution with all source node IDs, unrelated weak neighbours disappear from `Why this?`, broad taxonomy no longer stacks, and hard policy/feedback behavior remains unchanged. Presentation calibration remains deferred to #210.
 
+
+
+## Post-canonical score calibration validation (#210)
+
+Calibration is a presentation/ranking-resolution layer; the exact additive raw score and trace remain authoritative.
+
+For each representative Home rank batch, capture `scoreCalibration` from the `[MyAlgo] rank response` log and record:
+
+- raw min/p25/p50/p75/p90/p95/max;
+- display min/p25/p50/p75/p90/p95/max;
+- display distinct-count and tie rate;
+- saturation rates at >=95, >=97, and >=99;
+- replacement minimum score/uplift, qualified rate, and median threshold headroom.
+
+Validation sequence:
+
+1. collect at least one cold-worker and three warm-worker batches on the same stable Home working set;
+2. repeat in Default and at least one durable mode;
+3. confirm diagnostics are deterministic when the ranked inputs are unchanged;
+4. inspect ordinary-candidate saturation before changing `calibrateLocalScore()`;
+5. change calibration only if the measured distribution is unnecessarily compressed/saturated;
+6. after any mapping change, revalidate replacement minimum score/uplift against the same stored/replay batch;
+7. raw scores, contribution reconciliation, trace IDs for unchanged scoring inputs, hard exclusions, and explicit-feedback authority must remain unchanged by a presentation-calibration change.
+
+Do not infer success from a prettier numeric spread alone. The gate is improved usable ordering/resolution without changing the underlying Personal Algorithm semantics.
