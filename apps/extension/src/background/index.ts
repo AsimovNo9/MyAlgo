@@ -2438,6 +2438,59 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'PERSONAL_ALGORITHM_EXPLAIN_CONTENT') {
+    void (async () => {
+      const externalId = typeof payload?.externalId === 'string' ? payload.externalId.trim() : '';
+      if (!externalId) {
+        sendResponse({ ok: false, error: 'A content ID is required.' });
+        return;
+      }
+
+      const [candidateIndex, sourceFilters, mode] = await Promise.all([
+        getCandidatePoolIndexCached(),
+        getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
+        getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
+      ]);
+      const candidate = candidateIndex.get(externalId);
+      if (!candidate) {
+        sendResponse({
+          ok: false,
+          error: 'This content is no longer available in the local candidate reservoir.',
+        });
+        return;
+      }
+
+      const [hydrated] = await hydrateCandidatePool([candidate]);
+      const [ranked] = await rankLocalCandidates([hydrated], sourceFilters, mode);
+      if (!ranked) {
+        sendResponse({ ok: false, error: 'Unable to score this content.' });
+        return;
+      }
+
+      sendResponse({
+        ok: true,
+        item: {
+          external_id: ranked.external_id,
+          title: ranked.title,
+          channel_name: ranked.channel_name ?? null,
+          thumbnail_url: ranked.thumbnail_url ?? null,
+          score: ranked.score,
+          rawScore: ranked.rawScore,
+          traceId: ranked.traceId,
+          visible: ranked.visible,
+          suppressed: ranked.suppressed,
+          policyOutcome: ranked.policyOutcome,
+          semantic_category: ranked.semantic_category ?? null,
+          explanation: ranked.explanation ?? null,
+        },
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to explain this content.',
+    }));
+    return true;
+  }
+
   if (type === 'PERSONAL_ALGORITHM_INSPECT') {
     void personalAlgorithmStore.exportState()
       .then((state) => sendResponse({ ok: true, state }))
