@@ -629,12 +629,36 @@ export function GraphCanvas({
               <g
                 key={node.id}
                 transform={`translate(${node.x} ${node.y})`}
+                role={onNodeSelect ? 'button' : undefined}
+                tabIndex={onNodeSelect ? 0 : undefined}
+                aria-label={onNodeSelect ? `Inspect ${node.label}` : undefined}
+                onPointerDown={(event) => {
+                  if (!onNodeSelect) return;
+                  event.stopPropagation();
+                }}
                 onClick={(event) => {
                   event.stopPropagation();
                   onNodeSelect?.(node.id);
                 }}
-                style={{ cursor: onNodeSelect ? 'pointer' : 'default' }}
+                onKeyDown={(event) => {
+                  if (!onNodeSelect || (event.key !== 'Enter' && event.key !== ' ')) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onNodeSelect(node.id);
+                }}
+                style={{ cursor: onNodeSelect ? 'pointer' : 'default', outline: 'none' }}
               >
+                {onNodeSelect ? (
+                  <rect
+                    x={layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? -36 : -(radius + 9)}
+                    y={layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? -23 : -(radius + 9)}
+                    width={layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? 72 : (radius + 9) * 2}
+                    height={layoutMode === 'lineage' && node.kind === 'content' && node.thumbnailUrl ? 46 : (radius + 9) * 2}
+                    rx="7"
+                    fill="transparent"
+                    pointerEvents="all"
+                  />
+                ) : null}
                 {(selected || node.searchMatch) ? (
                   <circle
                     r={radius + 7}
