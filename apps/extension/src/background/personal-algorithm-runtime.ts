@@ -288,6 +288,22 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
   };
 }
 
+const getPreparedLocalScoringState = (
+  state: PersonalAlgorithmState,
+): PreparedLocalScoringState => {
+  let prepared = preparedLocalScoringState.get(state);
+  if (prepared) return prepared;
+  prepared = {
+    policy: buildLocalScoringPolicy(state),
+    scoringIndex: buildLocalScoringIndex(state),
+    graphIndex: buildPersonalScoringGraphIndex(state),
+    revisionContextByFeedbackKey: new Map(),
+    candidateScoreCache: new Map(),
+  };
+  preparedLocalScoringState.set(state, prepared);
+  return prepared;
+};
+
 const inferredFormat = (candidate: LocalRuntimeCandidate): string | null => {
   if (candidate.is_short) return 'short';
   if (candidate.is_live) return 'live';
@@ -1044,6 +1060,7 @@ export function buildLocalFeedbackSignals(
   events: LocalRuntimeFeedbackEvent[],
   state?: PersonalAlgorithmState,
 ): ScoreFeedbackSignal[] {
+  const scoringIndex = state ? getPreparedLocalScoringState(state).scoringIndex : null;
   const latestByContent = new Map<string, LocalRuntimeFeedbackEvent>();
   events.forEach((event, index) => {
     if (!event.contentItemId || !event.eventType) return;
@@ -1061,19 +1078,16 @@ export function buildLocalFeedbackSignals(
   return [...latestByContent.values()]
     .map((event) => {
       const contentId = event.contentItemId ?? null;
-      const contentNode = state?.graph.nodes.find((node) => node.id === contentNodeId('youtube', contentId ?? ''));
-      const creatorEdge = contentNode
-        ? state?.graph.edges.find((edge) => (
-          edge.relation === 'created_by'
-          && edge.sourceNodeId === contentNode.id
-          && state.graph.nodes.some((node) => node.id === edge.targetNodeId && node.kind === 'creator')
-        ))
-        : undefined;
+      const contentNodeIdValue = contentNodeId('youtube', contentId ?? '');
+      const contentNode = scoringIndex?.contentNodes.get(contentNodeIdValue);
+      const creatorNodeId = contentNode
+        ? scoringIndex?.creatorByContent.get(contentNode.id) ?? null
+        : null;
       const nodeId = event.eventType === 'never_show_channel'
         ? (
           event.channelId
             ? `creator:youtube:${encodeURIComponent(event.channelId)}`
-            : creatorEdge?.targetNodeId ?? null
+            : creatorNodeId
         )
         : null;
       const value = event.eventType === 'more_like_this'
@@ -1135,17 +1149,7 @@ export function scoreLocalCandidates(
   sourceFilters: FeedSourceFilters = {},
   activeDurableMode?: LocalDurableModeScoringContext | null,
 ): LocalRuntimeRankedCandidate[] {
-  let prepared = preparedLocalScoringState.get(state);
-  if (!prepared) {
-    prepared = {
-      policy: buildLocalScoringPolicy(state),
-      scoringIndex: buildLocalScoringIndex(state),
-      graphIndex: buildPersonalScoringGraphIndex(state),
-      revisionContextByFeedbackKey: new Map(),
-      candidateScoreCache: new Map(),
-    };
-    preparedLocalScoringState.set(state, prepared);
-  }
+  const prepared = getPreparedLocalScoringState(state);
   const feedbackKey = feedbackRevisionKey(feedbackSignals);
   let revisionContext = prepared.revisionContextByFeedbackKey.get(feedbackKey);
   if (!revisionContext) {
@@ -1162,7 +1166,7 @@ export function scoreLocalCandidates(
   return candidates
     .map((candidate) => {
       const signature = candidateScoringSignature(candidate);
-      const cached = prepared!.candidateScoreCache.get(candidate.external_id);
+      const cached = prepared.candidateScoreCache.get(candidate.external_id);
       let scoreResult = cached;
       if (
         !scoreResult
@@ -1200,7 +1204,7 @@ export function scoreLocalCandidates(
           classification,
           trace: result.trace,
         };
-        prepared!.candidateScoreCache.set(candidate.external_id, scoreResult);
+        prepared.candidateScoreCache.set(candidate.external_id, scoreResult);
       }
 
       const visible = !(
