@@ -117,6 +117,10 @@ export function Options() {
     setMode('Default');
     setActiveModeId('default');
     setDurableModeCatalog(null);
+    setGraphInspector(null);
+    setGraphInspectorSource(null);
+    setSelectedEdgeId(null);
+    setOfflineGraphJson('');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
 
