@@ -143,7 +143,13 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
         {
           id: 'content:youtube:video-a', kind: 'content', label: 'Video A',
           content: { source: 'youtube', externalId: 'video-a' },
-          provenance: 'explicit', confidence: null, attributes: {},
+          provenance: 'explicit', confidence: null,
+          attributes: {
+            metadata: {
+              creatorName: 'Creator A',
+              thumbnailUrl: 'https://i.ytimg.com/vi/video-a/mqdefault.jpg',
+            },
+          },
           createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
         },
         {
@@ -178,6 +184,10 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
   ]);
   assert.deepEqual(view.edgesByRelation, [{ key: 'created_by', count: 1 }]);
   assert.equal(view.nodes.find((node) => node.id === 'creator:youtube:creator-a').supportCount, 1);
+  const contentNode = view.nodes.find((node) => node.id === 'content:youtube:video-a');
+  assert.equal(contentNode.thumbnailUrl, 'https://i.ytimg.com/vi/video-a/mqdefault.jpg');
+  assert.equal(contentNode.creatorName, 'Creator A');
+  assert.equal(contentNode.contentExternalId, 'video-a');
   assert.deepEqual(view.edges[0].evidence, [{
     id: 'e1',
     kind: 'interaction',
