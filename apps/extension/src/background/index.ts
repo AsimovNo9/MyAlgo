@@ -2492,8 +2492,17 @@ const handleRuntimeMessage = (
   }
 
   if (type === 'PERSONAL_ALGORITHM_INSPECT') {
-    void personalAlgorithmStore.exportState()
-      .then((state) => sendResponse({ ok: true, state }))
+    void Promise.all([
+      personalAlgorithmStore.exportState(),
+      getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+      getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    ])
+      .then(([state, durableModeCatalog, activeModeId]) => sendResponse({
+        ok: true,
+        state,
+        durableModeCatalog,
+        activeModeId,
+      }))
       .catch((error) => sendResponse({
         ok: false,
         error: error instanceof Error ? error.message : 'Unable to inspect Personal Algorithm Graph.',
