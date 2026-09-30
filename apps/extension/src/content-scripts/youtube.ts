@@ -2015,6 +2015,10 @@ window.addEventListener('yt-navigate-start', () => {
     window.cancelAnimationFrame(optimisticPresentationFrame);
     optimisticPresentationFrame = undefined;
   }
+  if (viewportPresentationTimer !== undefined) {
+    window.clearTimeout(viewportPresentationTimer);
+    viewportPresentationTimer = undefined;
+  }
   watchedVideo = null;
   watchSession = null;
   rankGeneration += 1;
@@ -2057,6 +2061,26 @@ window.addEventListener('resize', () => {
     clearLegacyRecommendationShelf();
   }, 120);
 });
+
+window.addEventListener('scroll', () => {
+  if (
+    !extensionEnabled
+    || !isYouTubeHomePage(location.pathname)
+    || cachedFeed.length === 0
+  ) return;
+  if (viewportPresentationTimer !== undefined) {
+    window.clearTimeout(viewportPresentationTimer);
+  }
+  viewportPresentationTimer = window.setTimeout(() => {
+    viewportPresentationTimer = undefined;
+    if (!isCurrentInstance() || !extensionEnabled) return;
+    // Re-evaluate viewport priority after the user moves through Home. Stable
+    // bindings remain intact; newly visible unbound cards get first access to
+    // currently available mode-relevant candidates.
+    applyRankedFeed();
+    renderReplacementSlots(rankGeneration);
+  }, 90);
+}, { passive: true });
 
 const scheduleOptimisticPresentation = () => {
   if (
