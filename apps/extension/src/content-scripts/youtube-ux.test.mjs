@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -14,6 +14,50 @@ test('MVP scores are eligible for shelf presentation', () => {
   assert.deepEqual(
     getShelfCandidates(lowScoreFeed, 6, [], 0),
     [lowScoreFeed[0], lowScoreFeed[1]],
+  );
+});
+
+test('explanation view model preserves graph paths, acquisition boundary, and exact contribution values', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-a',
+    score: 72,
+    traceId: 'trace-a',
+    explanation: {
+      rawScore: 14.5,
+      displayScore: 72,
+      graphRevision: 12,
+      acquisitionMechanism: 'web_search',
+      contributions: [
+        { label: 'semantic neighbourhood: local AI', value: 10, kind: 'feature', evidenceIds: ['e1'] },
+        { label: 'explicit feedback: not_interested', value: -5, kind: 'feedback', evidenceIds: ['e2'] },
+      ],
+      matchedPaths: [
+        {
+          nodeIds: ['topic:local-ai', 'creator:youtube:example'],
+          nodeLabels: ['Local AI', 'Example Creator'],
+          edgeIds: ['edge:created_by:a'],
+          evidenceIds: ['e1', 'e2'],
+        },
+      ],
+      modeGrounding: null,
+    },
+  });
+
+  assert.equal(view.scoreLine, 'Score 72/100 · raw 14.5 · graph r12');
+  assert.equal(
+    view.acquisitionLine,
+    'Acquired via web_search · acquisition is not preference evidence',
+  );
+  assert.deepEqual(
+    view.pathLines,
+    ['Graph path: Local AI ↔ Example Creator · 2 evidence items'],
+  );
+  assert.deepEqual(
+    view.contributionLines,
+    [
+      'semantic neighbourhood: local AI: +10',
+      'explicit feedback: not_interested: -5',
+    ],
   );
 });
 
