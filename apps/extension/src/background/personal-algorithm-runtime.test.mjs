@@ -8,6 +8,7 @@ import {
   classifyCandidateContent,
   extractLocalCandidateFeatures,
   scoreLocalCandidates,
+  summarizeLocalScoreCalibration,
 } from './personal-algorithm-runtime.ts';
 
 const state = {
@@ -579,6 +580,66 @@ test('calibrated scores are deterministic, monotonic, and bounded', () => {
   assert.ok(calibrateLocalScore(-20) < calibrateLocalScore(-10));
   assert.ok(calibrateLocalScore(1000) <= 100);
   assert.ok(calibrateLocalScore(-1000) >= 0);
+});
+
+
+test('score calibration diagnostics expose post-canonical distribution and threshold pressure', () => {
+  const rawScores = [-30, -10, 0, 5, 10, 20, 30, 40, 60, 90];
+  const diagnostics = summarizeLocalScoreCalibration(
+    rawScores.map((rawScore) => ({
+      rawScore,
+      score: calibrateLocalScore(rawScore),
+    })),
+    55,
+    5,
+  );
+
+  assert.equal(diagnostics.count, 10);
+  assert.equal(diagnostics.raw.min, -30);
+  assert.equal(diagnostics.raw.p50, 10);
+  assert.equal(diagnostics.raw.p95, 90);
+  assert.equal(diagnostics.raw.max, 90);
+  assert.equal(diagnostics.display.min, calibrateLocalScore(-30));
+  assert.equal(diagnostics.display.p50, calibrateLocalScore(10));
+  assert.equal(diagnostics.display.max, calibrateLocalScore(90));
+  assert.ok(diagnostics.display.saturation95Rate > 0);
+  assert.equal(diagnostics.replacement.minimumScore, 55);
+  assert.equal(diagnostics.replacement.minimumUplift, 5);
+  assert.ok(diagnostics.replacement.qualifiedRate > 0);
+  assert.equal(
+    diagnostics.replacement.medianHeadroom,
+    calibrateLocalScore(10) - 55,
+  );
+});
+
+test('score calibration diagnostics are empty-safe and deterministic', () => {
+  assert.deepEqual(
+    summarizeLocalScoreCalibration([], 55, 5),
+    {
+      count: 0,
+      raw: { min: 0, p25: 0, p50: 0, p75: 0, p90: 0, p95: 0, max: 0 },
+      display: {
+        min: 0,
+        p25: 0,
+        p50: 0,
+        p75: 0,
+        p90: 0,
+        p95: 0,
+        max: 0,
+        distinct: 0,
+        tieRate: 0,
+        saturation95Rate: 0,
+        saturation97Rate: 0,
+        saturation99Rate: 0,
+      },
+      replacement: {
+        minimumScore: 55,
+        minimumUplift: 5,
+        qualifiedRate: 0,
+        medianHeadroom: 0,
+      },
+    },
+  );
 });
 
 
