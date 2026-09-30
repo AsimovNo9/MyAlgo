@@ -89,12 +89,55 @@ export type RankedFeedItem = {
 };
 
 
+export type WhyThisDisplayContribution = {
+  label: string;
+  shortLabel: string;
+  value: number;
+  kind: string;
+  evidenceCount: number;
+  actionLabel: 'Reduce' | 'Mute' | 'Prefer' | null;
+};
+
+export type WhyThisMiniNode = {
+  id: string;
+  label: string;
+  kind: 'video' | 'creator' | 'topic' | 'concept' | 'format' | 'mode' | 'other';
+};
+
 export type ExplanationViewModel = {
   scoreLine: string;
   acquisitionLine: string | null;
   pathLines: string[];
   contributionLines: string[];
+  contributions: WhyThisDisplayContribution[];
+  miniNodes: WhyThisMiniNode[];
+  graphRevision: number | null;
+  traceId: string | null;
 };
+
+const contributionKind = (label: string, kind: string): WhyThisMiniNode['kind'] => {
+  const normalized = `${kind} ${label}`.toLowerCase();
+  if (normalized.includes('creator')) return 'creator';
+  if (normalized.includes('topic')) return 'topic';
+  if (normalized.includes('format') || normalized.includes('long-form') || normalized.includes('short')) return 'format';
+  if (normalized.includes('mode')) return 'mode';
+  if (normalized.includes('concept') || normalized.includes('semantic')) return 'concept';
+  return 'other';
+};
+
+const contributionAction = (nodeKind: WhyThisMiniNode['kind']): WhyThisDisplayContribution['actionLabel'] => {
+  if (nodeKind === 'creator') return 'Reduce';
+  if (nodeKind === 'topic') return 'Mute';
+  if (nodeKind === 'format' || nodeKind === 'concept') return 'Prefer';
+  return null;
+};
+
+const humanContributionLabel = (label: string): string => (
+  label
+    .replace(/^creator:\s*/i, 'Creator: ')
+    .replace(/^topic:\s*/i, 'Topic: ')
+    .replace(/^format:\s*/i, 'Format: ')
+);
 
 export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
   const explanation = item.explanation;
@@ -123,11 +166,43 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
         ? `Graph path: ${pathLabel} · ${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`
         : `Graph path: ${pathLabel}`;
     });
-  const contributionLines = (explanation?.contributions ?? []).map((contribution) => {
+  const contributions = (explanation?.contributions ?? [])
+    .filter((entry) => Number.isFinite(entry.value) && entry.value !== 0)
+    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
+    .slice(0, 4)
+    .map((entry) => {
+      const nodeKind = contributionKind(entry.label, entry.kind);
+      return {
+        label: humanContributionLabel(entry.label),
+        shortLabel: entry.label.replace(/^[^:]+:\s*/, '').trim() || entry.label,
+        value: entry.value,
+        kind: nodeKind,
+        evidenceCount: entry.evidenceIds?.length ?? 0,
+        actionLabel: contributionAction(nodeKind),
+      };
+    });
+  const contributionLines = contributions.map((contribution) => {
     const sign = contribution.value > 0 ? '+' : '';
     return `${contribution.label}: ${sign}${contribution.value}`;
   });
-  return { scoreLine, acquisitionLine, pathLines, contributionLines };
+  const miniNodes: WhyThisMiniNode[] = [
+    { id: item.external_id ?? 'video', label: 'This video', kind: 'video' },
+    ...contributions.slice(0, 3).map((contribution, index) => ({
+      id: `contribution:${index}:${contribution.shortLabel}`,
+      label: contribution.shortLabel,
+      kind: contribution.kind,
+    })),
+  ];
+  return {
+    scoreLine,
+    acquisitionLine,
+    pathLines,
+    contributionLines,
+    contributions,
+    miniNodes,
+    graphRevision: explanation?.graphRevision ?? null,
+    traceId: item.traceId ?? null,
+  };
 }
 
 export function getContentPresentationLabel(
