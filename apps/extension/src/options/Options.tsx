@@ -7,6 +7,7 @@ import {
   buildGraphModeOverlay,
   parseGraphInspectorExport,
   type ContentExplanation,
+  type GraphInspectorSemanticContext,
   type GraphInspectorView,
 } from '../lib/extension-helpers';
 import { GraphCanvas } from '../components/GraphCanvas';
@@ -202,6 +203,7 @@ export function Options() {
       state?: unknown;
       durableModeCatalog?: DurableSemanticModeCatalog | null;
       activeModeId?: string;
+      semanticContext?: GraphInspectorSemanticContext[];
       error?: string;
     };
     if (!response?.ok || !response.state) {
@@ -209,11 +211,11 @@ export function Options() {
       return;
     }
     try {
-      const view = buildGraphInspectorView(response.state);
+      const view = buildGraphInspectorView(response.state, response.semanticContext ?? []);
       setGraphInspector(view);
       setGraphInspectorSource('live');
-      if (response.durableModeCatalog) setDurableModeCatalog(response.durableModeCatalog);
-      if (response.activeModeId) setActiveModeId(response.activeModeId);
+      setDurableModeCatalog(response.durableModeCatalog ?? null);
+      setActiveModeId(response.activeModeId ?? 'default');
       setGraphModeId('all');
       setGraphFocusOnly(true);
       setSelectedNodeId(null);
@@ -476,7 +478,9 @@ export function Options() {
         <h2>Personal Algorithm Graph explorer</h2>
         <p>
           Explore the current local graph visually, search stable graph IDs, switch between durable mode overlays,
-          and inspect exact retained evidence. This surface is read-only and does not edit preferences.
+          and inspect exact retained evidence. Live snapshots also use retained semantic affinities to cluster content by
+          its strongest durable mode or semantic topic without creating synthetic graph edges. This surface is read-only
+          and does not edit preferences.
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
