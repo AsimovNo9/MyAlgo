@@ -1045,12 +1045,15 @@ const applyRankedFeed = () => {
       const replacementSelectionSeed = createReplacementSelectionSeed(routeKey);
       const blockedReplacementIds = [...nativeIds, ...usedCandidateOwnerById.keys()];
       const candidateLimit = Math.max(24, remainingReplacementCapacity * 6);
+      const modeRelevantMinimumScore = activeDurableMode && feedReplacementPercent >= 100
+        ? 0
+        : replacementMinimumScore;
       const groundedCandidates = latestModeSupplyPlan
         ? getReplacementCandidates(
             latestModeSupplyPlan.poolCandidates,
             blockedReplacementIds,
             candidateLimit,
-            replacementMinimumScore,
+            modeRelevantMinimumScore,
             replacementSelectionSeed,
           )
         : [];
@@ -1063,7 +1066,7 @@ const applyRankedFeed = () => {
             )),
             [...blockedReplacementIds, ...groundedCandidateIds],
             Math.max(0, candidateLimit - groundedCandidates.length),
-            replacementMinimumScore,
+            modeRelevantMinimumScore,
             replacementSelectionSeed,
           )
         : [];
@@ -1092,7 +1095,14 @@ const applyRankedFeed = () => {
         ) {
           return [];
         }
-        return [{ externalId: id, score, nativeIndex }];
+        const rect = element.getBoundingClientRect();
+        const viewportHeight = Math.max(1, window.innerHeight);
+        const viewportPriority = rect.bottom > 0 && rect.top < viewportHeight
+          ? 0
+          : rect.top < viewportHeight * 2 && rect.bottom > -viewportHeight
+            ? 1
+            : 2;
+        return [{ externalId: id, score, nativeIndex, viewportPriority }];
       });
 
       const selectedAssignments = selectFeedMixAssignments(
