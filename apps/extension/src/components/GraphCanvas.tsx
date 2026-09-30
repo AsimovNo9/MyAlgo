@@ -314,6 +314,21 @@ export function GraphCanvas({
             const dimmed = layout.modeActive && !modeEdge;
             return (
               <g key={edge.id}>
+                {!compact && onEdgeSelect ? (
+                  <line
+                    x1={source.x}
+                    y1={source.y}
+                    x2={target.x}
+                    y2={target.y}
+                    stroke="transparent"
+                    strokeWidth="12"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdgeSelect(edge.id);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
+                ) : null}
                 <line
                   x1={source.x}
                   y1={source.y}
@@ -404,19 +419,49 @@ export function GraphCanvas({
         </g>
       </svg>
       {!compact ? (
-        <div style={{
-          position: 'absolute',
-          left: 12,
-          bottom: 10,
-          padding: '6px 8px',
-          borderRadius: 8,
-          background: 'rgba(15,23,42,.82)',
-          color: '#cbd5e1',
-          fontSize: 11,
-        }}>
-          {layout.nodes.length}/{nodes.length} nodes · {layout.edges.length}/{edges.length} edges rendered
-          {modeOverlay.modeId !== 'all' ? ` · ${modeOverlay.modeLabel} r${modeOverlay.modeRevision ?? '—'}` : ''}
-        </div>
+        <>
+          <div style={{
+            position: 'absolute',
+            left: 12,
+            bottom: 10,
+            padding: '6px 8px',
+            borderRadius: 8,
+            background: 'rgba(15,23,42,.82)',
+            color: '#cbd5e1',
+            fontSize: 11,
+          }}>
+            {layout.nodes.length}/{nodes.length} nodes · {layout.edges.length}/{edges.length} edges rendered
+            {modeOverlay.modeId !== 'all' ? ` · ${modeOverlay.modeLabel} r${modeOverlay.modeRevision ?? '—'}` : ''}
+          </div>
+          <div style={{
+            position: 'absolute',
+            left: 12,
+            top: 10,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            maxWidth: '70%',
+            padding: '6px 8px',
+            borderRadius: 8,
+            background: 'rgba(15,23,42,.82)',
+            color: '#cbd5e1',
+            fontSize: 10,
+          }}>
+            {[
+              ['#60a5fa', 'content'],
+              ['#fbbf24', 'creator'],
+              ['#a78bfa', 'concept'],
+              ['#22d3ee', 'topic'],
+              ['#34d399', 'objective'],
+            ].map(([color, label]) => (
+              <span key={label} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+                {label}
+              </span>
+            ))}
+            <span>white ring = explicit · filled dark ring = inferred</span>
+          </div>
+        </>
       ) : null}
     </div>
   );
