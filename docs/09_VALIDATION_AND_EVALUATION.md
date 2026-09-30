@@ -774,7 +774,10 @@ Validate all of the following:
 11. malformed or wrong-schema pasted snapshots fail clearly and leave the previous live graph unchanged;
 12. the explorer uses current graph node/edge/evidence identifiers so #153 Why-this paths can reuse the same renderer without identifier translation;
 13. Network and Lineage/family-tree layouts render the same graph state; lineage uses only stored graph edges and does not invent ancestry;
-14. lineage places content/history-like content toward leaves, creator/topic/concept nodes in intermediate layers, and objective/user-level nodes toward the root while retained evidence remains an edge drill-down until evidence itself becomes a first-class graph node.
+14. lineage places content/history-like content toward leaves, creator/topic/concept nodes in intermediate layers, and objective/user-level nodes toward the root while retained evidence remains an edge drill-down until evidence itself becomes a first-class graph node;
+15. content leaves remain collapsed by default in lineage overview; selecting/searching a branch or choosing a mode reveals only related content leaves, and disabling Focus only restores higher-level context without expanding unrelated content;
+16. miniature content thumbnails are rendered only from thumbnail URLs already observed and retained from YouTube metadata; graph inspection must not synthesize bulk thumbnail URLs or introduce a new thumbnail-fetch pipeline;
+17. clicking a content/creator/topic/concept node populates an inspectable detail card with stable identity, provenance/support, and connected relationships, and relationship selection continues into retained evidence drill-down.
 
 The first slice deliberately avoids graph mutation, scoring, preference inference, and a heavyweight graph-rendering dependency. The follow-on #153 mini graph must render only the current trace subgraph and preserve the same trace/graph revision as the textual Why-this explanation.
 
