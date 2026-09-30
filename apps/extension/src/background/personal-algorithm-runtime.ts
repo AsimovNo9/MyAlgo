@@ -134,33 +134,50 @@ const containsTokenSequence = (
   return false;
 };
 
-const candidateLexicalFields = (candidate: LocalRuntimeCandidate): string[] => [
+type PreparedLexicalText = {
+  normalized: string;
+  tokens: string[];
+};
+
+const prepareLexicalText = (value: string | null | undefined): PreparedLexicalText => {
+  const normalized = normalizeFeatureText(value);
+  return {
+    normalized,
+    tokens: normalized ? featureTokens(normalized) : [],
+  };
+};
+
+const candidateLexicalFields = (candidate: LocalRuntimeCandidate): PreparedLexicalText[] => [
   candidate.title,
   candidate.channel_name ?? '',
   ...(candidate.topics ?? []),
-].map(normalizeFeatureText).filter(Boolean);
+].map(prepareLexicalText).filter((field) => Boolean(field.normalized));
 
-const lexicalMatch = (label: string, candidateFields: readonly string[]): number => {
-  const normalizedLabel = normalizeFeatureText(label);
-  if (!normalizedLabel || candidateFields.length === 0) return 0;
-  const labelTokens = featureTokens(normalizedLabel);
-  if (labelTokens.length === 0) return 0;
+const lexicalMatchPrepared = (
+  label: PreparedLexicalText,
+  candidateFields: readonly PreparedLexicalText[],
+): number => {
+  if (!label.normalized || label.tokens.length === 0 || candidateFields.length === 0) return 0;
 
   for (const field of candidateFields) {
-    if (field.includes(normalizedLabel)) return 1;
-    const fieldTokens = featureTokens(field);
-    if (labelTokens.length === 1) {
-      if (fieldTokens.includes(labelTokens[0]!)) return 1;
+    if (field.normalized.includes(label.normalized)) return 1;
+    if (label.tokens.length === 1) {
+      if (field.tokens.includes(label.tokens[0]!)) return 1;
       continue;
     }
 
     // Multi-token concepts must be grounded as one contiguous semantic phrase
     // inside one trusted field. Do not construct a match by combining words
     // scattered across title/description/channel/tags.
-    if (containsTokenSequence(fieldTokens, labelTokens)) return 1;
+    if (containsTokenSequence(field.tokens, label.tokens)) return 1;
   }
   return 0;
 };
+
+const lexicalMatch = (
+  label: string,
+  candidateFields: readonly PreparedLexicalText[],
+): number => lexicalMatchPrepared(prepareLexicalText(label), candidateFields);
 
 type LocalScoringIndex = {
   contentNodes: Map<string, PersonalAlgorithmState['graph']['nodes'][number]>;
@@ -168,9 +185,21 @@ type LocalScoringIndex = {
   creatorByLabel: Map<string, string>;
   creatorIds: Set<string>;
   featureNodes: PersonalAlgorithmState['graph']['nodes'];
+  featureNodeById: Map<string, PersonalAlgorithmState['graph']['nodes'][number]>;
+  featureLexicalById: Map<string, PreparedLexicalText>;
   canonicalConcepts: CanonicalSemanticConcept[];
   canonicalByNodeId: Map<string, CanonicalSemanticConcept>;
   evidenceIdsByNodeId: Map<string, string[]>;
+};
+
+type CachedCandidateScore = {
+  signature: string;
+  modeKey: string;
+  feedbackKey: string;
+  rawScore: number;
+  score: number;
+  classification: ReturnType<typeof classifyCandidateContent>;
+  trace: PersonalScoreTrace;
 };
 
 type PreparedLocalScoringState = {
@@ -178,6 +207,7 @@ type PreparedLocalScoringState = {
   scoringIndex: LocalScoringIndex;
   graphIndex: ReturnType<typeof buildPersonalScoringGraphIndex>;
   revisionContextByFeedbackKey: Map<string, ReturnType<typeof buildPersonalScoringRevisionContext>>;
+  candidateScoreCache: Map<string, CachedCandidateScore>;
 };
 
 const preparedLocalScoringState = new WeakMap<PersonalAlgorithmState, PreparedLocalScoringState>();
@@ -248,6 +278,10 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
     creatorByLabel,
     creatorIds,
     featureNodes,
+    featureNodeById: new Map(featureNodes.map((node) => [node.id, node])),
+    featureLexicalById: new Map(
+      featureNodes.map((node) => [node.id, prepareLexicalText(node.label)]),
+    ),
     canonicalConcepts: canonical.concepts,
     canonicalByNodeId,
     evidenceIdsByNodeId,
@@ -407,12 +441,16 @@ const extractLocalCandidateFeaturesWithCanonical = (
   featureNodes: PersonalAlgorithmState['graph']['nodes'],
   canonicalByNodeId: ReadonlyMap<string, CanonicalSemanticConcept>,
   evidenceIdsByNodeId: ReadonlyMap<string, readonly string[]>,
+  featureNodeById: ReadonlyMap<string, PersonalAlgorithmState['graph']['nodes'][number]> = new Map(
+    featureNodes.map((node) => [node.id, node]),
+  ),
+  featureLexicalById: ReadonlyMap<string, PreparedLexicalText> = new Map(
+    featureNodes.map((node) => [node.id, prepareLexicalText(node.label)]),
+  ),
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
   const lexicalFields = candidateLexicalFields(candidate);
   const nodeIds: string[] = [];
   const features: ScoreFeatureSignal[] = [];
-
-  const featureNodeById = new Map(featureNodes.map((node) => [node.id, node]));
   const matchMetadataByCanonicalId = new Map<string, {
     label: string;
     taxonomyOnly: boolean;
@@ -480,7 +518,10 @@ const extractLocalCandidateFeaturesWithCanonical = (
 
   for (const node of featureNodes) {
     if (!['objective', 'topic', 'concept'].includes(node.kind)) continue;
-    const similarity = lexicalMatch(node.label, lexicalFields);
+    const similarity = lexicalMatchPrepared(
+      featureLexicalById.get(node.id) ?? prepareLexicalText(node.label),
+      lexicalFields,
+    );
     if (similarity <= 0) continue;
     const confidence = Math.min(
       1,
@@ -556,7 +597,11 @@ const extractLocalCandidateFeaturesWithCanonical = (
         : [match.node_id];
       const hasLexicalSupport = lexicalMatch(match.node_label, lexicalFields) > 0
         || sourceNodeIdsForSupport.some((nodeId) => (
-          lexicalMatch(featureNodeById.get(nodeId)?.label ?? '', lexicalFields) > 0
+          lexicalMatchPrepared(
+            featureLexicalById.get(nodeId)
+              ?? prepareLexicalText(featureNodeById.get(nodeId)?.label ?? ''),
+            lexicalFields,
+          ) > 0
         ));
       if (!hasLexicalSupport && (
         !embeddingProfileQualified
@@ -931,6 +976,7 @@ const candidateContext = (
   index: LocalScoringIndex = buildLocalScoringIndex(state),
   mode = 'default',
   activeDurableMode?: LocalDurableModeScoringContext | null,
+  classification: ReturnType<typeof classifyCandidateContent> = classifyCandidateContent(candidate),
 ): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
@@ -939,8 +985,9 @@ const candidateContext = (
     index.featureNodes,
     index.canonicalByNodeId,
     index.evidenceIdsByNodeId,
+    index.featureNodeById,
+    index.featureLexicalById,
   );
-  const classification = classifyCandidateContent(candidate);
   const hasDurableMode = Boolean(activeDurableMode && activeDurableMode.id !== 'default');
   // Durable modes use only graph-grounded member contributions. Legacy
   // classifier/centroid/category mode signals remain available for custom
@@ -1047,6 +1094,39 @@ export function buildLocalFeedbackSignals(
     .filter((signal) => signal.value !== 0);
 }
 
+const candidateScoringSignature = (candidate: LocalRuntimeCandidate): string => JSON.stringify({
+  external_id: candidate.external_id,
+  title: candidate.title,
+  channel_name: candidate.channel_name ?? null,
+  channel_id: candidate.channel_id ?? null,
+  description: candidate.description ?? null,
+  duration_seconds: candidate.duration_seconds ?? null,
+  published_at: candidate.published_at ?? null,
+  topics: candidate.topics ?? [],
+  content_type: candidate.content_type ?? null,
+  language: candidate.language ?? null,
+  format: candidate.format ?? null,
+  is_short: candidate.is_short ?? false,
+  is_live: candidate.is_live ?? false,
+  content_label: candidate.content_label ?? null,
+  content_label_confidence: candidate.content_label_confidence ?? null,
+  semantic_graph_similarity: candidate.semantic_graph_similarity ?? null,
+  semantic_mode_similarity: candidate.semantic_mode_similarity ?? null,
+  semantic_model_version: candidate.semantic_model_version ?? null,
+  semantic_category: candidate.semantic_category ?? null,
+  semantic_category_confidence: candidate.semantic_category_confidence ?? null,
+  semantic_category_scores: candidate.semantic_category_scores ?? {},
+  semantic_mode_affinities: candidate.semantic_mode_affinities ?? [],
+  semantic_graph_matches: candidate.semantic_graph_matches ?? [],
+});
+
+const durableModeScoringKey = (
+  mode: string,
+  activeDurableMode?: LocalDurableModeScoringContext | null,
+): string => activeDurableMode && activeDurableMode.id !== 'default'
+  ? `${activeDurableMode.id}@${activeDurableMode.revision}`
+  : `legacy:${mode.trim().toLowerCase() || 'default'}`;
+
 export function scoreLocalCandidates(
   state: PersonalAlgorithmState,
   candidates: LocalRuntimeCandidate[],
@@ -1062,6 +1142,7 @@ export function scoreLocalCandidates(
       scoringIndex: buildLocalScoringIndex(state),
       graphIndex: buildPersonalScoringGraphIndex(state),
       revisionContextByFeedbackKey: new Map(),
+      candidateScoreCache: new Map(),
     };
     preparedLocalScoringState.set(state, prepared);
   }
@@ -1077,11 +1158,51 @@ export function scoreLocalCandidates(
     graphIndex,
   } = prepared;
 
+  const modeKey = durableModeScoringKey(mode, activeDurableMode);
   return candidates
     .map((candidate) => {
-      const classification = classifyCandidateContent(candidate);
-      const context = candidateContext(state, candidate, scoringIndex, mode, activeDurableMode);
-      const result = scorePersonalAlgorithm(state, context, policy, mode, feedbackSignals, revisionContext, graphIndex);
+      const signature = candidateScoringSignature(candidate);
+      const cached = prepared!.candidateScoreCache.get(candidate.external_id);
+      let scoreResult = cached;
+      if (
+        !scoreResult
+        || scoreResult.signature !== signature
+        || scoreResult.modeKey !== modeKey
+        || scoreResult.feedbackKey !== feedbackKey
+      ) {
+        const classification = classifyCandidateContent(candidate);
+        const context = candidateContext(
+          state,
+          candidate,
+          scoringIndex,
+          mode,
+          activeDurableMode,
+          classification,
+        );
+        const result = scorePersonalAlgorithm(
+          state,
+          context,
+          policy,
+          mode,
+          feedbackSignals,
+          revisionContext,
+          graphIndex,
+        );
+        if (!isScoreTraceConsistent(result.trace)) {
+          throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
+        }
+        scoreResult = {
+          signature,
+          modeKey,
+          feedbackKey,
+          rawScore: result.score,
+          score: calibrateLocalScore(result.score),
+          classification,
+          trace: result.trace,
+        };
+        prepared!.candidateScoreCache.set(candidate.external_id, scoreResult);
+      }
+
       const visible = !(
         (candidate.is_short && sourceFilters.includeShorts === false)
         || (candidate.is_live && sourceFilters.includeLive === false)
@@ -1089,19 +1210,16 @@ export function scoreLocalCandidates(
         || (sourceFilters.includeDiscovery === false && candidate.source_kind === 'discovery')
       );
 
-      if (!isScoreTraceConsistent(result.trace)) {
-        throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
-      }
-
       return {
         ...candidate,
         id: candidate.external_id,
-        rawScore: result.score,
-        score: calibrateLocalScore(result.score),
+        rawScore: scoreResult.rawScore,
+        score: scoreResult.score,
         visible,
-        content_label: candidate.content_label ?? classification.label,
-        content_label_confidence: candidate.content_label_confidence ?? classification.confidence,
-        trace: result.trace,
+        content_label: candidate.content_label ?? scoreResult.classification.label,
+        content_label_confidence:
+          candidate.content_label_confidence ?? scoreResult.classification.confidence,
+        trace: scoreResult.trace,
       };
     })
     .sort((left, right) => right.score - left.score || right.rawScore - left.rawScore || left.external_id.localeCompare(right.external_id));
