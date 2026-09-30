@@ -224,10 +224,10 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #223/#221, PR #224, PR #225, PR #226, PR #227, and PR #228 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, and the bounded warm ranking/presentation path are now foundations rather than active architecture work.
+PR #223/#221 through PR #229 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
 
-1. **Active P1 — #210 score calibration.** Capture post-canonical raw/display quantiles, tie rate, saturation at 95/97/99, and replacement-threshold context on real rank batches. Do not change `calibrateLocalScore()` or replacement thresholds until those measurements show a concrete problem.
-2. **Next P1 — #153 + #170 trust UX.** Build the complete trace→graph→evidence explanation and graph/provenance inspection flow from the now-stable trace contract.
+1. **Active P1 — #153 trust UX.** Extend exact trace explanations to scored native cards, carry symbolic matched graph paths and evidence provenance, and keep acquisition provenance explicitly separate from preference/ranking reasons.
+2. **Next P1 — #170 graph inspection.** Build the read-only Personal Algorithm Graph/provenance explorer on the same node/edge/evidence identifiers exposed by #153.
 3. **P1/P2 — #155 + #154 + #178 correction/provenance/history controls.** Let users forget evidence, reduce/prefer/mute graph terms, and explicitly choose history clusters.
 4. **P2 — remaining #161 + #158.** Add user-authored/versioned modes and explicit graph nodes once inspection/correction semantics are established.
 5. **P3 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot.
