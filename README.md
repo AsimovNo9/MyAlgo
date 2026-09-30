@@ -85,3 +85,8 @@ Cloud sync, billing, managed inference, multimodal enrichment, and additional co
 ### Graph edit safety invariant
 
 Graph visualization is read-only. Future graph-edit controls (#158/#154/#155) must preserve an original pre-user-edit baseline before the first user mutation. Every user-authored node/edge/control change must create a versioned graph revision with reversible before/after state. Undo returns to the previous user revision; Restore original returns to the preserved baseline without deleting retained evidence. Filtering, moving, hiding, or selecting nodes in the explorer never changes recommendation state.
+
+
+### Graph explorer layouts
+
+The read-only #170 explorer supports both Network and Lineage / family-tree projections over the same canonical graph. Network is for cross-link exploration; Lineage layers content toward the leaves, creator/topic/concept nodes through the middle, and objective/user-level nodes toward the root. Neither layout creates or changes graph state. Search/mode focus can hide unrelated material entirely, and trackpad zoom is pointer-centered rather than SVG-origin-centered.
