@@ -59,6 +59,18 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
       'explicit feedback: not_interested: -5',
     ],
   );
+  assert.deepEqual(
+    view.miniNodes,
+    [
+      { id: 'video-a', label: 'This video', kind: 'video' },
+      { id: 'contribution:0:local AI', label: 'local AI', kind: 'concept' },
+      { id: 'contribution:1:not_interested', label: 'not_interested', kind: 'other' },
+    ],
+  );
+  assert.equal(view.contributions[0].evidenceCount, 1);
+  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.graphRevision, 12);
+  assert.equal(view.traceId, 'trace-a');
 });
 
 test('explanation provenance uses user-facing labels without becoming a ranking reason', () => {
