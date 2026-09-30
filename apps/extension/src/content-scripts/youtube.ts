@@ -255,6 +255,7 @@ const clearExtensionPresentation = (
     delete element.dataset.personalAlgorithmRank;
     delete element.dataset.personalAlgorithmSlotId;
     delete element.dataset.personalAlgorithmSlotWidth;
+    delete element.dataset.personalAlgorithmSlotHeight;
     delete element.dataset.personalAlgorithmReplacementCandidateId;
     delete element.dataset.personalAlgorithmSourceScore;
   });
@@ -294,6 +295,7 @@ const createReplacementCard = (
 ): HTMLElement => {
   const card = document.createElement('article');
   const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
+  const targetHeight = Number(target.dataset.personalAlgorithmSlotHeight ?? 0);
   const targetFlags = getVideoSourceFlags(target);
   const aspectRatio = targetFlags.is_short
     ? youtubeConnector.presentation.verticalAspectRatio
@@ -322,7 +324,7 @@ const createReplacementCard = (
   card.dataset.personalAlgorithmReplacementScore = String(metadata.score);
   card.setAttribute('role', 'group');
   card.setAttribute('aria-label', `MyAlgo replacement: ${item.title ?? 'Recommended video'}`);
-  card.style.cssText = `display:block;width:100%;max-width:${targetWidth > 0 ? `${targetWidth}px` : '100%'};min-width:0;align-self:start;box-sizing:border-box;position:relative;color:var(--yt-spec-text-primary, #0f0f0f);font-family:Roboto,Arial,sans-serif;`;
+  card.style.cssText = `display:block;width:100%;max-width:${targetWidth > 0 ? `${targetWidth}px` : '100%'};height:${targetHeight > 0 ? `${targetHeight}px` : 'auto'};min-width:0;align-self:start;box-sizing:border-box;position:relative;overflow:hidden;contain:layout paint;color:var(--yt-spec-text-primary, #0f0f0f);font-family:Roboto,Arial,sans-serif;`;
 
   const replacementBadge = document.createElement('span');
   replacementBadge.dataset.personalAlgorithmBadge = 'true';
@@ -471,7 +473,14 @@ const refreshReplacementCardPresentation = (
         currentThumbnail.src = item.thumbnail_url ?? '';
       }
     } else if (currentThumbnail) {
-      const targetFlags = getVideoSourceFlags(target);
+      const targetWidth = Number(target.dataset.personalAlgorithmSlotWidth ?? 0);
+  const targetHeight = Number(target.dataset.personalAlgorithmSlotHeight ?? 0);
+  card.style.width = '100%';
+  card.style.maxWidth = targetWidth > 0 ? `${targetWidth}px` : '100%';
+  card.style.height = targetHeight > 0 ? `${targetHeight}px` : 'auto';
+  card.style.overflow = 'hidden';
+  card.style.contain = 'layout paint';
+  const targetFlags = getVideoSourceFlags(target);
       const aspectRatio = targetFlags.is_short
         ? youtubeConnector.presentation.verticalAspectRatio
         : youtubeConnector.presentation.horizontalAspectRatio;
@@ -1023,8 +1032,10 @@ const applyRankedFeed = () => {
         continue;
       }
 
-      const slotWidth = element.getBoundingClientRect().width;
-      if (slotWidth < 120) continue;
+      const slotRect = element.getBoundingClientRect();
+      const slotWidth = slotRect.width;
+      const slotHeight = slotRect.height;
+      if (slotWidth < 120 || slotHeight < 80) continue;
       element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
         rankGeneration,
         routeKey,
@@ -1032,6 +1043,7 @@ const applyRankedFeed = () => {
         id,
       );
       element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+      element.dataset.personalAlgorithmSlotHeight = String(Math.round(slotHeight));
       element.dataset.personalAlgorithmReplacementCandidateId = sticky.candidateId;
       element.dataset.personalAlgorithmSourceScore = String(nativeScore);
       element.style.setProperty('display', 'none', 'important');
