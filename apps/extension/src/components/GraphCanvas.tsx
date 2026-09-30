@@ -324,16 +324,17 @@ export function GraphCanvas({
         ['concept', 1],
         ['topic', 1],
         ['creator', 2],
-        ['content', 3],
       ]);
       const levelGroups = new Map<number, GraphInspectorNode[]>();
+      const contentNodes = prioritized.filter((node) => node.kind === 'content');
       for (const node of prioritized) {
+        if (node.kind === 'content') continue;
         const level = levelByKind.get(node.kind) ?? 2;
         const group = levelGroups.get(level) ?? [];
         group.push(node);
         levelGroups.set(level, group);
       }
-      const yByLevel = [72, 205, 350, 590];
+      const yByLevel = [72, 190, 330];
       for (const [level, group] of levelGroups.entries()) {
         const sorted = [...group].sort((left, right) => (
           Number(memberIds.has(right.id)) - Number(memberIds.has(left.id))
@@ -349,7 +350,7 @@ export function GraphCanvas({
           const rowSize = Math.min(maxPerRow, sorted.length - rowStart);
           const indexInRow = index - rowStart;
           const spacing = WIDTH / (rowSize + 1);
-          const rowOffset = level === 2 ? row * 62 : row * 52;
+          const rowOffset = level === 2 ? row * 88 : row * 54;
           const searchMatch = Boolean(normalizedQuery) && (
             node.label.toLowerCase().includes(normalizedQuery)
             || node.id.toLowerCase().includes(normalizedQuery)
@@ -359,6 +360,49 @@ export function GraphCanvas({
             ...node,
             x: spacing * (indexInRow + 1),
             y: yByLevel[Math.min(level, yByLevel.length - 1)] + rowOffset - ((rowCount - 1) * 10),
+            degree: degreeByNode.get(node.id) ?? 0,
+            modeMember: memberIds.has(node.id),
+            modeConnected: connectedIds.has(node.id),
+            searchMatch,
+          });
+        });
+      }
+
+      const createdByParent = new Map<string, string>();
+      for (const edge of visibleEdges) {
+        if (edge.relation === 'created_by') createdByParent.set(edge.sourceNodeId, edge.targetNodeId);
+      }
+      const childrenByCreator = new Map<string, GraphInspectorNode[]>();
+      for (const content of contentNodes) {
+        const parentId = createdByParent.get(content.id);
+        if (!parentId) continue;
+        const siblings = childrenByCreator.get(parentId) ?? [];
+        siblings.push(content);
+        childrenByCreator.set(parentId, siblings);
+      }
+      for (const [creatorId, children] of childrenByCreator.entries()) {
+        const parent = positioned.get(creatorId);
+        if (!parent) continue;
+        const sorted = [...children].sort((left, right) => (
+          right.supportCount - left.supportCount
+          || left.label.localeCompare(right.label)
+          || left.id.localeCompare(right.id)
+        ));
+        const offsets = sorted.length === 1
+          ? [0]
+          : sorted.length === 2
+            ? [-54, 54]
+            : [-68, 0, 68];
+        sorted.slice(0, 3).forEach((node, index) => {
+          const searchMatch = Boolean(normalizedQuery) && (
+            node.label.toLowerCase().includes(normalizedQuery)
+            || node.id.toLowerCase().includes(normalizedQuery)
+            || node.kind.toLowerCase().includes(normalizedQuery)
+          );
+          positioned.set(node.id, {
+            ...node,
+            x: Math.max(42, Math.min(WIDTH - 42, parent.x + (offsets[index] ?? 0))),
+            y: Math.min(HEIGHT - 52, parent.y + 92),
             degree: degreeByNode.get(node.id) ?? 0,
             modeMember: memberIds.has(node.id),
             modeConnected: connectedIds.has(node.id),
