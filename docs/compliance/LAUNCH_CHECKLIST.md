@@ -15,7 +15,7 @@
 - [ ] Graph visualization works
 - [x] Additive scorer has reproducible traces (#151/#193)
 - [x] Native feed enforcement works (#152/#204)
-- [ ] “Why am I seeing this?” works
+- [x] “Why am I seeing this?” works on scored native and replacement cards with exact trace/revision, additive contributions, graph-path support, and separated acquisition provenance (#153/PR #230)
 - [ ] Reduce/mute/prefer actions work
 - [ ] Forget/delete semantics work
 - [x] Modes operate over one graph
