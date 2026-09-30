@@ -1026,7 +1026,7 @@ const quantile = (sorted: readonly number[], fraction: number): number => {
   if (sorted.length === 0) return 0;
   const index = Math.min(
     sorted.length - 1,
-    Math.max(0, Math.round((sorted.length - 1) * fraction)),
+    Math.max(0, Math.ceil(sorted.length * fraction) - 1),
   );
   return sorted[index] ?? 0;
 };
