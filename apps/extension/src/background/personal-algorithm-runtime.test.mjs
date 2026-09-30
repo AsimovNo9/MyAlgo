@@ -1337,3 +1337,57 @@ test('exposure-only evidence churn reuses candidate preparation but refreshes ex
   assert.equal(diagnostics.contextHits, 1);
   assert.equal(diagnostics.contextMisses, 0);
 });
+
+
+test('created-by exposure support churn keeps scoring state stable but refreshes trace evidence', () => {
+  const candidate = {
+    external_id: 'video-a',
+    title: 'Video A',
+    channel_name: 'Creator A',
+    firstSeenAt: '2026-09-30T00:00:00.000Z',
+    lastSeenAt: '2026-09-30T00:00:00.000Z',
+  };
+  const baselineState = structuredClone(state);
+  baselineState.evidence.push({
+    id: 'e1',
+    evidence: {
+      kind: 'interaction',
+      source: 'youtube',
+      externalId: 'video-a',
+      observedAt: '2026-09-30T00:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:00:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+
+  const first = scoreLocalCandidates(baselineState, [candidate], 'Default')[0];
+  const nextState = structuredClone(baselineState);
+  nextState.evidence.push({
+    id: 'exposure:two',
+    evidence: {
+      kind: 'exposure',
+      source: 'youtube',
+      externalId: 'video-a',
+      observedAt: '2026-09-30T00:01:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'home_dom' },
+      context: {},
+    },
+    confidence: 1,
+    retainedAt: '2026-09-30T00:01:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+  nextState.graph.edges[0].evidenceIds = ['e1', 'exposure:two'];
+
+  const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
+  const diagnostics = getLocalScoringDiagnostics();
+  const edgeContribution = second.trace.edgeContributions
+    .find((item) => item.id === 'edge:edge:created_by:video-a');
+
+  assert.equal(second.rawScore, first.rawScore);
+  assert.equal(diagnostics.contextHits, 1);
+  assert.equal(diagnostics.contextMisses, 0);
+  assert.deepEqual(edgeContribution?.evidenceIds, ['e1', 'exposure:two']);
+});
