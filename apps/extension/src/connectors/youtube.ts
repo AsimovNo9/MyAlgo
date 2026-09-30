@@ -92,6 +92,7 @@ export const youtubeConnector: PageProviderConnector = {
       language: normalizeYouTubeText(input.language ?? '') || null,
       format: normalizeYouTubeText(input.format ?? '') || null,
       contentType: normalizeYouTubeText(input.contentType ?? '') || null,
+      thumbnailUrl: normalizeYouTubeText(input.thumbnailUrl ?? '') || null,
     };
   },
   createExposure(input) {
