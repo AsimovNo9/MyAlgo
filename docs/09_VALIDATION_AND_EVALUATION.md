@@ -788,3 +788,15 @@ The first slice deliberately avoids graph mutation, scoring, preference inferenc
 
 
 Future mutation validation must also preserve the pre-user-edit graph baseline, verify monotonic revision history for every user edit/undo/restore, prove Restore original does not erase retained evidence, and prove explorer-only interactions never create graph revisions.
+
+
+### Expanded Why-this product card validation
+
+The feed-card explanation surface should default to a product explanation, not a raw trace dump. Validate:
+
+1. expanded Why-this shows content title/creator and score/category metadata first;
+2. the visible mini graph is bounded, deterministic, centered on This video, and limited to the strongest contributing creator/topic/concept/format nodes;
+3. contribution rows show exact scorer values without recomputation;
+4. Reduce/Mute/Prefer affordances and the Light touch ↔ Strict control remain visibly disabled until revisioned mutation/undo semantics ship;
+5. trace ID, graph revision, acquisition provenance, and matched paths are available under a collapsed Technical details disclosure rather than dominating the default UI;
+6. the same item/trace refresh updates the product card without duplicate controls or stale contribution rows.
