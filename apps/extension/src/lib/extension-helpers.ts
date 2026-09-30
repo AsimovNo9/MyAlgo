@@ -430,3 +430,98 @@ export function buildGraphModeOverlay(
     connectedEdgeIds: [...connectedEdgeIds].sort(),
   };
 }
+
+
+export type ContentExplanation = {
+  external_id: string;
+  title: string;
+  channel_name: string | null;
+  thumbnail_url: string | null;
+  score: number;
+  rawScore: number;
+  traceId: string;
+  visible: boolean;
+  suppressed: boolean;
+  policyOutcome: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
+  semantic_category: SemanticCategoryId | null;
+  explanation: {
+    rawScore: number;
+    displayScore: number;
+    graphRevision: number;
+    policyRevision: string;
+    acquisitionMechanism: string | null;
+    contributions: Array<{
+      label: string;
+      value: number;
+      kind: string;
+      sourceId?: string;
+      sourceIds?: string[];
+      evidenceIds: string[];
+      modeId?: string;
+      modeRevision?: number;
+      canonicalId?: string;
+    }>;
+    matchedPaths: Array<{
+      nodeIds: string[];
+      nodeLabels: string[];
+      edgeIds: string[];
+      evidenceIds: string[];
+    }>;
+    modeGrounding: {
+      modeId: string;
+      modeRevision: number;
+      total: number;
+      members: Array<{
+        canonicalId: string;
+        label: string;
+        value: number;
+        sourceIds: string[];
+        evidenceIds: string[];
+      }>;
+    } | null;
+  } | null;
+};
+
+export function buildExplanationGraphView(
+  view: GraphInspectorView,
+  contentNodeId: string,
+  explanation: ContentExplanation['explanation'],
+): GraphInspectorView {
+  const nodeIds = new Set<string>([contentNodeId]);
+  const edgeIds = new Set<string>();
+  for (const path of explanation?.matchedPaths ?? []) {
+    for (const nodeId of path.nodeIds) nodeIds.add(nodeId);
+    for (const edgeId of path.edgeIds) edgeIds.add(edgeId);
+  }
+  for (const contribution of explanation?.contributions ?? []) {
+    if (contribution.sourceId) nodeIds.add(contribution.sourceId);
+    for (const sourceId of contribution.sourceIds ?? []) nodeIds.add(sourceId);
+  }
+  for (const member of explanation?.modeGrounding?.members ?? []) {
+    nodeIds.add(member.canonicalId);
+    for (const sourceId of member.sourceIds) nodeIds.add(sourceId);
+  }
+
+  // Include real stored edges only. If a matched path omits an edge identifier,
+  // keep direct edges among included nodes so the compact explanation remains
+  // connected without inventing relationships.
+  const edges = view.edges.filter((edge) => (
+    edgeIds.has(edge.id)
+    || (nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))
+  ));
+  for (const edge of edges) {
+    nodeIds.add(edge.sourceNodeId);
+    nodeIds.add(edge.targetNodeId);
+  }
+
+  const nodes = view.nodes.filter((node) => nodeIds.has(node.id));
+  return {
+    ...view,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    nodesByKind: countBy(nodes.map((node) => node.kind)),
+    edgesByRelation: countBy(edges.map((edge) => edge.relation)),
+    nodes,
+    edges,
+  };
+}
