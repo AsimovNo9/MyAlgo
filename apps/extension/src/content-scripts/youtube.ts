@@ -1136,8 +1136,10 @@ const applyRankedFeed = () => {
         const selected = assignment.target;
         const element = knownElements[selected.nativeIndex];
         if (!element?.parentElement || element.style.getPropertyValue('display') === 'none') continue;
-        const slotWidth = element.getBoundingClientRect().width;
-        if (slotWidth < 120) continue;
+        const slotRect = element.getBoundingClientRect();
+        const slotWidth = slotRect.width;
+        const slotHeight = slotRect.height;
+        if (slotWidth < 120 || slotHeight < 80) continue;
         element.dataset.personalAlgorithmSlotId = createReplacementSlotId(
           rankGeneration,
           routeKey,
@@ -1145,6 +1147,7 @@ const applyRankedFeed = () => {
           selected.externalId,
         );
         element.dataset.personalAlgorithmSlotWidth = String(Math.round(slotWidth));
+        element.dataset.personalAlgorithmSlotHeight = String(Math.round(slotHeight));
         const replacementCandidateId = assignment.item.external_id ?? '';
         element.dataset.personalAlgorithmReplacementCandidateId = replacementCandidateId;
         if (replacementCandidateId) {
@@ -1306,8 +1309,12 @@ const renderReplacementSlots = (generation: number) => {
   });
   const boundSlotIds = new Set(boundAssignments.map((assignment) => assignment.slot.slotId));
   const boundCandidateIds = new Set(boundAssignments.map((assignment) => assignment.item.external_id));
-  const replacementSource = activeDurableMode && feedReplacementPercent < 100
-    ? cachedFeed.filter((item) => isDurableModeGroundedItem(item, activeDurableMode))
+  const replacementSource = activeDurableMode
+    ? cachedFeed.filter((item) => (
+        feedReplacementPercent < 100
+          ? isDurableModeGroundedItem(item, activeDurableMode)
+          : isProvisionalDurableModeRelevantItem(item, activeDurableMode)
+      ))
     : cachedFeed;
   const fallbackAssignments = planReplacementAssignments(
     replacementSource,
