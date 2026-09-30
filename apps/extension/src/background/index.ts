@@ -97,8 +97,12 @@ type ConceptExtractionRefreshResult = {
 };
 
 type LocalFeedItem = CandidatePoolItem & {
+  content_label?: 'learning' | 'work' | 'relax' | null;
+  content_label_confidence?: number | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
+  semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   id: string;
   rawScore: number;
@@ -2688,18 +2692,52 @@ const handleRuntimeMessage = (
         // Cache persistence is not presentation work. Persist only when the
         // presentation materially changes, and batch related keys into one
         // chrome.storage transaction to reduce serialization/IPC churn.
+        const persistedPresentationFeed = presentationFeed.map((item) => ({
+          external_id: item.external_id,
+          title: item.title,
+          channel_name: item.channel_name ?? null,
+          thumbnail_url: item.thumbnail_url ?? null,
+          source_kind: item.source_kind ?? null,
+          is_short: item.is_short ?? false,
+          is_live: item.is_live ?? false,
+          rawScore: item.rawScore,
+          score: item.score,
+          visible: item.visible,
+          suppressed: item.suppressed,
+          policyOutcome: item.policyOutcome,
+          traceId: item.traceId,
+          content_label: item.content_label ?? null,
+          content_label_confidence: item.content_label_confidence ?? null,
+          semantic_category: item.semantic_category ?? null,
+          semantic_category_confidence: item.semantic_category_confidence ?? null,
+          semantic_category_scores: item.semantic_category_scores ?? {},
+          semantic_mode_similarity: item.semantic_mode_similarity ?? null,
+          semantic_model_version: item.semantic_model_version ?? null,
+          provenance: item.provenance,
+          acquisition_history: item.acquisition_history,
+          explanation: item.explanation
+            ? {
+                rawScore: item.explanation.rawScore,
+                displayScore: item.explanation.displayScore,
+                graphRevision: item.explanation.graphRevision,
+                acquisitionMechanism: item.explanation.acquisitionMechanism,
+                contributions: [],
+                modeGrounding: item.explanation.modeGrounding,
+              }
+            : undefined,
+        }));
         const presentationCache = {
           mode: payload?.mode ?? 'default',
           activeModeId,
           activeModeRevision: activeDurableMode?.revision ?? null,
           generatedAt: new Date().toISOString(),
-          feed: presentationFeed,
+          feed: persistedPresentationFeed,
         };
         const rankCacheSignature = JSON.stringify({
           mode: presentationCache.mode,
           activeModeId,
           activeModeRevision: presentationCache.activeModeRevision,
-          feed: presentationFeed.map((item) => [
+          feed: persistedPresentationFeed.map((item) => [
             item.external_id,
             item.score,
             item.traceId,
