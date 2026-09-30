@@ -236,25 +236,47 @@ const hashScoringMaterial = (value: unknown): string => {
 
 const graphScoringKey = (state: PersonalAlgorithmState): string => hashScoringMaterial({
   revision: state.graph.currentRevision,
-  nodes: state.graph.nodes.map((node) => ({
-    id: node.id,
-    kind: node.kind,
-    label: node.label,
-    provenance: node.provenance,
-    confidence: node.confidence ?? null,
-    content: node.content ?? null,
-    attributes: node.attributes ?? {},
-  })),
-  edges: state.graph.edges.map((edge) => ({
-    id: edge.id,
-    sourceNodeId: edge.sourceNodeId,
-    targetNodeId: edge.targetNodeId,
-    relation: edge.relation,
-    provenance: edge.provenance,
-    confidence: edge.confidence ?? null,
-    evidenceIds: [...(edge.evidenceIds ?? [])].sort(),
-    attributes: edge.attributes ?? {},
-  })),
+  nodes: state.graph.nodes.map((node) => (
+    node.kind === 'content'
+      ? {
+          id: node.id,
+          kind: node.kind,
+          content: node.content ?? null,
+        }
+      : node.kind === 'creator'
+        ? {
+            id: node.id,
+            kind: node.kind,
+            label: node.label,
+          }
+        : {
+            id: node.id,
+            kind: node.kind,
+            label: node.label,
+            provenance: node.provenance,
+            confidence: node.confidence ?? null,
+            attributes: node.attributes ?? {},
+          }
+  )),
+  edges: state.graph.edges.map((edge) => (
+    edge.relation === 'created_by'
+      ? {
+          id: edge.id,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          relation: edge.relation,
+        }
+      : {
+          id: edge.id,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          relation: edge.relation,
+          provenance: edge.provenance,
+          confidence: edge.confidence ?? null,
+          evidenceIds: [...(edge.evidenceIds ?? [])].sort(),
+          attributes: edge.attributes ?? {},
+        }
+  )),
 });
 
 const feedbackRevisionKey = (signals: readonly ScoreFeedbackSignal[]): string => JSON.stringify(
@@ -1350,8 +1372,8 @@ export function scoreLocalCandidates(
   const {
     policy,
     scoringIndex,
-    graphIndex,
   } = prepared;
+  const graphIndex = buildPersonalScoringGraphIndex(state);
 
   const modeKey = durableModeScoringKey(mode, activeDurableMode);
   let cacheHits = 0;
