@@ -1015,8 +1015,10 @@ export type LocalScoreCalibrationDiagnostics = {
     saturation99Rate: number;
   };
   replacement: {
-    minimumScore: number;
+    baseMinimumScore: number;
+    effectiveMinimumScore: number;
     minimumUplift: number;
+    replacementPercent: number;
     qualifiedRate: number;
     medianHeadroom: number;
   };
@@ -1037,6 +1039,7 @@ export function summarizeLocalScoreCalibration(
   candidates: readonly Pick<LocalRuntimeRankedCandidate, 'rawScore' | 'score'>[],
   replacementMinimumScore: number,
   replacementMinimumUplift: number,
+  replacementPercent = 0,
 ): LocalScoreCalibrationDiagnostics {
   const finite = candidates.filter((candidate) => (
     Number.isFinite(candidate.rawScore) && Number.isFinite(candidate.score)
@@ -1045,7 +1048,10 @@ export function summarizeLocalScoreCalibration(
   const display = finite.map((candidate) => candidate.score).sort((a, b) => a - b);
   const count = finite.length;
   const distinct = new Set(display).size;
-  const qualified = display.filter((score) => score >= replacementMinimumScore).length;
+  const boundedReplacementPercent = Math.max(0, Math.min(100, replacementPercent));
+  const effectiveMinimumScore = replacementMinimumScore
+    * (1 - boundedReplacementPercent / 100);
+  const qualified = display.filter((score) => score >= effectiveMinimumScore).length;
 
   return {
     count,
@@ -1079,10 +1085,12 @@ export function summarizeLocalScoreCalibration(
         : 0,
     },
     replacement: {
-      minimumScore: replacementMinimumScore,
+      baseMinimumScore: replacementMinimumScore,
+      effectiveMinimumScore,
       minimumUplift: replacementMinimumUplift,
+      replacementPercent: boundedReplacementPercent,
       qualifiedRate: count > 0 ? roundRate(qualified / count) : 0,
-      medianHeadroom: count > 0 ? quantile(display, 0.5) - replacementMinimumScore : 0,
+      medianHeadroom: count > 0 ? quantile(display, 0.5) - effectiveMinimumScore : 0,
     },
   };
 }
