@@ -753,3 +753,22 @@ For #153 explanation validation, require:
 5. acquisition mechanism is shown separately and explicitly not presented as preference evidence;
 6. repeated presentation refreshes update the explanation for the current trace without duplicating controls or changing native card identity.
 
+
+
+## Read-only graph inspector validation (#170)
+
+The first #170 slice is an inspection surface, not a graph mutation path.
+
+Validate all of the following:
+
+1. opening/loading the live inspector does not change graph revision, evidence count, node count, edge count, or user-edit history;
+2. node-kind and edge-relation summaries reconcile to the inspected snapshot;
+3. explicit vs inferred provenance and evidence-support counts are visible without exposing raw storage objects as the primary UI;
+4. selecting an inferred edge shows the retained supporting evidence records, including connector, mechanism, observed time, and content label;
+5. search filters nodes/edges by label, kind/relation, or stable ID without mutating graph state;
+6. pasted export JSON is parsed only in the Settings page and does not overwrite/persist live graph state;
+7. malformed or wrong-schema pasted snapshots fail clearly and leave the previous live graph unchanged;
+8. bootstrap-sized graphs remain practically navigable through bounded scroll/search lists;
+9. the inspector uses current graph node/edge/evidence identifiers so #153 Why-this paths can later deep-link without identifier translation.
+
+The first slice deliberately avoids force-directed layout, graph mutation, scoring, and preference inference. Those are separate UX/control concerns.
