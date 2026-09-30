@@ -2496,12 +2496,23 @@ const handleRuntimeMessage = (
       personalAlgorithmStore.exportState(),
       getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
       getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+      getSemanticFeatureCacheCached(),
     ])
-      .then(([state, durableModeCatalog, activeModeId]) => sendResponse({
+      .then(([state, durableModeCatalog, activeModeId, semanticFeatureCache]) => sendResponse({
         ok: true,
         state,
         durableModeCatalog,
         activeModeId,
+        semanticContext: Object.values(semanticFeatureCache).map((record) => ({
+          externalId: record.externalId,
+          category: record.category,
+          categoryConfidence: record.categoryConfidence,
+          modeAffinities: (record.modeAffinities ?? []).map((affinity) => ({
+            modeId: affinity.modeId,
+            label: affinity.label,
+            affinity: affinity.affinity,
+          })),
+        })),
       }))
       .catch((error) => sendResponse({
         ok: false,
