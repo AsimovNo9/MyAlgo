@@ -989,6 +989,104 @@ export function calibrateLocalScore(rawScore: number): number {
   return Math.max(0, Math.min(100, Math.round(50 + 50 * Math.tanh(rawScore / 30))));
 }
 
+export type LocalScoreCalibrationDiagnostics = {
+  count: number;
+  raw: {
+    min: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+    max: number;
+  };
+  display: {
+    min: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+    max: number;
+    distinct: number;
+    tieRate: number;
+    saturation95Rate: number;
+    saturation97Rate: number;
+    saturation99Rate: number;
+  };
+  replacement: {
+    minimumScore: number;
+    minimumUplift: number;
+    qualifiedRate: number;
+    medianHeadroom: number;
+  };
+};
+
+const quantile = (sorted: readonly number[], fraction: number): number => {
+  if (sorted.length === 0) return 0;
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.round((sorted.length - 1) * fraction)),
+  );
+  return sorted[index] ?? 0;
+};
+
+const roundRate = (value: number): number => Math.round(value * 1000) / 1000;
+
+export function summarizeLocalScoreCalibration(
+  candidates: readonly Pick<LocalRuntimeRankedCandidate, 'rawScore' | 'score'>[],
+  replacementMinimumScore: number,
+  replacementMinimumUplift: number,
+): LocalScoreCalibrationDiagnostics {
+  const finite = candidates.filter((candidate) => (
+    Number.isFinite(candidate.rawScore) && Number.isFinite(candidate.score)
+  ));
+  const raw = finite.map((candidate) => candidate.rawScore).sort((a, b) => a - b);
+  const display = finite.map((candidate) => candidate.score).sort((a, b) => a - b);
+  const count = finite.length;
+  const distinct = new Set(display).size;
+  const qualified = display.filter((score) => score >= replacementMinimumScore).length;
+
+  return {
+    count,
+    raw: {
+      min: raw[0] ?? 0,
+      p25: quantile(raw, 0.25),
+      p50: quantile(raw, 0.5),
+      p75: quantile(raw, 0.75),
+      p90: quantile(raw, 0.9),
+      p95: quantile(raw, 0.95),
+      max: raw[raw.length - 1] ?? 0,
+    },
+    display: {
+      min: display[0] ?? 0,
+      p25: quantile(display, 0.25),
+      p50: quantile(display, 0.5),
+      p75: quantile(display, 0.75),
+      p90: quantile(display, 0.9),
+      p95: quantile(display, 0.95),
+      max: display[display.length - 1] ?? 0,
+      distinct,
+      tieRate: count > 0 ? roundRate(1 - distinct / count) : 0,
+      saturation95Rate: count > 0
+        ? roundRate(display.filter((score) => score >= 95).length / count)
+        : 0,
+      saturation97Rate: count > 0
+        ? roundRate(display.filter((score) => score >= 97).length / count)
+        : 0,
+      saturation99Rate: count > 0
+        ? roundRate(display.filter((score) => score >= 99).length / count)
+        : 0,
+    },
+    replacement: {
+      minimumScore: replacementMinimumScore,
+      minimumUplift: replacementMinimumUplift,
+      qualifiedRate: count > 0 ? roundRate(qualified / count) : 0,
+      medianHeadroom: count > 0 ? quantile(display, 0.5) - replacementMinimumScore : 0,
+    },
+  };
+}
+
 const candidateContext = (
   state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
