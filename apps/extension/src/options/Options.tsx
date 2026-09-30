@@ -2,9 +2,11 @@ import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import {
   buildDurableModeOptions,
+  buildExplanationGraphView,
   buildGraphInspectorView,
   buildGraphModeOverlay,
   parseGraphInspectorExport,
+  type ContentExplanation,
   type GraphInspectorView,
 } from '../lib/extension-helpers';
 import { GraphCanvas } from '../components/GraphCanvas';
@@ -43,6 +45,9 @@ export function Options() {
   const [graphLayoutMode, setGraphLayoutMode] = React.useState<'network' | 'lineage'>('network');
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
+  const [contentExplanation, setContentExplanation] = React.useState<ContentExplanation | null>(null);
+  const [contentExplanationLoading, setContentExplanationLoading] = React.useState(false);
+  const [contentExplanationError, setContentExplanationError] = React.useState<string | null>(null);
   const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
 
   React.useEffect(() => {
@@ -130,6 +135,8 @@ export function Options() {
     setGraphLayoutMode('network');
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
+    setContentExplanation(null);
+    setContentExplanationError(null);
     setOfflineGraphJson('');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
@@ -194,6 +201,8 @@ export function Options() {
       setGraphFocusOnly(true);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
+      setContentExplanation(null);
+      setContentExplanationError(null);
       setStatus(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to inspect the local Personal Algorithm Graph.');
@@ -212,6 +221,29 @@ export function Options() {
       setStatus(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to inspect the pasted graph export.');
+    }
+  };
+
+  const handleExplainSelectedContent = async () => {
+    if (!selectedGraphNode?.contentExternalId) return;
+    setContentExplanationLoading(true);
+    setContentExplanationError(null);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'PERSONAL_ALGORITHM_EXPLAIN_CONTENT',
+        payload: { externalId: selectedGraphNode.contentExternalId },
+      }) as { ok?: boolean; item?: ContentExplanation; error?: string };
+      if (!response?.ok || !response.item) {
+        setContentExplanation(null);
+        setContentExplanationError(response?.error ?? 'Unable to explain this content.');
+        return;
+      }
+      setContentExplanation(response.item);
+    } catch (error) {
+      setContentExplanation(null);
+      setContentExplanationError(error instanceof Error ? error.message : 'Unable to explain this content.');
+    } finally {
+      setContentExplanationLoading(false);
     }
   };
 
@@ -267,6 +299,16 @@ export function Options() {
         edge.sourceNodeId === selectedGraphNode.id || edge.targetNodeId === selectedGraphNode.id
       )).slice(0, 16)
     : [];
+  const explanationGraphView = graphInspector && selectedGraphNode && contentExplanation
+    ? buildExplanationGraphView(
+        graphInspector,
+        selectedGraphNode.id,
+        contentExplanation.explanation,
+      )
+    : null;
+  const explanationGraphOverlay = explanationGraphView
+    ? buildGraphModeOverlay(explanationGraphView, null, 'all')
+    : null;
   const graphSearchResults = normalizedGraphQuery
     ? [
         ...filteredGraphNodes.slice(0, 8).map((node) => ({ id: node.id, label: node.label, kind: node.kind, type: 'node' as const })),
@@ -556,9 +598,13 @@ export function Options() {
                           if (result.type === 'node') {
                             setSelectedNodeId(result.id);
                             setSelectedEdgeId(null);
+                            setContentExplanation(null);
+                            setContentExplanationError(null);
                           } else {
                             setSelectedEdgeId(result.id);
                             setSelectedNodeId(null);
+                            setContentExplanation(null);
+                            setContentExplanationError(null);
                           }
                         }}
                         style={{
@@ -640,10 +686,14 @@ export function Options() {
                   onNodeSelect={(nodeId) => {
                     setSelectedNodeId(nodeId);
                     setSelectedEdgeId(null);
+                    setContentExplanation(null);
+                    setContentExplanationError(null);
                   }}
                   onEdgeSelect={(edgeId) => {
                     setSelectedEdgeId(edgeId);
                     setSelectedNodeId(null);
+                    setContentExplanation(null);
+                    setContentExplanationError(null);
                   }}
                   height={640}
                   focusOnly={graphFocusOnly}
@@ -691,6 +741,98 @@ export function Options() {
                           <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
                         </div>
                       </div>
+
+                      {selectedGraphNode.kind === 'content' && selectedGraphNode.contentExternalId ? (
+                        <div style={{ marginTop: 14, borderTop: '1px solid #263244', paddingTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => void handleExplainSelectedContent()}
+                              disabled={contentExplanationLoading}
+                            >
+                              {contentExplanationLoading ? 'Explaining…' : contentExplanation ? 'Refresh Why this?' : 'Why this?'}
+                            </button>
+                            {contentExplanation ? (
+                              <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                                exact local score · graph r{contentExplanation.explanation?.graphRevision ?? '—'}
+                              </span>
+                            ) : null}
+                          </div>
+                          {contentExplanationError ? (
+                            <p style={{ color: '#fca5a5', marginBottom: 0 }}>{contentExplanationError}</p>
+                          ) : null}
+
+                          {contentExplanation && explanationGraphView && explanationGraphOverlay ? (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 12,
+                                alignItems: 'baseline',
+                                marginBottom: 8,
+                              }}>
+                                <div>
+                                  <strong>Why this?</strong>
+                                  <div style={{ color: '#cbd5e1', fontSize: 12, marginTop: 2 }}>
+                                    Score {contentExplanation.score}/100 · raw {contentExplanation.explanation?.rawScore ?? contentExplanation.rawScore}
+                                  </div>
+                                </div>
+                                <code style={{ color: '#94a3b8', fontSize: 10, overflowWrap: 'anywhere' }}>
+                                  {contentExplanation.traceId}
+                                </code>
+                              </div>
+
+                              <GraphCanvas
+                                nodes={explanationGraphView.nodes}
+                                edges={explanationGraphView.edges}
+                                modeOverlay={explanationGraphOverlay}
+                                selectedNodeId={selectedGraphNode.id}
+                                compact
+                                layoutMode="lineage"
+                                height={240}
+                              />
+
+                              {contentExplanation.explanation?.acquisitionMechanism ? (
+                                <p style={{ color: '#94a3b8', fontSize: 11, margin: '8px 0 0' }}>
+                                  Acquired via {contentExplanation.explanation.acquisitionMechanism} · source is not preference evidence
+                                </p>
+                              ) : null}
+
+                              <div style={{ marginTop: 10 }}>
+                                {(contentExplanation.explanation?.contributions ?? []).map((contribution, index) => (
+                                  <div
+                                    key={`${contribution.kind}:${contribution.label}:${index}`}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto',
+                                      gap: 10,
+                                      padding: '8px 0',
+                                      borderTop: '1px solid #263244',
+                                    }}
+                                  >
+                                    <div>
+                                      <strong>{contribution.label}</strong>
+                                      <div style={{ color: '#94a3b8', fontSize: 11 }}>
+                                        {contribution.kind}
+                                        {contribution.evidenceIds.length > 0
+                                          ? ` · ${contribution.evidenceIds.length} evidence item${contribution.evidenceIds.length === 1 ? '' : 's'}`
+                                          : ''}
+                                      </div>
+                                    </div>
+                                    <strong style={{ color: contribution.value >= 0 ? '#86efac' : '#fca5a5' }}>
+                                      {contribution.value > 0 ? '+' : ''}{contribution.value}
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 0 }}>
+                                Reduce / Mute / Prefer actions remain disabled until #154/#155 land with revisioned undo/restore semantics.
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       <div style={{ marginTop: 14, borderTop: '1px solid #263244', paddingTop: 10 }}>
                         <strong>Connected relationships</strong>
