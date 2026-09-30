@@ -46,7 +46,7 @@ PR #229 found no top-end display-score saturation that justified retuning the ex
 
 PR #230 completed the first #153 trust slice: scored native and replacement cards share one exact trace-grounded explanation renderer with matched symbolic graph paths, evidence support counts, stable trace/graph revision identity, and acquisition provenance kept separate from preference evidence.
 
-The active implementation task is **#170 graph inspection**: add a read-only Settings surface for current or pasted graph snapshots, provenance/evidence drill-down, and revision inspection. #153 remains open for direct graph actions and tighter Why-this → graph/evidence navigation.
+The active implementation task is **#170 graphical graph exploration**: add a read-only interactive Settings graph with pan/zoom, search, node/edge focus, stable durable-mode overlays, current/pasted snapshots, provenance/evidence drill-down, and revision inspection. The same renderer will be reused by the next #153 compact Why-this graph slice. #153 remains open for direct graph actions and tighter Why-this → graph/evidence navigation.
 
 #211 remains open only for long-session/browser stress validation and measured follow-up; it is not the primary architecture task. #214's runtime/documentation work is complete.
 
