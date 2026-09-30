@@ -1,6 +1,11 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildDurableModeOptions } from '../lib/extension-helpers';
+import {
+  buildDurableModeOptions,
+  buildGraphInspectorView,
+  parseGraphInspectorExport,
+  type GraphInspectorView,
+} from '../lib/extension-helpers';
 import type { DurableSemanticModeCatalog } from '@repo/shared-types';
 
 export function Options() {
@@ -28,6 +33,11 @@ export function Options() {
   } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
+  const [graphInspector, setGraphInspector] = React.useState<GraphInspectorView | null>(null);
+  const [graphInspectorSource, setGraphInspectorSource] = React.useState<'live' | 'offline' | null>(null);
+  const [graphQuery, setGraphQuery] = React.useState('');
+  const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
+  const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
 
   React.useEffect(() => {
     chrome.storage.local.get([
@@ -152,6 +162,39 @@ export function Options() {
     setSemanticModelMode(response.semanticModelMode === 'neural' ? 'neural' : 'hash');
   };
 
+  const handleLoadLiveGraph = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'PERSONAL_ALGORITHM_INSPECT' }) as {
+      ok?: boolean;
+      state?: unknown;
+      error?: string;
+    };
+    if (!response?.ok || !response.state) {
+      setStatus(response?.error ?? 'Unable to inspect the local Personal Algorithm Graph.');
+      return;
+    }
+    try {
+      const view = buildGraphInspectorView(response.state);
+      setGraphInspector(view);
+      setGraphInspectorSource('live');
+      setSelectedEdgeId(null);
+      setStatus(null);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to inspect the local Personal Algorithm Graph.');
+    }
+  };
+
+  const handleInspectOfflineGraph = () => {
+    try {
+      const view = parseGraphInspectorExport(offlineGraphJson);
+      setGraphInspector(view);
+      setGraphInspectorSource('offline');
+      setSelectedEdgeId(null);
+      setStatus(null);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to inspect the pasted graph export.');
+    }
+  };
+
   const handleNeuralBatchSizeChange = async (nextBatchSize: number) => {
     const batchSize = Math.max(1, Math.min(16, Math.floor(nextBatchSize)));
     setNeuralBatchSize(batchSize);
@@ -168,6 +211,21 @@ export function Options() {
   };
 
   const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
+  const normalizedGraphQuery = graphQuery.trim().toLowerCase();
+  const filteredGraphNodes = (graphInspector?.nodes ?? []).filter((node) => (
+    !normalizedGraphQuery
+    || node.label.toLowerCase().includes(normalizedGraphQuery)
+    || node.id.toLowerCase().includes(normalizedGraphQuery)
+    || node.kind.toLowerCase().includes(normalizedGraphQuery)
+  )).slice(0, 80);
+  const filteredGraphEdges = (graphInspector?.edges ?? []).filter((edge) => (
+    !normalizedGraphQuery
+    || edge.relation.toLowerCase().includes(normalizedGraphQuery)
+    || edge.sourceLabel.toLowerCase().includes(normalizedGraphQuery)
+    || edge.targetLabel.toLowerCase().includes(normalizedGraphQuery)
+    || edge.id.toLowerCase().includes(normalizedGraphQuery)
+  )).slice(0, 80);
+  const selectedGraphEdge = graphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
 
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'sans-serif' }}>
@@ -301,6 +359,162 @@ export function Options() {
           Record visible YouTube Home recommendations as context
         </label>
         <p>When enabled, MyAlgo stores visible video IDs, titles, creators, position, section, and observation time only in this browser. A surfaced recommendation is not treated as a preference; clicks and later history matches are recorded separately.</p>
+      </section>
+
+      <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+        <h2>Personal Algorithm Graph inspector</h2>
+        <p>
+          Read the current local graph or inspect a pasted MyAlgo export without changing live graph state.
+          This view shows symbolic nodes, relationships, evidence support, and revision history; it does not edit preferences.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button type="button" onClick={() => void handleLoadLiveGraph()}>Inspect live graph</button>
+          {graphInspector ? (
+            <span>
+              {graphInspectorSource === 'live' ? 'Live snapshot' : 'Offline pasted snapshot'}
+              {' · '}graph r{graphInspector.graphRevision}
+              {' · '}{graphInspector.nodeCount} nodes
+              {' · '}{graphInspector.edgeCount} edges
+              {' · '}{graphInspector.evidenceCount} evidence records
+            </span>
+          ) : null}
+        </div>
+
+        <details style={{ marginBottom: 16 }}>
+          <summary>Inspect an exported graph snapshot offline</summary>
+          <p style={{ marginBottom: 8 }}>
+            Paste the JSON produced by MyAlgo export. Parsing happens only in this Settings page and does not write it into local state.
+          </p>
+          <textarea
+            value={offlineGraphJson}
+            onChange={(event) => setOfflineGraphJson(event.target.value)}
+            rows={8}
+            placeholder="Paste myalgo-personal-algorithm-state.json here"
+            style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace' }}
+          />
+          <button
+            type="button"
+            disabled={!offlineGraphJson.trim()}
+            onClick={handleInspectOfflineGraph}
+            style={{ marginTop: 8 }}
+          >
+            Inspect pasted snapshot
+          </button>
+        </details>
+
+        {graphInspector ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
+              <div>
+                <strong>Node kinds</strong>
+                <ul>
+                  {graphInspector.nodesByKind.map((entry) => (
+                    <li key={entry.key}>{entry.key}: {entry.count}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <strong>Relations</strong>
+                <ul>
+                  {graphInspector.edgesByRelation.map((entry) => (
+                    <li key={entry.key}>{entry.key}: {entry.count}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <strong>Recent revisions</strong>
+                <ul>
+                  {graphInspector.revisions.slice(0, 6).map((revision) => (
+                    <li key={`${revision.revision}:${revision.createdAt}`}>
+                      r{revision.revision} · {revision.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <label htmlFor="graph-inspector-search">
+              Search nodes and edges
+              <input
+                id="graph-inspector-search"
+                type="search"
+                value={graphQuery}
+                onChange={(event) => setGraphQuery(event.target.value)}
+                placeholder="concept, creator, relation, or ID"
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, padding: 8 }}
+              />
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 16 }}>
+              <div>
+                <h3>Nodes</h3>
+                <div style={{ maxHeight: 420, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  {filteredGraphNodes.map((node) => (
+                    <div key={node.id} style={{ padding: 10, borderBottom: '1px solid #e2e8f0' }}>
+                      <strong>{node.label}</strong>
+                      <div>{node.kind} · {node.provenance} · {node.supportCount} support item{node.supportCount === 1 ? '' : 's'}</div>
+                      <code style={{ overflowWrap: 'anywhere' }}>{node.id}</code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3>Edges</h3>
+                <div style={{ maxHeight: 420, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  {filteredGraphEdges.map((edge) => (
+                    <button
+                      key={edge.id}
+                      type="button"
+                      onClick={() => setSelectedEdgeId(edge.id)}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: 10,
+                        textAlign: 'left',
+                        border: 0,
+                        borderBottom: '1px solid #e2e8f0',
+                        background: selectedEdgeId === edge.id ? '#e2e8f0' : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <strong>{edge.sourceLabel} → {edge.targetLabel}</strong>
+                      <div>{edge.relation} · {edge.provenance} · {edge.evidenceIds.length} support item{edge.evidenceIds.length === 1 ? '' : 's'}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {selectedGraphEdge ? (
+              <div style={{ marginTop: 16, padding: 12, border: '1px solid #cbd5e1', borderRadius: 8 }}>
+                <h3 style={{ marginTop: 0 }}>Relationship provenance</h3>
+                <p>
+                  <strong>{selectedGraphEdge.sourceLabel}</strong> → <strong>{selectedGraphEdge.targetLabel}</strong>
+                  {' · '}{selectedGraphEdge.relation}
+                  {' · '}{selectedGraphEdge.provenance}
+                </p>
+                <code style={{ overflowWrap: 'anywhere' }}>{selectedGraphEdge.id}</code>
+                {selectedGraphEdge.evidence.length > 0 ? (
+                  <ul>
+                    {selectedGraphEdge.evidence.map((evidence) => (
+                      <li key={evidence.id} style={{ marginTop: 8 }}>
+                        <strong>{evidence.kind === 'interaction' ? evidence.interaction : 'surfaced'}</strong>
+                        {' · '}{evidence.contentLabel}
+                        {' · '}{evidence.connector}/{evidence.mechanism}
+                        {' · '}{evidence.observedAt}
+                        <br />
+                        <code>{evidence.id}</code>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No retained supporting evidence is available for this relationship.</p>
+                )}
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </section>
 
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
