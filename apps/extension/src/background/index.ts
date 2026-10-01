@@ -430,8 +430,7 @@ let lastRankMemo: {
   state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportStateForRead']>>;
   mode: string;
   sourceFiltersSignature: string;
-  activeModeId: string;
-  activeModeRevision: number | null;
+  activeModeSignature: string;
   durableModeSignature: string;
   feedbackSignature: string;
   candidateIdsSignature: string;
@@ -1888,7 +1887,8 @@ async function rankLocalCandidates(
   const [
     state,
     feedbackEvents,
-    activeModeId,
+    legacyActiveModeId,
+    storedActiveModeIds,
     durableModeCatalog,
     semanticContext,
     semanticFeatureCache,
@@ -1901,6 +1901,7 @@ async function rankLocalCandidates(
       [],
     ),
     getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
     getStorage<DurableSemanticModeCatalog | null>(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
@@ -1910,7 +1911,19 @@ async function rankLocalCandidates(
     getVideoStoreCached(),
     getCandidatePoolIndexCached(),
   ]);
-  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const activeModeIds = [...new Set(
+    (storedActiveModeIds.length > 0
+      ? storedActiveModeIds
+      : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [])
+      .filter(Boolean),
+  )];
+  const activeDurableModes = activeModeIds
+    .map((modeId) => resolveDurableMode(durableModeCatalog, modeId))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const activeModeSignature = activeDurableModes
+    .map((entry) => `${entry.id}@${entry.revision}`)
+    .sort()
+    .join('|');
   const sourceFiltersSignature = JSON.stringify(sourceFilters);
   const feedbackSignature = JSON.stringify(
     feedbackEvents
@@ -1927,8 +1940,7 @@ async function rankLocalCandidates(
     && lastRankMemo.state === state
     && lastRankMemo.mode === mode
     && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
-    && lastRankMemo.activeModeId === activeModeId
-    && lastRankMemo.activeModeRevision === (activeDurableMode?.revision ?? null)
+    && lastRankMemo.activeModeSignature === activeModeSignature
     && lastRankMemo.durableModeSignature === durableModeSignature
     && lastRankMemo.feedbackSignature === feedbackSignature
     && lastRankMemo.candidateIdsSignature === candidateIdsSignature
@@ -1970,13 +1982,11 @@ async function rankLocalCandidates(
     mode,
     feedbackSignals,
     sourceFilters,
-    activeDurableMode
-      ? {
-          id: activeDurableMode.id,
-          label: activeDurableMode.label,
-          revision: activeDurableMode.revision,
-        }
-      : null,
+    activeDurableModes.map((activeDurableMode) => ({
+      id: activeDurableMode.id,
+      label: activeDurableMode.label,
+      revision: activeDurableMode.revision,
+    })),
   );
 
   const traces = ranked.slice(0, 60).map((item) => ({
@@ -2242,8 +2252,7 @@ async function rankLocalCandidates(
     state,
     mode,
     sourceFiltersSignature,
-    activeModeId,
-    activeModeRevision: activeDurableMode?.revision ?? null,
+    activeModeSignature,
     durableModeSignature,
     feedbackSignature,
     candidateIdsSignature,
