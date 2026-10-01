@@ -1990,6 +1990,44 @@ async function rankLocalCandidates(
   }
 
   const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
+  const graphNodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const historyEvidenceByContentNodeId = new Map<string, typeof state.evidence>();
+  for (const record of state.evidence) {
+    const evidence = record.evidence;
+    if (
+      evidence.kind !== 'interaction'
+      || !['watched', 'clicked', 'saved', 'shared'].includes(evidence.interaction)
+    ) continue;
+    const contentId = `content:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(evidence.content.externalId)}`;
+    const records = historyEvidenceByContentNodeId.get(contentId) ?? [];
+    records.push(record);
+    historyEvidenceByContentNodeId.set(contentId, records);
+  }
+  for (const records of historyEvidenceByContentNodeId.values()) {
+    records.sort((left, right) => (
+      right.evidence.observedAt.localeCompare(left.evidence.observedAt)
+      || left.id.localeCompare(right.id)
+    ));
+  }
+
+  // Build a reverse neighbourhood from preference-bearing graph nodes to
+  // content. This supports a three-hop explanation:
+  // prior watched video -> shared creator/topic/concept -> current video.
+  const historyContentBySignalNodeId = new Map<string, Set<string>>();
+  for (const edge of state.graph.edges) {
+    const source = graphNodeById.get(edge.sourceNodeId);
+    const target = graphNodeById.get(edge.targetNodeId);
+    if (!source || !target || source.kind === target.kind) continue;
+
+    const content = source.kind === 'content' ? source : target.kind === 'content' ? target : null;
+    const signal = source.kind === 'content' ? target : target.kind === 'content' ? source : null;
+    if (!content || !signal || signal.kind === 'content') continue;
+
+    const connected = historyContentBySignalNodeId.get(signal.id) ?? new Set<string>();
+    connected.add(content.id);
+    historyContentBySignalNodeId.set(signal.id, connected);
+  }
+
   const feed = ranked.map(({ trace, ...item }) => {
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
@@ -2054,6 +2092,7 @@ async function rankLocalCandidates(
 
     const historyEvidenceIds = new Set<string>();
     const matchedByEvidenceId = new Map<string, Set<string>>();
+    const historyBackedContributionIds = new Set<string>();
     const registerHistoryEvidence = (evidenceId: string, label: string) => {
       const record = evidenceById.get(evidenceId);
       if (!record) return;
@@ -2068,16 +2107,50 @@ async function rankLocalCandidates(
       if (label.trim()) labels.add(label.trim());
       matchedByEvidenceId.set(evidenceId, labels);
     };
+
     for (const contribution of allScoringContributions) {
+      let contributionHistoryBacked = false;
       for (const evidenceId of contribution.evidenceIds ?? []) {
+        const before = historyEvidenceIds.size;
         registerHistoryEvidence(evidenceId, contribution.label);
+        if (historyEvidenceIds.size > before || historyEvidenceIds.has(evidenceId)) {
+          contributionHistoryBacked = true;
+        }
       }
+
+      const sourceIds = [
+        contribution.sourceId,
+        ...(contribution.sourceIds ?? []),
+      ].filter((sourceId): sourceId is string => Boolean(sourceId && !sourceId.startsWith('content:')));
+
+      for (const sourceId of sourceIds) {
+        const signalLabel = nodeLabelById.get(sourceId) ?? contribution.label;
+        for (const contentNodeId of historyContentBySignalNodeId.get(sourceId) ?? []) {
+          const contentNode = graphNodeById.get(contentNodeId);
+          if (
+            !contentNode?.content
+            || contentNode.content.externalId === item.external_id
+          ) continue;
+          const priorRecords = historyEvidenceByContentNodeId.get(contentNodeId) ?? [];
+          for (const record of priorRecords.slice(0, 2)) {
+            registerHistoryEvidence(record.id, signalLabel);
+            contributionHistoryBacked = true;
+          }
+        }
+      }
+
+      if (contributionHistoryBacked) historyBackedContributionIds.add(contribution.id);
     }
+
+    // Matched paths may carry supporting retained history even when the
+    // corresponding scorer contribution was canonicalized into another source.
     for (const path of trace.matchedPaths) {
-      const pathLabel = path.nodeIds
+      const currentContentId = `content:youtube:${encodeURIComponent(item.external_id)}`;
+      const pathLabels = path.nodeIds
+        .filter((nodeId) => nodeId !== currentContentId)
         .map((nodeId) => nodeLabelById.get(nodeId) ?? '')
-        .filter(Boolean)
-        .join(' ↔ ');
+        .filter(Boolean);
+      const pathLabel = pathLabels.join(' ↔ ');
       for (const evidenceId of path.evidenceIds) registerHistoryEvidence(evidenceId, pathLabel);
     }
 
@@ -2104,7 +2177,10 @@ async function rankLocalCandidates(
     const historyBackedContributionTotal = allScoringContributions
       .filter((contribution) => (
         contribution.value > 0
-        && (contribution.evidenceIds ?? []).some((evidenceId) => historyEvidenceIds.has(evidenceId))
+        && (
+          historyBackedContributionIds.has(contribution.id)
+          || (contribution.evidenceIds ?? []).some((evidenceId) => historyEvidenceIds.has(evidenceId))
+        )
       ))
       .reduce((sum, contribution) => sum + contribution.value, 0);
     const historySupport = historyMatches.length > 0
