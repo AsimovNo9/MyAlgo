@@ -108,9 +108,12 @@ Cloud processing is a separate future product/data-handling decision.
 These actions are distinct:
 
 - **Disable**: stop using a node.
-- **Reduce**: lower its contribution.
-- **Mute**: suppress matching content.
-- **Delete/forget**: remove the selected graph/evidence relationship.
+- **Reduce**: lower an existing score-bearing graph contribution without deleting the node, edge, or supporting evidence. The first #154 implementation applies a deterministic 0.5 multiplier to the exact sourced contribution.
+- **Prefer**: strengthen an existing score-bearing graph contribution without inventing new evidence. The first #154 implementation applies a deterministic 1.5 multiplier to the exact sourced contribution.
+- **Mute**: hard-suppress candidates that match the exact controlled node or edge; suppression is evaluated by the deterministic scorer and remains visible in the trace.
+- **Delete/forget**: remove the selected graph/evidence relationship or evidence record. Forget remains owned by #155 and is not an alias for Reduce, Prefer, Mute, Undo, or Restore original.
+
+The first user-authored graph correction captures an immutable pre-edit baseline containing graph nodes, edges, and control state but not retained evidence. Every correction, undo, and restore creates a new graph revision. Undo reverts the most recent unreverted user edit. Restore original returns graph/control state to the captured baseline while leaving retained evidence intact.
 
 Deleted evidence must not immediately recreate the same node from the same retained evidence.
 
