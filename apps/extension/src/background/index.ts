@@ -1847,6 +1847,26 @@ async function refreshSemanticScoreFeatures(
         updatedAt: new Date().toISOString(),
       });
     }
+    if (
+      graphMatchVerifier
+      && semantic.diagnostics.graphVerificationRequested > 0
+      && effectiveContext.semanticModelMode === 'neural'
+    ) {
+      const verificationError = semantic.diagnostics.graphVerificationFallbackReason;
+      await setStorage(STORAGE_KEYS.CONCEPT_MODEL_STATUS, {
+        status: verificationError ? 'error' : 'ready',
+        phase: 'graph_match_verification',
+        modelId: graphMatchVerifier.modelId,
+        modelVersion: graphMatchVerifier.modelVersion,
+        pipelineVersion: SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID,
+        inputCount: semantic.diagnostics.graphVerificationRequested,
+        verifiedLabels: semantic.diagnostics.graphVerificationVerified,
+        rejectedLabels: semantic.diagnostics.graphVerificationRejected,
+        backend: semantic.diagnostics.graphVerificationBackend,
+        error: verificationError,
+        updatedAt: new Date().toISOString(),
+      });
+    }
     if (refreshEpoch !== semanticEpoch) return { changed: 0, diagnostics: null };
     const next = { ...existing };
     let changed = 0;
