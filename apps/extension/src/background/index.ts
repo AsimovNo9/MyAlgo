@@ -1982,9 +1982,58 @@ async function rankLocalCandidates(
     semanticFeatureCache,
     durableModeCatalog,
   );
+
+  // Guard selected-mode scoring against obvious cross-domain leakage. A mode
+  // supported overwhelmingly by one semantic category (for example Music)
+  // must not contribute to a candidate confidently classified into another
+  // category (for example Gaming) merely because one embedding match crossed
+  // the affinity threshold.
+  const latestSemanticByExternalId = new Map<string, SemanticFeatureRecord>();
+  for (const record of Object.values(semanticFeatureCache)) {
+    const previous = latestSemanticByExternalId.get(record.externalId);
+    if (!previous || record.generatedAt > previous.generatedAt) {
+      latestSemanticByExternalId.set(record.externalId, record);
+    }
+  }
+  const categorySupportByModeId = new Map<string, Map<string, number>>();
+  for (const durableMode of durableModeCatalog?.modes ?? []) {
+    const counts = new Map<string, number>();
+    for (const supportContentId of durableMode.members.flatMap((member) => member.supportContentIds)) {
+      const prefix = 'content:youtube:';
+      const encodedExternalId = supportContentId.startsWith(prefix)
+        ? supportContentId.slice(prefix.length)
+        : '';
+      if (!encodedExternalId) continue;
+      let externalId = encodedExternalId;
+      try { externalId = decodeURIComponent(encodedExternalId); } catch { /* retain encoded id */ }
+      const support = latestSemanticByExternalId.get(externalId);
+      const category = support?.category?.trim().toLowerCase();
+      if (!category || Number(support?.categoryConfidence ?? 0) < 0.45) continue;
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    categorySupportByModeId.set(durableMode.id, counts);
+  }
+
+  const coherentCandidates = candidatesWithSemanticFeatures.map((candidate) => {
+    const candidateCategory = candidate.semantic_category?.trim().toLowerCase();
+    if (!candidateCategory || Number(candidate.semantic_category_confidence ?? 0) < 0.45) return candidate;
+    const affinities = (candidate.semantic_mode_affinities ?? []).filter((affinity) => {
+      const counts = categorySupportByModeId.get(affinity.modeId);
+      if (!counts || counts.size === 0) return true;
+      const total = [...counts.values()].reduce((sum, value) => sum + value, 0);
+      const matching = counts.get(candidateCategory) ?? 0;
+      const strongest = Math.max(0, ...counts.values());
+      const dominantRatio = total > 0 ? strongest / total : 0;
+      return matching > 0 || dominantRatio < 0.75;
+    });
+    return affinities.length === (candidate.semantic_mode_affinities ?? []).length
+      ? candidate
+      : { ...candidate, semantic_mode_affinities: affinities };
+  });
+
   const ranked = scoreLocalCandidates(
     state,
-    candidatesWithSemanticFeatures,
+    coherentCandidates,
     mode,
     feedbackSignals,
     sourceFilters,
