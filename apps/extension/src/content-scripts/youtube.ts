@@ -460,63 +460,88 @@ const renderExplanationContent = (
 
   const graph = document.createElement('div');
   graph.dataset.personalAlgorithmExplanationGraph = 'true';
-  graph.style.cssText = `position:relative;height:${view.historyMatches.length > 0 ? 260 : 180}px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;`;
+  const hasHistory = view.historyMatches.length > 0;
+  graph.style.cssText = `position:relative;height:${hasHistory ? 300 : 180}px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;`;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-  const positions = [
-    { x: 24, y: 28 },
-    { x: 76, y: 28 },
-    { x: 50, y: 82 },
-  ];
-  view.miniNodes.slice(1, 4).forEach((_, index) => {
-    const position = positions[index];
-    if (!position) return;
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', '50');
-    line.setAttribute('y1', view.historyMatches.length > 0 ? '40' : '53');
-    line.setAttribute('x2', String(position.x));
-    line.setAttribute('y2', String(position.y));
-    line.setAttribute('stroke', '#64748b');
-    line.setAttribute('stroke-width', '1');
-    svg.appendChild(line);
-  });
   graph.appendChild(svg);
 
   const centerNode = document.createElement('div');
   centerNode.textContent = 'This video';
-  centerNode.style.cssText = `position:absolute;left:50%;top:${view.historyMatches.length > 0 ? 40 : 53}%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+  centerNode.style.cssText = `position:absolute;left:50%;top:${hasHistory ? 18 : 53}%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
   graph.appendChild(centerNode);
 
-  view.miniNodes.slice(1, 4).forEach((node, index) => {
-    const position = positions[index];
-    if (!position) return;
-    const accent = whyNodeAccent(node.kind);
-    const pill = document.createElement('div');
-    pill.textContent = node.label;
-    pill.title = node.label;
-    pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
-    graph.appendChild(pill);
-  });
-  if (view.historyMatches.length > 0) {
-    const historyHeading = document.createElement('div');
-    historyHeading.textContent = 'Past watches that support this';
-    historyHeading.style.cssText = 'position:absolute;left:50%;bottom:58px;transform:translateX(-50%);color:#94a3b8;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
-    graph.appendChild(historyHeading);
+  if (hasHistory) {
+    const cleanSignalLabel = (value: string): string => (
+      value
+        .replace(/^Graph path:\s*/i, '')
+        .replace(/^[^:]+:\s*/, '')
+        .trim()
+    );
+    const signalLabels = [...new Set(
+      view.historyMatches
+        .flatMap((match) => match.matchedBy)
+        .map(cleanSignalLabel)
+        .filter(Boolean),
+    )].slice(0, 2);
+    if (signalLabels.length === 0) {
+      signalLabels.push(...view.miniNodes.slice(1, 3).map((node) => node.label));
+    }
 
-    const historyPositions = [
-      { x: 28, y: 84 },
-      { x: 72, y: 84 },
-    ];
-    view.historyMatches.slice(0, 2).forEach((match, index) => {
-      const position = historyPositions[index];
+    const signalPositions = signalLabels.length === 1
+      ? [{ x: 50, y: 47 }]
+      : [{ x: 30, y: 47 }, { x: 70, y: 47 }];
+
+    signalLabels.forEach((label, index) => {
+      const position = signalPositions[index];
       if (!position) return;
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', '50');
-      line.setAttribute('y1', '48');
+      line.setAttribute('y1', '23');
       line.setAttribute('x2', String(position.x));
-      line.setAttribute('y2', String(position.y - 6));
+      line.setAttribute('y2', String(position.y - 5));
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+
+      const sourceNode = view.miniNodes.find((node) => node.label.toLowerCase() === label.toLowerCase());
+      const accent = whyNodeAccent(sourceNode?.kind ?? 'concept');
+      const pill = document.createElement('div');
+      pill.textContent = label;
+      pill.title = label;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+
+    const historyHeading = document.createElement('div');
+    historyHeading.textContent = 'Past videos supporting this';
+    historyHeading.style.cssText = 'position:absolute;left:50%;top:64%;transform:translateX(-50%);color:#94a3b8;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
+    graph.appendChild(historyHeading);
+
+    const visibleHistory = view.historyMatches.slice(0, 3);
+    const historyPositions = visibleHistory.length === 1
+      ? [{ x: 50, y: 84 }]
+      : visibleHistory.length === 2
+        ? [{ x: 28, y: 84 }, { x: 72, y: 84 }]
+        : [{ x: 18, y: 84 }, { x: 50, y: 84 }, { x: 82, y: 84 }];
+
+    visibleHistory.forEach((match, index) => {
+      const position = historyPositions[index];
+      if (!position) return;
+      const matchedSignals = match.matchedBy
+        .map(cleanSignalLabel)
+        .filter(Boolean);
+      let signalIndex = signalLabels.findIndex((label) => matchedSignals.includes(label));
+      if (signalIndex < 0) signalIndex = Math.min(index, signalPositions.length - 1);
+      const signalPosition = signalPositions[Math.max(0, signalIndex)] ?? { x: 50, y: 47 };
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', String(position.x));
+      line.setAttribute('y1', String(position.y - 6));
+      line.setAttribute('x2', String(signalPosition.x));
+      line.setAttribute('y2', String(signalPosition.y + 5));
       line.setAttribute('stroke', '#475569');
       line.setAttribute('stroke-width', '0.9');
       line.setAttribute('stroke-dasharray', '3 2');
@@ -525,13 +550,38 @@ const renderExplanationContent = (
       const pill = document.createElement('div');
       pill.textContent = match.title;
       pill.title = match.title;
-      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:40%;padding:7px 9px;border:1px solid #64748b;border-radius:10px;background:#1e293b;color:#e2e8f0;text-align:center;font:600 10px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:29%;padding:7px 9px;border:1px solid #64748b;border-radius:10px;background:#1e293b;color:#e2e8f0;text-align:center;font:600 10px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+  } else {
+    const positions = [
+      { x: 24, y: 28 },
+      { x: 76, y: 28 },
+      { x: 50, y: 82 },
+    ];
+    view.miniNodes.slice(1, 4).forEach((node, index) => {
+      const position = positions[index];
+      if (!position) return;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', '50');
+      line.setAttribute('y1', '53');
+      line.setAttribute('x2', String(position.x));
+      line.setAttribute('y2', String(position.y));
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+
+      const accent = whyNodeAccent(node.kind);
+      const pill = document.createElement('div');
+      pill.textContent = node.label;
+      pill.title = node.label;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
       graph.appendChild(pill);
     });
   }
   shell.appendChild(graph);
 
-  if (view.historyMatches.length > 0) {
+  if (hasHistory) {
     const history = document.createElement('div');
     history.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#111827;';
     const heading = document.createElement('div');
@@ -543,13 +593,15 @@ const renderExplanationContent = (
     history.appendChild(heading);
 
     const note = document.createElement('div');
-    note.textContent = 'This is scorer attribution, not a probability estimate.';
+    note.textContent = 'Scroll to inspect retained prior videos. This is scorer attribution, not a probability estimate.';
     note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
     history.appendChild(note);
 
-    for (const match of view.historyMatches.slice(0, 4)) {
+    const historyList = document.createElement('div');
+    historyList.style.cssText = 'max-height:150px;margin-top:6px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;';
+    for (const match of view.historyMatches) {
       const row = document.createElement('div');
-      row.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #263244;';
+      row.style.cssText = 'padding:8px 0;border-top:1px solid #263244;';
       const title = document.createElement('div');
       title.textContent = match.title;
       title.style.cssText = 'color:#e2e8f0;font:600 11px/1.3 Roboto,Arial,sans-serif;white-space:normal;';
@@ -558,16 +610,17 @@ const renderExplanationContent = (
       const matchedBy = match.matchedBy
         .map((label) => label.replace(/^[^:]+:\s*/, '').trim())
         .filter(Boolean)
-        .slice(0, 2)
+        .slice(0, 3)
         .join(' · ');
       meta.textContent = [
         match.interaction === 'watched' ? 'Watched before' : match.interaction,
-        matchedBy ? `matched via ${matchedBy}` : null,
+        matchedBy ? `supports via ${matchedBy}` : null,
       ].filter(Boolean).join(' · ');
       meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
       row.appendChild(meta);
-      history.appendChild(row);
+      historyList.appendChild(row);
     }
+    history.appendChild(historyList);
     shell.appendChild(history);
   }
 
