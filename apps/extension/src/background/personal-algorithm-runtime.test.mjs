@@ -1532,6 +1532,6 @@ test('revisioned graph controls change local scoring without mutating retained e
     title: 'Video A',
   }], 'Default')[0];
   assert.equal(muted.rawScore, 0);
-  assert.equal(muted.suppressed, true);
-  assert.equal(muted.policyOutcome, 'suppressed');
+  assert.equal(muted.trace.suppressed, true);
+  assert.equal(muted.trace.policyOutcome, 'suppressed');
 });
