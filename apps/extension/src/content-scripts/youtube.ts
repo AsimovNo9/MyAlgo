@@ -257,15 +257,17 @@ const clearExtensionPresentation = (
     )) return;
     badge.remove();
   });
-  document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
-  ).forEach((container) => {
-    container.style.removeProperty('display');
-    delete container.dataset.personalAlgorithmSourceShelfHidden;
-    delete container.dataset.personalAlgorithmSourceRowHidden;
-    delete container.dataset.personalAlgorithmSourceSectionHidden;
-    delete container.dataset.personalAlgorithmSourceLayoutHidden;
-  });
+  if (showPaused || !extensionEnabled) {
+    document.querySelectorAll<HTMLElement>(
+      '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
+    ).forEach((container) => {
+      container.style.removeProperty('display');
+      delete container.dataset.personalAlgorithmSourceShelfHidden;
+      delete container.dataset.personalAlgorithmSourceRowHidden;
+      delete container.dataset.personalAlgorithmSourceSectionHidden;
+      delete container.dataset.personalAlgorithmSourceLayoutHidden;
+    });
+  }
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
     element.style.removeProperty('position');
     delete element.dataset.personalAlgorithmPositionPatched;
@@ -1992,6 +1994,7 @@ const applyRankedPresentation = (generation = rankGeneration) => {
   const applyMs = performance.now() - applyStartedAt;
   const replacementStartedAt = performance.now();
   renderReplacementSlots(generation, snapshot);
+  syncSourceFilteredContainers();
   const replacementMs = performance.now() - replacementStartedAt;
   console.info('[MyAlgo] presentation timing', {
     nativeCardCount: snapshot.cards.length,
@@ -2251,6 +2254,7 @@ const applySourceFilters = (nextFilters: FeedSourceFilters) => {
   // policy.
   clearExtensionPresentation(false);
   applyRankedFeed();
+  syncSourceFilteredContainers();
 
   lastCandidateSignature = '';
   lastRankMode = '';
