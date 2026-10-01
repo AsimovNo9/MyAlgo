@@ -18,6 +18,14 @@ import { buildYoutubeRssFeedUrl, isYoutubeSearchBlockedError, needsYoutubeMetada
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
 import { createLocalConceptExtractionProvider } from '../lib/concept-extraction-provider';
+import {
+  applyDurableModeUserConfig,
+  createEmptyDurableModeUserConfig,
+  normalizeDurableModeUserConfig,
+  undoLastDurableModeUserConfigEdit,
+  updateDurableModeUserConfig,
+  type DurableModeUserConfigState,
+} from '../lib/durable-mode-user-config';
 
 type PageCandidate = {
   external_id: string;
@@ -314,20 +322,28 @@ const durableModeCatalogSignature = (
 const refreshDurableModeCatalog = async (
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
 ): Promise<DurableSemanticModeCatalog> => {
-  const [storedPrevious, selectedModeIds] = await Promise.all([
+  const [storedPrevious, selectedModeIds, rawUserConfig] = await Promise.all([
     getStorage<DurableSemanticModeCatalog | null>(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
     ),
     getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+    getStorage<DurableModeUserConfigState>(
+      STORAGE_KEYS.DURABLE_MODE_USER_CONFIG,
+      createEmptyDurableModeUserConfig(),
+    ),
   ]);
+  const userConfig = normalizeDurableModeUserConfig(rawUserConfig);
   const selectedModeIdSet = new Set(selectedModeIds);
   const previous = storedPrevious
     ? {
         ...storedPrevious,
         modes: storedPrevious.modes.map((mode) => ({
           ...mode,
-          pinned: selectedModeIdSet.has(mode.id),
+          // Selection is temporary feed intent. Explicit user pinning is durable
+          // ownership state. Both protect identity during reconciliation, but
+          // only the user-config overlay remains pinned in the persisted catalog.
+          pinned: selectedModeIdSet.has(mode.id) || userConfig.overrides[mode.id]?.pinned === true,
         })),
       }
     : null;
@@ -349,9 +365,10 @@ const refreshDurableModeCatalog = async (
       maxModes: 32,
     },
   );
+  const configuredCatalog = applyDurableModeUserConfig(reconciled.catalog, userConfig) ?? reconciled.catalog;
 
-  if (reconciled.changed || !previous) {
-    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, reconciled.catalog);
+  if (reconciled.changed || !storedPrevious || JSON.stringify(storedPrevious) !== JSON.stringify(configuredCatalog)) {
+    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, configuredCatalog);
   }
   await setStorage(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, {
     status: 'completed',
@@ -359,7 +376,7 @@ const refreshDurableModeCatalog = async (
     graphRevision: state.graph.currentRevision,
     ...clustered.diagnostics,
     ...reconciled.diagnostics,
-    generatedAt: reconciled.catalog.generatedAt,
+    generatedAt: configuredCatalog.generatedAt,
   });
 
   const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
@@ -367,7 +384,7 @@ const refreshDurableModeCatalog = async (
   if (!legacyActiveModeId) {
     const migrated = storedMode.toLowerCase() === 'default'
       ? null
-      : reconciled.catalog.modes.find((mode) => (
+      : configuredCatalog.modes.find((mode) => (
           mode.label.toLowerCase() === storedMode.toLowerCase()
         ));
     legacyActiveModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
@@ -378,7 +395,7 @@ const refreshDurableModeCatalog = async (
     ? selectedModeIds
     : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
   const selectedModes = effectiveSelectedIds
-    .map((modeId) => resolveDurableMode(reconciled.catalog, modeId))
+    .map((modeId) => resolveDurableMode(configuredCatalog, modeId))
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
   const primary = selectedModes[0] ?? null;
   const selectedLabel = selectedModes.length > 0
@@ -408,7 +425,7 @@ const refreshDurableModeCatalog = async (
       : undefined));
   }
 
-  return reconciled.catalog;
+  return configuredCatalog;
 };
 
 const resolveModeSelection = async (
