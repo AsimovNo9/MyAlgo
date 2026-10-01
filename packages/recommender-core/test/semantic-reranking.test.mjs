@@ -10,6 +10,8 @@ import {
   embeddingCacheKey,
   enrichCandidatesWithSemanticReranking,
   semanticInputHash,
+  shouldVerifySemanticGraphMatches,
+  SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID,
 } from '../src/semantic-reranking.ts';
 
 const state = {
@@ -231,6 +233,158 @@ test('candidate category comes from graph-derived semantic matches regardless of
     'Distributed systems': 0.7,
     'Ambient music': 0.4,
   }).category, 'Distributed systems');
+});
+
+test('semantic graph verification targets moderate or ambiguous specific matches only', () => {
+  assert.equal(shouldVerifySemanticGraphMatches([
+    { node_label: 'Clear concept', similarity: 0.82 },
+    { node_label: 'Runner up', similarity: 0.5 },
+  ]), false);
+  assert.equal(shouldVerifySemanticGraphMatches([
+    { node_label: 'Moderate concept', similarity: 0.6 },
+    { node_label: 'Runner up', similarity: 0.3 },
+  ]), true);
+  assert.equal(shouldVerifySemanticGraphMatches([
+    { node_label: 'Close concept A', similarity: 0.8 },
+    { node_label: 'Close concept B', similarity: 0.77 },
+  ]), true);
+  assert.equal(shouldVerifySemanticGraphMatches([
+    { node_label: 'Broad taxonomy', similarity: 0.7, taxonomy_only: true },
+  ]), false);
+});
+
+test('DeBERTa verifier filters ambiguous embedding graph matches before they become affinities', async () => {
+  const calls = [];
+  const verifier = {
+    modelId: 'fixture-deberta',
+    modelVersion: 'fixture-nli-v1',
+    async verify(items) {
+      calls.push(...items);
+      return {
+        concepts: items.map(() => ['CRDTs and local-first software']),
+        backend: 'wasm-sandbox',
+      };
+    },
+  };
+
+  const result = await enrichCandidatesWithSemanticReranking(
+    state,
+    [{
+      external_id: 'ambiguous-systems',
+      title: 'Distributed systems CRDT implementation',
+      description: 'Practical software architecture',
+    }],
+    'CRDTs and local-first software',
+    provider,
+    createMemoryEmbeddingCache(),
+    { graphMatchVerifier: verifier },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].labels.includes('Build reliable distributed systems'));
+  assert.ok(calls[0].labels.includes('CRDTs and local-first software'));
+  assert.deepEqual(
+    result.candidates[0].semantic_graph_matches.map((match) => match.node_label),
+    ['CRDTs and local-first software'],
+  );
+  assert.equal(result.candidates[0].semantic_graph_matches[0].verification_status, 'verified');
+  assert.equal(
+    result.candidates[0].semantic_graph_matches[0].verification_pipeline_id,
+    SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID,
+  );
+  assert.equal(
+    result.candidates[0].semantic_graph_matches[0].verification_model_version,
+    'fixture-deberta@fixture-nli-v1',
+  );
+  assert.equal(result.diagnostics.graphVerificationRequested, 1);
+  assert.equal(result.diagnostics.graphVerificationVerified, 1);
+  assert.equal(result.diagnostics.graphVerificationRejected, 1);
+  assert.equal(result.diagnostics.graphVerificationBackend, 'wasm-sandbox');
+});
+
+test('semantic graph verification can abstain from all ambiguous specific matches', async () => {
+  const verifier = {
+    modelId: 'fixture-deberta',
+    modelVersion: 'fixture-nli-v1',
+    async verify(items) {
+      return { concepts: items.map(() => []), backend: 'wasm-sandbox' };
+    },
+  };
+
+  const result = await enrichCandidatesWithSemanticReranking(
+    state,
+    [{
+      external_id: 'rejected-systems',
+      title: 'Distributed systems CRDT implementation',
+      description: 'Practical software architecture',
+    }],
+    'CRDTs and local-first software',
+    provider,
+    createMemoryEmbeddingCache(),
+    { graphMatchVerifier: verifier },
+  );
+
+  assert.deepEqual(result.candidates[0].semantic_graph_matches, []);
+  assert.equal(result.candidates[0].semantic_graph_similarity, 0);
+  assert.equal(result.candidates[0].semantic_category, null);
+  assert.equal(result.diagnostics.graphVerificationRejected, 2);
+});
+
+test('semantic graph verifier failure preserves embedding matches with explicit fallback provenance', async () => {
+  const verifier = {
+    modelId: 'fixture-deberta',
+    modelVersion: 'fixture-nli-v1',
+    async verify() {
+      throw new Error('fixture verifier unavailable');
+    },
+  };
+
+  const result = await enrichCandidatesWithSemanticReranking(
+    state,
+    [{
+      external_id: 'fallback-systems',
+      title: 'Distributed systems CRDT implementation',
+      description: 'Practical software architecture',
+    }],
+    'CRDTs and local-first software',
+    provider,
+    createMemoryEmbeddingCache(),
+    { graphMatchVerifier: verifier },
+  );
+
+  assert.ok(result.candidates[0].semantic_graph_matches.length >= 2);
+  assert.equal(
+    result.candidates[0].semantic_graph_matches
+      .filter((match) => match.verification_pipeline_id === SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID)
+      .every((match) => match.verification_status === 'fallback'),
+    true,
+  );
+  assert.match(result.diagnostics.graphVerificationFallbackReason, /fixture verifier unavailable/);
+});
+
+test('clear high-confidence graph matches skip the NLI verifier', async () => {
+  let calls = 0;
+  const verifier = {
+    modelId: 'fixture-deberta',
+    modelVersion: 'fixture-nli-v1',
+    async verify(items) {
+      calls += items.length;
+      return { concepts: items.map((item) => item.labels), backend: 'wasm-sandbox' };
+    },
+  };
+
+  const result = await enrichCandidatesWithSemanticReranking(
+    state,
+    [{ external_id: 'ambient-clear', title: 'Ambient music relax unwind' }],
+    'Ambient music',
+    provider,
+    createMemoryEmbeddingCache(),
+    { graphMatchVerifier: verifier },
+  );
+
+  assert.equal(calls, 0);
+  assert.equal(result.diagnostics.graphVerificationRequested, 0);
+  assert.equal(result.candidates[0].semantic_graph_matches[0].verification_status, 'not_required');
 });
 
 test('changing mode changes semantic mode alignment without changing graph similarity', async () => {
