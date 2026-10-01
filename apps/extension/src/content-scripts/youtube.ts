@@ -670,6 +670,100 @@ const renderExplanationContent = (
     shell.appendChild(history);
   }
 
+  if (view.evidenceRecords.length > 0) {
+    const evidenceSection = document.createElement('div');
+    evidenceSection.dataset.personalAlgorithmEvidenceRecords = 'true';
+    evidenceSection.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#0f172a;';
+
+    const heading = document.createElement('div');
+    heading.textContent = 'Exact evidence used';
+    heading.style.cssText = 'font:700 11px/1.2 Roboto,Arial,sans-serif;color:#f8fafc;text-transform:uppercase;letter-spacing:.04em;';
+    evidenceSection.appendChild(heading);
+
+    const note = document.createElement('div');
+    note.textContent = 'These are retained records referenced by this explanation. Forget deletes one exact record and cannot be reversed by graph Undo/Restore.';
+    note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.35 Roboto,Arial,sans-serif;';
+    evidenceSection.appendChild(note);
+
+    const evidenceList = document.createElement('div');
+    evidenceList.style.cssText = 'max-height:210px;margin-top:6px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;';
+
+    for (const evidence of view.evidenceRecords) {
+      const row = document.createElement('div');
+      row.dataset.personalAlgorithmEvidenceId = evidence.evidenceId;
+      row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid #263244;';
+
+      const detail = document.createElement('div');
+      detail.style.minWidth = '0';
+      const title = document.createElement('div');
+      title.textContent = evidence.title;
+      title.style.cssText = 'color:#e2e8f0;font:600 11px/1.3 Roboto,Arial,sans-serif;white-space:normal;';
+      detail.appendChild(title);
+
+      const kindLabel = evidence.kind === 'interaction'
+        ? evidence.interaction ?? 'interaction'
+        : 'surfaced';
+      const meta = document.createElement('div');
+      meta.textContent = `${kindLabel} · ${evidence.connector}/${evidence.mechanism} · confidence ${evidence.confidence.toFixed(2)} · ${new Date(evidence.observedAt).toLocaleString()}`;
+      meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;overflow-wrap:anywhere;';
+      detail.appendChild(meta);
+
+      const id = document.createElement('div');
+      id.textContent = evidence.evidenceId;
+      id.title = evidence.evidenceId;
+      id.style.cssText = 'margin-top:2px;color:#64748b;font:500 9px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      detail.appendChild(id);
+      row.appendChild(detail);
+
+      const forget = document.createElement('button');
+      forget.type = 'button';
+      forget.textContent = 'Forget';
+      forget.title = 'Delete this exact retained evidence record. Graph Undo/Restore will not bring it back.';
+      forget.style.cssText = 'padding:4px 9px;border:1px solid #f87171;border-radius:999px;background:rgba(127,29,29,.35);color:#fecaca;font:700 10px/1.2 Roboto,Arial,sans-serif;cursor:pointer;';
+      forget.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const confirmed = window.confirm(
+          'Forget this exact evidence record?\n\nThe retained payload will be deleted and excluded from future reconstruction. Graph Undo/Restore will not restore it.',
+        );
+        if (!confirmed) return;
+
+        forget.disabled = true;
+        const originalLabel = forget.textContent;
+        forget.textContent = 'Forgetting…';
+        void chrome.runtime.sendMessage({
+          type: 'PERSONAL_ALGORITHM_FORGET_EVIDENCE',
+          payload: { evidenceId: evidence.evidenceId },
+        }).then((response: { ok?: boolean; forgotten?: boolean; graphRevision?: number; error?: string }) => {
+          if (!response?.ok || !response.forgotten) {
+            forget.disabled = false;
+            forget.textContent = originalLabel;
+            forget.title = response?.error ?? 'Unable to forget this evidence record.';
+            return;
+          }
+
+          row.replaceChildren();
+          const removed = document.createElement('div');
+          removed.textContent = `Evidence forgotten · graph r${response.graphRevision ?? '?'} · refreshing explanation…`;
+          removed.style.cssText = 'grid-column:1/-1;color:#fca5a5;font:600 10px/1.35 Roboto,Arial,sans-serif;';
+          row.appendChild(removed);
+          showStatus(`Evidence forgotten · graph r${response.graphRevision ?? '?'}`);
+          lastCandidateSignature = '';
+          triggerRank('graph');
+        }).catch((error) => {
+          forget.disabled = false;
+          forget.textContent = originalLabel;
+          forget.title = error instanceof Error ? error.message : 'Unable to forget this evidence record.';
+        });
+      });
+      row.appendChild(forget);
+      evidenceList.appendChild(row);
+    }
+
+    evidenceSection.appendChild(evidenceList);
+    shell.appendChild(evidenceSection);
+  }
+
   if (view.pathLines.length > 0) {
     const reasons = document.createElement('div');
     reasons.style.cssText = 'padding:10px 14px 8px;border-bottom:1px solid #303030;background:#141414;';

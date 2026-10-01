@@ -447,6 +447,10 @@ The extension store tests exercise current-schema persistence, v1→v3 and v2→
 See `docs/13_REPLAY_AND_SEMANTIC_EVALUATION.md` for the fixture and metric contract.
 
 
+### #155 PR #234 live browser validation
+
+PR #234 was validated in a live browser after merge. Targeted Forget removed the exact retained evidence payload, persisted the minimal forgotten-evidence marker across restart/rebuild, rejected same-ID re-observation, prevented graph Undo/Restore original from resurrecting deleted support, and full local reset cleared the forgotten ledger. This establishes the destructive evidence semantics reused by the remaining #153 feed-card action surface.
+
 ## PR #217 semantic concept materialization validation
 
 PR #216 is merged and supplies the replay/evaluation contract. #217 validates the missing live graph layer discovered after #215.
@@ -763,7 +767,11 @@ For #153 explanation validation, require:
 3. displayed contribution values are copied from the scorer trace without recomputation;
 4. matched graph paths preserve node IDs, user-facing node labels, edge IDs, and evidence IDs from the trace;
 5. acquisition mechanism is shown separately and explicitly not presented as preference evidence;
-6. repeated presentation refreshes update the explanation for the current trace without duplicating controls or changing native card identity.
+6. repeated presentation refreshes update the explanation for the current trace without duplicating controls or changing native card identity;
+7. evidence actions are offered only for concrete retained evidence IDs actually referenced by the current contribution/path/mode/history explanation, never for an aggregated contribution without an exact target;
+8. each actionable evidence row shows connector/mechanism, observed time, confidence, stable evidence ID, and enough content context for the user to identify the record;
+9. Forget from an open feed-card explanation uses the same #155 deletion path as Settings, then invalidates ranking and refreshes the explanation against a strictly newer graph revision when deletion changes the graph;
+10. the refreshed explanation no longer contains the forgotten evidence ID or any score-bearing path that depended solely on it, while unrelated retained evidence/support remains visible.
 
 
 

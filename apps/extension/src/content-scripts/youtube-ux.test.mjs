@@ -40,6 +40,19 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
         },
       ],
       modeGrounding: null,
+      evidenceRecords: [
+        {
+          evidenceId: 'e1',
+          kind: 'interaction',
+          interaction: 'watched',
+          connector: 'youtube',
+          mechanism: 'history_dom',
+          observedAt: '2026-09-30T12:00:00.000Z',
+          confidence: 0.9,
+          externalId: 'past-video',
+          title: 'Past video',
+        },
+      ],
     },
   });
 
@@ -71,8 +84,64 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.equal(view.contributions[0].actionLabel, 'Reduce');
   assert.equal(view.contributions[0].targetKind, 'node');
   assert.equal(view.contributions[0].targetId, 'topic:local-ai');
+  assert.deepEqual(view.evidenceRecords, [
+    {
+      evidenceId: 'e1',
+      kind: 'interaction',
+      interaction: 'watched',
+      connector: 'youtube',
+      mechanism: 'history_dom',
+      observedAt: '2026-09-30T12:00:00.000Z',
+      confidence: 0.9,
+      externalId: 'past-video',
+      title: 'Past video',
+    },
+  ]);
   assert.equal(view.graphRevision, 12);
   assert.equal(view.traceId, 'trace-a');
+});
+
+test('exact evidence records are sorted newest-first and remain individually addressable', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-evidence',
+    score: 60,
+    traceId: 'trace-evidence',
+    explanation: {
+      rawScore: 7,
+      displayScore: 60,
+      graphRevision: 22,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [],
+      matchedPaths: [],
+      modeGrounding: null,
+      evidenceRecords: [
+        {
+          evidenceId: 'older',
+          kind: 'exposure',
+          interaction: null,
+          connector: 'youtube',
+          mechanism: 'home_dom',
+          observedAt: '2026-09-30T10:00:00.000Z',
+          confidence: 0.8,
+          externalId: 'video-evidence',
+          title: 'Current video exposure',
+        },
+        {
+          evidenceId: 'newer',
+          kind: 'interaction',
+          interaction: 'watched',
+          connector: 'youtube',
+          mechanism: 'history_dom',
+          observedAt: '2026-10-01T10:00:00.000Z',
+          confidence: 1,
+          externalId: 'past-video',
+          title: 'Past watched video',
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(view.evidenceRecords.map((record) => record.evidenceId), ['newer', 'older']);
 });
 
 test('exact negative graph contributions suggest the positive correction direction', () => {

@@ -17,7 +17,7 @@
 - [x] Native feed enforcement works (#152/#204)
 - [x] “Why am I seeing this?” works on scored native and replacement cards with exact trace/revision, additive contributions, graph-path support, and separated acquisition provenance (#153/PR #230)
 - [x] Reduce/mute/prefer actions work with revisioned Undo/Restore-original and visible Unmute recovery (#154/PR #233, browser validated)
-- [ ] Forget/delete semantics work
+- [x] Forget/delete semantics work in the live graph provenance flow with durable reconstruction exclusion, staging-store purge, graph Undo/Restore separation, and full-reset cleanup (#155/PR #234, browser validated)
 - [x] Modes operate over one graph
 - [x] #221 / PR #223 canonical semantic scoring passes CI plus live validation: canonical neighbourhood assignments are replayable, redundant lexical/embedding source-node matches do not stack as independent score evidence, broad taxonomy remains distinguishable, and exact source-node provenance survives in traces
 - [x] #214 durable mode architecture validated against #162: candidate affinities are multi-label, durable mode clusters have stable local identity, and every active-mode score contribution resolves to the stable mode revision and exact canonical/source graph member in the deterministic trace

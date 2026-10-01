@@ -77,6 +77,17 @@ export type RankedFeedItem = {
         matchedBy: string[];
       }>;
     } | null;
+    evidenceRecords?: Array<{
+      evidenceId: string;
+      kind: 'exposure' | 'interaction';
+      interaction: string | null;
+      connector: string;
+      mechanism: string;
+      observedAt: string;
+      confidence: number;
+      externalId: string;
+      title: string;
+    }>;
   };
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
@@ -127,6 +138,18 @@ export type WhyThisHistoryMatch = {
   matchedBy: string[];
 };
 
+export type WhyThisEvidenceRecord = {
+  evidenceId: string;
+  kind: 'exposure' | 'interaction';
+  interaction: string | null;
+  connector: string;
+  mechanism: string;
+  observedAt: string;
+  confidence: number;
+  externalId: string;
+  title: string;
+};
+
 export type ExplanationViewModel = {
   scoreLine: string;
   acquisitionLine: string | null;
@@ -137,6 +160,7 @@ export type ExplanationViewModel = {
   miniNodes: WhyThisMiniNode[];
   historyScoreSharePercent: number | null;
   historyMatches: WhyThisHistoryMatch[];
+  evidenceRecords: WhyThisEvidenceRecord[];
   graphRevision: number | null;
   traceId: string | null;
 };
@@ -319,6 +343,11 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
     miniNodes,
     historyScoreSharePercent: explanation?.historySupport?.scoreSharePercent ?? null,
     historyMatches: explanation?.historySupport?.matches ?? [],
+    evidenceRecords: [...(explanation?.evidenceRecords ?? [])]
+      .sort((left, right) => (
+        right.observedAt.localeCompare(left.observedAt)
+        || left.evidenceId.localeCompare(right.evidenceId)
+      )),
     graphRevision: explanation?.graphRevision ?? null,
     traceId: item.traceId ?? null,
   };

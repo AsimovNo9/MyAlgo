@@ -162,6 +162,17 @@ type LocalFeedItem = CandidatePoolItem & {
         matchedBy: string[];
       }>;
     } | null;
+    evidenceRecords: Array<{
+      evidenceId: string;
+      kind: 'exposure' | 'interaction';
+      interaction: string | null;
+      connector: string;
+      mechanism: string;
+      observedAt: string;
+      confidence: number;
+      externalId: string;
+      title: string;
+    }>;
   };
 };
 
@@ -2400,6 +2411,50 @@ async function rankLocalCandidates(
         }
       : null;
 
+    const referencedEvidenceIds = new Set<string>();
+    for (const contribution of contributions) {
+      for (const evidenceId of contribution.evidenceIds) referencedEvidenceIds.add(evidenceId);
+    }
+    for (const path of matchedPaths) {
+      for (const evidenceId of path.evidenceIds) referencedEvidenceIds.add(evidenceId);
+    }
+    for (const member of modeGrounding?.members ?? []) {
+      for (const evidenceId of member.evidenceIds) referencedEvidenceIds.add(evidenceId);
+    }
+    for (const match of historyMatches) referencedEvidenceIds.add(match.evidenceId);
+
+    const evidenceRecords = [...referencedEvidenceIds]
+      .map((evidenceId) => evidenceById.get(evidenceId))
+      .filter((record): record is NonNullable<typeof record> => Boolean(record))
+      .map((record) => {
+        const evidence = record.evidence;
+        const externalId = evidence.content.externalId;
+        const contentNodeId = `content:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(externalId)}`;
+        const graphLabel = graphNodeById.get(contentNodeId)?.label?.trim() ?? '';
+        const storedVideoTitle = videoStore[externalId]?.title?.trim() ?? '';
+        const pooledTitle = candidatePoolIndex.get(externalId)?.title?.trim() ?? '';
+        const title = [
+          evidence.metadata?.title?.trim(),
+          graphLabel && graphLabel !== externalId ? graphLabel : '',
+          storedVideoTitle && storedVideoTitle !== externalId ? storedVideoTitle : '',
+          pooledTitle && pooledTitle !== externalId ? pooledTitle : '',
+        ].find(Boolean) || 'Retained YouTube evidence';
+
+        return {
+          evidenceId: record.id,
+          kind: evidence.kind,
+          interaction: evidence.kind === 'interaction' ? evidence.interaction : null,
+          connector: evidence.provenance.connector,
+          mechanism: evidence.provenance.mechanism,
+          observedAt: evidence.observedAt,
+          confidence: record.confidence,
+          externalId,
+          title,
+        };
+      })
+      .sort((left, right) => right.observedAt.localeCompare(left.observedAt) || left.evidenceId.localeCompare(right.evidenceId))
+      .slice(0, 8);
+
     return {
       ...item,
       suppressed: trace.suppressed,
@@ -2416,6 +2471,7 @@ async function rankLocalCandidates(
         matchedPaths,
         modeGrounding,
         historySupport,
+        evidenceRecords,
       },
     };
   });
