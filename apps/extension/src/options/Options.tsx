@@ -621,13 +621,15 @@ export function Options() {
         </label>
         <p>
           When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
-          for semantic similarity and DeBERTa-v3-xsmall NLI for bounded zero-shot concept verification. Candidate text, verified
-          concepts, graph state, embeddings, and inference stay local. The installed extension does not download
+          for candidate↔graph semantic retrieval and DeBERTa-v3-xsmall NLI for bounded zero-shot verification of metadata concepts
+          plus ambiguous graph matches. Clear high-confidence embedding matches skip DeBERTa. Candidate text, verified concepts,
+          graph state, embeddings, and inference stay local. The installed extension does not download
           model files at runtime. Embeddings prefer WebGPU and fall back to local WebAssembly CPU inference when needed.
           The concept verifier deliberately uses q8 WebAssembly CPU inference, which is independent of the embedding batch slider.
-          Concept verification remains asynchronous and falls back to the existing metadata materializer only when verification fails.
+          Metadata concept verification remains asynchronous. For ambiguous graph matches, verifier failure preserves the embedding
+          result with explicit fallback provenance instead of failing ranking.
         </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + WASM concept verification)' : 'Deterministic baseline'}</p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + bounded WASM NLI verification)' : 'Deterministic baseline'}</p>
         <div style={{ marginTop: 16 }}>
           <label htmlFor="semantic-neural-batch-size">
             WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
