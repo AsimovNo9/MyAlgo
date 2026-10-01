@@ -304,6 +304,21 @@ Required invariants:
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider using the fixed replay fixture, and benchmark the DeBERTa verifier separately on its deliberate q8 WASM path. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
 
 
+## Hybrid candidate↔graph verification validation (PR #237)
+
+Validate the combined local model path separately from metadata concept extraction:
+
+1. mxbai remains the candidate↔graph retriever and produces the same clear high-confidence graph matches without invoking DeBERTa;
+2. only non-taxonomy graph matches that are moderate in absolute similarity or close to an independent runner-up enter NLI verification;
+3. one semantic slice sends at most four candidates and at most three graph labels per candidate to DeBERTa;
+4. accepted ambiguous labels remain score-bearing and record verifier model/pipeline provenance;
+5. rejected ambiguous labels are absent from `semantic_graph_matches` before durable-mode affinity construction and deterministic scoring;
+6. explicit lexical support is unaffected by DeBERTa rejection because lexical and embedding evidence remain separate score paths;
+7. if all ambiguous specific matches are rejected, semantic graph similarity contributes no embedding-backed score for that candidate;
+8. verifier failure preserves the embedding result, records fallback provenance, and does not turn a local model outage into a ranking outage;
+9. semantic-feature cache identity changes with the combined pipeline so pre-verifier cached graph matches cannot be silently reused;
+10. compare precision/abstention, rank changes, verifier invocation rate, WASM latency, and memory against the embedding-only baseline before changing thresholds.
+
 ## Post-#213 category/mode and Home-stability validation (#214)
 
 Live review after PR #213 exposed two distinct failure classes that must be evaluated separately.
