@@ -398,6 +398,7 @@ export function Options() {
         edgesByRelation: [],
         nodes: [],
         edges: [],
+        controls: [],
         revisions: [],
       }, durableModeCatalog, 'all');
   const selectedGraphNode = graphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -417,6 +418,10 @@ export function Options() {
   const explanationGraphOverlay = explanationGraphView
     ? buildGraphModeOverlay(explanationGraphView, null, 'all')
     : null;
+  const mutedGraphControls = (graphInspector?.controls ?? [])
+    .filter((control) => control.action === 'mute')
+    .sort((left, right) => left.targetLabel.localeCompare(right.targetLabel));
+
   const graphSearchResults = normalizedGraphQuery
     ? [
         ...filteredGraphNodes.slice(0, 8).map((node) => ({ id: node.id, label: node.label, kind: node.kind, type: 'node' as const })),
@@ -532,6 +537,51 @@ export function Options() {
           Groups are discovered from retained semantic graph support. Repeated standalone interests can become groups once supported
           by at least two retained videos; parent/child reclustering does not silently clear a user selection.
         </p>
+      </section>
+
+      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Muted graph terms</h2>
+        <p>
+          Mute is a hard Personal Algorithm suppression. Muted terms remain visible here until you explicitly unmute them;
+          unmuting removes only the mute control and does not delete retained history or graph evidence.
+        </p>
+        {graphInspectorSource !== 'live' ? (
+          <button type="button" onClick={() => void handleLoadLiveGraph()}>
+            Load muted terms
+          </button>
+        ) : mutedGraphControls.length === 0 ? (
+          <p>No graph terms are currently muted.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {mutedGraphControls.map((control) => (
+              <div
+                key={control.id}
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 10,
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <strong>{control.targetLabel}</strong>
+                  <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere' }}>
+                    {control.targetKind} · {control.targetId}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveGraphControl(control.targetKind, control.targetId)}
+                >
+                  Unmute
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>
