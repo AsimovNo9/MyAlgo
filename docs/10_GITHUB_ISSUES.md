@@ -4,15 +4,15 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 ## Current execution order
 
-PR #216/#162 replay evaluation, PR #218/#217 graph materialization, and PR #220/#219 local topic verification are merged.
+The semantic/runtime sequence through PR #229 and the trust/graph sequence through PR #231 are merged. #170 is complete; the next work is user control over the inspected model.
 
-1. **P0 — #221 / PR #223 canonical concepts + bounded semantic scoring — in review.** Reconcile aliases/near-duplicates into replayable canonical neighbourhoods, preserve source-node/evidence provenance, and prevent lexical/embedding duplicate score paths from stacking.
-2. **P0 — #214 durable inferred modes.** Build stable local mode IDs/revisions over canonical concept neighbourhoods, retain multi-label candidate affinity, and persist modes independently of feed-cache churn.
-3. **P0 — #214 graph-grounded mode scoring/retrieval/supply.** Ground every mode contribution in exact member nodes, change retrieval planning with the active mode, and compute slider-relative native supply before using the acquired reservoir.
-4. **P1 — #210 + #153 + #170 scoring/trust UX.** Revisit 0–100 calibration after semantic overcount is fixed; then complete exact Why-this and graph/provenance inspection.
-5. **P1 — #154 + #155 + #178 correction/provenance/history controls.**
-6. **P2 — #169 offline/signed-out local-runtime validation plus remaining #161/#158/#159 editable/pinned modes, graph editing, and counterfactual replay.**
-7. **P3 — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
+1. **P1 — #154 + #155 correction/evidence controls.** Implement Reduce/Prefer/Mute/Forget with durable revisions, preserved pre-edit baseline, undo/restore, and evidence-deletion semantics.
+2. **P1 — #153 direct-action/evidence-navigation completion.** Connect Why-this and graph-inspector terms to #154/#155 operations and concrete evidence records.
+3. **P2 — #161 + #178 mode/history ownership UX.** Make discovered groups explicitly editable/versioned and let users choose which history clusters influence the graph/feed.
+4. **P2 — #169 + #211 release hardening.** Finish signed-out/offline behavior plus long-session/infinite-scroll/service-worker-restart and detached-DOM validation.
+5. **P3 — #158 explicit user-created graph nodes.** Add user-authored interests/concepts/creators/formats after edit/undo semantics are stable.
+6. **P3/P4 — #159 counterfactual replay.** Preview hypothetical edits against a fixed local snapshot after real graph editing exists.
+7. **Later — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
 #219/#220 is now a completed upstream boundary. Zero-shot verifier output remains rebuildable derived content understanding; retained interaction evidence is still the preference gate and #218 remains the deterministic graph-materialization authority.
 
@@ -199,7 +199,7 @@ PR #195 is merged. Treat this entry as the status record for the runtime-scoring
 
 PR #193 was merged after CI and live browser/runtime validation. The live diagnostic exercised the actual persisted Personal Algorithm state (792 evidence records, 516 nodes, 269 edges) and confirmed score 10.5, exact contribution accounting, trace consistency, and replay stability. Live validation also exposed an edge-scoping bug; the scorer was corrected so only edges whose endpoints are both part of the candidate path contribute.
 
-### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization — **sequenced after #168 and native-feed hardening**
+### [#170](https://github.com/AsimovNo9/MyAlgo/issues/170): Build Personal Algorithm Graph visualization — **completed in PR #231**
 
 ## P2 — Feed enforcement
 
@@ -215,7 +215,7 @@ Merged implementation uses one native feed surface, trace-backed in-place replac
 
 Merged and live-browser validated. Injected DOM is excluded from evidence/candidate/interaction paths; stale generations are rejected by generation + route + mode; pause/reactivation, feedback, rebuild invalidation, and infinite-scroll recycling were validated.
 
-## P3 — Trust UX
+## P1 — Trust UX / correction controls
 
 ### [#153](https://github.com/AsimovNo9/MyAlgo/issues/153): Build per-item “Why am I seeing this?” and trace-to-graph path
 
@@ -225,7 +225,7 @@ Merged and live-browser validated. Injected DOM is excluded from evidence/candid
 
 ### [#158](https://github.com/AsimovNo9/MyAlgo/issues/158): Support user-created Personal Algorithm Graph nodes
 
-## P4 — Graph editing
+## P2/P3 — Mode ownership and graph editing
 
 ### [#161](https://github.com/AsimovNo9/MyAlgo/issues/161): Add modes as overlays over one Personal Algorithm Graph
 
