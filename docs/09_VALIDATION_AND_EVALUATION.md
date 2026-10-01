@@ -231,6 +231,18 @@ Validate the search/classification slice with the following invariants:
 10. Search/enrichment remains off the initial overlay first-paint path.
 
 
+### YouTube anti-abuse / redirect handling
+
+Web discovery must treat any redirect/interstitial away from the requested YouTube search page as a provider-blocking condition, not as a page to follow. Search fetches use manual redirect handling so Google anti-abuse destinations such as `google.com/sorry` are never fetched from the extension origin.
+
+Validation requirements:
+
+1. a redirect response from `/results?search_query=...` is classified as `YOUTUBE_SEARCH_BLOCKED`;
+2. once the offscreen search provider is available, a provider/network failure is terminal for that attempt and must not be repeated immediately from the service worker;
+3. blocked discovery enters a six-hour cooldown rather than ordinary short failure backoff;
+4. the retrieval diagnostics surface a user-readable blocked/paused message without affecting normal ranking, Why-this, RSS discovery, or existing candidate presentation;
+5. browser extension errors should not contain a CORS failure caused by following a YouTube search redirect to `google.com/sorry`.
+
 ### Search isolation and retention regression
 
 For long-session validation:
