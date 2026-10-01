@@ -56,7 +56,7 @@ Current execution order:
 11. **P1 — finish #153 evidence-action integration:** direct graph correction actions are live; finish concrete evidence navigation/Forget integration against #155 semantics.
 12. **P2 — #161 + #178 mode/history ownership UX:** add explicit user editing of discovered groups (rename/pin/member management/versioning) and let users choose which history clusters influence the graph/feed.
 13. **P2 release hardening — #169 + #211:** finish signed-out/offline validation plus long-session/infinite-scroll/service-worker-restart stress and detached-DOM checks.
-13. **P3 — #158 explicit user-created graph nodes, then #159 counterfactual replay.**
+14. **P3 — #158 explicit user-created graph nodes, then #159 counterfactual replay.**
 14. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
 
