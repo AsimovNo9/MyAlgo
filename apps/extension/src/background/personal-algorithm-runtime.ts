@@ -1230,12 +1230,13 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p7',
+    revision: 'local-mvp-p8',
     baseScore: 0,
     nodeWeights,
-    edgeRelationWeights: {
-      created_by: 2,
-    },
+    // Structural graph relations explain provenance/paths but do not earn
+    // recommendation score on their own. Creator affinity is represented by
+    // the creator node contribution above.
+    edgeRelationWeights: {},
   };
 }
 
