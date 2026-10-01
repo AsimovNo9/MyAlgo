@@ -6,8 +6,9 @@ This backlog is ordered by dependency and risk. Historical P-labels in issue tit
 
 The semantic/runtime sequence through PR #229 and the trust/graph sequence through PR #231 are merged. #170 is complete; the next work is user control over the inspected model.
 
-1. **P1 — #154 + #155 correction/evidence controls.** Implement Reduce/Prefer/Mute/Forget with durable revisions, preserved pre-edit baseline, undo/restore, and evidence-deletion semantics.
-2. **P1 — #153 direct-action/evidence-navigation completion.** Connect Why-this and graph-inspector terms to #154/#155 operations and concrete evidence records.
+1. **Complete — #154 / PR #233 correction controls.** Reduce/Prefer/Mute, baseline preservation, revisioned Undo/Restore original, Why-this/graph-target actions, fallback feedback, and Unmute are merged and browser validated.
+2. **P1 — #155 evidence provenance + Forget.** Persist minimal deletion intent so a forgotten concrete evidence record cannot be silently recreated; rebuild and graph Undo/Restore must respect current retained evidence.
+3. **P1 — #153 evidence-action/navigation completion.** Graph correction actions are live; connect concrete Why-this/graph provenance records to #155 Forget/navigation.
 3. **P2 — #161 + #178 mode/history ownership UX.** Make discovered groups explicitly editable/versioned and let users choose which history clusters influence the graph/feed.
 4. **P2 — #169 + #211 release hardening.** Finish signed-out/offline behavior plus long-session/infinite-scroll/service-worker-restart and detached-DOM validation.
 5. **P3 — #158 explicit user-created graph nodes.** Add user-authored interests/concepts/creators/formats after edit/undo semantics are stable.
@@ -115,7 +116,7 @@ PR #191 continues the #148 implementation with an evidence-backed graph relation
 
 Implemented scope:
 
-- versioned browser-local state schema, now v2;
+- versioned browser-local state schema, now v3 with a minimal forgotten-evidence ledger;
 - normalized evidence records with confidence and retention/expiry metadata;
 - content graph nodes keyed by source + external ID;
 - graph nodes/edges with explicit versus inferred provenance;
@@ -144,7 +145,7 @@ Acceptance criteria:
 - [x] Remove stale inferred relationships when their supporting evidence is deleted.
 - [x] Support reset, targeted evidence deletion, graph export-ready serialization, and lifecycle-safe persistence.
 - [x] Keep browser-observed evidence and YouTube API account/display data separate.
-- [x] Provide a versioned schema and migration strategy, including v1 → v2 preservation.
+- [x] Provide a versioned schema and migration strategy, including v1 → v2 preservation and v2 → v3 initialization of forgotten-evidence state.
 - [x] Cover create, read, update, delete, reset, restart, evidence-backed edges, and migration behavior with CI-validated tests.
 - [x] Reconcile repeated YouTube History scans idempotently without using collector observation time as watch-event identity.
 
