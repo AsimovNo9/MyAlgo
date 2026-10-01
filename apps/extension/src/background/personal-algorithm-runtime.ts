@@ -1225,12 +1225,15 @@ const candidateContext = (
 export function buildLocalScoringPolicy(state: PersonalAlgorithmState): PersonalScoringPolicy {
   const nodeWeights: Record<string, number> = {};
   for (const node of state.graph.nodes) {
-    if (node.kind === 'content') nodeWeights[node.id] = 1;
+    // A retained content identity is bookkeeping, not a preference signal.
+    // Scoring the content node makes an opaque YouTube ID appear as +1 simply
+    // because the exact item exists in the graph. Preference comes from
+    // creator/semantic/feedback/mode evidence instead.
     if (node.kind === 'creator') nodeWeights[node.id] = 8;
   }
 
   return {
-    revision: 'local-mvp-p8',
+    revision: 'local-mvp-p9',
     baseScore: 0,
     nodeWeights,
     // Structural graph relations explain provenance/paths but do not earn
