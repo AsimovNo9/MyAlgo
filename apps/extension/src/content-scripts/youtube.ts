@@ -460,7 +460,7 @@ const renderExplanationContent = (
 
   const graph = document.createElement('div');
   graph.dataset.personalAlgorithmExplanationGraph = 'true';
-  graph.style.cssText = 'position:relative;height:180px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;';
+  graph.style.cssText = `position:relative;height:${view.historyMatches.length > 0 ? 260 : 180}px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;`;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
@@ -475,7 +475,7 @@ const renderExplanationContent = (
     if (!position) return;
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('x1', '50');
-    line.setAttribute('y1', '53');
+    line.setAttribute('y1', view.historyMatches.length > 0 ? '40' : '53');
     line.setAttribute('x2', String(position.x));
     line.setAttribute('y2', String(position.y));
     line.setAttribute('stroke', '#64748b');
@@ -486,7 +486,7 @@ const renderExplanationContent = (
 
   const centerNode = document.createElement('div');
   centerNode.textContent = 'This video';
-  centerNode.style.cssText = 'position:absolute;left:50%;top:53%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  centerNode.style.cssText = `position:absolute;left:50%;top:${view.historyMatches.length > 0 ? 40 : 53}%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
   graph.appendChild(centerNode);
 
   view.miniNodes.slice(1, 4).forEach((node, index) => {
@@ -499,7 +499,77 @@ const renderExplanationContent = (
     pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
     graph.appendChild(pill);
   });
+  if (view.historyMatches.length > 0) {
+    const historyHeading = document.createElement('div');
+    historyHeading.textContent = 'Past watches that support this';
+    historyHeading.style.cssText = 'position:absolute;left:50%;bottom:58px;transform:translateX(-50%);color:#94a3b8;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
+    graph.appendChild(historyHeading);
+
+    const historyPositions = [
+      { x: 28, y: 84 },
+      { x: 72, y: 84 },
+    ];
+    view.historyMatches.slice(0, 2).forEach((match, index) => {
+      const position = historyPositions[index];
+      if (!position) return;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', '50');
+      line.setAttribute('y1', '48');
+      line.setAttribute('x2', String(position.x));
+      line.setAttribute('y2', String(position.y - 6));
+      line.setAttribute('stroke', '#475569');
+      line.setAttribute('stroke-width', '0.9');
+      line.setAttribute('stroke-dasharray', '3 2');
+      svg.appendChild(line);
+
+      const pill = document.createElement('div');
+      pill.textContent = match.title;
+      pill.title = match.title;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:40%;padding:7px 9px;border:1px solid #64748b;border-radius:10px;background:#1e293b;color:#e2e8f0;text-align:center;font:600 10px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+  }
   shell.appendChild(graph);
+
+  if (view.historyMatches.length > 0) {
+    const history = document.createElement('div');
+    history.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#111827;';
+    const heading = document.createElement('div');
+    const share = view.historyScoreSharePercent;
+    heading.textContent = share == null
+      ? 'Past history support'
+      : `Past history support · ${share}% of positive score is history-backed`;
+    heading.style.cssText = 'font:700 11px/1.2 Roboto,Arial,sans-serif;color:#f8fafc;text-transform:uppercase;letter-spacing:.04em;';
+    history.appendChild(heading);
+
+    const note = document.createElement('div');
+    note.textContent = 'This is scorer attribution, not a probability estimate.';
+    note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+    history.appendChild(note);
+
+    for (const match of view.historyMatches.slice(0, 4)) {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #263244;';
+      const title = document.createElement('div');
+      title.textContent = match.title;
+      title.style.cssText = 'color:#e2e8f0;font:600 11px/1.3 Roboto,Arial,sans-serif;white-space:normal;';
+      row.appendChild(title);
+      const meta = document.createElement('div');
+      const matchedBy = match.matchedBy
+        .map((label) => label.replace(/^[^:]+:\s*/, '').trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' · ');
+      meta.textContent = [
+        match.interaction === 'watched' ? 'Watched before' : match.interaction,
+        matchedBy ? `matched via ${matchedBy}` : null,
+      ].filter(Boolean).join(' · ');
+      meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+      row.appendChild(meta);
+      history.appendChild(row);
+    }
+    shell.appendChild(history);
+  }
 
   if (view.pathLines.length > 0) {
     const reasons = document.createElement('div');
