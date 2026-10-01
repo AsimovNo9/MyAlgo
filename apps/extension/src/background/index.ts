@@ -50,6 +50,9 @@ type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
   lastAcquiredAt?: string;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
   semantic_mode_affinities?: CandidateModeAffinity[];
 };
 
@@ -2491,6 +2494,7 @@ const handleRuntimeMessage = (
     payload?: {
       mode?: string;
       modeId?: string;
+      toggle?: boolean;
       algorithmId?: string;
       enabled?: boolean;
       contentItemId?: string;
