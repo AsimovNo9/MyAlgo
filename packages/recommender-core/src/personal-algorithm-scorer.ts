@@ -83,6 +83,27 @@ export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:Sc
  }), traceId=`trace-${hash({candidate:{id:candidate.id,content:candidate.content,nodeIds:ids(candidate),creatorNodeId:candidate.creatorNodeId??null},policyRevision:policy.revision,mode,graphRevision:state.graph.currentRevision,evidenceRevision:er,feedbackRevision,featureRevision})}`;
  const empty=(outcome:PersonalScoreTrace['policyOutcome']):PersonalScoreResult=>({score:0,trace:{id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible,suppressed:outcome!=='eligible',policyOutcome:outcome,finalScore:0,baseScore:0,nodeContributions:[],edgeContributions:[],featureContributions:[],feedbackContributions:[],modeContributions:[],suppressionContributions:[],matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()}});
  if(excluded)return empty('excluded'); if(!eligible)return empty('ineligible');
+ const graphControls=[...(policy.graphControls??[])].sort((a,b)=>a.id.localeCompare(b.id));
+ const candidateSourceIds=new Set([
+  ...nids,
+  ...(candidate.features??[]).flatMap(signal=>[signal.sourceId??'',...(signal.sourceIds??[])]),
+  ...(candidate.modeFeatures??[]).flatMap(signal=>[signal.sourceId??'',...(signal.sourceIds??[])]),
+ ].filter(Boolean));
+ const muteControl=graphControls.find(control=>control.action==='mute'&&(
+  control.targetKind==='edge'
+   ? es.some(edge=>edge.id===control.targetId)
+   : candidateSourceIds.has(control.targetId)
+ ));
+ if(muteControl){
+  const suppression=contrib(
+   `suppression:graph-control:${muteControl.id}`,
+   'suppression',
+   `muted by you: ${muteControl.targetId}`,
+   0,
+   muteControl.targetId,
+  );
+  return {score:0,trace:{id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible:true,suppressed:true,policyOutcome:'suppressed',finalScore:0,baseScore:0,nodeContributions:[],edgeContributions:[],featureContributions:[],feedbackContributions:[],modeContributions:[],suppressionContributions:[suppression],matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()}};
+ }
  const mp=policy.modes?.[mode]??{}, nc:ScoreContribution[]=[],ec:ScoreContribution[]=[],xc:ScoreContribution[]=[],fc:ScoreContribution[]=[],mc:ScoreContribution[]=[],sc:ScoreContribution[]=[];
  const modeBaseDelta=finite(mp.baseDelta); if(modeBaseDelta)mc.push(contrib(`mode-base:${mode}`,'mode',`${mode}:base`,modeBaseDelta));
  for(const id of nids){const v=finite(policy.nodeWeights?.[id]);if(v)nc.push(contrib(`node:${id}`,'node',id,v,id));const mv=finite(mp.nodeWeights?.[id]);if(mv)mc.push(contrib(`mode-node:${id}`,'mode',`${mode}:${id}`,mv,id))}
@@ -90,17 +111,9 @@ export function scorePersonalAlgorithm(state:PersonalAlgorithmState,candidate:Sc
  for(const s of [...(candidate.features??[])].sort((a,b)=>a.id.localeCompare(b.id)))if(finite(s.value)!==0)xc.push(contrib(`feature:${s.id}`,'feature',s.label,s.value,s.sourceId??s.id,s.evidenceIds??[],s.sourceIds??[]));
  for(const s of [...(candidate.modeFeatures??[])].sort((a,b)=>a.id.localeCompare(b.id)))if(finite(s.value)!==0)mc.push(contrib(`mode-feature:${s.id}`,'mode',s.label,s.value,s.sourceId??s.canonicalId,s.evidenceIds??[],s.sourceIds??[],{modeId:s.modeId,modeRevision:s.modeRevision,canonicalId:s.canonicalId}));
  for(const s of [...feedbackSignals].sort((a,b)=>a.id.localeCompare(b.id)))if(feedbackMatch(s,candidate,ns))fc.push(contrib(`feedback:${s.id}`,'feedback',s.label??s.id,s.value,s.id,s.evidenceIds??[]));
- const graphControls=[...(policy.graphControls??[])].sort((a,b)=>a.id.localeCompare(b.id));
  const controlledNc=applyPreferenceControls(nc,graphControls),controlledEc=applyPreferenceControls(ec,graphControls),controlledXc=applyPreferenceControls(xc,graphControls),controlledMc=applyPreferenceControls(mc,graphControls);
  const base=normalizedScore(finite(policy.baseScore)); let score=contributionTotal(base,[controlledNc,controlledEc,controlledXc,fc,controlledMc]);
- const reasons:string[]=[];
- const muteControls=graphControls.filter(control=>control.action==='mute');
- for(const control of muteControls){
-  const matches=control.targetKind==='edge'
-   ? es.some(edge=>edge.id===control.targetId)
-   : ns.has(control.targetId)||[...controlledNc,...controlledXc,...controlledMc].some(item=>controlMatchesContribution(control,item));
-  if(matches)reasons.push(`graph_control:${control.id}`);
- }if(mp.suppressNodeIds?.some(id=>ns.has(id)))reasons.push('mode_node');if(mp.suppressRelations?.some(r=>rels.has(r)))reasons.push('mode_relation');if(policy.suppression?.nodeIds?.some(id=>ns.has(id)))reasons.push('node');if(policy.suppression?.relations?.some(r=>rels.has(r)))reasons.push('relation');if(policy.suppression?.belowScore!=null&&score<policy.suppression.belowScore)reasons.push('below_score');
+ const reasons:string[]=[];if(mp.suppressNodeIds?.some(id=>ns.has(id)))reasons.push('mode_node');if(mp.suppressRelations?.some(r=>rels.has(r)))reasons.push('mode_relation');if(policy.suppression?.nodeIds?.some(id=>ns.has(id)))reasons.push('node');if(policy.suppression?.relations?.some(r=>rels.has(r)))reasons.push('relation');if(policy.suppression?.belowScore!=null&&score<policy.suppression.belowScore)reasons.push('below_score');
  if(reasons.length){sc.push(contrib(`suppression:${hash(reasons.sort())}`,'suppression',reasons.join(','),-score));score=0}
  const trace:PersonalScoreTrace={id:traceId,scorerRevision:SCORER_REVISION,policyRevision:policy.revision,graphRevision:state.graph.currentRevision,evidenceRevision:er,candidateId:candidate.id,content:candidate.content,eligible:true,suppressed:reasons.length>0,policyOutcome:reasons.length?'suppressed':'eligible',finalScore:score,baseScore:base,nodeContributions:controlledNc,edgeContributions:controlledEc,featureContributions:controlledXc,feedbackContributions:fc,modeContributions:controlledMc,suppressionContributions:sc,matchedPaths:paths(candidate,state.graph.nodes,es),createdAt:new Date().toISOString()};
  return {score,trace};
