@@ -43,6 +43,7 @@ const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, 
 export function Popup() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
+  const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [feedReplacementPercent, setFeedReplacementPercent] = React.useState(0);
   const [feedCount, setFeedCount] = React.useState(0);
@@ -64,6 +65,10 @@ export function Popup() {
         ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
       setMode(storedMode);
       setActiveModeId(storedModeId);
+      const storedModeIds = result['personal-algorithm-active-mode-ids'] as string[] | undefined;
+      setSelectedModeIds(Array.isArray(storedModeIds)
+        ? storedModeIds
+        : storedModeId !== 'default' ? [storedModeId] : []);
       setDurableModeCatalog(catalog);
       const storedPercent = Number(result['personal-algorithm-feed-replacement-percent'] ?? 0);
       setFeedReplacementPercent(Number.isFinite(storedPercent) ? Math.max(0, Math.min(100, storedPercent)) : 0);
@@ -83,13 +88,14 @@ export function Popup() {
   const handleSetMode = async (nextModeId: string) => {
     const response = await chrome.runtime.sendMessage({
       type: 'SET_MODE',
-      payload: { modeId: nextModeId },
-    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string };
+      payload: { modeId: nextModeId, toggle: nextModeId !== 'default' },
+    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string; modeIds?: string[] };
     if (!response?.ok) {
       setLastError(response?.error ?? 'Unable to change mode.');
       return;
     }
-    setActiveModeId(response.modeId ?? nextModeId);
+    setActiveModeId(response.modeId ?? 'default');
+    setSelectedModeIds(response.modeIds ?? []);
     setMode(response.mode ?? 'Default');
     const result = await chrome.storage.local.get([
       'personal-algorithm-feed-cache',
@@ -244,7 +250,7 @@ export function Popup() {
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: enabled ? '#22c55e' : '#9ca3af', display: 'inline-block' }} />
         {enabled ? 'Enabled' : 'Paused'}
       </div>
-      <p>Current mode: <strong>{mode === 'Default' ? 'All' : mode}</strong></p>
+      <p>Selected groups: <strong>{selectedModeIds.length === 0 ? 'All' : mode}</strong></p>
       <p style={{ marginTop: -6, fontSize: 12 }}>
         {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active
         {' · '}{durableModeCatalog?.modes.length ?? 0} retained durable modes
@@ -342,15 +348,27 @@ export function Popup() {
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {modeOptions.map((option) => (
-          <button
-            key={option.id}
-            onClick={() => void handleSetMode(option.id)}
-            aria-pressed={option.id === activeModeId}
-          >
-            {option.label}{option.active ? '' : ' (dormant)'}
-          </button>
-        ))}
+        {modeOptions.map((option) => {
+          const pressed = option.id === 'default'
+            ? selectedModeIds.length === 0
+            : selectedModeIds.includes(option.id);
+          return (
+            <button
+              key={option.id}
+              onClick={() => void handleSetMode(option.id)}
+              aria-pressed={pressed}
+              style={{
+                borderRadius: 999,
+                padding: '6px 10px',
+                border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                background: pressed ? '#dbeafe' : '#fff',
+                fontWeight: pressed ? 700 : 500,
+              }}
+            >
+              {option.label}{option.active ? '' : ' (dormant)'}
+            </button>
+          );
+        })}
       </div>
       <button onClick={() => void handleOpenOptions()} style={{ marginTop: 12 }}>
         Open options
