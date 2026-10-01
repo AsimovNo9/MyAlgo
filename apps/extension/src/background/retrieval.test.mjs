@@ -8,6 +8,7 @@ import {
   mergeCandidateAcquisitionHistory,
   nextRssAllowedAt,
   nextWebSearchAllowedAt,
+  WEB_SEARCH_BLOCKED_COOLDOWN_MS,
   reconcileModeSupplyForSelection,
   selectWebSearchPlans,
   shouldRefreshObservedCandidate,
@@ -15,6 +16,7 @@ import {
 import {
   buildYoutubeRssFeedUrl,
   createYoutubeSearchPageProvider,
+  isYoutubeSearchBlockedError,
   enrichYoutubeCandidate,
   needsYoutubeMetadataRefresh,
   parseYoutubeRssFeed,
@@ -297,6 +299,13 @@ test('web-search refresh policy applies TTL and bounded failure backoff', () => 
   assert.equal(Date.parse(failure) - now, 4 * 60 * 1000);
 });
 
+test('web-search provider blocking uses an extended cooldown', () => {
+  const now = Date.parse('2026-09-26T12:00:00.000Z');
+  const blocked = nextWebSearchAllowedAt(now, 1, true);
+  assert.equal(Date.parse(blocked) - now, WEB_SEARCH_BLOCKED_COOLDOWN_MS);
+  assert.equal(WEB_SEARCH_BLOCKED_COOLDOWN_MS, 6 * 60 * 60 * 1000);
+});
+
 
 
 
@@ -338,6 +347,34 @@ test('YouTube search-page parser extracts bounded unique video results from ytIn
   assert.equal(results[0].title, 'Distributed systems tutorial');
   assert.equal(results[0].snippet, 'Learn CRDTs');
   assert.equal(results[0].thumbnailUrl, 'https://i.ytimg.com/vi/video-a/hqdefault.jpg');
+});
+
+test('YouTube search provider treats redirects as blocking and never parses the interstitial', async () => {
+  let requests = 0;
+  const provider = createYoutubeSearchPageProvider(async () => {
+    requests += 1;
+    return new Response('', {
+      status: 302,
+      headers: { location: 'https://www.google.com/sorry/index' },
+    });
+  });
+
+  await assert.rejects(
+    () => provider.search({
+      query: 'Arms guide',
+      lane: 'topic',
+      topics: ['Arms'],
+      graphRevision: 'graph-x',
+      acquiredAt: '2026-09-26T19:00:00.000Z',
+      limit: 5,
+    }),
+    (error) => {
+      assert.equal(isYoutubeSearchBlockedError(error), true);
+      assert.match(error.message, /YOUTUBE_SEARCH_BLOCKED/);
+      return true;
+    },
+  );
+  assert.equal(requests, 1);
 });
 
 test('YouTube search provider uses generated query with existing YouTube host access', async () => {
