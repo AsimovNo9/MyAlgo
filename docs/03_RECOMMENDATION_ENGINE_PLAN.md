@@ -180,7 +180,11 @@ active mode seed ──────────→ semantic mode lens over graph
 
 PR #213 initially bootstrapped candidate labels from five fixed intent anchors. Post-merge live review showed that nearest-anchor similarity is too coarse to serve as the authoritative content taxonomy: broad anchors can become the least-wrong label for unrelated content. #214 replaces that bootstrap rule with **graph-derived category inference**.
 
-Candidate category vocabulary comes from eligible Personal Algorithm Graph topic/concept labels. A candidate vector is compared with those symbolic graph-node vectors, the strongest bounded scores are retained as rebuildable features, and a visible category is emitted only when the winner clears both an absolute similarity floor and a runner-up margin. Ambiguous candidates remain uncategorized. This is still embedding inference, not model training, and similarity alone never creates a preference edge.
+Candidate category vocabulary comes from eligible Personal Algorithm Graph topic/concept labels. A candidate vector is compared with those symbolic graph-node vectors, the strongest bounded scores are retained as rebuildable features, and a visible category is emitted only when the winner clears both an absolute similarity floor and a runner-up margin. Ambiguous candidates remain uncategorized.
+
+PR #237 adds a second-stage local verifier only for ambiguous/moderate **specific graph matches**. mxbai remains the broad retriever; DeBERTa receives at most three candidate graph labels for at most four candidates per semantic slice and asks the existing NLI question `This video is about {}.`. Rejected ambiguous embedding matches are removed before mode-affinity construction and deterministic scoring. Clear high-confidence matches skip the verifier, broad taxonomy-only matches are not promoted through this verifier, and explicit lexical support remains independent. If DeBERTa is unavailable, the embedding result is retained with explicit verifier-fallback provenance.
+
+This is still derived semantic inference, not model training, and neither similarity nor verifier output creates a preference edge.
 
 Modes remain semantic lenses over one graph, but the mode surface is no longer a fixed Work/Learning/Relax/Gaming/French list. Available modes are populated from categories actually inferred in local state plus a neutral All/Default state. Selecting an inferred mode adds that category as bounded retrieval/semantic intent and applies exact traceable mode/category-affinity contributions. Known PR #213 bootstrap modes are migrated to All/Default on extension update; an arbitrary custom mode string is preserved so user-owned configuration is not silently discarded.
 
@@ -449,7 +453,7 @@ derived graph nodes
 mxbai embedding canonicalization (#214 next)
 ```
 
-The active verifier is pinned `Xenova/nli-deberta-v3-xsmall` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model.
+The active verifier is pinned `Xenova/nli-deberta-v3-xsmall` q8. Its upstream base model is MIT-licensed and was trained specifically for entailment/not-entailment zero-shot classification. It runs through the same sandboxed Transformers.js/ONNX surface as the mxbai embedding model. The same verifier service is reused by PR #237 for bounded ambiguous candidate↔graph verification; this does not create a second model or remote inference boundary.
 
 ### Generative-model rejection
 
