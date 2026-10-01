@@ -885,6 +885,8 @@ PR #231 merged the read-only graph explorer and the expanded Why-this lifecycle/
 - live graph Network/Lineage views stay read-only and preserve graph revision/counts while navigating, filtering, focusing, and zooming;
 - provisional semantic topic clusters and durable groups remain distinct presentation concepts: graph content prefers a matching durable group when one exists, while unmatched semantic clustering is labelled **Topic cluster** and is never implied to be selectable/persistent;
 - the graph's durable-group overlay dropdown and the Groups selector are sourced from the same durable mode catalog, so every graph cluster labelled **Group** must correspond to a catalog entry shown in those controls;
+- retained content listed in a durable mode member's `supportContentIds` stays spatially inside that durable **Group** cluster even if transient semantic-feature cache entries are missing or rotate; the durable catalog, not cache affinity, is the visual-membership source of truth;
+- durable Group boundaries remain visibly drawn in the Network view and durable-group members are prioritized ahead of ungrouped nodes when the graph exceeds the visual node cap;
 - discovered durable groups are searchable and multi-select; selected groups remain pinned/retained through reclustering until explicitly deselected;
 - multiple selected groups share a bounded mode-score budget and clear cross-category conflicts abstain rather than leak score mass.
 
