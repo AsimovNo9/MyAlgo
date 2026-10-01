@@ -42,6 +42,7 @@ export type DerivedGraphProjectionResult = {
 export type GraphReview = {
   schemaVersion: number;
   evidenceCount: number;
+  forgottenEvidenceCount: number;
   nodeCount: number;
   edgeCount: number;
   nodesByKind: Record<string, number>;
@@ -54,7 +55,8 @@ export type GraphReview = {
 };
 
 const DEFAULT_STATE_KEY = 'personal-algorithm-state';
-const PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
+const PERSONAL_ALGORITHM_SCHEMA_VERSION = 3 as const;
+const PREVIOUS_PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
 const LEGACY_PERSONAL_ALGORITHM_SCHEMA_VERSION = 1 as const;
 
 const nowIso = () => new Date().toISOString();
@@ -109,6 +111,7 @@ const mergeContentMetadata = (
 const createEmptyState = (): PersonalAlgorithmState => ({
   schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
   evidence: [],
+  forgottenEvidence: [],
   graph: {
     nodes: [],
     edges: [],
@@ -136,6 +139,50 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
     return {
       schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
       evidence: candidate.evidence,
+      forgottenEvidence: Array.isArray(candidate.forgottenEvidence)
+        ? candidate.forgottenEvidence
+          .filter((entry) => (
+            entry
+            && typeof entry.evidenceId === 'string'
+            && entry.evidenceId.length > 0
+            && typeof entry.deletedAt === 'string'
+          ))
+          .map((entry) => ({
+            evidenceId: entry.evidenceId,
+            deletedAt: entry.deletedAt,
+            reason: 'forgotten' as const,
+          }))
+        : [],
+      graph: {
+        ...candidate.graph,
+        edges: candidate.graph.edges.map((edge) => ({
+          ...edge,
+          evidenceIds: Array.isArray((edge as GraphEdge).evidenceIds)
+            ? [...new Set((edge as GraphEdge).evidenceIds.filter((id) => typeof id === 'string' && id.length > 0))]
+            : [],
+        })),
+        controls: Array.isArray(candidate.graph.controls)
+          ? candidate.graph.controls.map((control) => structuredClone(control))
+          : [],
+        originalBaseline: candidate.graph.originalBaseline
+          ? structuredClone(candidate.graph.originalBaseline)
+          : null,
+      },
+    };
+  }
+
+  if (rawVersion === PREVIOUS_PERSONAL_ALGORITHM_SCHEMA_VERSION
+      && Array.isArray(candidate.evidence)
+      && candidate.graph
+      && Array.isArray(candidate.graph.nodes)
+      && Array.isArray(candidate.graph.edges)
+      && Array.isArray(candidate.graph.userEdits)
+      && Array.isArray(candidate.graph.revisions)
+      && Number.isInteger(candidate.graph.currentRevision)) {
+    return {
+      schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
+      evidence: candidate.evidence,
+      forgottenEvidence: [],
       graph: {
         ...candidate.graph,
         edges: candidate.graph.edges.map((edge) => ({
@@ -165,6 +212,7 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
     return {
       schemaVersion: PERSONAL_ALGORITHM_SCHEMA_VERSION,
       evidence: candidate.evidence,
+      forgottenEvidence: [],
       graph: {
         ...candidate.graph,
         edges: candidate.graph.edges.map((edge) => ({
@@ -233,8 +281,9 @@ export class LocalPersonalAlgorithmStore {
     return record ? structuredClone(record) : null;
   }
 
-  async upsertEvidence(input: EvidenceInput, id = makeId('evidence')): Promise<EvidenceRecord> {
+  async upsertEvidence(input: EvidenceInput, id = makeId('evidence')): Promise<EvidenceRecord | null> {
     return this.mutate((state) => {
+      if (state.forgottenEvidence.some((entry) => entry.evidenceId === id)) return null;
       const record: EvidenceRecord = {
         id,
         evidence: structuredClone(input.evidence),
@@ -281,7 +330,10 @@ export class LocalPersonalAlgorithmStore {
       }
 
       const retainedAt = nowIso();
+      const forgottenIds = new Set(state.forgottenEvidence.map((entry) => entry.evidenceId));
+      let upserted = 0;
       for (const input of inputs) {
+        if (forgottenIds.has(input.id)) continue;
         const record: EvidenceRecord = {
           id: input.id,
           evidence: structuredClone(input.evidence),
@@ -297,9 +349,10 @@ export class LocalPersonalAlgorithmStore {
         else state.evidence.push(record);
         this.ensureContentNode(state, record.evidence);
         this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
+        upserted += 1;
       }
 
-      return { removed: historyIds.size, upserted: inputs.length };
+      return { removed: historyIds.size, upserted };
     });
   }
 
@@ -330,7 +383,10 @@ export class LocalPersonalAlgorithmStore {
       }
 
       const retainedAt = nowIso();
+      const forgottenIds = new Set(state.forgottenEvidence.map((entry) => entry.evidenceId));
+      let upserted = 0;
       for (const input of inputs) {
+        if (forgottenIds.has(input.id)) continue;
         const record: EvidenceRecord = {
           id: input.id,
           evidence: structuredClone(input.evidence),
@@ -343,9 +399,10 @@ export class LocalPersonalAlgorithmStore {
         else state.evidence.push(record);
         this.ensureContentNode(state, record.evidence);
         this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
+        upserted += 1;
       }
 
-      return { removed: removedIds.size, upserted: inputs.length };
+      return { removed: removedIds.size, upserted };
     });
   }
 
@@ -406,18 +463,48 @@ export class LocalPersonalAlgorithmStore {
     return removedIds.size;
   }
 
-  async deleteEvidence(id: string): Promise<boolean> {
+  async forgetEvidence(id: string): Promise<{
+    forgotten: boolean;
+    graphRevision: number;
+  }> {
     return this.mutate((state) => {
-      const before = state.evidence.length;
+      const record = state.evidence.find((item) => item.id === id);
+      if (!record) {
+        return {
+          forgotten: false,
+          graphRevision: state.graph.currentRevision,
+        };
+      }
+
       state.evidence = state.evidence.filter((item) => item.id !== id);
-      if (state.evidence.length === before) return false;
+      if (!state.forgottenEvidence.some((entry) => entry.evidenceId === id)) {
+        state.forgottenEvidence.push({
+          evidenceId: id,
+          deletedAt: nowIso(),
+          reason: 'forgotten',
+        });
+      }
 
-      state.graph.edges = state.graph.edges
-        .map((edge) => ({ ...edge, evidenceIds: edge.evidenceIds.filter((evidenceId) => evidenceId !== id) }))
-        .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+      this.sanitizeGraphAgainstRetainedEvidence(state);
 
-      return true;
+      state.graph.currentRevision += 1;
+      state.graph.revisions.push({
+        id: makeId('revision'),
+        revision: state.graph.currentRevision,
+        reason: `forget_evidence:${id}`,
+        createdAt: nowIso(),
+      });
+
+      return {
+        forgotten: true,
+        graphRevision: state.graph.currentRevision,
+      };
     });
+  }
+
+  async deleteEvidence(id: string): Promise<boolean> {
+    const result = await this.forgetEvidence(id);
+    return result.forgotten;
   }
 
   async deleteEvidenceForContent(source: string, externalId: string): Promise<number> {
@@ -599,6 +686,7 @@ export class LocalPersonalAlgorithmStore {
 
       if (target.before == null) this.removeCreatedEditState(state, target);
       else this.applyEditState(state, target.before);
+      this.sanitizeGraphAgainstRetainedEvidence(state);
       const undo = this.recordEdit(
         state,
         'undo',
@@ -619,6 +707,7 @@ export class LocalPersonalAlgorithmStore {
       state.graph.nodes = structuredClone(baseline.nodes);
       state.graph.edges = structuredClone(baseline.edges);
       state.graph.controls = structuredClone(baseline.controls);
+      this.sanitizeGraphAgainstRetainedEvidence(state);
       const after = this.captureEditableGraphState(state);
       this.recordEdit(state, 'restore_original', 'graph', before, after);
       return true;
@@ -676,6 +765,7 @@ export class LocalPersonalAlgorithmStore {
     return {
       schemaVersion: state.schemaVersion,
       evidenceCount: state.evidence.length,
+      forgottenEvidenceCount: state.forgottenEvidence.length,
       nodeCount: state.graph.nodes.length,
       edgeCount: state.graph.edges.length,
       nodesByKind,
@@ -921,6 +1011,60 @@ export class LocalPersonalAlgorithmStore {
 
       return structuredClone(state.graph);
     });
+  }
+
+  private sanitizeGraphAgainstRetainedEvidence(state: PersonalAlgorithmState): void {
+    const retainedEvidenceIds = new Set(state.evidence.map((record) => record.id));
+    state.graph.edges = state.graph.edges
+      .map((edge) => ({
+        ...edge,
+        evidenceIds: edge.evidenceIds.filter((evidenceId) => retainedEvidenceIds.has(evidenceId)),
+      }))
+      .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+
+    const referencedNodeIds = new Set(
+      state.graph.edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+    );
+    const controlledNodeIds = new Set(
+      (state.graph.controls ?? [])
+        .filter((control) => control.targetKind === 'node')
+        .map((control) => control.targetId),
+    );
+    const editedNodeIds = new Set(
+      state.graph.userEdits
+        .filter((edit) => edit.action.endsWith('_node'))
+        .map((edit) => edit.targetId),
+    );
+    const retainedContentNodeIds = new Set(
+      state.evidence.map((record) => contentNodeId(
+        record.evidence.content.source,
+        record.evidence.content.externalId,
+      )),
+    );
+
+    state.graph.nodes = state.graph.nodes.filter((node) => {
+      if (node.kind === 'creator' && node.provenance === 'inferred') {
+        return referencedNodeIds.has(node.id) || controlledNodeIds.has(node.id) || editedNodeIds.has(node.id);
+      }
+      if (node.kind === 'content') {
+        return retainedContentNodeIds.has(node.id)
+          || referencedNodeIds.has(node.id)
+          || controlledNodeIds.has(node.id)
+          || editedNodeIds.has(node.id);
+      }
+      return true;
+    });
+
+    const availableNodeIds = new Set(state.graph.nodes.map((node) => node.id));
+    state.graph.edges = state.graph.edges.filter((edge) => (
+      availableNodeIds.has(edge.sourceNodeId) && availableNodeIds.has(edge.targetNodeId)
+    ));
+    const availableEdgeIds = new Set(state.graph.edges.map((edge) => edge.id));
+    state.graph.controls = (state.graph.controls ?? []).filter((control) => (
+      control.targetKind === 'node'
+        ? availableNodeIds.has(control.targetId)
+        : availableEdgeIds.has(control.targetId)
+    ));
   }
 
   private ensureContentNode(state: PersonalAlgorithmState, evidence: NormalizedEvidence): void {
