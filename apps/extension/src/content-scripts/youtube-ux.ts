@@ -964,6 +964,16 @@ export function isRenderGenerationStale(requestGeneration: number, latestGenerat
   return requestGeneration !== latestGeneration;
 }
 
+export function shouldClearSourceFilteredPresentation(
+  showPaused: boolean,
+  extensionEnabled: boolean,
+): boolean {
+  // Active reranks must not briefly restore structurally filtered shelves.
+  // Restore them only when the extension is paused/disabled; filter changes
+  // explicitly resynchronise the structural containers under the new policy.
+  return showPaused || !extensionEnabled;
+}
+
 export function getSourceShelfHideReason(
   input: { heading?: string; hasShortsLink?: boolean; hasPlayableLink?: boolean },
   filters: { includeShorts?: boolean; includePlayables?: boolean },
