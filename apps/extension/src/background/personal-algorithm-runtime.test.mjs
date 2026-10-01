@@ -285,6 +285,107 @@ test('durable active mode score is split across exact canonical members and sour
   assert.equal(metrics.reconciliationRate, 1);
 });
 
+test('multiple selected durable modes share one bounded mode-score budget', () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push(
+    {
+      id: 'topic:mode-a',
+      kind: 'topic',
+      label: 'Mode A topic',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:mode-b',
+      kind: 'topic',
+      label: 'Mode B topic',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.edges.push(
+    {
+      id: 'edge:mode:a',
+      sourceNodeId: 'topic:mode-a',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-a'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'edge:mode:b',
+      sourceNodeId: 'topic:mode-b',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-b'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.currentRevision += 1;
+
+  const modeA = { id: 'mode:a', label: 'Mode A', revision: 1 };
+  const modeB = { id: 'mode:b', label: 'Mode B', revision: 1 };
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'multi-mode-candidate',
+    title: 'Neutral candidate',
+    semantic_mode_affinities: [
+      {
+        modeId: modeA.id,
+        modeRevision: modeA.revision,
+        label: modeA.label,
+        affinity: 0.8,
+        matchedCanonicalIds: ['canonical:a'],
+        sourceNodeIds: ['topic:mode-a'],
+        memberAffinities: [{
+          canonicalId: 'canonical:a',
+          label: 'Mode A topic',
+          memberWeight: 1,
+          similarity: 0.8,
+          weightedAffinity: 0.8,
+          sourceNodeIds: ['topic:mode-a'],
+        }],
+      },
+      {
+        modeId: modeB.id,
+        modeRevision: modeB.revision,
+        label: modeB.label,
+        affinity: 0.8,
+        matchedCanonicalIds: ['canonical:b'],
+        sourceNodeIds: ['topic:mode-b'],
+        memberAffinities: [{
+          canonicalId: 'canonical:b',
+          label: 'Mode B topic',
+          memberWeight: 1,
+          similarity: 0.8,
+          weightedAffinity: 0.8,
+          sourceNodeIds: ['topic:mode-b'],
+        }],
+      },
+    ],
+  }], 'Mode A + Mode B', [], {}, [modeA, modeB])[0];
+
+  assert.equal(ranked.rawScore, 14);
+  assert.equal(ranked.trace.modeContributions.length, 2);
+  assert.deepEqual(
+    ranked.trace.modeContributions.map((item) => [item.modeId, item.value]).sort(),
+    [['mode:a', 7], ['mode:b', 7]],
+  );
+});
+
 test('durable mode revision mismatch abstains instead of using stale or free-floating mode similarity', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'stale-mode-affinity',
