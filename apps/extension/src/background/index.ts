@@ -2033,6 +2033,14 @@ async function rankLocalCandidates(
   // Build a reverse neighbourhood from preference-bearing graph nodes to
   // content. This supports a three-hop explanation:
   // prior watched video -> shared creator/topic/concept -> current video.
+  // Broad platform taxonomy labels such as People & Blogs are not specific
+  // enough to justify a historical recommendation explanation.
+  const nonSpecificHistoryLabels = new Set([
+    'people & blogs',
+    'people and blogs',
+    'video',
+    'videos',
+  ]);
   const historyContentBySignalNodeId = new Map<string, Set<string>>();
   for (const edge of state.graph.edges) {
     const source = graphNodeById.get(edge.sourceNodeId);
@@ -2042,6 +2050,7 @@ async function rankLocalCandidates(
     const content = source.kind === 'content' ? source : target.kind === 'content' ? target : null;
     const signal = source.kind === 'content' ? target : target.kind === 'content' ? source : null;
     if (!content || !signal || signal.kind === 'content') continue;
+    if (nonSpecificHistoryLabels.has(signal.label.trim().toLowerCase())) continue;
 
     const connected = historyContentBySignalNodeId.get(signal.id) ?? new Set<string>();
     connected.add(content.id);
