@@ -419,7 +419,10 @@ test('clear high-confidence graph matches skip the NLI verifier', async () => {
     ...state,
     graph: {
       ...state.graph,
-      nodes: [state.graph.nodes.find((node) => node.id === 'concept:ambient')],
+      nodes: [{
+        ...state.graph.nodes.find((node) => node.id === 'concept:ambient'),
+        kind: 'topic',
+      }],
     },
   };
   const result = await enrichCandidatesWithSemanticReranking(
