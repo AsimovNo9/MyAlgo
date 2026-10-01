@@ -596,7 +596,7 @@ test('history interaction metadata hydrates content nodes and creator relationsh
   assert.equal(edge?.evidenceIds.includes('history-1'), true);
 });
 
-test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
+test('legacy schema v1 migrates to v3 without discarding evidence or nodes', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
     schemaVersion: 1,
@@ -638,13 +638,14 @@ test('legacy schema v1 migrates to v2 without discarding evidence or nodes', asy
 
   const store = new LocalPersonalAlgorithmStore(storage);
   const state = await store.exportState();
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.equal(state.evidence.length, 1);
+  assert.deepEqual(state.forgottenEvidence, []);
   assert.deepEqual(state.graph.edges[0].evidenceIds, []);
-  assert.equal(backing.get('personal-algorithm-state').schemaVersion, 2);
+  assert.equal(backing.get('personal-algorithm-state').schemaVersion, 3);
 });
 
-test('invalid or unknown schema versions migrate to a safe empty v2 state', async () => {
+test('invalid or unknown schema versions migrate to a safe empty v3 state', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
     schemaVersion: 99,
@@ -654,8 +655,9 @@ test('invalid or unknown schema versions migrate to a safe empty v2 state', asyn
 
   const store = new LocalPersonalAlgorithmStore(storage);
   const state = await store.exportState();
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.deepEqual(state.evidence, []);
+  assert.deepEqual(state.forgottenEvidence, []);
   assert.equal(state.graph.currentRevision, 0);
 });
 
