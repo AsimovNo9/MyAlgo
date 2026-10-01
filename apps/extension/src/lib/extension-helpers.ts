@@ -500,6 +500,29 @@ export function buildGraphInspectorView(
   };
 }
 
+export function applyDurableModeLabelsToGraphInspector(
+  view: GraphInspectorView,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): GraphInspectorView {
+  if (!catalog || catalog.modes.length === 0) return view;
+  const labelByModeId = new Map(catalog.modes.map((mode) => [mode.id, mode.label]));
+  let changed = false;
+  const nodes = view.nodes.map((node) => {
+    if (node.semanticClusterKind !== 'mode' || !node.semanticClusterId) return node;
+    const modeId = node.semanticClusterId.startsWith('mode:')
+      ? node.semanticClusterId.slice('mode:'.length)
+      : node.semanticClusterId;
+    const label = labelByModeId.get(modeId);
+    if (!label || label === node.semanticClusterLabel) return node;
+    changed = true;
+    return {
+      ...node,
+      semanticClusterLabel: label,
+    };
+  });
+  return changed ? { ...view, nodes } : view;
+}
+
 export function parseGraphInspectorExport(json: string): GraphInspectorView {
   let parsed: unknown;
   try {
