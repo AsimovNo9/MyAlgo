@@ -783,6 +783,58 @@ const renderExplanationContent = (
   }
   shell.appendChild(contributions);
 
+  if (item.external_id) {
+    const itemFeedback = document.createElement('div');
+    itemFeedback.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#121212;';
+    const feedbackLabel = document.createElement('div');
+    feedbackLabel.textContent = 'Video-level feedback';
+    feedbackLabel.style.cssText = 'margin-bottom:7px;color:#cbd5e1;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;';
+    itemFeedback.appendChild(feedbackLabel);
+    const feedbackControls = document.createElement('div');
+    feedbackControls.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    const feedbackOptions = [
+      { label: 'More like this', eventType: 'more_like_this' as const },
+      { label: 'Less like this', eventType: 'not_interested' as const },
+    ];
+    for (const option of feedbackOptions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option.label;
+      button.style.cssText = 'padding:5px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 10px/1.2 Roboto,Arial,sans-serif;cursor:pointer;';
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const original = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Saving…';
+        void chrome.runtime.sendMessage({
+          type: EXTENSION_MESSAGE_TYPES.FEEDBACK,
+          payload: { contentItemId: item.external_id, eventType: option.eventType },
+        }).then((response: { ok?: boolean; error?: string }) => {
+          button.disabled = false;
+          if (!response?.ok) {
+            button.textContent = original;
+            button.title = response?.error ?? 'Unable to save feedback.';
+            return;
+          }
+          button.textContent = `${option.label} ✓`;
+          button.title = 'Saved as explicit video feedback and applied to the next rank.';
+        }).catch((error) => {
+          button.disabled = false;
+          button.textContent = original;
+          button.title = error instanceof Error ? error.message : 'Unable to save feedback.';
+        });
+      });
+      feedbackControls.appendChild(button);
+    }
+    itemFeedback.appendChild(feedbackControls);
+    const feedbackNote = document.createElement('div');
+    feedbackNote.textContent = 'Use these when no exact graph term exists yet. Video feedback affects ranking; graph-term controls remain separate.';
+    feedbackNote.style.cssText = 'margin-top:6px;color:#94a3b8;font:500 10px/1.35 Roboto,Arial,sans-serif;';
+    itemFeedback.appendChild(feedbackNote);
+    shell.appendChild(itemFeedback);
+  }
+
   const footer = document.createElement('div');
   footer.style.cssText = 'padding:10px 14px 12px;';
   const details = document.createElement('details');
