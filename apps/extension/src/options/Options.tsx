@@ -226,10 +226,11 @@ export function Options() {
       return;
     }
     try {
-      const view = buildGraphInspectorView(response.state, response.semanticContext ?? []);
+      const durableCatalog = response.durableModeCatalog ?? null;
+      const view = buildGraphInspectorView(response.state, response.semanticContext ?? [], durableCatalog);
       setGraphInspector(view);
       setGraphInspectorSource('live');
-      setDurableModeCatalog(response.durableModeCatalog ?? null);
+      setDurableModeCatalog(durableCatalog);
       setActiveModeId(response.activeModeId ?? 'default');
       setGraphModeId('all');
       setGraphFocusOnly(true);
