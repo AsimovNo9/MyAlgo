@@ -443,7 +443,7 @@ test('explicit local feedback changes the score without treating watch evidence 
   assert.equal(ranked[0].external_id, 'video-b');
   assert.equal(ranked[0].rawScore, 21);
   assert.equal(ranked[0].score, calibrateLocalScore(21));
-  assert.equal(ranked[1].rawScore, 11);
+  assert.equal(ranked[1].rawScore, 9);
 });
 
 test('explicit not-interested feedback lowers the matching candidate score', () => {
@@ -456,7 +456,7 @@ test('explicit not-interested feedback lowers the matching candidate score', () 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 11);
+  assert.equal(ranked[0].rawScore, 9);
   assert.equal(ranked[1].external_id, 'video-b');
   assert.equal(ranked[1].rawScore, -24);
   assert.equal(ranked[1].trace.feedbackContributions.length, 1);
@@ -486,8 +486,8 @@ test('never-show-channel feedback matches the creator node rather than only the 
     { external_id: 'video-c', title: 'Video C' },
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
-  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -89);
-  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -89);
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -91);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -91);
 });
 
 test('subscription and discovery filters apply to source-tagged candidates', () => {
@@ -516,7 +516,7 @@ test('local policy is graph-derived and does not use candidate base scores', () 
   assert.equal(policy.baseScore, 0);
   assert.equal(policy.nodeWeights?.['content:youtube:video-a'], 1);
   assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 8);
-  assert.equal(policy.edgeRelationWeights?.created_by, 2);
+  assert.equal(policy.edgeRelationWeights?.created_by, undefined);
 });
 
 
@@ -1383,11 +1383,10 @@ test('created-by exposure support churn keeps scoring state stable but refreshes
 
   const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
   const diagnostics = getLocalScoringDiagnostics();
-  const edgeContribution = second.trace.edgeContributions
-    .find((item) => item.id === 'edge:edge:created_by:video-a');
 
   assert.equal(second.rawScore, first.rawScore);
+  assert.notEqual(second.trace.id, first.trace.id);
   assert.equal(diagnostics.contextHits, 1);
   assert.equal(diagnostics.contextMisses, 0);
-  assert.deepEqual(edgeContribution?.evidenceIds, ['e1', 'exposure:two']);
+  assert.equal(second.trace.edgeContributions.length, 0);
 });
