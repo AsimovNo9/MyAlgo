@@ -144,6 +144,30 @@ test('incremental creator relationships remain evidence-backed after metadata ar
   assert.deepEqual(edge?.evidenceIds, ['late-creator-2']);
 });
 
+test('schema v2 migrates to v3 with an empty forgotten-evidence ledger', async () => {
+  backing.clear();
+  backing.set('personal-algorithm-state', {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      nodes: [],
+      edges: [],
+      userEdits: [],
+      revisions: [],
+      currentRevision: 0,
+      controls: [],
+      originalBaseline: null,
+    },
+  });
+
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const migrated = await store.exportState();
+
+  assert.equal(migrated.schemaVersion, 3);
+  assert.deepEqual(migrated.forgottenEvidence, []);
+  assert.deepEqual(migrated.graph.controls, []);
+});
+
 test('local store persists normalized evidence and graph content nodes across restart', async () => {
   backing.clear();
   setCalls = 0;
