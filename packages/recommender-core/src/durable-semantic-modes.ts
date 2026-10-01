@@ -26,6 +26,7 @@ export type DurableSemanticModeClusterOptions = {
   minimumSharedContent?: number;
   minimumSupportJaccard?: number;
   minimumMembers?: number;
+  minimumSingletonSupport?: number;
 };
 
 export type DurableSemanticModeClusterResult = {
@@ -179,6 +180,10 @@ export function buildDurableSemanticModeClusters(
   const minimumSharedContent = Math.max(1, Math.floor(options.minimumSharedContent ?? 2));
   const minimumSupportJaccard = Math.max(0, Math.min(1, options.minimumSupportJaccard ?? 0.5));
   const minimumMembers = Math.max(2, Math.floor(options.minimumMembers ?? 2));
+  const minimumSingletonSupport = Math.max(
+    minimumSupportPerConcept,
+    Math.floor(options.minimumSingletonSupport ?? 3),
+  );
   const canonical = canonicalInput ?? buildCanonicalSemanticConcepts(state);
   const supportById = contentSupportByCanonicalId(state, canonical);
 
@@ -215,7 +220,13 @@ export function buildDurableSemanticModeClusters(
   }
 
   const proposals = [...byRoot.values()]
-    .filter((group) => group.length >= minimumMembers)
+    .filter((group) => (
+      group.length >= minimumMembers
+      || (
+        group.length === 1
+        && (supportById.get(group[0]!.id)?.size ?? 0) >= minimumSingletonSupport
+      )
+    ))
     .map((group) => ({
       label: representativeLabel(group, supportById),
       members: proposalMembers(group, supportById),
