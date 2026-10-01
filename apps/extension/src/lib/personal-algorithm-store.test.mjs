@@ -356,9 +356,10 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
 
   const graph = await store.getGraph();
   assert.equal(graph.edges.length, 1);
-  assert.equal(graph.currentRevision, 2);
+  assert.equal(graph.currentRevision, 3);
   assert.equal(graph.userEdits.length, 2);
-  assert.equal(graph.revisions.length, 2);
+  assert.equal(graph.revisions.length, 3);
+  assert.equal(graph.revisions.at(-1).reason.startsWith('create_edge:'), true);
 
   assert.equal((await store.deleteEvidence('evidence-3')), true);
   assert.equal((await store.getGraph()).edges.length, 0);
