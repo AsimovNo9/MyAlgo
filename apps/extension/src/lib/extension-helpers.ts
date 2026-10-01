@@ -249,6 +249,7 @@ export type GraphInspectorView = {
   schemaVersion: number;
   graphRevision: number;
   evidenceCount: number;
+  forgottenEvidenceCount: number;
   nodeCount: number;
   edgeCount: number;
   nodesByKind: Array<{ key: string; count: number }>;
@@ -271,7 +272,7 @@ const countBy = (values: readonly string[]): Array<{ key: string; count: number 
 const isPersonalAlgorithmState = (value: unknown): value is PersonalAlgorithmState => {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<PersonalAlgorithmState>;
-  return Number(candidate.schemaVersion) === 2
+  return [2, 3].includes(Number(candidate.schemaVersion))
     && Array.isArray(candidate.evidence)
     && Boolean(candidate.graph)
     && Array.isArray(candidate.graph?.nodes)
@@ -446,6 +447,7 @@ export function buildGraphInspectorView(
     schemaVersion: state.schemaVersion,
     graphRevision: state.graph.currentRevision,
     evidenceCount: state.evidence.length,
+    forgottenEvidenceCount: Array.isArray(state.forgottenEvidence) ? state.forgottenEvidence.length : 0,
     nodeCount: nodes.length,
     edgeCount: edges.length,
     nodesByKind: countBy(nodes.map((node) => node.kind)),
