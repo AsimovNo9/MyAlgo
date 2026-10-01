@@ -235,6 +235,16 @@ export type GraphInspectorEdge = {
   evidence: GraphInspectorEvidence[];
 };
 
+export type GraphInspectorControl = {
+  id: string;
+  targetKind: 'node' | 'edge';
+  targetId: string;
+  targetLabel: string;
+  action: 'reduce' | 'prefer' | 'mute';
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GraphInspectorView = {
   schemaVersion: number;
   graphRevision: number;
@@ -245,6 +255,7 @@ export type GraphInspectorView = {
   edgesByRelation: Array<{ key: string; count: number }>;
   nodes: GraphInspectorNode[];
   edges: GraphInspectorEdge[];
+  controls: GraphInspectorControl[];
   revisions: Array<{ revision: number; reason: string; createdAt: string }>;
 };
 
@@ -441,6 +452,30 @@ export function buildGraphInspectorView(
     edgesByRelation: countBy(edges.map((edge) => edge.relation)),
     nodes,
     edges,
+    controls: [...(state.graph.controls ?? [])]
+      .map((control) => {
+        const node = control.targetKind === 'node'
+          ? nodeById.get(control.targetId)
+          : null;
+        const edge = control.targetKind === 'edge'
+          ? edges.find((entry) => entry.id === control.targetId)
+          : null;
+        return {
+          id: control.id,
+          targetKind: control.targetKind,
+          targetId: control.targetId,
+          targetLabel: node?.label
+            ?? (edge ? `${edge.sourceLabel} → ${edge.targetLabel} · ${edge.relation}` : control.targetId),
+          action: control.action,
+          createdAt: control.createdAt,
+          updatedAt: control.updatedAt,
+        };
+      })
+      .sort((left, right) => (
+        left.action.localeCompare(right.action)
+        || left.targetLabel.localeCompare(right.targetLabel)
+        || left.id.localeCompare(right.id)
+      )),
     revisions: [...state.graph.revisions]
       .sort((left, right) => right.revision - left.revision || right.createdAt.localeCompare(left.createdAt))
       .map((revision) => ({
