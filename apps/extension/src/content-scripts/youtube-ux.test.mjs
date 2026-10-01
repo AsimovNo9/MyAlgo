@@ -96,12 +96,27 @@ test('explanation display humanizes encoded graph labels and omits relation name
         evidenceIds: ['e1', 'e2'],
       }],
       modeGrounding: null,
+      historySupport: {
+        scoreSharePercent: 67,
+        matchedVideoCount: 1,
+        matches: [{
+          evidenceId: 'e1',
+          externalId: 'past-video',
+          title: 'Past Angry Birds video',
+          observedAt: '2026-09-29T12:00:00.000Z',
+          interaction: 'watched',
+          matchedBy: ['creator: Angry Birds'],
+        }],
+      },
     },
   });
 
   assert.equal(view.pathLines[0], 'Graph path: Angry Birds ↔ Gaming · 2 evidence items');
+  assert.equal(view.contributionLines.some((line) => /created by/i.test(line)), false);
   assert.equal(view.miniNodes.some((node) => node.label === 'created by'), false);
   assert.equal(view.miniNodes.some((node) => node.label === 'Angry Birds'), true);
+  assert.equal(view.historyScoreSharePercent, 67);
+  assert.equal(view.historyMatches[0].title, 'Past Angry Birds video');
 });
 
 test('explanation provenance uses user-facing labels without becoming a ranking reason', () => {
