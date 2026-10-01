@@ -352,6 +352,7 @@ export class LocalPersonalAlgorithmStore {
         upserted += 1;
       }
 
+      this.sanitizeGraphAgainstRetainedEvidence(state);
       return { removed: historyIds.size, upserted };
     });
   }
@@ -402,6 +403,7 @@ export class LocalPersonalAlgorithmStore {
         upserted += 1;
       }
 
+      this.sanitizeGraphAgainstRetainedEvidence(state);
       return { removed: removedIds.size, upserted };
     });
   }
@@ -517,12 +519,20 @@ export class LocalPersonalAlgorithmStore {
       if (removedIds.size === 0) return 0;
 
       state.evidence = state.evidence.filter((item) => !removedIds.has(item.id));
-      state.graph.edges = state.graph.edges
-        .map((edge) => ({
-          ...edge,
-          evidenceIds: edge.evidenceIds.filter((evidenceId) => !removedIds.has(evidenceId)),
-        }))
-        .filter((edge) => edge.provenance !== 'inferred' || edge.evidenceIds.length > 0);
+      const deletedAt = nowIso();
+      for (const evidenceId of removedIds) {
+        if (!state.forgottenEvidence.some((entry) => entry.evidenceId === evidenceId)) {
+          state.forgottenEvidence.push({ evidenceId, deletedAt, reason: 'forgotten' });
+        }
+      }
+      this.sanitizeGraphAgainstRetainedEvidence(state);
+      state.graph.currentRevision += 1;
+      state.graph.revisions.push({
+        id: makeId('revision'),
+        revision: state.graph.currentRevision,
+        reason: `forget_content:${source}:${externalId}`,
+        createdAt: deletedAt,
+      });
 
       return removedIds.size;
     });
@@ -1008,6 +1018,7 @@ export class LocalPersonalAlgorithmStore {
         this.ensureContentNode(state, record.evidence);
         this.ensureCreatorRelationship(state, record.evidence, record.id, record.confidence);
       }
+      this.sanitizeGraphAgainstRetainedEvidence(state);
 
       return structuredClone(state.graph);
     });
