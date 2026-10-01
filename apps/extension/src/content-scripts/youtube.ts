@@ -957,12 +957,15 @@ const refreshReplacementCardPresentation = (
       : `MyAlgo · ${item.score ?? 0}/100`;
   }
 
-  const why = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation]');
+  const why = card.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation]');
   if (!why) return;
   why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
-  const panelId = why.getAttribute('aria-controls');
-  const explanation = panelId ? document.getElementById(panelId) : null;
-  if (!explanation) return;
+
+  // Replacement cards can survive while their body-level portal is removed by
+  // cleanup/navigation churn. Revalidate ownership and rebind every refresh
+  // instead of assuming aria-controls still points at a live panel.
+  const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
+  bindExplanationTrigger(why);
   renderExplanationContent(explanation, item);
 };
 
