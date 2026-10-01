@@ -124,7 +124,7 @@ export function buildDurableModeOptions(
   currentModeId: string,
   catalog: DurableSemanticModeCatalog | null | undefined,
   currentModeLabel = 'Default',
-  limit = 12,
+  limit = 32,
 ): DurableModeOption[] {
   const result: DurableModeOption[] = [{
     id: 'default',
@@ -135,8 +135,8 @@ export function buildDurableModeOptions(
   const seen = new Set(['default']);
   const modes = [...(catalog?.modes ?? [])]
     .sort((left, right) => (
-      Number(right.active) - Number(left.active)
-      || Number(right.pinned) - Number(left.pinned)
+      Number(right.pinned) - Number(left.pinned)
+      || Number(right.active) - Number(left.active)
       || right.lastSupportedAt.localeCompare(left.lastSupportedAt)
       || left.id.localeCompare(right.id)
     ));
