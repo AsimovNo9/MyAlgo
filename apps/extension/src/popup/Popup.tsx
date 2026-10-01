@@ -44,6 +44,7 @@ export function Popup() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
   const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
+  const [modeSearch, setModeSearch] = React.useState('');
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [feedReplacementPercent, setFeedReplacementPercent] = React.useState(0);
   const [feedCount, setFeedCount] = React.useState(0);
@@ -57,7 +58,7 @@ export function Popup() {
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-active-mode-id', 'personal-algorithm-durable-mode-catalog', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-active-mode-id', 'personal-algorithm-active-mode-ids', 'personal-algorithm-durable-mode-catalog', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
       const storedMode = (result['personal-algorithm-mode'] as string) ?? 'Default';
       const catalog = (result['personal-algorithm-durable-mode-catalog'] as DurableSemanticModeCatalog | undefined) ?? null;
       const storedModeId = (result['personal-algorithm-active-mode-id'] as string | undefined)
@@ -215,6 +216,16 @@ export function Popup() {
   };
 
   const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
+  const selectedModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default' && selectedModeIds.includes(option.id)
+  ));
+  const normalizedModeSearch = modeSearch.trim().toLowerCase();
+  const searchableModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default'
+    && (!normalizedModeSearch
+      || option.label.toLowerCase().includes(normalizedModeSearch)
+      || option.id.toLowerCase().includes(normalizedModeSearch))
+  ));
 
   if (!disclosureAccepted) {
     return (
@@ -347,29 +358,81 @@ export function Popup() {
       </fieldset>
       {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {modeOptions.map((option) => {
-          const pressed = option.id === 'default'
-            ? selectedModeIds.length === 0
-            : selectedModeIds.includes(option.id);
-          return (
+      <section style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Selected groups</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => void handleSetMode('default')}
+            aria-pressed={selectedModeIds.length === 0}
+            style={{
+              borderRadius: 999,
+              padding: '6px 10px',
+              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
+              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
+              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
+            }}
+          >
+            All
+          </button>
+          {selectedModeOptions.map((option) => (
             <button
               key={option.id}
+              type="button"
               onClick={() => void handleSetMode(option.id)}
-              aria-pressed={pressed}
+              aria-pressed="true"
+              title="Click to deselect"
               style={{
                 borderRadius: 999,
                 padding: '6px 10px',
-                border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
-                background: pressed ? '#dbeafe' : '#fff',
-                fontWeight: pressed ? 700 : 500,
+                border: '2px solid #2563eb',
+                background: '#dbeafe',
+                fontWeight: 700,
               }}
             >
-              {option.label}{option.active ? '' : ' (dormant)'}
+              {option.label}{option.active ? '' : ' · retained'}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Browse groups ({Math.max(0, modeOptions.length - 1)})
+          </summary>
+          <input
+            type="search"
+            value={modeSearch}
+            onChange={(event) => setModeSearch(event.target.value)}
+            placeholder="Search groups"
+            aria-label="Search groups"
+            style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: 7 }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 180, overflowY: 'auto' }}>
+            {searchableModeOptions.map((option) => {
+              const pressed = selectedModeIds.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => void handleSetMode(option.id)}
+                  aria-pressed={pressed}
+                  style={{
+                    borderRadius: 999,
+                    padding: '6px 10px',
+                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                    background: pressed ? '#dbeafe' : '#fff',
+                    fontWeight: pressed ? 700 : 500,
+                  }}
+                >
+                  {option.label}{option.active ? '' : ' (retained)'}
+                </button>
+              );
+            })}
+            {searchableModeOptions.length === 0 ? (
+              <span style={{ fontSize: 12, color: '#64748b' }}>No matching groups.</span>
+            ) : null}
+          </div>
+        </details>
+      </section>
       <button onClick={() => void handleOpenOptions()} style={{ marginTop: 12 }}>
         Open options
       </button>
