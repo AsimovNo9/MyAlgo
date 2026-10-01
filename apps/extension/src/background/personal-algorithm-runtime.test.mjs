@@ -113,7 +113,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 8);
   assert.equal(ranked[0].score, calibrateLocalScore(8));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p9');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p10');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 8);
   assert.equal(ranked[0].trace.edgeContributions.length, 0);
@@ -1490,4 +1490,48 @@ test('created-by exposure support churn keeps scoring state stable but refreshes
   assert.equal(diagnostics.contextHits, 1);
   assert.equal(diagnostics.contextMisses, 0);
   assert.equal(second.trace.edgeContributions.length, 0);
+});
+
+
+test('revisioned graph controls change local scoring without mutating retained evidence', () => {
+  const reducedState = structuredClone(state);
+  reducedState.graph.controls = [{
+    id: 'control:node:creator-a',
+    targetKind: 'node',
+    targetId: 'creator:youtube:Creator%20A',
+    action: 'reduce',
+    createdAt: '2026-10-01T12:00:00.000Z',
+    updatedAt: '2026-10-01T12:00:00.000Z',
+  }];
+  reducedState.graph.currentRevision += 1;
+
+  const reduced = scoreLocalCandidates(reducedState, [{
+    external_id: 'video-a',
+    title: 'Video A',
+  }], 'Default')[0];
+  assert.equal(reduced.rawScore, 4);
+  assert.equal(reduced.trace.nodeContributions[0].value, 4);
+  assert.match(reduced.trace.nodeContributions[0].label, /reduce by you/);
+  assert.deepEqual(reducedState.evidence, state.evidence);
+
+  const preferredState = structuredClone(reducedState);
+  preferredState.graph.controls[0].action = 'prefer';
+  preferredState.graph.currentRevision += 1;
+  const preferred = scoreLocalCandidates(preferredState, [{
+    external_id: 'video-a',
+    title: 'Video A',
+  }], 'Default')[0];
+  assert.equal(preferred.rawScore, 12);
+  assert.equal(preferred.trace.nodeContributions[0].value, 12);
+
+  const mutedState = structuredClone(preferredState);
+  mutedState.graph.controls[0].action = 'mute';
+  mutedState.graph.currentRevision += 1;
+  const muted = scoreLocalCandidates(mutedState, [{
+    external_id: 'video-a',
+    title: 'Video A',
+  }], 'Default')[0];
+  assert.equal(muted.rawScore, 0);
+  assert.equal(muted.trace.suppressed, true);
+  assert.equal(muted.trace.policyOutcome, 'suppressed');
 });

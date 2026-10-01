@@ -46,3 +46,73 @@ test('candidate mode features land in mode contributions with exact graph ground
 });
 
 test('preindexed graph scoring is trace-identical to full edge scans',()=>{const p={revision:'p-index',baseScore:1,nodeWeights:{'content:youtube:video-1':2,'creator:youtube:creator-1':3},edgeRelationWeights:{created_by:4}};const revisionContext=undefined;const indexed=scorePersonalAlgorithm(state,candidate,p,'default',[],revisionContext,buildPersonalScoringGraphIndex(state));const scanned=scorePersonalAlgorithm(state,candidate,p,'default',[]);assert.equal(indexed.score,scanned.score);assert.equal(indexed.trace.id,scanned.trace.id);assert.deepEqual(indexed.trace.edgeContributions,scanned.trace.edgeContributions);assert.deepEqual(indexed.trace.matchedPaths,scanned.trace.matchedPaths)});
+
+test('graph controls reduce and prefer exact sourced contributions',()=>{
+  const p={
+    revision:'p-controls',
+    nodeWeights:{'creator:youtube:creator-1':8},
+    graphControls:[{
+      id:'control:node:creator',
+      targetKind:'node',
+      targetId:'creator:youtube:creator-1',
+      action:'reduce'
+    }]
+  };
+  const reduced=scorePersonalAlgorithm(state,candidate,p);
+  assert.equal(reduced.score,4);
+  assert.equal(reduced.trace.nodeContributions[0].value,4);
+  assert.deepEqual(reduced.trace.nodeContributions[0].controlIds,['control:node:creator']);
+  assert.match(reduced.trace.nodeContributions[0].label,/reduce by you/);
+  assert.equal(isScoreTraceConsistent(reduced.trace),true);
+
+  const preferred=scorePersonalAlgorithm(state,candidate,{
+    ...p,
+    graphControls:[{
+      id:'control:node:creator',
+      targetKind:'node',
+      targetId:'creator:youtube:creator-1',
+      action:'prefer'
+    }]
+  });
+  assert.equal(preferred.score,12);
+  assert.equal(preferred.trace.nodeContributions[0].value,12);
+  assert.match(preferred.trace.nodeContributions[0].label,/prefer by you/);
+  assert.equal(isScoreTraceConsistent(preferred.trace),true);
+});
+
+test('mute graph control hard-suppresses a matching node before final presentation',()=>{
+  const result=scorePersonalAlgorithm(state,candidate,{
+    revision:'p-mute',
+    nodeWeights:{'creator:youtube:creator-1':8},
+    graphControls:[{
+      id:'control:node:creator',
+      targetKind:'node',
+      targetId:'creator:youtube:creator-1',
+      action:'mute'
+    }]
+  });
+  assert.equal(result.score,0);
+  assert.equal(result.trace.policyOutcome,'suppressed');
+  assert.equal(result.trace.suppressed,true);
+  assert.equal(result.trace.suppressionContributions.length,1);
+  assert.match(result.trace.suppressionContributions[0].label,/muted by you/);
+  assert.equal(isScoreTraceConsistent(result.trace),true);
+});
+
+test('edge controls affect only the exact matched score-bearing edge',()=>{
+  const policy={
+    revision:'p-edge-control',
+    edgeRelationWeights:{created_by:4},
+    graphControls:[{
+      id:'control:edge:creator',
+      targetKind:'edge',
+      targetId:'edge:created-by:video-1:creator-1',
+      action:'reduce'
+    }]
+  };
+  const result=scorePersonalAlgorithm(state,candidate,policy);
+  assert.equal(result.score,2);
+  assert.equal(result.trace.edgeContributions[0].value,2);
+  assert.deepEqual(result.trace.edgeContributions[0].controlIds,['control:edge:creator']);
+  assert.equal(isScoreTraceConsistent(result.trace),true);
+});

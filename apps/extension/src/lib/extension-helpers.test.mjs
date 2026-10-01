@@ -421,3 +421,48 @@ test('explanation graph view contains only exact trace nodes and stored connecti
   );
   assert.equal(subgraph.edges.some((edge) => edge.id === 'edge:music'), false);
 });
+
+
+test('graph inspector exposes muted controls with human target labels', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      currentRevision: 4,
+      userEdits: [],
+      revisions: [],
+      controls: [{
+        id: 'control:node:topic-ai',
+        targetKind: 'node',
+        targetId: 'topic:ai',
+        action: 'mute',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-01T10:00:00.000Z',
+      }],
+      nodes: [{
+        id: 'topic:ai',
+        kind: 'topic',
+        label: 'AI takeover',
+        content: null,
+        provenance: 'inferred',
+        confidence: 0.9,
+        attributes: {},
+        createdAt: '2026-10-01T09:00:00.000Z',
+        updatedAt: '2026-10-01T09:00:00.000Z',
+      }],
+      edges: [],
+    },
+  };
+
+  const view = buildGraphInspectorView(state);
+  assert.equal(view.controls.length, 1);
+  assert.deepEqual(view.controls[0], {
+    id: 'control:node:topic-ai',
+    targetKind: 'node',
+    targetId: 'topic:ai',
+    targetLabel: 'AI takeover',
+    action: 'mute',
+    createdAt: '2026-10-01T10:00:00.000Z',
+    updatedAt: '2026-10-01T10:00:00.000Z',
+  });
+});

@@ -15,6 +15,40 @@ import { ensureWorkerOffscreenDocument } from '../lib/offscreen-worker.ts';
 export const MAX_RSS_CHANNELS_PER_REFRESH = 6;
 export const MAX_RSS_ITEMS_PER_CHANNEL = 8;
 
+export const YOUTUBE_SEARCH_BLOCKED_ERROR_CODE = 'YOUTUBE_SEARCH_BLOCKED';
+
+export function isYoutubeSearchBlockedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return message.includes(YOUTUBE_SEARCH_BLOCKED_ERROR_CODE);
+}
+
+const assertYoutubeSearchResponse = (response: Response): void => {
+  // Production search requests must never follow YouTube's anti-abuse redirect
+  // into google.com/sorry. Following it creates a cross-origin CORS error in the
+  // extension console and a second retry only increases request pressure.
+  if (
+    response.type === 'opaqueredirect'
+    || (response.status >= 300 && response.status < 400)
+  ) {
+    throw new Error(
+      `${YOUTUBE_SEARCH_BLOCKED_ERROR_CODE}: YouTube search redirected to an anti-abuse/interstitial response.`,
+    );
+  }
+
+  if (response.url) {
+    try {
+      const host = new URL(response.url).hostname.toLowerCase();
+      if (host !== 'www.youtube.com' && host !== 'youtube.com') {
+        throw new Error(
+          `${YOUTUBE_SEARCH_BLOCKED_ERROR_CODE}: YouTube search left the YouTube origin (${host}).`,
+        );
+      }
+    } catch (error) {
+      if (isYoutubeSearchBlockedError(error)) throw error;
+    }
+  }
+};
+
 const decodeXml = (value: string): string => value
   .replace(/&amp;/g, '&')
   .replace(/&lt;/g, '<')
@@ -255,23 +289,28 @@ const toCandidate = (
 async function searchYoutubePageOffThread(
   request: WebSearchRequest,
 ): Promise<ParsedSearchResult[] | null> {
+  let ready = false;
   try {
-    const ready = await ensureWorkerOffscreenDocument(
+    ready = await ensureWorkerOffscreenDocument(
       'Run YouTube search-page parsing in a dedicated worker so ranking UI remains responsive.',
     );
-    if (!ready) return null;
-    const response = await chrome.runtime.sendMessage({
-      target: 'youtube-search-offscreen',
-      type: 'SEARCH_YOUTUBE_PAGE',
-      query: request.query,
-      limit: request.limit,
-    }) as { ok?: boolean; results?: ParsedSearchResult[]; error?: string };
-    if (!response?.ok) throw new Error(response?.error ?? 'YouTube search worker failed.');
-    return Array.isArray(response.results) ? response.results : [];
   } catch (error) {
-    console.warn('[MyAlgo] offscreen YouTube search unavailable; falling back to service worker', error);
+    console.warn('[MyAlgo] offscreen YouTube search unavailable; service-worker fallback allowed', error);
     return null;
   }
+  if (!ready) return null;
+
+  // Once the offscreen provider is available, a provider/network failure is
+  // terminal for this search attempt. Do not immediately repeat the same query
+  // from the service worker, especially after an anti-abuse response.
+  const response = await chrome.runtime.sendMessage({
+    target: 'youtube-search-offscreen',
+    type: 'SEARCH_YOUTUBE_PAGE',
+    query: request.query,
+    limit: request.limit,
+  }) as { ok?: boolean; results?: ParsedSearchResult[]; error?: string };
+  if (!response?.ok) throw new Error(response?.error ?? 'YouTube search worker failed.');
+  return Array.isArray(response.results) ? response.results : [];
 }
 
 export function createYoutubeSearchPageProvider(
@@ -299,11 +338,13 @@ export function createYoutubeSearchPageProvider(
           method: 'GET',
           credentials: 'omit',
           cache: 'no-store',
+          redirect: 'manual',
           headers: {
             Accept: 'text/html,application/xhtml+xml',
             'Accept-Language': 'en-US,en;q=0.9',
           },
         });
+        assertYoutubeSearchResponse(response);
         if (!response.ok) throw new Error(`YouTube search HTTP ${response.status}`);
         parsed = parseYoutubeSearchResultsHtml(await response.text(), request.limit);
       }

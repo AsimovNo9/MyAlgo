@@ -263,7 +263,7 @@ Hard exclusions and eligibility short-circuit before any additive contribution i
 
 The scorer accepts explicit node/relation weights, bounded feedback signals, and mode-specific weight/policy adjustments. Those are policy inputs; they are not learned implicitly by the scorer. Extension runtime wiring belongs to #169, while preference inference remains a separate upstream concern.
 
-## Feedback
+## Feedback and graph correction controls
 
 Feedback should update graph evidence or bounded preference state.
 
@@ -271,8 +271,30 @@ Examples:
 
 - More like this → strengthen relevant path.
 - Less like this → weaken relevant path.
-- Mute → hard suppression.
+- Reduce → multiply an existing exact graph-sourced contribution by 0.5.
+- Prefer → multiply an existing exact graph-sourced contribution by 1.5.
+- Mute → hard suppression for candidates matching the exact controlled node or edge.
 - Forget → remove selected evidence/relationship.
+
+Graph correction controls are overlays over the same Personal Algorithm Graph. They do not manufacture supporting evidence and they do not rewrite inferred graph structure. A control is keyed by a stable node/edge ID and is consumed by the deterministic scorer:
+
+```text
+retained graph + evidence
+        ↓
+candidate contributions
+        ↓
+exact node/edge correction overlay
+        ↓
+Reduce / Prefer adjustment
+        ↓
+hard Mute check
+        ↓
+final reproducible trace
+```
+
+The first user graph mutation captures an immutable pre-edit node/edge/control baseline. Every control change, undo, and Restore original creates a graph revision. Restore original restores graph/control state only; it never deletes retained evidence. Forget remains a separate #155 evidence operation.
+
+Aggregated contributions may refer to several source graph nodes. The feed explanation must not arbitrarily edit one member of an aggregated contribution; inline actions are enabled only when the explanation resolves to one exact graph target. The full graph inspector can always target a concrete node or edge directly.
 
 Do not let a single click rewrite the entire graph.
 

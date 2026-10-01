@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../lib/storage';
 import { EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
-import { MYALGO_INJECTED_SELECTOR, buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
+import { MYALGO_INJECTED_SELECTOR, buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, dedupeCandidatesById, getCandidateAcquisitionLabel, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isMyAlgoInjectedElement, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, shouldHideForSourceFilters, shouldClearSourceFilteredPresentation, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux';
 import type { DurableModePresentationContext, ModeSupplyPlan, RankedFeedItem, ReplacementRerankReason } from './youtube-ux';
 import { youtubeConnector } from '../connectors/youtube';
 
@@ -257,15 +257,17 @@ const clearExtensionPresentation = (
     )) return;
     badge.remove();
   });
-  document.querySelectorAll<HTMLElement>(
-    '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
-  ).forEach((container) => {
-    container.style.removeProperty('display');
-    delete container.dataset.personalAlgorithmSourceShelfHidden;
-    delete container.dataset.personalAlgorithmSourceRowHidden;
-    delete container.dataset.personalAlgorithmSourceSectionHidden;
-    delete container.dataset.personalAlgorithmSourceLayoutHidden;
-  });
+  if (shouldClearSourceFilteredPresentation(showPaused, extensionEnabled)) {
+    document.querySelectorAll<HTMLElement>(
+      '[data-personal-algorithm-source-shelf-hidden], [data-personal-algorithm-source-row-hidden], [data-personal-algorithm-source-section-hidden], [data-personal-algorithm-source-layout-hidden]',
+    ).forEach((container) => {
+      container.style.removeProperty('display');
+      delete container.dataset.personalAlgorithmSourceShelfHidden;
+      delete container.dataset.personalAlgorithmSourceRowHidden;
+      delete container.dataset.personalAlgorithmSourceSectionHidden;
+      delete container.dataset.personalAlgorithmSourceLayoutHidden;
+    });
+  }
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-position-patched="true"]').forEach((element) => {
     element.style.removeProperty('position');
     delete element.dataset.personalAlgorithmPositionPatched;
@@ -468,6 +470,37 @@ const renderExplanationContent = (
   header.appendChild(headerMeta);
   shell.appendChild(header);
 
+  const presentation = document.createElement('div');
+  presentation.style.cssText = 'padding:9px 14px;border-bottom:1px solid #303030;background:#101010;color:#cbd5e1;font:600 11px/1.35 Roboto,Arial,sans-serif;';
+  const panelKind = container.dataset.personalAlgorithmExplanationPanel === 'replacement'
+    ? 'replacement'
+    : 'native';
+  const sourceLine = document.createElement('div');
+  sourceLine.textContent = panelKind === 'replacement'
+    ? `Presentation: replaced a YouTube card · Source: ${view.sourceLabel}`
+    : 'Presentation: native YouTube card reranked in place · Source: YouTube native page';
+  presentation.appendChild(sourceLine);
+  if (activeDurableMode) {
+    const exactModeMatch = isDurableModeGroundedItem(item, activeDurableMode);
+    const provisionalModeMatch = !exactModeMatch
+      && isProvisionalDurableModeRelevantItem(item, activeDurableMode);
+    const modeLine = document.createElement('div');
+    modeLine.style.marginTop = '3px';
+    modeLine.textContent = exactModeMatch
+      ? `Selected group: ${activeDurableMode.label} · exact graph-grounded match`
+      : provisionalModeMatch
+        ? `Selected group: ${activeDurableMode.label} · provisional semantic match; graph/history grounding is not available yet`
+        : `Selected group: ${activeDurableMode.label} · this item has no selected-group grounding`;
+    presentation.appendChild(modeLine);
+  }
+  if (view.historyMatches.length === 0) {
+    const historyLine = document.createElement('div');
+    historyLine.style.marginTop = '3px';
+    historyLine.textContent = 'History: no retained prior watch/click evidence directly supports this score.';
+    presentation.appendChild(historyLine);
+  }
+  shell.appendChild(presentation);
+
   const graph = document.createElement('div');
   graph.dataset.personalAlgorithmExplanationGraph = 'true';
   const hasHistory = view.historyMatches.length > 0;
@@ -655,9 +688,17 @@ const renderExplanationContent = (
 
   const contributions = document.createElement('div');
   contributions.style.cssText = 'padding:0 14px;';
+  if (view.contributions.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:10px 0;color:#94a3b8;border-bottom:1px solid #303030;font:500 11px/1.4 Roboto,Arial,sans-serif;';
+    empty.textContent = activeDurableMode && isProvisionalDurableModeRelevantItem(item, activeDurableMode)
+      ? 'No exact editable graph contribution is available yet. This replacement currently qualifies through provisional semantic mode matching.'
+      : 'No exact editable graph contribution is available for this item yet.';
+    contributions.appendChild(empty);
+  }
   for (const contribution of view.contributions) {
     const row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
+    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,auto);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
     const label = document.createElement('div');
     label.style.cssText = 'min-width:0;font-weight:700;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     const accent = document.createElement('span');
@@ -673,18 +714,126 @@ const renderExplanationContent = (
     value.style.cssText = 'color:#e2e8f0;font-variant-numeric:tabular-nums;';
     row.appendChild(value);
 
-    const action = document.createElement('button');
-    action.type = 'button';
-    action.textContent = contribution.actionLabel ?? 'Inspect';
-    action.disabled = true;
-    action.title = contribution.actionLabel
-      ? 'Available after revisioned preference controls land.'
-      : 'No direct preference action for this contribution yet.';
-    action.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.72;';
-    row.appendChild(action);
+    const actionable = Boolean(
+      contribution.targetKind
+      && contribution.targetId,
+    );
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;';
+    if (!actionable) {
+      const inspect = document.createElement('button');
+      inspect.type = 'button';
+      inspect.textContent = 'Inspect';
+      inspect.disabled = true;
+      inspect.title = 'This contribution is aggregated or has no direct graph target.';
+      inspect.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.5;';
+      actions.appendChild(inspect);
+    } else {
+      const controlOptions = [
+        { label: 'Prefer', action: 'prefer' as const, title: 'Recommend more from this exact graph term.' },
+        { label: 'Reduce', action: 'reduce' as const, title: 'Recommend less from this exact graph term.' },
+        { label: 'Mute', action: 'mute' as const, title: 'Suppress candidates matching this exact graph term.' },
+      ];
+      for (const option of controlOptions) {
+        const control = document.createElement('button');
+        control.type = 'button';
+        control.textContent = option.label;
+        const suggested = contribution.actionLabel === option.label;
+        control.title = `${option.title} The edit is revisioned and can be undone in Options.`;
+        control.style.cssText = `padding:3px 7px;border:${suggested ? '2px' : '1px'} solid #64748b;border-radius:999px;background:${suggested ? 'rgba(30,64,175,.35)' : 'transparent'};color:#f8fafc;font:${suggested ? '700' : '600'} 10px/1.2 Roboto,Arial,sans-serif;cursor:pointer;`;
+        control.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const siblings = Array.from(actions.querySelectorAll<HTMLButtonElement>('button'));
+          siblings.forEach((button) => { button.disabled = true; });
+          const originalLabel = control.textContent;
+          control.textContent = 'Applying…';
+          void chrome.runtime.sendMessage({
+            type: 'PERSONAL_ALGORITHM_SET_CONTROL',
+            payload: {
+              targetKind: contribution.targetKind,
+              targetId: contribution.targetId,
+              action: option.action,
+            },
+          }).then((response: { ok?: boolean; error?: string }) => {
+            siblings.forEach((button) => { button.disabled = false; });
+            if (!response?.ok) {
+              control.textContent = originalLabel;
+              control.title = response?.error ?? 'Unable to update this graph control.';
+              return;
+            }
+            siblings.forEach((button) => {
+              if (button !== control && button.textContent?.endsWith(' ✓')) {
+                button.textContent = button.textContent.slice(0, -2);
+              }
+            });
+            control.textContent = `${option.label} ✓`;
+            control.title = 'Saved as a revisioned graph control. Choose another direction here or use Options to undo/restore.';
+          }).catch((error) => {
+            siblings.forEach((button) => { button.disabled = false; });
+            control.textContent = originalLabel;
+            control.title = error instanceof Error ? error.message : 'Unable to update this graph control.';
+          });
+        });
+        actions.appendChild(control);
+      }
+    }
+    row.appendChild(actions);
     contributions.appendChild(row);
   }
   shell.appendChild(contributions);
+
+  if (item.external_id) {
+    const itemFeedback = document.createElement('div');
+    itemFeedback.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#121212;';
+    const feedbackLabel = document.createElement('div');
+    feedbackLabel.textContent = 'Video-level feedback';
+    feedbackLabel.style.cssText = 'margin-bottom:7px;color:#cbd5e1;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;';
+    itemFeedback.appendChild(feedbackLabel);
+    const feedbackControls = document.createElement('div');
+    feedbackControls.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    const feedbackOptions = [
+      { label: 'More like this', eventType: 'more_like_this' as const },
+      { label: 'Less like this', eventType: 'not_interested' as const },
+    ];
+    for (const option of feedbackOptions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option.label;
+      button.style.cssText = 'padding:5px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 10px/1.2 Roboto,Arial,sans-serif;cursor:pointer;';
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const original = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Saving…';
+        void chrome.runtime.sendMessage({
+          type: EXTENSION_MESSAGE_TYPES.FEEDBACK,
+          payload: { contentItemId: item.external_id, eventType: option.eventType },
+        }).then((response: { ok?: boolean; error?: string }) => {
+          button.disabled = false;
+          if (!response?.ok) {
+            button.textContent = original;
+            button.title = response?.error ?? 'Unable to save feedback.';
+            return;
+          }
+          button.textContent = `${option.label} ✓`;
+          button.title = 'Saved as explicit video feedback and applied to the next rank.';
+        }).catch((error) => {
+          button.disabled = false;
+          button.textContent = original;
+          button.title = error instanceof Error ? error.message : 'Unable to save feedback.';
+        });
+      });
+      feedbackControls.appendChild(button);
+    }
+    itemFeedback.appendChild(feedbackControls);
+    const feedbackNote = document.createElement('div');
+    feedbackNote.textContent = 'Use these when no exact graph term exists yet. Video feedback affects ranking; graph-term controls remain separate.';
+    feedbackNote.style.cssText = 'margin-top:6px;color:#94a3b8;font:500 10px/1.35 Roboto,Arial,sans-serif;';
+    itemFeedback.appendChild(feedbackNote);
+    shell.appendChild(itemFeedback);
+  }
 
   const footer = document.createElement('div');
   footer.style.cssText = 'padding:10px 14px 12px;';
@@ -825,9 +974,10 @@ const createReplacementCard = (
   const replacementBadge = document.createElement('span');
   replacementBadge.dataset.personalAlgorithmBadge = 'true';
   const contentLabel = getContentPresentationLabel(item);
+  const replacementSourceLabel = getCandidateAcquisitionLabel(item);
   replacementBadge.textContent = contentLabel
-    ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
-    : `MyAlgo replacement · ${metadata.score}`;
+    ? `${contentLabel} · MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`
+    : `MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`;
   replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 104px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
   card.appendChild(replacementBadge);
 
@@ -859,8 +1009,8 @@ const createReplacementCard = (
   const meta = document.createElement('div');
   meta.dataset.personalAlgorithmReplacementSummary = 'true';
   meta.textContent = contentLabel
-    ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
-    : `MyAlgo · ${item.score ?? 0}/100`;
+    ? `${contentLabel} · Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`
+    : `Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`;
   meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary,#aaa);font-size:12px;line-height:17px;font-weight:600;';
   card.appendChild(meta);
 
@@ -928,9 +1078,10 @@ const refreshReplacementCardPresentation = (
 
   const badge = card.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
   if (badge) {
+    const replacementSourceLabel = getCandidateAcquisitionLabel(item);
     badge.textContent = contentLabel
-      ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
-      : `MyAlgo replacement · ${metadata.score}`;
+      ? `${contentLabel} · MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`
+      : `MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`;
   }
 
   const link = card.querySelector<HTMLAnchorElement>('a[data-personal-algorithm-video-id]');
@@ -962,9 +1113,10 @@ const refreshReplacementCardPresentation = (
   if (creator) creator.textContent = displayMetadata.creator;
   const summary = card.querySelector<HTMLElement>('[data-personal-algorithm-replacement-summary]');
   if (summary) {
+    const replacementSourceLabel = getCandidateAcquisitionLabel(item);
     summary.textContent = contentLabel
-      ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
-      : `MyAlgo · ${item.score ?? 0}/100`;
+      ? `${contentLabel} · Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`
+      : `Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`;
   }
 
   const why = card.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation]');
@@ -1441,8 +1593,8 @@ const applyRankedFeed = (
     }
     const contentLabel = getContentPresentationLabel(item);
     badge.textContent = contentLabel
-      ? `${contentLabel} · ${score}`
-      : `MyAlgo · ${score}`;
+      ? `${contentLabel} · MyAlgo reranked · ${score}`
+      : `MyAlgo reranked · ${score}`;
     ensureNativeExplanationControl(element, item);
   });
 
@@ -1957,6 +2109,7 @@ const applyRankedPresentation = (generation = rankGeneration) => {
   const applyMs = performance.now() - applyStartedAt;
   const replacementStartedAt = performance.now();
   renderReplacementSlots(generation, snapshot);
+  syncSourceFilteredContainers();
   const replacementMs = performance.now() - replacementStartedAt;
   console.info('[MyAlgo] presentation timing', {
     nativeCardCount: snapshot.cards.length,
@@ -2216,6 +2369,7 @@ const applySourceFilters = (nextFilters: FeedSourceFilters) => {
   // policy.
   clearExtensionPresentation(false);
   applyRankedFeed();
+  syncSourceFilteredContainers();
 
   lastCandidateSignature = '';
   lastRankMode = '';

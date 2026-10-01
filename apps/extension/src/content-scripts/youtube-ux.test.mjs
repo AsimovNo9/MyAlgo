@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getCandidateAcquisitionLabel, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldClearSourceFilteredPresentation, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -28,7 +28,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
       graphRevision: 12,
       acquisitionMechanism: 'web_search',
       contributions: [
-        { label: 'semantic neighbourhood: local AI', value: 10, kind: 'feature', evidenceIds: ['e1'] },
+        { label: 'semantic neighbourhood: local AI', value: 10, kind: 'feature', sourceId: 'topic:local-ai', evidenceIds: ['e1'] },
         { label: 'explicit feedback: not_interested', value: -5, kind: 'feedback', evidenceIds: ['e2'] },
       ],
       matchedPaths: [
@@ -46,7 +46,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.equal(view.scoreLine, 'Score 72/100 · raw 14.5 · graph r12');
   assert.equal(
     view.acquisitionLine,
-    'Discovered via YouTube search · source is not preference evidence',
+    'YouTube search discovery · acquisition source is not preference evidence',
   );
   assert.deepEqual(
     view.pathLines,
@@ -68,9 +68,39 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
     ],
   );
   assert.equal(view.contributions[0].evidenceCount, 1);
-  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.contributions[0].actionLabel, 'Reduce');
+  assert.equal(view.contributions[0].targetKind, 'node');
+  assert.equal(view.contributions[0].targetId, 'topic:local-ai');
   assert.equal(view.graphRevision, 12);
   assert.equal(view.traceId, 'trace-a');
+});
+
+test('exact negative graph contributions suggest the positive correction direction', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-negative',
+    title: 'Negative example',
+    score: 40,
+    traceId: 'trace-negative',
+    explanation: {
+      rawScore: -3,
+      displayScore: 40,
+      graphRevision: 7,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [{
+        label: 'topic: gaming',
+        value: -3,
+        kind: 'feature',
+        sourceId: 'topic:gaming',
+        evidenceIds: ['e-negative'],
+      }],
+      matchedPaths: [],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+
+  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.contributions[0].targetId, 'topic:gaming');
 });
 
 test('explanation display humanizes encoded graph labels and omits relation names from the mini graph', () => {
@@ -189,7 +219,7 @@ test('explanation provenance uses user-facing labels without becoming a ranking 
         modeGrounding: null,
       },
     }).acquisitionLine,
-    'Observed on the current YouTube page · source is not preference evidence',
+    'YouTube native page · acquisition source is not preference evidence',
   );
 });
 
@@ -396,6 +426,12 @@ test('explicit source-filter hides are terminal and never become replacement slo
   );
 });
 
+
+test('active reranks preserve structurally hidden source shelves', () => {
+  assert.equal(shouldClearSourceFilteredPresentation(false, true), false);
+  assert.equal(shouldClearSourceFilteredPresentation(true, true), true);
+  assert.equal(shouldClearSourceFilteredPresentation(false, false), true);
+});
 
 test('source shelf policy removes Shorts and Playables only when disabled', () => {
   assert.equal(
@@ -1082,4 +1118,47 @@ test('retrieved discovery never replaces a stronger native card', () => {
     ),
     [],
   );
+});
+
+
+test('candidate acquisition labels distinguish native, RSS, and search sources', () => {
+  assert.equal(getCandidateAcquisitionLabel({
+    explanation: { acquisitionMechanism: 'observed_dom' },
+  }), 'YouTube native page');
+  assert.equal(getCandidateAcquisitionLabel({
+    explanation: { acquisitionMechanism: 'rss' },
+  }), 'RSS discovery');
+  assert.equal(getCandidateAcquisitionLabel({
+    provenance: { mechanism: 'web_search', acquired_at: '2026-10-01T10:00:00.000Z' },
+  }), 'YouTube search discovery');
+  assert.equal(getCandidateAcquisitionLabel({
+    acquisition_history: [
+      { mechanism: 'rss', acquired_at: '2026-10-01T09:00:00.000Z' },
+      { mechanism: 'web_search', acquired_at: '2026-10-01T11:00:00.000Z' },
+    ],
+  }), 'YouTube search discovery');
+});
+
+test('explanation view model exposes acquisition source even without graph/history support', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'rss-ai',
+    title: 'AI candidate',
+    score: 50,
+    traceId: 'trace-rss-ai',
+    provenance: { mechanism: 'rss', acquired_at: '2026-10-01T10:00:00.000Z' },
+    explanation: {
+      rawScore: 0,
+      displayScore: 50,
+      graphRevision: 9,
+      acquisitionMechanism: 'rss',
+      contributions: [],
+      matchedPaths: [],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+  assert.equal(view.sourceLabel, 'RSS discovery');
+  assert.match(view.acquisitionLine, /RSS discovery/);
+  assert.deepEqual(view.contributions, []);
+  assert.deepEqual(view.historyMatches, []);
 });

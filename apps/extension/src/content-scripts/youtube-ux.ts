@@ -108,6 +108,8 @@ export type WhyThisDisplayContribution = {
   kind: string;
   evidenceCount: number;
   actionLabel: 'Reduce' | 'Mute' | 'Prefer' | null;
+  targetKind: 'node' | 'edge' | null;
+  targetId: string | null;
 };
 
 export type WhyThisMiniNode = {
@@ -128,6 +130,7 @@ export type WhyThisHistoryMatch = {
 export type ExplanationViewModel = {
   scoreLine: string;
   acquisitionLine: string | null;
+  sourceLabel: string;
   pathLines: string[];
   contributionLines: string[];
   contributions: WhyThisDisplayContribution[];
@@ -148,11 +151,12 @@ const contributionKind = (label: string, kind: string): WhyThisMiniNode['kind'] 
   return 'other';
 };
 
-const contributionAction = (nodeKind: WhyThisMiniNode['kind']): WhyThisDisplayContribution['actionLabel'] => {
-  if (nodeKind === 'creator') return 'Reduce';
-  if (nodeKind === 'topic') return 'Mute';
-  if (nodeKind === 'format' || nodeKind === 'concept') return 'Prefer';
-  return null;
+const contributionAction = (
+  value: number,
+  targetId: string | null,
+): WhyThisDisplayContribution['actionLabel'] => {
+  if (!targetId || value === 0) return null;
+  return value > 0 ? 'Reduce' : 'Prefer';
 };
 
 const humanizeGraphLabel = (value: string): string => {
@@ -184,23 +188,28 @@ const humanContributionLabel = (label: string): string => {
   return humanizeGraphLabel(raw);
 };
 
+export function getCandidateAcquisitionLabel(item: RankedFeedItem): string {
+  const mechanism = item.explanation?.acquisitionMechanism
+    ?? item.provenance?.mechanism
+    ?? [...(item.acquisition_history ?? [])]
+      .sort((left, right) => String(right.acquired_at ?? '').localeCompare(String(left.acquired_at ?? '')))[0]
+      ?.mechanism
+    ?? null;
+  if (mechanism === 'observed_dom') return 'YouTube native page';
+  if (mechanism === 'rss') return 'RSS discovery';
+  if (mechanism === 'web_search') return 'YouTube search discovery';
+  if (mechanism === 'exploration') return 'MyAlgo exploration';
+  if (mechanism) return `MyAlgo candidate pool · ${mechanism}`;
+  return 'MyAlgo candidate pool';
+}
+
 export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
   const explanation = item.explanation;
   const scoreLine = explanation
     ? `Score ${explanation.displayScore}/100 · raw ${explanation.rawScore} · graph r${explanation.graphRevision}`
     : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
-  const mechanismLabel = explanation?.acquisitionMechanism === 'observed_dom'
-    ? 'Observed on the current YouTube page'
-    : explanation?.acquisitionMechanism === 'web_search'
-      ? 'Discovered via YouTube search'
-      : explanation?.acquisitionMechanism === 'rss'
-        ? 'Discovered via RSS'
-        : explanation?.acquisitionMechanism
-          ? `Acquired via ${explanation.acquisitionMechanism}`
-          : null;
-  const acquisitionLine = mechanismLabel
-    ? `${mechanismLabel} · source is not preference evidence`
-    : null;
+  const sourceLabel = getCandidateAcquisitionLabel(item);
+  const acquisitionLine = `${sourceLabel} · acquisition source is not preference evidence`;
   const pathLines = (explanation?.matchedPaths ?? [])
     .slice(0, 3)
     .map((path) => {
@@ -229,13 +238,24 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
     .slice(0, 4)
     .map((entry) => {
       const nodeKind = contributionKind(entry.label, entry.kind);
+      const sourceNodeIds = [...new Set([
+        ...(entry.sourceId && !entry.sourceId.startsWith('canonical:') ? [entry.sourceId] : []),
+        ...(entry.sourceIds ?? []),
+      ].filter((sourceId) => (
+        !sourceId.startsWith('content:')
+        && !sourceId.startsWith('canonical:')
+        && !sourceId.startsWith('local-feedback:')
+      )))];
+      const targetId = sourceNodeIds.length === 1 ? sourceNodeIds[0]! : null;
       return {
         label: humanContributionLabel(entry.label),
         shortLabel: humanizeGraphLabel(entry.label.replace(/^[^:]+:\s*/, '').trim() || entry.label),
         value: entry.value,
         kind: nodeKind,
         evidenceCount: entry.evidenceIds?.length ?? 0,
-        actionLabel: contributionAction(nodeKind),
+        actionLabel: contributionAction(entry.value, targetId),
+        targetKind: targetId ? 'node' as const : null,
+        targetId,
       };
     });
   const contributionLines = contributions.map((contribution) => {
@@ -292,6 +312,7 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
   return {
     scoreLine,
     acquisitionLine,
+    sourceLabel,
     pathLines,
     contributionLines,
     contributions,
@@ -948,6 +969,16 @@ export function planReplacementAssignments(
 
 export function isRenderGenerationStale(requestGeneration: number, latestGeneration: number): boolean {
   return requestGeneration !== latestGeneration;
+}
+
+export function shouldClearSourceFilteredPresentation(
+  showPaused: boolean,
+  extensionEnabled: boolean,
+): boolean {
+  // Active reranks must not briefly restore structurally filtered shelves.
+  // Restore them only when the extension is paused/disabled; filter changes
+  // explicitly resynchronise the structural containers under the new policy.
+  return showPaused || !extensionEnabled;
 }
 
 export function getSourceShelfHideReason(

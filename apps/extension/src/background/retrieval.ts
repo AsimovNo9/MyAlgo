@@ -147,11 +147,16 @@ export function shouldRefreshObservedCandidate(
 }
 
 export const WEB_SEARCH_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+export const WEB_SEARCH_BLOCKED_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 export function nextWebSearchAllowedAt(
   nowMs: number,
   consecutiveFailures: number,
+  providerBlocked = false,
 ): string {
+  if (providerBlocked) {
+    return new Date(nowMs + WEB_SEARCH_BLOCKED_COOLDOWN_MS).toISOString();
+  }
   if (consecutiveFailures <= 0) {
     return new Date(nowMs + WEB_SEARCH_REFRESH_INTERVAL_MS).toISOString();
   }

@@ -231,6 +231,18 @@ Validate the search/classification slice with the following invariants:
 10. Search/enrichment remains off the initial overlay first-paint path.
 
 
+### YouTube anti-abuse / redirect handling
+
+Web discovery must treat any redirect/interstitial away from the requested YouTube search page as a provider-blocking condition, not as a page to follow. Search fetches use manual redirect handling so Google anti-abuse destinations such as `google.com/sorry` are never fetched from the extension origin.
+
+Validation requirements:
+
+1. a redirect response from `/results?search_query=...` is classified as `YOUTUBE_SEARCH_BLOCKED`;
+2. once the offscreen search provider is available, a provider/network failure is terminal for that attempt and must not be repeated immediately from the service worker;
+3. blocked discovery enters a six-hour cooldown rather than ordinary short failure backoff;
+4. the retrieval diagnostics surface a user-readable blocked/paused message without affecting normal ranking, Why-this, RSS discovery, or existing candidate presentation;
+5. browser extension errors should not contain a CORS failure caused by following a YouTube search redirect to `google.com/sorry`.
+
 ### Search isolation and retention regression
 
 For long-session validation:
@@ -849,3 +861,46 @@ PR #231 merged the read-only graph explorer and the expanded Why-this lifecycle/
 - multiple selected groups share a bounded mode-score budget and clear cross-category conflicts abstain rather than leak score mass.
 
 New product validation should now concentrate on mutation semantics in #154/#155: preserved original baseline, versioned user edits, undo/restore, hard suppression ordering, targeted evidence deletion, and exact scorer/Why-this reconciliation after each mutation.
+
+
+## Revisioned graph correction validation (#154)
+
+### Replacement provenance, sparse explanations, and unmute UX
+
+A visible MyAlgo annotation must distinguish presentation behavior from acquisition provenance:
+
+- a native YouTube card that remains in its slot is labeled **MyAlgo reranked**;
+- a MyAlgo candidate occupying a hidden native slot is labeled **MyAlgo replaced**;
+- replacement annotations and Why-this show the candidate acquisition source (for example RSS discovery or YouTube search discovery);
+- source/provenance remains informational and never earns score by itself.
+
+When a selected durable group admits a replacement through provisional semantic matching before exact graph/history grounding exists, Why-this must say so explicitly instead of rendering an unexplained empty panel. It must also state when no retained prior watch/click evidence directly supports the score.
+
+Every scored item keeps symmetric video-level feedback even when no exact editable graph node exists: **More like this** and **Less like this** persist explicit item feedback for the next rank. Exact graph-term Prefer/Reduce/Mute remains separate and is enabled only for a concrete stable graph target.
+
+Muted graph terms must be recoverable. Options lists every live `mute` graph control with a human target label and an **Unmute** action. Unmute removes only the mute overlay, creates the normal revisioned graph-control change, and must not delete retained history/evidence.
+
+
+### Bidirectional correction and source-filter stability
+
+Every exact preference-bearing graph term must expose both directions of correction. A positive contribution is not limited to a negative-only button and a negative contribution is not limited to a positive-only button: the user may choose **Prefer**, **Reduce**, or **Mute** for any exact node target. The UI may emphasize Reduce for a currently-positive contribution and Prefer for a currently-negative contribution, but that emphasis is advisory only. Mute remains the stronger hard suppression, and neutralization/undo remains available through the revision history.
+
+Source filters are a presentation policy, not transient rerank state. While MyAlgo is active, ordinary ranking, semantic refresh, retrieval refresh, replacement refresh, and graph-control reranks must not temporarily restore a structurally hidden Shorts/Playables shelf. Hidden source containers are restored only when the extension is paused/disabled or when a source-filter policy change explicitly resynchronizes them under the new policy. This prevents YouTube shelf churn from destabilizing nearby Why-this controls.
+
+
+Reduce / Prefer / Mute are user-authored control overlays over existing stable graph targets. Validate the following before treating the #154 slice as complete:
+
+1. the first user correction captures exactly one immutable pre-edit baseline containing nodes, edges, and control state but not evidence;
+2. Reduce changes only the exact score-bearing node/edge contribution selected by the user and applies the deterministic 0.5 multiplier;
+3. Prefer changes only the exact score-bearing node/edge contribution selected by the user and applies the deterministic 1.5 multiplier;
+4. Mute is evaluated as a hard exact-target suppression before additive scoring and produces a suppressed trace with score 0;
+5. controls never create new evidence, semantic nodes, graph relationships, or candidate matches merely to make the action take effect;
+6. every set/change/remove/undo/restore operation increments graph revision and leaves an inspectable user-edit/revision record;
+7. Undo reverts the most recent unreverted user edit and is itself a revision;
+8. Restore original returns nodes/edges/control state to the captured baseline, preserves retained evidence byte-for-byte, and is itself undoable;
+9. a controlled rebuildable semantic node/edge remains addressable across derived projection refreshes until its control is cleared, preventing a user edit from disappearing underneath reclustering;
+10. Why-this inline actions are enabled only when the scorer explanation resolves to one exact graph node. Aggregated canonical/multi-source contributions must remain non-destructive until the user selects a concrete graph target;
+11. live graph-inspector controls support Reduce, Prefer, Mute, Clear control, Undo last edit, and Restore original; pasted/offline snapshots remain read-only;
+12. after each action, the next score/trace uses the new graph revision and exact controlled contribution, while the prior trace remains internally consistent.
+
+Browser validation should exercise one creator/node correction from Why-this and one semantic node/edge correction from the graph inspector, then undo and Restore original while confirming the feed reranks and retained history/evidence counts do not change.

@@ -44,12 +44,43 @@ export type GraphEdge = {
   updatedAt: string;
 };
 
+export type GraphControlAction = 'reduce' | 'prefer' | 'mute';
+export type GraphControlTargetKind = 'node' | 'edge';
+
+export type GraphControl = {
+  id: string;
+  targetKind: GraphControlTargetKind;
+  targetId: string;
+  action: GraphControlAction;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GraphEditBaseline = {
+  revision: number;
+  capturedAt: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  controls: GraphControl[];
+};
+
 export type UserGraphEdit = {
   id: string;
-  action: 'create_node' | 'update_node' | 'delete_node' | 'create_edge' | 'update_edge' | 'delete_edge';
+  action:
+    | 'create_node'
+    | 'update_node'
+    | 'delete_node'
+    | 'create_edge'
+    | 'update_edge'
+    | 'delete_edge'
+    | 'set_control'
+    | 'remove_control'
+    | 'undo'
+    | 'restore_original';
   targetId: string;
   before: unknown | null;
   after: unknown | null;
+  revertsEditId?: string | null;
   createdAt: string;
 };
 
@@ -66,6 +97,17 @@ export type PersonalAlgorithmGraph = {
   userEdits: UserGraphEdit[];
   revisions: GraphRevision[];
   currentRevision: number;
+  /**
+   * Explicit user correction overlays. Optional for schema-v2 compatibility;
+   * the local store normalizes missing arrays to [].
+   */
+  controls?: GraphControl[];
+  /**
+   * Immutable snapshot captured immediately before the first user graph
+   * mutation. Evidence is intentionally excluded so Restore original never
+   * deletes retained evidence.
+   */
+  originalBaseline?: GraphEditBaseline | null;
 };
 
 export type PersonalAlgorithmState = {
@@ -80,4 +122,6 @@ export const createEmptyGraph = (): PersonalAlgorithmGraph => ({
   userEdits: [],
   revisions: [],
   currentRevision: 0,
+  controls: [],
+  originalBaseline: null,
 });
