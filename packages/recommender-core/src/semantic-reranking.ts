@@ -592,8 +592,12 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
         labels,
         labelKeys: new Set(labels.map(normalizeVerificationLabel)),
       });
-      if (verificationPlans.length >= maxVerificationItems) break;
     }
+  }
+  if (verificationPlans.length > maxVerificationItems) {
+    throw new Error(
+      `Semantic graph verification planned ${verificationPlans.length} candidates; caller limit is ${maxVerificationItems}. Reduce the semantic slice so ambiguous matches are never silently cached without verification.`,
+    );
   }
 
   const verificationAcceptedByCandidate = new Map<number, Set<string>>();
