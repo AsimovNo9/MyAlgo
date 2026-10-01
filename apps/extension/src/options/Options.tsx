@@ -1,6 +1,7 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import {
+  applyDurableModeLabelsToGraphInspector,
   buildDurableModeOptions,
   buildExplanationGraphView,
   buildGraphInspectorView,
@@ -473,14 +474,17 @@ export function Options() {
       || option.label.toLowerCase().includes(normalizedModeSearch)
       || option.id.toLowerCase().includes(normalizedModeSearch))
   ));
+  const effectiveGraphInspector = graphInspector && graphInspectorSource === 'live'
+    ? applyDurableModeLabelsToGraphInspector(graphInspector, durableModeCatalog)
+    : graphInspector;
   const normalizedGraphQuery = graphQuery.trim().toLowerCase();
-  const filteredGraphNodes = (graphInspector?.nodes ?? []).filter((node) => (
+  const filteredGraphNodes = (effectiveGraphInspector?.nodes ?? []).filter((node) => (
     !normalizedGraphQuery
     || node.label.toLowerCase().includes(normalizedGraphQuery)
     || node.id.toLowerCase().includes(normalizedGraphQuery)
     || node.kind.toLowerCase().includes(normalizedGraphQuery)
   )).slice(0, 80);
-  const filteredGraphEdges = (graphInspector?.edges ?? []).filter((edge) => (
+  const filteredGraphEdges = (effectiveGraphInspector?.edges ?? []).filter((edge) => (
     !normalizedGraphQuery
     || edge.relation.toLowerCase().includes(normalizedGraphQuery)
     || edge.sourceLabel.toLowerCase().includes(normalizedGraphQuery)
@@ -488,8 +492,8 @@ export function Options() {
     || edge.id.toLowerCase().includes(normalizedGraphQuery)
   )).slice(0, 80);
   const graphModeCatalog = graphInspectorSource === 'live' ? durableModeCatalog : null;
-  const graphModeOverlay = graphInspector
-    ? buildGraphModeOverlay(graphInspector, graphModeCatalog, graphModeId)
+  const graphModeOverlay = effectiveGraphInspector
+    ? buildGraphModeOverlay(effectiveGraphInspector, graphModeCatalog, graphModeId)
     : buildGraphModeOverlay({
         schemaVersion: 2,
         graphRevision: 0,
@@ -504,16 +508,16 @@ export function Options() {
         controls: [],
         revisions: [],
       }, durableModeCatalog, 'all');
-  const selectedGraphNode = graphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const selectedGraphEdge = graphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedGraphNode = effectiveGraphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedGraphEdge = effectiveGraphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
   const selectedGraphNodeEdges = selectedGraphNode
-    ? (graphInspector?.edges ?? []).filter((edge) => (
+    ? (effectiveGraphInspector?.edges ?? []).filter((edge) => (
         edge.sourceNodeId === selectedGraphNode.id || edge.targetNodeId === selectedGraphNode.id
       )).slice(0, 16)
     : [];
-  const explanationGraphView = graphInspector && selectedGraphNode && contentExplanation
+  const explanationGraphView = effectiveGraphInspector && selectedGraphNode && contentExplanation
     ? buildExplanationGraphView(
-        graphInspector,
+        effectiveGraphInspector,
         selectedGraphNode.id,
         contentExplanation.explanation,
       )
@@ -1055,7 +1059,7 @@ export function Options() {
                     <div>
                       <strong>Node kinds</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {graphInspector.nodesByKind.map((entry) => (
+                        {effectiveGraphInspector?.nodesByKind ?? [].map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -1063,7 +1067,7 @@ export function Options() {
                     <div>
                       <strong>Relations</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {graphInspector.edgesByRelation.map((entry) => (
+                        {effectiveGraphInspector?.edgesByRelation ?? [].map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -1074,7 +1078,7 @@ export function Options() {
                 <details style={{ marginTop: 10 }}>
                   <summary>Recent revisions</summary>
                   <ul style={{ paddingLeft: 18 }}>
-                    {graphInspector.revisions.slice(0, 8).map((revision) => (
+                    {effectiveGraphInspector?.revisions ?? [].slice(0, 8).map((revision) => (
                       <li key={`${revision.revision}:${revision.createdAt}`}>
                         r{revision.revision} · {revision.reason}
                       </li>
@@ -1085,8 +1089,8 @@ export function Options() {
 
               <div>
                 <GraphCanvas
-                  nodes={graphInspector.nodes}
-                  edges={graphInspector.edges}
+                  nodes={effectiveGraphInspector?.nodes ?? []}
+                  edges={effectiveGraphInspector?.edges ?? []}
                   modeOverlay={graphModeOverlay}
                   searchQuery={graphQuery}
                   selectedNodeId={selectedNodeId}
