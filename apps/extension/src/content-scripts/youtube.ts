@@ -385,7 +385,11 @@ const ensureExplanationPortalForTrigger = (
   return panel!;
 };
 
-const bindExplanationTrigger = (trigger: HTMLButtonElement) => {
+const bindExplanationTrigger = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+  item: RankedFeedItem,
+) => {
   // Assign through onclick rather than a copied DOM marker. YouTube can clone
   // renderer subtrees, which copies data attributes but not event listeners.
   // Reassigning the property is idempotent for a live element and repairs clones.
@@ -393,9 +397,15 @@ const bindExplanationTrigger = (trigger: HTMLButtonElement) => {
   trigger.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const panelId = trigger.getAttribute('aria-controls');
-    const panel = panelId ? document.getElementById(panelId) : null;
-    if (!panel) return;
+
+    // Recover lazily as well as during presentation refresh. This closes the
+    // window where cleanup removed a body-level portal but the visible card
+    // survived long enough to be clicked before the next rerank/refresh.
+    const existingPanelId = trigger.getAttribute('aria-controls');
+    const existingPanel = existingPanelId ? document.getElementById(existingPanelId) : null;
+    const panel = existingPanel ?? ensureExplanationPortalForTrigger(trigger, kind);
+    if (!existingPanel) renderExplanationContent(panel, item);
+
     const opening = panel.hidden;
     if (opening) closeOtherExplanationPanels(panel);
     setExplanationPanelOpen(panel, opening);
@@ -746,7 +756,7 @@ const ensureNativeExplanationControl = (
     host.appendChild(why);
   }
   const panel = ensureExplanationPortalForTrigger(why, 'native');
-  bindExplanationTrigger(why);
+  bindExplanationTrigger(why, 'native', item);
 
   why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
   renderExplanationContent(panel, item);
@@ -868,7 +878,7 @@ const createReplacementCard = (
   card.appendChild(why);
   const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
   renderExplanationContent(explanation, item);
-  bindExplanationTrigger(why);
+  bindExplanationTrigger(why, 'replacement', item);
 
   return card;
 };
@@ -965,7 +975,7 @@ const refreshReplacementCardPresentation = (
   // cleanup/navigation churn. Revalidate ownership and rebind every refresh
   // instead of assuming aria-controls still points at a live panel.
   const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
-  bindExplanationTrigger(why);
+  bindExplanationTrigger(why, 'replacement', item);
   renderExplanationContent(explanation, item);
 };
 
