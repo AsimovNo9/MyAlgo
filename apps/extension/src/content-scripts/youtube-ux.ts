@@ -65,6 +65,18 @@ export type RankedFeedItem = {
         evidenceIds: string[];
       }>;
     } | null;
+    historySupport?: {
+      scoreSharePercent: number;
+      matchedVideoCount: number;
+      matches: Array<{
+        evidenceId: string;
+        externalId: string;
+        title: string;
+        observedAt: string;
+        interaction: string;
+        matchedBy: string[];
+      }>;
+    } | null;
   };
   suppressed?: boolean;
   policyOutcome?: 'eligible' | 'ineligible' | 'excluded' | 'suppressed';
@@ -104,6 +116,15 @@ export type WhyThisMiniNode = {
   kind: 'video' | 'creator' | 'topic' | 'concept' | 'format' | 'mode' | 'other';
 };
 
+export type WhyThisHistoryMatch = {
+  evidenceId: string;
+  externalId: string;
+  title: string;
+  observedAt: string;
+  interaction: string;
+  matchedBy: string[];
+};
+
 export type ExplanationViewModel = {
   scoreLine: string;
   acquisitionLine: string | null;
@@ -111,6 +132,8 @@ export type ExplanationViewModel = {
   contributionLines: string[];
   contributions: WhyThisDisplayContribution[];
   miniNodes: WhyThisMiniNode[];
+  historyScoreSharePercent: number | null;
+  historyMatches: WhyThisHistoryMatch[];
   graphRevision: number | null;
   traceId: string | null;
 };
@@ -194,7 +217,12 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
         : `Graph path: ${pathLabel}`;
     });
   const contributions = (explanation?.contributions ?? [])
-    .filter((entry) => Number.isFinite(entry.value) && entry.value !== 0)
+    .filter((entry) => (
+      Number.isFinite(entry.value)
+      && entry.value !== 0
+      && entry.kind !== 'edge'
+      && !/^(created[_ ]by|related[_ ]to|influences)$/i.test(entry.label.trim())
+    ))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
     .slice(0, 4)
     .map((entry) => {
@@ -257,6 +285,8 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
     contributionLines,
     contributions,
     miniNodes,
+    historyScoreSharePercent: explanation?.historySupport?.scoreSharePercent ?? null,
+    historyMatches: explanation?.historySupport?.matches ?? [],
     graphRevision: explanation?.graphRevision ?? null,
     traceId: item.traceId ?? null,
   };
