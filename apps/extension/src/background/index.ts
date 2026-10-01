@@ -1892,6 +1892,8 @@ async function rankLocalCandidates(
     durableModeCatalog,
     semanticContext,
     semanticFeatureCache,
+    videoStore,
+    candidatePoolIndex,
   ] = await Promise.all([
     personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
@@ -1905,6 +1907,8 @@ async function rankLocalCandidates(
     ),
     getSemanticProviderContext(),
     getSemanticFeatureCacheCached(),
+    getVideoStoreCached(),
+    getCandidatePoolIndexCached(),
   ]);
   const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
   const sourceFiltersSignature = JSON.stringify(sourceFilters);
@@ -2158,15 +2162,34 @@ async function rankLocalCandidates(
       .map((evidenceId) => {
         const record = evidenceById.get(evidenceId)!;
         const evidence = record.evidence;
+        const externalId = evidence.content.externalId;
+        const contentNodeId = `content:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(externalId)}`;
+        const graphLabel = graphNodeById.get(contentNodeId)?.label?.trim() ?? '';
+        const storedVideoTitle = videoStore[externalId]?.title?.trim() ?? '';
+        const pooledTitle = candidatePoolIndex.get(externalId)?.title?.trim() ?? '';
+        const title = [
+          evidence.metadata?.title?.trim(),
+          graphLabel && graphLabel !== externalId ? graphLabel : '',
+          storedVideoTitle && storedVideoTitle !== externalId ? storedVideoTitle : '',
+          pooledTitle && pooledTitle !== externalId ? pooledTitle : '',
+        ].find(Boolean) || 'Past YouTube video';
+
+        const matchedBy = [...(matchedByEvidenceId.get(evidenceId) ?? [])]
+          .map((label) => label.trim())
+          .filter(Boolean)
+          .filter((label, index, labels) => (
+            labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index
+          ))
+          .sort()
+          .slice(0, 3);
+
         return {
           evidenceId,
-          externalId: evidence.content.externalId,
-          title: evidence.metadata?.title?.trim() || evidence.content.externalId,
+          externalId,
+          title,
           observedAt: evidence.observedAt,
           interaction: evidence.kind === 'interaction' ? evidence.interaction : 'observed',
-          matchedBy: [...(matchedByEvidenceId.get(evidenceId) ?? [])]
-            .sort()
-            .slice(0, 3),
+          matchedBy,
         };
       })
       .sort((left, right) => right.observedAt.localeCompare(left.observedAt) || left.evidenceId.localeCompare(right.evidenceId))
