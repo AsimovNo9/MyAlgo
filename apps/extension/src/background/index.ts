@@ -2115,19 +2115,30 @@ async function rankLocalCandidates(
         contribution.modeId
         && Number.isInteger(contribution.modeRevision)
         && contribution.canonicalId
-      ))
-      .sort((left, right) => (
-        (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '')
       ));
-    const firstGroundedMode = groundedModeContributions[0];
-    const modeGrounding = firstGroundedMode
+    const groundedByMode = new Map<string, typeof groundedModeContributions>();
+    for (const contribution of groundedModeContributions) {
+      const modeId = contribution.modeId!;
+      const group = groundedByMode.get(modeId) ?? [];
+      group.push(contribution);
+      groundedByMode.set(modeId, group);
+    }
+    const primaryGroundedMode = [...groundedByMode.entries()]
+      .map(([modeId, contributions]) => ({
+        modeId,
+        contributions: [...contributions].sort((left, right) => (
+          (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '')
+        )),
+        total: contributions.reduce((sum, contribution) => sum + contribution.value, 0),
+      }))
+      .sort((left, right) => right.total - left.total || left.modeId.localeCompare(right.modeId))[0];
+    const firstGroundedMode = primaryGroundedMode?.contributions[0];
+    const modeGrounding = firstGroundedMode && primaryGroundedMode
       ? {
           modeId: firstGroundedMode.modeId!,
           modeRevision: firstGroundedMode.modeRevision!,
-          total: Number(groundedModeContributions
-            .reduce((sum, contribution) => sum + contribution.value, 0)
-            .toFixed(2)),
-          members: groundedModeContributions.map((contribution) => ({
+          total: Number(primaryGroundedMode.total.toFixed(2)),
+          members: primaryGroundedMode.contributions.map((contribution) => ({
             canonicalId: contribution.canonicalId!,
             label: contribution.label,
             value: contribution.value,
