@@ -306,6 +306,24 @@ export function Options() {
       : 'No pre-edit graph baseline has been captured yet.');
   };
 
+  const handleForgetEvidence = async (evidenceId: string, edgeId: string) => {
+    if (!window.confirm('Forget this retained evidence? This deletes the evidence and excludes the same record from future reconstruction. Graph-edit Undo will not restore it.')) return;
+    const response = await chrome.runtime.sendMessage({
+      type: 'PERSONAL_ALGORITHM_FORGET_EVIDENCE',
+      payload: { evidenceId },
+    }) as { ok?: boolean; error?: string; forgotten?: boolean; graphRevision?: number };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to forget this evidence.');
+      return;
+    }
+    await handleLoadLiveGraph();
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+    setStatus(response.forgotten
+      ? `Evidence forgotten. Graph/evidence state is now revision ${response.graphRevision ?? 'updated'}; graph-edit Undo cannot restore the deleted evidence.`
+      : 'That evidence is no longer retained.');
+  };
+
 
   const handleInspectOfflineGraph = () => {
     try {
@@ -392,6 +410,7 @@ export function Options() {
         schemaVersion: 2,
         graphRevision: 0,
         evidenceCount: 0,
+        forgottenEvidenceCount: 0,
         nodeCount: 0,
         edgeCount: 0,
         nodesByKind: [],
@@ -711,7 +730,8 @@ export function Options() {
               {' · '}graph r{graphInspector.graphRevision}
               {' · '}{graphInspector.nodeCount} nodes
               {' · '}{graphInspector.edgeCount} edges
-              {' · '}{graphInspector.evidenceCount} evidence records
+              {' · '}{graphInspector.evidenceCount} retained evidence
+              {graphInspector.forgottenEvidenceCount > 0 ? ` · ${graphInspector.forgottenEvidenceCount} forgotten` : ''}
             </span>
           ) : null}
         </div>
@@ -1158,6 +1178,15 @@ export function Options() {
                               {' · '}{evidence.observedAt}
                               <br />
                               <code style={{ color: '#94a3b8' }}>{evidence.id}</code>
+                              {graphInspectorSource === 'live' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleForgetEvidence(evidence.id, selectedGraphEdge.id)}
+                                  style={{ marginLeft: 8 }}
+                                >
+                                  Forget evidence
+                                </button>
+                              ) : null}
                             </li>
                           ))}
                         </ul>
