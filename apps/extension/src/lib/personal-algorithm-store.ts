@@ -750,11 +750,28 @@ export class LocalPersonalAlgorithmStore {
         }
       }
 
-      const referencedByNonOwnedEdge = new Set(
-        state.graph.edges
+      const controlledNodeIds = new Set(
+        (state.graph.controls ?? [])
+          .filter((control) => control.targetKind === 'node')
+          .map((control) => control.targetId),
+      );
+      const controlledEdgeIds = new Set(
+        (state.graph.controls ?? [])
+          .filter((control) => control.targetKind === 'edge')
+          .map((control) => control.targetId),
+      );
+      const preservedControlledEdges = state.graph.edges.filter((edge) => (
+        ownedEdge(edge)
+        && !proposedEdgeIds.has(edge.id)
+        && controlledEdgeIds.has(edge.id)
+      ));
+      const referencedByNonOwnedEdge = new Set([
+        ...state.graph.edges
           .filter((edge) => !ownedEdge(edge))
           .flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
-      );
+        ...preservedControlledEdges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+        ...controlledNodeIds,
+      ]);
       const preservedReferencedNodes = state.graph.nodes.filter((node) => (
         ownedNode(node)
         && !proposedNodeIds.has(node.id)
@@ -790,7 +807,8 @@ export class LocalPersonalAlgorithmStore {
         ...preservedReferencedNodes,
       ].sort((left, right) => left.id.localeCompare(right.id));
 
-      const nextOwnedEdges: GraphEdge[] = input.edges
+      const nextOwnedEdges: GraphEdge[] = [
+        ...input.edges
         .map((edge) => {
           const evidenceIdsForEdge = [...new Set(edge.evidenceIds)].sort();
           const previous = existingEdgeById.get(edge.id);
@@ -814,8 +832,9 @@ export class LocalPersonalAlgorithmStore {
             createdAt: previous?.createdAt ?? timestamp,
             updatedAt: unchanged && previous ? previous.updatedAt : timestamp,
           };
-        })
-        .sort((left, right) => left.id.localeCompare(right.id));
+        }),
+        ...preservedControlledEdges,
+      ].sort((left, right) => left.id.localeCompare(right.id));
 
       const projectionSignature = (nodes: GraphNode[], edges: GraphEdge[]) => JSON.stringify({
         nodes: nodes
