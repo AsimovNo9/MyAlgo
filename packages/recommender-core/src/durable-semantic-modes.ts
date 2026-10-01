@@ -389,8 +389,11 @@ export function reconcileDurableSemanticModes(
 
   const modes = [...activeModes, ...dormantModes]
     .sort((left, right) => (
-      Number(right.active) - Number(left.active)
-      || Number(right.pinned) - Number(left.pinned)
+      // A user-selected/pinned mode is durable UI state. Keep it in the catalog
+      // even if a fresh clustering pass makes it dormant or introduces a broader
+      // parent cluster with newer support.
+      Number(right.pinned) - Number(left.pinned)
+      || Number(right.active) - Number(left.active)
       || right.lastSupportedAt.localeCompare(left.lastSupportedAt)
       || left.id.localeCompare(right.id)
     ))
