@@ -1009,8 +1009,8 @@ const createReplacementCard = (
   const meta = document.createElement('div');
   meta.dataset.personalAlgorithmReplacementSummary = 'true';
   meta.textContent = contentLabel
-    ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
-    : `MyAlgo · ${item.score ?? 0}/100`;
+    ? `${contentLabel} · Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`
+    : `Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`;
   meta.style.cssText = 'margin-top:7px;color:var(--yt-spec-text-secondary,#aaa);font-size:12px;line-height:17px;font-weight:600;';
   card.appendChild(meta);
 
@@ -1113,9 +1113,10 @@ const refreshReplacementCardPresentation = (
   if (creator) creator.textContent = displayMetadata.creator;
   const summary = card.querySelector<HTMLElement>('[data-personal-algorithm-replacement-summary]');
   if (summary) {
+    const replacementSourceLabel = getCandidateAcquisitionLabel(item);
     summary.textContent = contentLabel
-      ? `${contentLabel} · MyAlgo · ${item.score ?? 0}/100`
-      : `MyAlgo · ${item.score ?? 0}/100`;
+      ? `${contentLabel} · Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`
+      : `Replaced · ${replacementSourceLabel} · ${item.score ?? 0}/100`;
   }
 
   const why = card.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation]');
