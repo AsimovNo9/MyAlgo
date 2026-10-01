@@ -277,6 +277,7 @@ const modeSemanticSignature = (mode: DurableSemanticMode): string =>
   JSON.stringify({
     id: mode.id,
     label: mode.label,
+    inferredLabel: mode.inferredLabel ?? mode.label,
     revision: mode.revision,
     members: memberSignature(mode.members),
     provenance: mode.provenance,
@@ -355,13 +356,13 @@ export function reconcileDurableSemanticModes(
 
     const id = prior?.id ?? modeIdForMembers(proposal.members.map((member) => member.canonicalId));
     const semanticChanged = !prior
-      || prior.label !== proposal.label
       || memberSignature(prior.members) !== memberSignature(proposal.members)
       || prior.active !== true;
 
     return {
       id,
       label: proposal.label,
+      inferredLabel: proposal.label,
       revision: prior ? prior.revision + Number(semanticChanged) : 1,
       members: proposal.members.map((member) => ({
         ...member,
