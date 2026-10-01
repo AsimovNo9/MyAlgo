@@ -31,7 +31,9 @@ A YouTube item being surfaced is contextual evidence; it is not automatically tr
 
 The MVP stores its Personal Algorithm state in `chrome.storage.local`, which is extension-specific browser storage. Operational stores are bounded, including candidate/metadata/event/trace caches and derived semantic embedding/similarity caches. Embeddings are recomputable derived data keyed by model/version/input identity; they are not canonical graph/evidence truth. Evidence and graph state may persist locally until the user deletes it, resets MyAlgo, or a future version applies an explicitly documented retention rule.
 
-Because Chrome extension storage can persist independently of ordinary browser cache/history clearing, users should use MyAlgo's **Delete all local MyAlgo data** control when they want the extension's retained state removed.
+For targeted evidence deletion, **Forget** removes the selected evidence payload and unsupported inferred relationships. To prevent the exact same locally observed record from being immediately re-imported, MyAlgo retains only a local deletion marker containing that evidence record's stable ID, deletion time, and deletion reason. The deleted title, creator, metadata, interaction details, and other evidence payload are not retained in that marker.
+
+Because Chrome extension storage can persist independently of ordinary browser cache/history clearing, users should use MyAlgo's **Delete all local MyAlgo data** control when they want the extension's retained state removed. The Delete all local MyAlgo data control also removes Forget deletion markers.
 
 ## Data sharing and transfer
 
