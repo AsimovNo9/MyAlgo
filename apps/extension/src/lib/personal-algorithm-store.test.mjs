@@ -356,13 +356,68 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
 
   const exported = await store.exportState();
   const exportedJson = await store.exportStateJson();
-  assert.equal(JSON.parse(exportedJson).schemaVersion, 2);
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(JSON.parse(exportedJson).schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 3);
   assert.equal(exported.graph.nodes.some((item) => item.id === 'topic:testing'), true);
 
   await store.reset();
   assert.deepEqual(await store.listEvidence(), []);
   assert.equal((await store.getGraph()).currentRevision, 0);
+});
+
+test('Forget tombstones evidence so reconciliation, rebuild, undo, and restore cannot recreate it', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const evidenceId = 'interaction:watched:forgotten-video:history';
+  const forgottenEvidence = {
+    kind: 'interaction',
+    content: { source: 'youtube', externalId: 'forgotten-video' },
+    exposureId: null,
+    interaction: 'watched',
+    observedAt: '2026-10-01T18:00:00.000Z',
+    provenance: { connector: 'youtube', mechanism: 'history_dom' },
+    metadata: { title: 'Forgotten video', creatorId: 'creator-forgotten', creatorName: 'Forgotten Creator' },
+  };
+
+  await store.upsertEvidence({ evidence: forgottenEvidence }, evidenceId);
+  const creatorId = 'creator:youtube:creator-forgotten';
+  await store.setGraphControl('node', creatorId, 'reduce');
+  const revisionBeforeForget = (await store.getGraph()).currentRevision;
+
+  const result = await store.forgetEvidence(evidenceId);
+  assert.equal(result.forgotten, true);
+  assert.equal(result.graphRevision, revisionBeforeForget + 1);
+  assert.equal(await store.getEvidence(evidenceId), null);
+
+  const afterForget = await store.exportState();
+  assert.deepEqual(afterForget.forgottenEvidence.map((entry) => entry.evidenceId), [evidenceId]);
+  assert.equal(afterForget.graph.edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  const reingested = await store.upsertEvidence({ evidence: forgottenEvidence }, evidenceId);
+  assert.equal(reingested, null);
+  const reconciled = await store.reconcileHistoryEvidence([
+    { id: evidenceId, evidence: forgottenEvidence },
+  ]);
+  assert.equal(reconciled.upserted, 0);
+
+  await store.rebuildGraphFromEvidence();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  await store.restoreOriginalGraph();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  await store.undoLastGraphEdit();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  const restarted = new LocalPersonalAlgorithmStore(storage);
+  assert.equal(await restarted.getEvidence(evidenceId), null);
+  assert.deepEqual(
+    (await restarted.exportState()).forgottenEvidence.map((entry) => entry.evidenceId),
+    [evidenceId],
+  );
 });
 
 test('rebuildGraphFromEvidence materializes deterministic creator nodes and evidence-backed edges', async () => {
