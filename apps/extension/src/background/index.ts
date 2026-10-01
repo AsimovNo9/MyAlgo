@@ -201,6 +201,8 @@ const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const MAX_HYBRID_CANDIDATES_PER_REFRESH = 4;
+const MAX_BACKGROUND_SEMANTIC_DRAIN_PASSES = 6;
+const BACKGROUND_SEMANTIC_DRAIN_YIELD_MS = 75;
 const CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const NEURAL_FALLBACK_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -2623,42 +2625,82 @@ const scheduleRankSemanticRefresh = (
     rankSemanticRefreshQueuedAt = 0;
     if (!pending) return;
 
-    void refreshSemanticScoreFeatures(pending.candidates, pending.mode).then(async (semanticRefresh) => {
-      const pendingCandidateCount = Number(
-        semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
-      );
-      if (pending.senderTabId && semanticRefresh.changed > 0) {
-        await chrome.tabs.sendMessage(pending.senderTabId, {
-          type: 'YOUTUBE_SEMANTICS_ENRICHED',
-          payload: {
-            count: semanticRefresh.changed,
-            modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
-              ? semanticRefresh.diagnostics.modelVersion
-              : null,
-            pendingCandidateCount,
-          },
-        }).catch(() => undefined);
-      }
+    void (async () => {
+      let lastPendingCandidateCount = Number.POSITIVE_INFINITY;
+      let lastConceptPendingCount = Number.POSITIVE_INFINITY;
 
-      if (
-        semanticRefresh.diagnostics?.requestedSemanticModelMode === 'neural'
-        && pendingCandidateCount === 0
-      ) {
-        void refreshSemanticConceptGraph(true).then(async (materialization) => {
-          if (!materialization.changed || !pending.senderTabId) return;
+      for (let pass = 0; pass < MAX_BACKGROUND_SEMANTIC_DRAIN_PASSES; pass += 1) {
+        const semanticRefresh = await refreshSemanticScoreFeatures(
+          pending.candidates,
+          pending.mode,
+        );
+        const pendingCandidateCount = Number(
+          semanticRefresh.diagnostics?.pendingCandidateCount ?? 0,
+        );
+        lastPendingCandidateCount = pendingCandidateCount;
+
+        if (pending.senderTabId && semanticRefresh.changed > 0) {
+          await chrome.tabs.sendMessage(pending.senderTabId, {
+            type: 'YOUTUBE_SEMANTICS_ENRICHED',
+            payload: {
+              count: semanticRefresh.changed,
+              modelVersion: typeof semanticRefresh.diagnostics?.modelVersion === 'string'
+                ? semanticRefresh.diagnostics.modelVersion
+                : null,
+              pendingCandidateCount,
+              backgroundDrainPass: pass + 1,
+            },
+          }).catch(() => undefined);
+        }
+
+        if (
+          semanticRefresh.diagnostics?.requestedSemanticModelMode !== 'neural'
+          || pendingCandidateCount > 0
+        ) {
+          if (pendingCandidateCount <= 0) break;
+          await new Promise((resolve) => setTimeout(resolve, BACKGROUND_SEMANTIC_DRAIN_YIELD_MS));
+          continue;
+        }
+
+        const materialization = await refreshSemanticConceptGraph(true);
+        const conceptPendingCount = Number(
+          materialization.diagnostics.modelPendingCandidateCount ?? 0,
+        );
+        lastConceptPendingCount = conceptPendingCount;
+
+        if (materialization.changed && pending.senderTabId) {
           await chrome.tabs.sendMessage(pending.senderTabId, {
             type: 'YOUTUBE_SEMANTICS_ENRICHED',
             payload: {
               count: 0,
               conceptGraphChanged: true,
               graphRevision: materialization.diagnostics.graphRevision ?? null,
+              conceptPendingCandidateCount: conceptPendingCount,
+              backgroundDrainPass: pass + 1,
             },
           }).catch(() => undefined);
-        }).catch((error) => {
-          console.warn('[MyAlgo] deferred concept verification failed', error);
-        });
+        }
+
+        // A materialized concept changes graph revision and therefore invalidates
+        // the just-produced semantic feature slice. Loop once more so the same
+        // background drain reconciles candidate affinities against the new graph.
+        if (materialization.changed || conceptPendingCount > 0) {
+          await new Promise((resolve) => setTimeout(resolve, BACKGROUND_SEMANTIC_DRAIN_YIELD_MS));
+          continue;
+        }
+
+        break;
       }
-    }).catch((error) => {
+
+      console.info('[MyAlgo] semantic background drain complete', {
+        semanticPendingCandidateCount: Number.isFinite(lastPendingCandidateCount)
+          ? lastPendingCandidateCount
+          : null,
+        conceptPendingCandidateCount: Number.isFinite(lastConceptPendingCount)
+          ? lastConceptPendingCount
+          : null,
+      });
+    })().catch((error) => {
       console.warn('[MyAlgo] asynchronous semantic enrichment failed', error);
     });
   }, delayMs);
