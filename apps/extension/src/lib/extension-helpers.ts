@@ -575,6 +575,18 @@ export type ContentExplanation = {
         evidenceIds: string[];
       }>;
     } | null;
+    historySupport: {
+      scoreSharePercent: number;
+      matchedVideoCount: number;
+      matches: Array<{
+        evidenceId: string;
+        externalId: string;
+        title: string;
+        observedAt: string;
+        interaction: string;
+        matchedBy: string[];
+      }>;
+    } | null;
   } | null;
 };
 
