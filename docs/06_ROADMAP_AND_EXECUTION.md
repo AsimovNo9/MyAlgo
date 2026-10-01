@@ -233,8 +233,8 @@ PR #223/#221 through PR #231 are merged. Canonical semantic regions, durable mod
 4. **P1 — finish #153 evidence-action integration.** Direct graph correction actions are live; wire Why-this/graph provenance records to concrete Forget/navigation semantics from #155.
 5. **P2 — #161 + #178 mode/history ownership UX.** Let users explicitly edit discovered groups (rename/pin/member management/versioning) and choose which history clusters influence the Personal Algorithm.
 6. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
-6. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
-7. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
+7. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
+8. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
 8. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
 
 
