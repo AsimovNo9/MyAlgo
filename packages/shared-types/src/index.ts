@@ -249,7 +249,10 @@ export interface DurableSemanticModeMember {
 
 export interface DurableSemanticMode {
   id: string;
+  /** User-facing label. May be overlaid by local user configuration. */
   label: string;
+  /** Reconciler-owned inferred label, retained so a user rename can be reset safely. */
+  inferredLabel?: string;
   revision: number;
   members: DurableSemanticModeMember[];
   provenance: 'inferred';
