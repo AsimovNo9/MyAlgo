@@ -297,7 +297,7 @@ export interface SemanticGraphMatch {
   source_node_ids?: string[];
   taxonomy_only?: boolean;
   pipeline_id?: string;
-  verification_status?: 'not_required' | 'verified';
+  verification_status?: 'not_required' | 'verified' | 'fallback';
   verification_model_version?: string;
   verification_pipeline_id?: string;
 }
