@@ -111,13 +111,13 @@ test('local runtime scores candidates from the persisted graph and returns deter
   ], 'Work');
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 9);
-  assert.equal(ranked[0].score, calibrateLocalScore(9));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p8');
+  assert.equal(ranked[0].rawScore, 8);
+  assert.equal(ranked[0].score, calibrateLocalScore(8));
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p9');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 9);
   assert.equal(ranked[0].trace.edgeContributions.length, 0);
-  assert.equal(ranked[0].trace.nodeContributions.length, 2);
+  assert.equal(ranked[0].trace.nodeContributions.length, 1);
   assert.equal(ranked[0].trace.suppressed, false);
   assert.deepEqual(ranked[0].semantic_mode_affinities, [{
     modeId: 'mode:inferred:v1:test',
@@ -441,9 +441,9 @@ test('explicit local feedback changes the score without treating watch evidence 
 
   assert.equal(ranked[0].external_id, 'video-b');
   assert.equal(ranked[0].external_id, 'video-b');
-  assert.equal(ranked[0].rawScore, 21);
-  assert.equal(ranked[0].score, calibrateLocalScore(21));
-  assert.equal(ranked[1].rawScore, 9);
+  assert.equal(ranked[0].rawScore, 20);
+  assert.equal(ranked[0].score, calibrateLocalScore(20));
+  assert.equal(ranked[1].rawScore, 8);
 });
 
 test('explicit not-interested feedback lowers the matching candidate score', () => {
@@ -456,9 +456,9 @@ test('explicit not-interested feedback lowers the matching candidate score', () 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 9);
+  assert.equal(ranked[0].rawScore, 8);
   assert.equal(ranked[1].external_id, 'video-b');
-  assert.equal(ranked[1].rawScore, -24);
+  assert.equal(ranked[1].rawScore, -25);
   assert.equal(ranked[1].trace.feedbackContributions.length, 1);
   assert.equal(ranked[1].trace.feedbackContributions[0].value, -25);
 });
@@ -486,7 +486,7 @@ test('never-show-channel feedback matches the creator node rather than only the 
     { external_id: 'video-c', title: 'Video C' },
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
-  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -91);
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -92);
   assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -91);
 });
 
@@ -514,7 +514,7 @@ test('source filters remain local visibility rules', () => {
 test('local policy is graph-derived and does not use candidate base scores', () => {
   const policy = buildLocalScoringPolicy(state);
   assert.equal(policy.baseScore, 0);
-  assert.equal(policy.nodeWeights?.['content:youtube:video-a'], 1);
+  assert.equal(policy.nodeWeights?.['content:youtube:video-a'], undefined);
   assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 8);
   assert.equal(policy.edgeRelationWeights?.created_by, undefined);
 });
