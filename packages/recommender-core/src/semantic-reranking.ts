@@ -206,6 +206,17 @@ export function buildCandidateEmbeddingText(candidate: RecommendationCandidate):
   return [...new Set(parts)].join(' | ').slice(0, 6000);
 }
 
+export function buildSemanticGraphVerificationText(candidate: RecommendationCandidate): string {
+  const title = normalizeText(candidate.title).slice(0, 220);
+  const description = normalizeText(candidate.description ?? '').slice(0, 700);
+  const category = normalizeText(candidate.content_type ?? '').slice(0, 80);
+  return [
+    title,
+    description,
+    category ? `Category: ${category}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 export function buildGraphNodeEmbeddingText(
   node: PersonalAlgorithmState['graph']['nodes'][number],
 ): string {
@@ -594,7 +605,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   if (options.graphMatchVerifier && verificationPlans.length > 0) {
     try {
       const result = await options.graphMatchVerifier.verify(verificationPlans.map((plan) => ({
-        text: buildCandidateEmbeddingText(prepared[plan.candidateIndex].candidate),
+        text: buildSemanticGraphVerificationText(prepared[plan.candidateIndex].candidate),
         labels: plan.labels,
       })));
       if (result.concepts.length !== verificationPlans.length) {
