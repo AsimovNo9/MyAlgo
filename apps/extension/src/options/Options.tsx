@@ -712,10 +712,12 @@ export function Options() {
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
         <h2>Personal Algorithm Graph explorer</h2>
         <p>
-          Explore the current local graph visually, search stable graph IDs, switch between durable mode overlays,
-          and inspect exact retained evidence. Live snapshots also use retained semantic affinities to cluster content by
-          its strongest durable mode or semantic topic without creating synthetic graph edges. Selecting a live node or
-          relationship also exposes revisioned Reduce / Prefer / Mute controls. Offline pasted snapshots remain read-only.
+          Explore the current local graph visually, search stable graph IDs, switch between durable group overlays,
+          and inspect exact retained evidence. Live snapshots place content into its strongest durable group when one exists;
+          otherwise they may show a provisional semantic topic cluster. Topic clusters are visual derived context only and do
+          not appear in the Groups selector or durable-group dropdown until repeated retained support promotes them into a
+          durable group. Selecting a live node or relationship also exposes revisioned Reduce / Prefer / Mute controls.
+          Offline pasted snapshots remain read-only.
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
@@ -799,7 +801,7 @@ export function Options() {
                 </p>
 
                 <label htmlFor="graph-mode-overlay">
-                  <strong>Mode overlay</strong>
+                  <strong>Durable group overlay</strong>
                   <select
                     id="graph-mode-overlay"
                     value={graphModeId}
