@@ -229,13 +229,13 @@ PR #223/#221 through PR #231 are merged. Canonical semantic regions, durable mod
 
 1. **Complete — #153/#170 trust and graph-inspection foundation / PRs #230–#231.** Native/replacement Why-this, exact scorer-backed graph paths, retained-history support, read-only Network/Lineage exploration, evidence drill-down, semantic/topic grouping, and searchable multi-select durable groups are merged. #170 is complete; #153 remains open only for direct actions/evidence-navigation integration.
 2. **Complete — #154 / PR #233 correction controls.** Reduce/Prefer/Mute, exact target controls, baseline capture, revisioned Undo/Restore original, Unmute, and fallback video feedback are merged and browser validated.
-3. **P1 — #155 evidence provenance + Forget.** Persist deletion intent so a forgotten concrete evidence record cannot be silently re-added by later reconciliation/rebuild. Evidence deletion creates a new graph/evidence revision boundary but is not a user-graph edit and is never restored by #154 Undo/Restore original.
-4. **P1 — finish #153 evidence-action integration.** Direct graph correction actions are live; wire Why-this/graph provenance records to concrete Forget/navigation semantics from #155.
+3. **Complete core semantics — #155 / PR #234 evidence provenance + Forget.** Exact retained evidence deletion is browser validated; minimal deletion intent survives restart/rebuild, staging payloads are purged, re-observation of the same stable record is rejected, and #154 Undo/Restore original cannot resurrect forgotten evidence.
+4. **Active P1 — finish #153 evidence-action integration.** Direct graph correction actions are live; feed-card Why-this must carry a bounded set of exact retained evidence records referenced by its score/path, allow destructive action only on those concrete IDs, and refresh to the post-Forget trace/graph revision.
 5. **P2 — #161 + #178 mode/history ownership UX.** Let users explicitly edit discovered groups (rename/pin/member management/versioning) and choose which history clusters influence the Personal Algorithm.
 6. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
 7. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
 8. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
-8. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
+9. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
 
 
 ## Phase 1 scope discipline
