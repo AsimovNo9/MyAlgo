@@ -113,7 +113,7 @@ test('local runtime scores candidates from the persisted graph and returns deter
   assert.equal(ranked[0].external_id, 'video-a');
   assert.equal(ranked[0].rawScore, 8);
   assert.equal(ranked[0].score, calibrateLocalScore(8));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p9');
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p10');
   assert.equal(ranked[0].trace.graphRevision, 4);
   assert.equal(ranked[0].trace.finalScore, 8);
   assert.equal(ranked[0].trace.edgeContributions.length, 0);
