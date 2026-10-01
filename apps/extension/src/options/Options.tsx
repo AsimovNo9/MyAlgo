@@ -1175,6 +1175,7 @@ export function Options() {
                               <strong>{evidence.kind === 'interaction' ? evidence.interaction : 'surfaced'}</strong>
                               {' · '}{evidence.contentLabel}
                               {' · '}{evidence.connector}/{evidence.mechanism}
+                              {' · '}confidence {evidence.confidence.toFixed(2)}
                               {' · '}{evidence.observedAt}
                               <br />
                               <code style={{ color: '#94a3b8' }}>{evidence.id}</code>
