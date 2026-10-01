@@ -999,63 +999,72 @@ const roundModeValue = (value: number): number => Number(value.toFixed(2));
 const groundedDurableModeFeatures = (
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex,
-  activeMode: LocalDurableModeScoringContext | null | undefined,
+  activeModes: readonly LocalDurableModeScoringContext[] | null | undefined,
 ): ScoreModeFeatureSignal[] => {
-  if (!activeMode || activeMode.id === 'default') return [];
-  const affinity = candidate.semantic_mode_affinities?.find((entry) => (
-    entry.modeId === activeMode.id
-    && entry.modeRevision === activeMode.revision
-  ));
-  const members = affinity?.memberAffinities
-    ?.map((member) => ({
-      ...member,
-      sourceNodeIds: member.sourceNodeIds.filter((nodeId) => (
-        index.evidenceIdsByNodeId.has(nodeId)
-      )),
-    }))
-    .filter((member) => member.weightedAffinity > 0 && member.sourceNodeIds.length > 0)
-    .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
-  if (!affinity || members.length === 0) return [];
+  const modes = (activeModes ?? []).filter((mode) => mode.id !== 'default');
+  if (modes.length === 0) return [];
 
-  // Recompute the aggregate from members that still resolve to the current
-  // graph. Do not transfer score mass from a removed/stale strongest member to
-  // weaker surviving members.
-  const groundedAffinity = Math.max(
-    0,
-    ...members.map((member) => Math.max(0, Math.min(1, member.weightedAffinity))),
-  );
-  const total = roundModeValue(
-    GROUNDED_MODE_CONTRIBUTION_CAP * groundedAffinity,
-  );
-  if (total <= 0) return [];
-  const weightTotal = members.reduce(
-    (sum, member) => sum + Math.max(0, member.weightedAffinity),
-    0,
-  );
-  if (weightTotal <= 0) return [];
+  const raw: ScoreModeFeatureSignal[] = [];
+  for (const activeMode of modes) {
+    const affinity = candidate.semantic_mode_affinities?.find((entry) => (
+      entry.modeId === activeMode.id
+      && entry.modeRevision === activeMode.revision
+      && entry.affinity >= 0.55
+    ));
+    const members = affinity?.memberAffinities
+      ?.map((member) => ({
+        ...member,
+        sourceNodeIds: member.sourceNodeIds.filter((nodeId) => (
+          index.evidenceIdsByNodeId.has(nodeId)
+        )),
+      }))
+      .filter((member) => member.weightedAffinity >= 0.55 && member.sourceNodeIds.length > 0)
+      .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
+    if (!affinity || members.length === 0) continue;
 
-  let allocated = 0;
-  return members.map((member, memberIndex) => {
-    const value = memberIndex === members.length - 1
-      ? roundModeValue(total - allocated)
-      : roundModeValue(total * (member.weightedAffinity / weightTotal));
-    allocated = roundModeValue(allocated + value);
-    const evidenceIds = [...new Set(
-      member.sourceNodeIds.flatMap((nodeId) => index.evidenceIdsByNodeId.get(nodeId) ?? []),
-    )].sort();
+    const groundedAffinity = Math.max(
+      0,
+      ...members.map((member) => Math.max(0, Math.min(1, member.weightedAffinity))),
+    );
+    const modeTotal = roundModeValue(GROUNDED_MODE_CONTRIBUTION_CAP * groundedAffinity);
+    if (modeTotal <= 0) continue;
+    const weightTotal = members.reduce(
+      (sum, member) => sum + Math.max(0, member.weightedAffinity),
+      0,
+    );
+    if (weightTotal <= 0) continue;
 
-    return {
-      id: `durable:${activeMode.id}:r${activeMode.revision}:${member.canonicalId}`,
-      label: `mode: ${activeMode.label} → canonical concept: ${member.label}`,
-      value,
-      sourceId: member.canonicalId,
-      sourceIds: [...member.sourceNodeIds].sort(),
-      evidenceIds,
-      modeId: activeMode.id,
-      modeRevision: activeMode.revision,
-      canonicalId: member.canonicalId,
-    };
-  }).filter((feature) => feature.value !== 0);
+    let allocated = 0;
+    members.forEach((member, memberIndex) => {
+      const value = memberIndex === members.length - 1
+        ? roundModeValue(modeTotal - allocated)
+        : roundModeValue(modeTotal * (member.weightedAffinity / weightTotal));
+      allocated = roundModeValue(allocated + value);
+      const evidenceIds = [...new Set(
+        member.sourceNodeIds.flatMap((nodeId) => index.evidenceIdsByNodeId.get(nodeId) ?? []),
+      )].sort();
+      raw.push({
+        id: `durable:${activeMode.id}:r${activeMode.revision}:${member.canonicalId}`,
+        label: `mode: ${activeMode.label} → canonical concept: ${member.label}`,
+        value,
+        sourceId: member.canonicalId,
+        sourceIds: [...member.sourceNodeIds].sort(),
+        evidenceIds,
+        modeId: activeMode.id,
+        modeRevision: activeMode.revision,
+        canonicalId: member.canonicalId,
+      });
+    });
+  }
+
+  // Multiple selected bubbles shape one feed; do not let selecting more groups
+  // linearly inflate the candidate score.
+  const total = raw.reduce((sum, feature) => sum + Math.max(0, feature.value), 0);
+  if (total <= GROUNDED_MODE_CONTRIBUTION_CAP) return raw.filter((feature) => feature.value !== 0);
+  const scale = GROUNDED_MODE_CONTRIBUTION_CAP / total;
+  return raw
+    .map((feature) => ({ ...feature, value: roundModeValue(feature.value * scale) }))
+    .filter((feature) => feature.value !== 0);
 };
 
 export function calibrateLocalScore(rawScore: number): number {
@@ -1174,7 +1183,7 @@ const candidateContext = (
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex = buildLocalScoringIndex(state),
   mode = 'default',
-  activeDurableMode?: LocalDurableModeScoringContext | null,
+  activeDurableModes?: LocalDurableModeScoringContext | readonly LocalDurableModeScoringContext[] | null,
   classification: ReturnType<typeof classifyCandidateContent> = classifyCandidateContent(candidate),
 ): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
@@ -1187,7 +1196,10 @@ const candidateContext = (
     index.featureNodeById,
     index.featureLexicalById,
   );
-  const hasDurableMode = Boolean(activeDurableMode && activeDurableMode.id !== 'default');
+  const selectedDurableModes = Array.isArray(activeDurableModes)
+    ? activeDurableModes
+    : activeDurableModes ? [activeDurableModes] : [];
+  const hasDurableMode = selectedDurableModes.some((entry) => entry.id !== 'default');
   // Durable modes use only graph-grounded member contributions. Legacy
   // classifier/centroid/category mode signals remain available for custom
   // non-durable mode values but must not stack beside a stable mode ID.
@@ -1201,7 +1213,7 @@ const candidateContext = (
   const durableModeFeatures = groundedDurableModeFeatures(
     candidate,
     index,
-    activeDurableMode,
+    selectedDurableModes,
   );
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
@@ -1324,10 +1336,17 @@ const candidateScoringSignature = (candidate: LocalRuntimeCandidate): string => 
 
 const durableModeScoringKey = (
   mode: string,
-  activeDurableMode?: LocalDurableModeScoringContext | null,
-): string => activeDurableMode && activeDurableMode.id !== 'default'
-  ? `${activeDurableMode.id}@${activeDurableMode.revision}`
-  : `legacy:${mode.trim().toLowerCase() || 'default'}`;
+  activeDurableModes?: LocalDurableModeScoringContext | readonly LocalDurableModeScoringContext[] | null,
+): string => {
+  const modes = (Array.isArray(activeDurableModes)
+    ? activeDurableModes
+    : activeDurableModes ? [activeDurableModes] : [])
+    .filter((entry) => entry.id !== 'default')
+    .sort((left, right) => left.id.localeCompare(right.id));
+  return modes.length > 0
+    ? modes.map((entry) => `${entry.id}@${entry.revision}`).join('|')
+    : `legacy:${mode.trim().toLowerCase() || 'default'}`;
+};
 
 export type LocalScoringDiagnostics = {
   cacheHits: number;
@@ -1379,7 +1398,7 @@ export function scoreLocalCandidates(
   } = prepared;
   const graphIndex = buildPersonalScoringGraphIndex(state);
 
-  const modeKey = durableModeScoringKey(mode, activeDurableMode);
+  const modeKey = durableModeScoringKey(mode, activeDurableModes);
   let cacheHits = 0;
   let cacheMisses = 0;
   let contextHits = 0;
@@ -1422,7 +1441,7 @@ export function scoreLocalCandidates(
             candidate,
             scoringIndex,
             mode,
-            activeDurableMode,
+            activeDurableModes,
             classification,
           );
           prepared.candidateContextCache.set(candidate.external_id, {
