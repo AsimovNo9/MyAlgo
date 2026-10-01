@@ -278,7 +278,7 @@ Evidence deletion removes its references from graph edges. Inferred edges with n
 
 User edits and graph revisions are retained as first-class local records so exported state can be inspected and replayed later. The store also exposes a deterministic graph-review summary for development validation before a dedicated visualization UI exists.
 
-Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization (`exportState()` / JSON). Schema version 2 has an explicit v1 → v2 migration that preserves existing evidence and graph nodes and initializes legacy edge support references to an empty list. Unknown versions are not heuristically interpreted.
+Persistence is browser-local through `chrome.storage.local`. The store exposes create/read/update/delete operations, targeted content deletion, reset, restart-safe initialization, and export-ready serialization (`exportState()` / JSON). Schema version 3 adds a minimal forgotten-evidence ledger. v2 → v3 preserves retained evidence/graph state and initializes that ledger empty; v1 still migrates through the legacy evidence-support normalization. A forgotten record stores only its stable evidence ID, deletion timestamp, and deletion reason—not the deleted evidence payload—and ingestion/reconciliation must refuse to recreate that same concrete record. Unknown versions are not heuristically interpreted.
 
 For development validation, the background service worker exposes three read/rebuild operations:
 - `PERSONAL_ALGORITHM_REVIEW` returns the deterministic review summary;
