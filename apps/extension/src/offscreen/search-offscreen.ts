@@ -606,11 +606,28 @@ chrome.runtime.onMessage.addListener((message: SearchJob, _sender, sendResponse)
       method: 'GET',
       credentials: 'omit',
       cache: 'no-store',
+      redirect: 'manual',
       headers: {
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.9',
       },
     });
+    if (
+      response.type === 'opaqueredirect'
+      || (response.status >= 300 && response.status < 400)
+    ) {
+      throw new Error(
+        'YOUTUBE_SEARCH_BLOCKED: YouTube search redirected to an anti-abuse/interstitial response.',
+      );
+    }
+    if (response.url) {
+      const host = new URL(response.url).hostname.toLowerCase();
+      if (host !== 'www.youtube.com' && host !== 'youtube.com') {
+        throw new Error(
+          `YOUTUBE_SEARCH_BLOCKED: YouTube search left the YouTube origin (${host}).`,
+        );
+      }
+    }
     if (!response.ok) throw new Error(`YouTube search HTTP ${response.status}`);
 
     const results = await parseInWorker(await response.text(), limit);
