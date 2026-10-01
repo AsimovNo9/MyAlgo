@@ -3125,19 +3125,42 @@ const handleRuntimeMessage = (
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     void (async () => {
-      const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
-      const previousDiagnostics = await getStorage<RetrievalDiagnostics>(
-        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
-        EMPTY_RETRIEVAL_DIAGNOSTICS,
-      );
+      const requested = payload?.modeId ?? payload?.mode ?? 'default';
+      const selection = await resolveModeSelection(requested);
+      const [currentIds, durableModeCatalog, previousDiagnostics] = await Promise.all([
+        getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+        getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+        getStorage<RetrievalDiagnostics>(
+          STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+          EMPTY_RETRIEVAL_DIAGNOSTICS,
+        ),
+      ]);
+
+      const nextIds = selection.modeId === 'default'
+        ? []
+        : payload?.toggle === true
+          ? currentIds.includes(selection.modeId)
+            ? currentIds.filter((id) => id !== selection.modeId)
+            : [...currentIds, selection.modeId]
+          : [selection.modeId];
+
+      const selectedModes = nextIds
+        .map((id) => resolveDurableMode(durableModeCatalog, id))
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      const primary = selectedModes[0] ?? null;
+      const modeLabel = selectedModes.length === 0
+        ? 'Default'
+        : selectedModes.map((entry) => entry.label).join(' + ');
+
       const nextDiagnostics = reconcileModeSupplyForSelection(
         previousDiagnostics,
-        selection.modeId,
-        selection.revision,
+        primary?.id ?? 'default',
+        primary?.revision ?? null,
       );
       await Promise.all([
-        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
-        setStorage(STORAGE_KEYS.MODE, selection.label),
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_IDS, selectedModes.map((entry) => entry.id)),
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
+        setStorage(STORAGE_KEYS.MODE, modeLabel),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
       ]);
       lastRankMemo = null;
@@ -3158,30 +3181,41 @@ const handleRuntimeMessage = (
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
           payload: {
-            mode: selection.label,
-            modeId: selection.modeId,
-            modeRevision: selection.revision,
-            memberLabels: selection.memberLabels,
+            mode: modeLabel,
+            modeId: primary?.id ?? 'default',
+            modeIds: selectedModes.map((entry) => entry.id),
+            modeRevision: primary?.revision ?? null,
+            memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
           },
         }).catch(() => undefined)
         : undefined));
 
-      // Selection takes effect immediately; re-grounding and acquisition happen
-      // automatically behind it rather than requiring a manual refresh.
-      void refreshSelectedModeSemantics(selection, tabs).catch((error) => {
-        console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
-      });
-      if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
+      // Re-ground each selected bubble so the feed can respond to a combination
+      // of interests instead of one exclusive mode.
+      for (const selectedMode of selectedModes.slice(0, 6)) {
+        void refreshSelectedModeSemantics({
+          modeId: selectedMode.id,
+          label: selectedMode.label,
+          revision: selectedMode.revision,
+          memberLabels: selectedMode.members.map((member) => member.label),
+        }, tabs).catch((error) => {
+          console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
+        });
+      }
+
+      if (settings.webSearchEnabled && selectedModes.length > 0) {
+        const combinedIntent = selectedModes.map((entry) => entry.label).join(' ');
+        void refreshWebSearchCandidates(true, combinedIntent).then(async (refresh) => {
           if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
         }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
       }
 
       sendResponse({
         ok: true,
-        mode: selection.label,
-        modeId: selection.modeId,
-        modeRevision: selection.revision,
+        mode: modeLabel,
+        modeId: primary?.id ?? 'default',
+        modeIds: selectedModes.map((entry) => entry.id),
+        modeRevision: primary?.revision ?? null,
       });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
