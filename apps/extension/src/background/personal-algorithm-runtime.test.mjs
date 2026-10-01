@@ -111,12 +111,12 @@ test('local runtime scores candidates from the persisted graph and returns deter
   ], 'Work');
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 11);
-  assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p7');
+  assert.equal(ranked[0].rawScore, 9);
+  assert.equal(ranked[0].score, calibrateLocalScore(9));
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p8');
   assert.equal(ranked[0].trace.graphRevision, 4);
-  assert.equal(ranked[0].trace.finalScore, 11);
-  assert.equal(ranked[0].trace.edgeContributions.length, 1);
+  assert.equal(ranked[0].trace.finalScore, 9);
+  assert.equal(ranked[0].trace.edgeContributions.length, 0);
   assert.equal(ranked[0].trace.nodeContributions.length, 2);
   assert.equal(ranked[0].trace.suppressed, false);
   assert.deepEqual(ranked[0].semantic_mode_affinities, [{
