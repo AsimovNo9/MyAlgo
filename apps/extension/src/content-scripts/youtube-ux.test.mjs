@@ -28,7 +28,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
       graphRevision: 12,
       acquisitionMechanism: 'web_search',
       contributions: [
-        { label: 'semantic neighbourhood: local AI', value: 10, kind: 'feature', evidenceIds: ['e1'] },
+        { label: 'semantic neighbourhood: local AI', value: 10, kind: 'feature', sourceId: 'topic:local-ai', evidenceIds: ['e1'] },
         { label: 'explicit feedback: not_interested', value: -5, kind: 'feedback', evidenceIds: ['e2'] },
       ],
       matchedPaths: [
@@ -69,6 +69,8 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   );
   assert.equal(view.contributions[0].evidenceCount, 1);
   assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.contributions[0].targetKind, 'node');
+  assert.equal(view.contributions[0].targetId, 'topic:local-ai');
   assert.equal(view.graphRevision, 12);
   assert.equal(view.traceId, 'trace-a');
 });
