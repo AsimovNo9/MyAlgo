@@ -303,10 +303,23 @@ const durableModeCatalogSignature = (
 const refreshDurableModeCatalog = async (
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
 ): Promise<DurableSemanticModeCatalog> => {
-  const previous = await getStorage<DurableSemanticModeCatalog | null>(
-    STORAGE_KEYS.DURABLE_MODE_CATALOG,
-    null,
-  );
+  const [storedPrevious, selectedModeIds] = await Promise.all([
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+    getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+  ]);
+  const selectedModeIdSet = new Set(selectedModeIds);
+  const previous = storedPrevious
+    ? {
+        ...storedPrevious,
+        modes: storedPrevious.modes.map((mode) => ({
+          ...mode,
+          pinned: selectedModeIdSet.has(mode.id),
+        })),
+      }
+    : null;
   const canonical = buildCanonicalSemanticConcepts(state);
   const clustered = buildDurableSemanticModeClusters(state, canonical, {
     minimumSupportPerConcept: 2,
@@ -322,7 +335,7 @@ const refreshDurableModeCatalog = async (
     new Date().toISOString(),
     {
       minimumIdentityJaccard: 0.5,
-      maxModes: 12,
+      maxModes: 32,
     },
   );
 
@@ -339,25 +352,47 @@ const refreshDurableModeCatalog = async (
   });
 
   const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
-  let activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
-  if (!activeModeId) {
+  let legacyActiveModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
+  if (!legacyActiveModeId) {
     const migrated = storedMode.toLowerCase() === 'default'
       ? null
       : reconciled.catalog.modes.find((mode) => (
           mode.label.toLowerCase() === storedMode.toLowerCase()
         ));
-    activeModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
-    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, activeModeId);
+    legacyActiveModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, legacyActiveModeId);
   }
 
-  const activeMode = resolveDurableMode(reconciled.catalog, activeModeId);
-  if (activeMode && storedMode !== activeMode.label) {
-    await setStorage(STORAGE_KEYS.MODE, activeMode.label);
+  const effectiveSelectedIds = selectedModeIds.length > 0
+    ? selectedModeIds
+    : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
+  const selectedModes = effectiveSelectedIds
+    .map((modeId) => resolveDurableMode(reconciled.catalog, modeId))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const primary = selectedModes[0] ?? null;
+  const selectedLabel = selectedModes.length > 0
+    ? selectedModes.map((entry) => entry.label).join(' + ')
+    : 'Default';
+
+  if (
+    storedMode !== selectedLabel
+    || legacyActiveModeId !== (primary?.id ?? 'default')
+  ) {
+    await Promise.all([
+      setStorage(STORAGE_KEYS.MODE, selectedLabel),
+      setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
+    ]);
     const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
     await Promise.all(tabs.map((tab) => tab.id
       ? chrome.tabs.sendMessage(tab.id, {
         type: 'MODE_CHANGED',
-        payload: { mode: activeMode.label, modeId: activeMode.id },
+        payload: {
+          mode: selectedLabel,
+          modeId: primary?.id ?? 'default',
+          modeIds: selectedModes.map((entry) => entry.id),
+          modeRevision: primary?.revision ?? null,
+          memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
+        },
       }).catch(() => undefined)
       : undefined));
   }
@@ -3242,11 +3277,22 @@ const handleRuntimeMessage = (
         primary?.id ?? 'default',
         primary?.revision ?? null,
       );
+      const selectedIdSet = new Set(selectedModes.map((entry) => entry.id));
+      const pinnedCatalog = durableModeCatalog
+        ? {
+            ...durableModeCatalog,
+            modes: durableModeCatalog.modes.map((entry) => ({
+              ...entry,
+              pinned: selectedIdSet.has(entry.id),
+            })),
+          }
+        : null;
       await Promise.all([
         setStorage(STORAGE_KEYS.ACTIVE_MODE_IDS, selectedModes.map((entry) => entry.id)),
         setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
         setStorage(STORAGE_KEYS.MODE, modeLabel),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
+        ...(pinnedCatalog ? [setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, pinnedCatalog)] : []),
       ]);
       lastRankMemo = null;
       if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
