@@ -853,6 +853,13 @@ New product validation should now concentrate on mutation semantics in #154/#155
 
 ## Revisioned graph correction validation (#154)
 
+### Bidirectional correction and source-filter stability
+
+Every exact preference-bearing graph term must expose both directions of correction. A positive contribution is not limited to a negative-only button and a negative contribution is not limited to a positive-only button: the user may choose **Prefer**, **Reduce**, or **Mute** for any exact node target. The UI may emphasize Reduce for a currently-positive contribution and Prefer for a currently-negative contribution, but that emphasis is advisory only. Mute remains the stronger hard suppression, and neutralization/undo remains available through the revision history.
+
+Source filters are a presentation policy, not transient rerank state. While MyAlgo is active, ordinary ranking, semantic refresh, retrieval refresh, replacement refresh, and graph-control reranks must not temporarily restore a structurally hidden Shorts/Playables shelf. Hidden source containers are restored only when the extension is paused/disabled or when a source-filter policy change explicitly resynchronizes them under the new policy. This prevents YouTube shelf churn from destabilizing nearby Why-this controls.
+
+
 Reduce / Prefer / Mute are user-authored control overlays over existing stable graph targets. Validate the following before treating the #154 slice as complete:
 
 1. the first user correction captures exactly one immutable pre-edit baseline containing nodes, edges, and control state but not evidence;
