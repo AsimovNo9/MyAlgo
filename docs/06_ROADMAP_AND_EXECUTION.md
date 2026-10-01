@@ -113,9 +113,10 @@ Additional connectors should implement the same contract rather than introducing
 
 PR #191 now extends the browser-local state boundary with evidence-backed graph relationships.
 
-The current schema is **v2** and contains:
+The current schema is **v3** and contains:
 
 - normalized `EvidenceRecord` entries with source-neutral evidence, confidence, retention policy, and expiry metadata;
+- a minimal `forgottenEvidence` deletion ledger containing evidence ID + deletion time only, so the same concrete record cannot be recreated by later reconciliation without retaining the deleted evidence payload;
 - explicit content graph nodes keyed by `source + externalId`;
 - graph nodes and edges with explicit versus inferred provenance;
 - `evidenceIds` on every graph edge so an inferred relationship can be traced back to the exact local evidence records that support it;
@@ -227,10 +228,11 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 PR #223/#221 through PR #231 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
 
 1. **Complete — #153/#170 trust and graph-inspection foundation / PRs #230–#231.** Native/replacement Why-this, exact scorer-backed graph paths, retained-history support, read-only Network/Lineage exploration, evidence drill-down, semantic/topic grouping, and searchable multi-select durable groups are merged. #170 is complete; #153 remains open only for direct actions/evidence-navigation integration.
-2. **P1 — #154 + #155 correction and evidence controls.** Implement Reduce/Prefer/Mute/Forget as persistent, revisioned, reversible operations. Preserve the original pre-user-edit baseline before the first mutation; keep Forget/evidence deletion separate from graph-edit undo/restore.
-3. **P1 — finish #153 direct-action integration.** Wire Why-this contribution/path terms and graph-inspector nodes/edges into the #154/#155 operations and direct evidence-record navigation.
-4. **P2 — #161 + #178 mode/history ownership UX.** Let users explicitly edit discovered groups (rename/pin/member management/versioning) and choose which history clusters influence the Personal Algorithm.
-5. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
+2. **Complete — #154 / PR #233 correction controls.** Reduce/Prefer/Mute, exact target controls, baseline capture, revisioned Undo/Restore original, Unmute, and fallback video feedback are merged and browser validated.
+3. **P1 — #155 evidence provenance + Forget.** Persist deletion intent so a forgotten concrete evidence record cannot be silently re-added by later reconciliation/rebuild. Evidence deletion creates a new graph/evidence revision boundary but is not a user-graph edit and is never restored by #154 Undo/Restore original.
+4. **P1 — finish #153 evidence-action integration.** Direct graph correction actions are live; wire Why-this/graph provenance records to concrete Forget/navigation semantics from #155.
+5. **P2 — #161 + #178 mode/history ownership UX.** Let users explicitly edit discovered groups (rename/pin/member management/versioning) and choose which history clusters influence the Personal Algorithm.
+6. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
 6. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
 7. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
 8. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
