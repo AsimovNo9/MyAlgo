@@ -276,7 +276,6 @@ const memberSignature = (members: readonly DurableSemanticModeMember[]): string 
 const modeSemanticSignature = (mode: DurableSemanticMode): string =>
   JSON.stringify({
     id: mode.id,
-    label: mode.label,
     inferredLabel: mode.inferredLabel ?? mode.label,
     revision: mode.revision,
     members: memberSignature(mode.members),
