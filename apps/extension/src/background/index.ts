@@ -615,27 +615,35 @@ async function purgeConcreteEvidencePayload(evidenceId: string): Promise<{
   historyRecords: number;
   homeObservations: number;
   behaviorEvents: number;
+  localEvents: number;
 }> {
-  const [historyEvidence, homeObservations, behaviorEvents] = await Promise.all([
+  const [historyEvidence, homeObservations, behaviorEvents, localEvents] = await Promise.all([
     getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []),
     getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []),
     getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []),
+    getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []),
   ]);
 
   const nextHistory = historyEvidence.filter((item) => createHistoryEvidenceId(item.externalId) !== evidenceId);
   const nextHome = homeObservations.filter((item) => `exposure:${item.exposureId}` !== evidenceId);
   const nextBehavior = behaviorEvents.filter((item) => evidenceIdForBehaviorObservation(item) !== evidenceId);
+  const nextLocalEvents = localEvents.filter((item) => {
+    if (item.kind !== 'selection' || !item.payload || typeof item.payload !== 'object') return true;
+    return evidenceIdForBehaviorObservation(item.payload as UserBehaviorObservation) !== evidenceId;
+  });
 
   const updates: Record<string, unknown> = {};
   if (nextHistory.length !== historyEvidence.length) updates[STORAGE_KEYS.HISTORY_EVIDENCE] = nextHistory;
   if (nextHome.length !== homeObservations.length) updates[STORAGE_KEYS.HOME_OBSERVATIONS] = nextHome;
   if (nextBehavior.length !== behaviorEvents.length) updates[STORAGE_KEYS.SELECTION_EVENTS] = nextBehavior;
+  if (nextLocalEvents.length !== localEvents.length) updates['personal-algorithm-local-events'] = nextLocalEvents;
   if (Object.keys(updates).length > 0) await setStorageBatch(updates);
 
   return {
     historyRecords: historyEvidence.length - nextHistory.length,
     homeObservations: homeObservations.length - nextHome.length,
     behaviorEvents: behaviorEvents.length - nextBehavior.length,
+    localEvents: localEvents.length - nextLocalEvents.length,
   };
 }
 
@@ -2956,7 +2964,7 @@ const handleRuntimeMessage = (
       const result = await personalAlgorithmStore.forgetEvidence(evidenceId);
       const purged = result.forgotten
         ? await purgeConcreteEvidencePayload(evidenceId)
-        : { historyRecords: 0, homeObservations: 0, behaviorEvents: 0 };
+        : { historyRecords: 0, homeObservations: 0, behaviorEvents: 0, localEvents: 0 };
       if (result.forgotten) {
         lastRankMemo = null;
         await notifyPersonalAlgorithmChanged('forget');
