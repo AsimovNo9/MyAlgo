@@ -789,3 +789,119 @@ test('read snapshots are reused until store mutation and invalidated afterward',
   assert.notEqual(exported, third);
   assert.deepEqual(exported, third);
 });
+
+
+test('graph controls preserve a pre-edit baseline and support undo and restore without deleting evidence', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      ...exposure,
+      metadata: {
+        title: 'Control target video',
+        creatorId: 'creator-control',
+        creatorName: 'Control Creator',
+      },
+    },
+  }, 'control-evidence');
+
+  const before = await store.exportState();
+  const creatorId = before.graph.nodes.find((node) => node.kind === 'creator')?.id;
+  assert.ok(creatorId);
+  assert.equal(before.graph.currentRevision, 0);
+  assert.equal(before.graph.originalBaseline ?? null, null);
+
+  const reduced = await store.setGraphControl('node', creatorId, 'reduce');
+  assert.equal(reduced.action, 'reduce');
+
+  let state = await store.exportState();
+  assert.equal(state.graph.controls?.length, 1);
+  assert.equal(state.graph.controls?.[0].action, 'reduce');
+  assert.equal(state.graph.currentRevision, 1);
+  assert.equal(state.graph.originalBaseline?.revision, 0);
+  assert.deepEqual(state.graph.originalBaseline?.controls, []);
+  assert.deepEqual(state.graph.originalBaseline?.nodes, before.graph.nodes);
+  assert.deepEqual(state.graph.originalBaseline?.edges, before.graph.edges);
+
+  await store.setGraphControl('node', creatorId, 'prefer');
+  state = await store.exportState();
+  assert.equal(state.graph.controls?.[0].action, 'prefer');
+  assert.equal(state.graph.currentRevision, 2);
+
+  const undo = await store.undoLastGraphEdit();
+  assert.equal(undo?.action, 'undo');
+  state = await store.exportState();
+  assert.equal(state.graph.controls?.[0].action, 'reduce');
+  assert.equal(state.graph.currentRevision, 3);
+  assert.equal(state.evidence.some((record) => record.id === 'control-evidence'), true);
+
+  const restored = await store.restoreOriginalGraph();
+  assert.equal(restored, true);
+  state = await store.exportState();
+  assert.deepEqual(state.graph.controls, []);
+  assert.deepEqual(state.graph.nodes, before.graph.nodes);
+  assert.deepEqual(state.graph.edges, before.graph.edges);
+  assert.equal(state.graph.currentRevision, 4);
+  assert.equal(state.evidence.some((record) => record.id === 'control-evidence'), true);
+
+  await store.undoLastGraphEdit();
+  state = await store.exportState();
+  assert.equal(state.graph.controls?.[0].action, 'reduce');
+  assert.equal(state.graph.currentRevision, 5);
+  assert.equal(state.graph.userEdits.at(-1)?.action, 'undo');
+  assert.equal(state.graph.revisions.at(-1)?.reason, 'graph_undo');
+});
+
+test('controlled derived graph targets survive projection churn until the control is cleared', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'controlled-derived' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-09-27T10:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: { title: 'Controlled derived video' },
+    },
+  }, 'controlled-derived-evidence');
+
+  const marker = 'semantic-concept-materializer-v1';
+  await store.reconcileDerivedGraphProjection({
+    marker,
+    nodes: [{
+      id: 'topic:derived:controlled',
+      kind: 'topic',
+      label: 'Controlled topic',
+      content: null,
+      provenance: 'inferred',
+      confidence: 0.8,
+      attributes: { derivedBy: marker, rebuildable: true },
+    }],
+    edges: [{
+      id: 'edge:derived-about:controlled',
+      sourceNodeId: 'topic:derived:controlled',
+      targetNodeId: 'content:youtube:controlled-derived',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.8,
+      evidenceIds: ['controlled-derived-evidence'],
+      attributes: { derivedBy: marker, rebuildable: true },
+    }],
+  });
+
+  await store.setGraphControl('node', 'topic:derived:controlled', 'prefer');
+  await store.reconcileDerivedGraphProjection({ marker, nodes: [], edges: [] });
+
+  let graph = await store.getGraph();
+  assert.equal(graph.nodes.some((node) => node.id === 'topic:derived:controlled'), true);
+
+  await store.removeGraphControl('node', 'topic:derived:controlled');
+  await store.reconcileDerivedGraphProjection({ marker, nodes: [], edges: [] });
+
+  graph = await store.getGraph();
+  assert.equal(graph.nodes.some((node) => node.id === 'topic:derived:controlled'), false);
+});
