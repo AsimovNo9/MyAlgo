@@ -196,8 +196,12 @@ export function Options() {
     setStatus(null);
   };
 
-  const handleRenameMode = async (modeId: string, inferredLabel: string | null) => {
-    const label = (modeNameDrafts[modeId] ?? '').trim();
+  const handleRenameMode = async (
+    modeId: string,
+    inferredLabel: string | null,
+    explicitLabel?: string | null,
+  ) => {
+    const label = (explicitLabel === undefined ? modeNameDrafts[modeId] ?? '' : explicitLabel ?? '').trim();
     const response = await chrome.runtime.sendMessage({
       type: 'DURABLE_MODE_CONFIG_UPDATE',
       payload: { modeId, label: label || null },
@@ -684,7 +688,7 @@ export function Options() {
                       type="button"
                       onClick={() => {
                         setModeNameDrafts((current) => ({ ...current, [option.id]: '' }));
-                        void handleRenameMode(option.id, option.inferredLabel);
+                        void handleRenameMode(option.id, option.inferredLabel, null);
                       }}
                     >
                       Reset name
