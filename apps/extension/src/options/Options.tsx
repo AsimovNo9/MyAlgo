@@ -1059,7 +1059,7 @@ export function Options() {
                     <div>
                       <strong>Node kinds</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {effectiveGraphInspector?.nodesByKind ?? [].map((entry) => (
+                        {(effectiveGraphInspector?.nodesByKind ?? []).map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -1067,7 +1067,7 @@ export function Options() {
                     <div>
                       <strong>Relations</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {effectiveGraphInspector?.edgesByRelation ?? [].map((entry) => (
+                        {(effectiveGraphInspector?.edgesByRelation ?? []).map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -1078,7 +1078,7 @@ export function Options() {
                 <details style={{ marginTop: 10 }}>
                   <summary>Recent revisions</summary>
                   <ul style={{ paddingLeft: 18 }}>
-                    {effectiveGraphInspector?.revisions ?? [].slice(0, 8).map((revision) => (
+                    {(effectiveGraphInspector?.revisions ?? []).slice(0, 8).map((revision) => (
                       <li key={`${revision.revision}:${revision.createdAt}`}>
                         r{revision.revision} · {revision.reason}
                       </li>
