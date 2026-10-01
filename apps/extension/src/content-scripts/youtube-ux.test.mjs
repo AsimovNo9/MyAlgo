@@ -46,7 +46,7 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.equal(view.scoreLine, 'Score 72/100 · raw 14.5 · graph r12');
   assert.equal(
     view.acquisitionLine,
-    'Discovered via YouTube search · source is not preference evidence',
+    'YouTube search discovery · acquisition source is not preference evidence',
   );
   assert.deepEqual(
     view.pathLines,
@@ -219,7 +219,7 @@ test('explanation provenance uses user-facing labels without becoming a ranking 
         modeGrounding: null,
       },
     }).acquisitionLine,
-    'Observed on the current YouTube page · source is not preference evidence',
+    'YouTube native page · acquisition source is not preference evidence',
   );
 });
 
