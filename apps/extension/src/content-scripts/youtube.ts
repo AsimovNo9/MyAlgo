@@ -659,7 +659,7 @@ const renderExplanationContent = (
   contributions.style.cssText = 'padding:0 14px;';
   for (const contribution of view.contributions) {
     const row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
+    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,auto);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
     const label = document.createElement('div');
     label.style.cssText = 'min-width:0;font-weight:700;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     const accent = document.createElement('span');
@@ -675,50 +675,71 @@ const renderExplanationContent = (
     value.style.cssText = 'color:#e2e8f0;font-variant-numeric:tabular-nums;';
     row.appendChild(value);
 
-    const action = document.createElement('button');
-    action.type = 'button';
-    action.textContent = contribution.actionLabel ?? 'Inspect';
     const actionable = Boolean(
-      contribution.actionLabel
-      && contribution.targetKind
+      contribution.targetKind
       && contribution.targetId,
     );
-    action.disabled = !actionable;
-    action.title = actionable
-      ? `${contribution.actionLabel} this graph term. The edit is revisioned and can be undone in Options.`
-      : 'This contribution is aggregated or has no direct graph target.';
-    action.style.cssText = `padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:${actionable ? '1' : '.5'};cursor:${actionable ? 'pointer' : 'default'};`;
-    if (actionable) {
-      action.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const originalLabel = action.textContent;
-        action.disabled = true;
-        action.textContent = 'Applying…';
-        void chrome.runtime.sendMessage({
-          type: 'PERSONAL_ALGORITHM_SET_CONTROL',
-          payload: {
-            targetKind: contribution.targetKind,
-            targetId: contribution.targetId,
-            action: contribution.actionLabel!.toLowerCase(),
-          },
-        }).then((response: { ok?: boolean; error?: string }) => {
-          if (!response?.ok) {
-            action.disabled = false;
-            action.textContent = originalLabel;
-            action.title = response?.error ?? 'Unable to update this graph control.';
-            return;
-          }
-          action.textContent = 'Applied';
-          action.title = 'Saved as a revisioned graph control. Use Options to undo or restore original.';
-        }).catch((error) => {
-          action.disabled = false;
-          action.textContent = originalLabel;
-          action.title = error instanceof Error ? error.message : 'Unable to update this graph control.';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;';
+    if (!actionable) {
+      const inspect = document.createElement('button');
+      inspect.type = 'button';
+      inspect.textContent = 'Inspect';
+      inspect.disabled = true;
+      inspect.title = 'This contribution is aggregated or has no direct graph target.';
+      inspect.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.5;';
+      actions.appendChild(inspect);
+    } else {
+      const controlOptions = [
+        { label: 'Prefer', action: 'prefer' as const, title: 'Recommend more from this exact graph term.' },
+        { label: 'Reduce', action: 'reduce' as const, title: 'Recommend less from this exact graph term.' },
+        { label: 'Mute', action: 'mute' as const, title: 'Suppress candidates matching this exact graph term.' },
+      ];
+      for (const option of controlOptions) {
+        const control = document.createElement('button');
+        control.type = 'button';
+        control.textContent = option.label;
+        const suggested = contribution.actionLabel === option.label;
+        control.title = `${option.title} The edit is revisioned and can be undone in Options.`;
+        control.style.cssText = `padding:3px 7px;border:${suggested ? '2px' : '1px'} solid #64748b;border-radius:999px;background:${suggested ? 'rgba(30,64,175,.35)' : 'transparent'};color:#f8fafc;font:${suggested ? '700' : '600'} 10px/1.2 Roboto,Arial,sans-serif;cursor:pointer;`;
+        control.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const siblings = Array.from(actions.querySelectorAll<HTMLButtonElement>('button'));
+          siblings.forEach((button) => { button.disabled = true; });
+          const originalLabel = control.textContent;
+          control.textContent = 'Applying…';
+          void chrome.runtime.sendMessage({
+            type: 'PERSONAL_ALGORITHM_SET_CONTROL',
+            payload: {
+              targetKind: contribution.targetKind,
+              targetId: contribution.targetId,
+              action: option.action,
+            },
+          }).then((response: { ok?: boolean; error?: string }) => {
+            siblings.forEach((button) => { button.disabled = false; });
+            if (!response?.ok) {
+              control.textContent = originalLabel;
+              control.title = response?.error ?? 'Unable to update this graph control.';
+              return;
+            }
+            siblings.forEach((button) => {
+              if (button !== control && button.textContent?.endsWith(' ✓')) {
+                button.textContent = button.textContent.slice(0, -2);
+              }
+            });
+            control.textContent = `${option.label} ✓`;
+            control.title = 'Saved as a revisioned graph control. Choose another direction here or use Options to undo/restore.';
+          }).catch((error) => {
+            siblings.forEach((button) => { button.disabled = false; });
+            control.textContent = originalLabel;
+            control.title = error instanceof Error ? error.message : 'Unable to update this graph control.';
+          });
         });
-      });
+        actions.appendChild(control);
+      }
     }
-    row.appendChild(action);
+    row.appendChild(actions);
     contributions.appendChild(row);
   }
   shell.appendChild(contributions);
