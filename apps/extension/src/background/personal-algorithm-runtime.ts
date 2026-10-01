@@ -1382,7 +1382,7 @@ export function scoreLocalCandidates(
   mode: string,
   feedbackSignals: ScoreFeedbackSignal[] = [],
   sourceFilters: FeedSourceFilters = {},
-  activeDurableMode?: LocalDurableModeScoringContext | null,
+  activeDurableModes?: LocalDurableModeScoringContext | readonly LocalDurableModeScoringContext[] | null,
 ): LocalRuntimeRankedCandidate[] {
   const scoringStateKey = graphScoringKey(state);
   const prepared = getPreparedLocalScoringState(state);
