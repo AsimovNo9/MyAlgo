@@ -607,11 +607,14 @@ const renderExplanationContent = (
       title.style.cssText = 'color:#e2e8f0;font:600 11px/1.3 Roboto,Arial,sans-serif;white-space:normal;';
       row.appendChild(title);
       const meta = document.createElement('div');
-      const matchedBy = match.matchedBy
+      const matchedByLabels = match.matchedBy
         .map((label) => label.replace(/^[^:]+:\s*/, '').trim())
         .filter(Boolean)
-        .slice(0, 3)
-        .join(' · ');
+        .filter((label, index, labels) => (
+          labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index
+        ))
+        .slice(0, 3);
+      const matchedBy = matchedByLabels.join(' · ');
       meta.textContent = [
         match.interaction === 'watched' ? 'Watched before' : match.interaction,
         matchedBy ? `supports via ${matchedBy}` : null,
