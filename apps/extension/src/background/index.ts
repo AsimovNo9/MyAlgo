@@ -3532,22 +3532,11 @@ const handleRuntimeMessage = (
         primary?.id ?? 'default',
         primary?.revision ?? null,
       );
-      const selectedIdSet = new Set(selectedModes.map((entry) => entry.id));
-      const pinnedCatalog = durableModeCatalog
-        ? {
-            ...durableModeCatalog,
-            modes: durableModeCatalog.modes.map((entry) => ({
-              ...entry,
-              pinned: selectedIdSet.has(entry.id),
-            })),
-          }
-        : null;
       await Promise.all([
         setStorage(STORAGE_KEYS.ACTIVE_MODE_IDS, selectedModes.map((entry) => entry.id)),
         setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
         setStorage(STORAGE_KEYS.MODE, modeLabel),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
-        ...(pinnedCatalog ? [setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, pinnedCatalog)] : []),
       ]);
       lastRankMemo = null;
       if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
