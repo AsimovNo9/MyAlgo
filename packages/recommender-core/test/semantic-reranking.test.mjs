@@ -373,8 +373,15 @@ test('clear high-confidence graph matches skip the NLI verifier', async () => {
     },
   };
 
+  const clearState = {
+    ...state,
+    graph: {
+      ...state.graph,
+      nodes: [state.graph.nodes.find((node) => node.id === 'concept:ambient')],
+    },
+  };
   const result = await enrichCandidatesWithSemanticReranking(
-    state,
+    clearState,
     [{ external_id: 'ambient-clear', title: 'Ambient music relax unwind' }],
     'Ambient music',
     provider,
