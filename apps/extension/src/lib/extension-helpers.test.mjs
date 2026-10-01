@@ -195,6 +195,7 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
     connector: 'youtube',
     mechanism: 'player_watch',
     observedAt: '2026-09-30T08:00:00.000Z',
+    confidence: 1,
     contentLabel: 'Video A',
   }]);
   assert.equal(view.revisions[0].revision, 7);
