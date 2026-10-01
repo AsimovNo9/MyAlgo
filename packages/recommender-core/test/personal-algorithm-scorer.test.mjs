@@ -95,7 +95,7 @@ test('mute graph control hard-suppresses a matching node before final presentati
   assert.equal(result.trace.policyOutcome,'suppressed');
   assert.equal(result.trace.suppressed,true);
   assert.equal(result.trace.suppressionContributions.length,1);
-  assert.match(result.trace.suppressionContributions[0].label,/graph_control/);
+  assert.match(result.trace.suppressionContributions[0].label,/muted by you/);
   assert.equal(isScoreTraceConsistent(result.trace),true);
 });
 
