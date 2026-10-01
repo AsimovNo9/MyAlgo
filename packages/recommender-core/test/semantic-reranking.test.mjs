@@ -268,6 +268,33 @@ test('semantic graph verification targets moderate or ambiguous specific matches
   ]), false);
 });
 
+test('ambiguous verifier work cannot silently exceed the caller slice limit', async () => {
+  const verifier = {
+    modelId: 'fixture-deberta',
+    modelVersion: 'fixture-nli-v1',
+    async verify(items) {
+      return { concepts: items.map((item) => item.labels), backend: 'wasm-sandbox' };
+    },
+  };
+  const candidates = Array.from({ length: 5 }, (_, index) => ({
+    external_id: `ambiguous-${index}`,
+    title: 'Distributed systems CRDT implementation',
+    description: 'Practical software architecture',
+  }));
+
+  await assert.rejects(
+    () => enrichCandidatesWithSemanticReranking(
+      state,
+      candidates,
+      'CRDTs and local-first software',
+      provider,
+      createMemoryEmbeddingCache(),
+      { graphMatchVerifier: verifier, maxGraphVerificationItems: 4 },
+    ),
+    /Reduce the semantic slice/,
+  );
+});
+
 test('DeBERTa verifier filters ambiguous embedding graph matches before they become affinities', async () => {
   const calls = [];
   const verifier = {
