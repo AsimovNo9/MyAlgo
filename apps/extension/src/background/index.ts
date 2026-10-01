@@ -147,6 +147,18 @@ type LocalFeedItem = CandidatePoolItem & {
         evidenceIds: string[];
       }>;
     } | null;
+    historySupport: {
+      scoreSharePercent: number;
+      matchedVideoCount: number;
+      matches: Array<{
+        evidenceId: string;
+        externalId: string;
+        title: string;
+        observedAt: string;
+        interaction: string;
+        matchedBy: string[];
+      }>;
+    } | null;
   };
 };
 
@@ -1977,6 +1989,7 @@ async function rankLocalCandidates(
     });
   }
 
+  const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
   const feed = ranked.map(({ trace, ...item }) => {
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
@@ -2013,12 +2026,16 @@ async function rankLocalCandidates(
       evidenceIds: path.evidenceIds,
     }));
 
-    const contributions = [
+    const allScoringContributions = [
       ...trace.featureContributions,
       ...trace.nodeContributions,
-      ...trace.edgeContributions,
       ...trace.feedbackContributions,
       ...trace.modeContributions,
+    ].filter((contribution) => contribution.value !== 0);
+
+    const contributions = [
+      ...allScoringContributions,
+      ...trace.edgeContributions,
     ]
       .filter((contribution) => contribution.value !== 0)
       .sort((left, right) => Math.abs(right.value) - Math.abs(left.value) || left.label.localeCompare(right.label))
@@ -2035,6 +2052,73 @@ async function rankLocalCandidates(
         evidenceIds: contribution.evidenceIds,
       }));
 
+    const historyEvidenceIds = new Set<string>();
+    const matchedByEvidenceId = new Map<string, Set<string>>();
+    const registerHistoryEvidence = (evidenceId: string, label: string) => {
+      const record = evidenceById.get(evidenceId);
+      if (!record) return;
+      const evidence = record.evidence;
+      if (
+        evidence.kind !== 'interaction'
+        || evidence.content.externalId === item.external_id
+        || !['watched', 'clicked', 'saved', 'shared'].includes(evidence.interaction)
+      ) return;
+      historyEvidenceIds.add(evidenceId);
+      const labels = matchedByEvidenceId.get(evidenceId) ?? new Set<string>();
+      if (label.trim()) labels.add(label.trim());
+      matchedByEvidenceId.set(evidenceId, labels);
+    };
+    for (const contribution of allScoringContributions) {
+      for (const evidenceId of contribution.evidenceIds ?? []) {
+        registerHistoryEvidence(evidenceId, contribution.label);
+      }
+    }
+    for (const path of trace.matchedPaths) {
+      const pathLabel = path.nodeIds
+        .map((nodeId) => nodeLabelById.get(nodeId) ?? '')
+        .filter(Boolean)
+        .join(' ↔ ');
+      for (const evidenceId of path.evidenceIds) registerHistoryEvidence(evidenceId, pathLabel);
+    }
+
+    const historyMatches = [...historyEvidenceIds]
+      .map((evidenceId) => {
+        const record = evidenceById.get(evidenceId)!;
+        const evidence = record.evidence;
+        return {
+          evidenceId,
+          externalId: evidence.content.externalId,
+          title: evidence.metadata?.title?.trim() || evidence.content.externalId,
+          observedAt: evidence.observedAt,
+          interaction: evidence.kind === 'interaction' ? evidence.interaction : 'observed',
+          matchedBy: [...(matchedByEvidenceId.get(evidenceId) ?? [])]
+            .sort()
+            .slice(0, 3),
+        };
+      })
+      .sort((left, right) => right.observedAt.localeCompare(left.observedAt) || left.evidenceId.localeCompare(right.evidenceId))
+      .slice(0, 6);
+
+    const positiveContributionTotal = allScoringContributions
+      .reduce((sum, contribution) => sum + Math.max(0, contribution.value), 0);
+    const historyBackedContributionTotal = allScoringContributions
+      .filter((contribution) => (
+        contribution.value > 0
+        && (contribution.evidenceIds ?? []).some((evidenceId) => historyEvidenceIds.has(evidenceId))
+      ))
+      .reduce((sum, contribution) => sum + contribution.value, 0);
+    const historySupport = historyMatches.length > 0
+      ? {
+          scoreSharePercent: positiveContributionTotal > 0
+            ? Math.max(0, Math.min(100, Math.round(
+                historyBackedContributionTotal / positiveContributionTotal * 100,
+              )))
+            : 0,
+          matchedVideoCount: historyMatches.length,
+          matches: historyMatches,
+        }
+      : null;
+
     return {
       ...item,
       suppressed: trace.suppressed,
@@ -2050,6 +2134,7 @@ async function rankLocalCandidates(
         contributions,
         matchedPaths,
         modeGrounding,
+        historySupport,
       },
     };
   });
