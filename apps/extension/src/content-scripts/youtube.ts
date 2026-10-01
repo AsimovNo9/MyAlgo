@@ -470,6 +470,37 @@ const renderExplanationContent = (
   header.appendChild(headerMeta);
   shell.appendChild(header);
 
+  const presentation = document.createElement('div');
+  presentation.style.cssText = 'padding:9px 14px;border-bottom:1px solid #303030;background:#101010;color:#cbd5e1;font:600 11px/1.35 Roboto,Arial,sans-serif;';
+  const panelKind = container.dataset.personalAlgorithmExplanationPanel === 'replacement'
+    ? 'replacement'
+    : 'native';
+  const sourceLine = document.createElement('div');
+  sourceLine.textContent = panelKind === 'replacement'
+    ? `Presentation: replaced a YouTube card · Source: ${view.sourceLabel}`
+    : 'Presentation: native YouTube card reranked in place · Source: YouTube native page';
+  presentation.appendChild(sourceLine);
+  if (activeDurableMode) {
+    const exactModeMatch = isDurableModeGroundedItem(item, activeDurableMode);
+    const provisionalModeMatch = !exactModeMatch
+      && isProvisionalDurableModeRelevantItem(item, activeDurableMode);
+    const modeLine = document.createElement('div');
+    modeLine.style.marginTop = '3px';
+    modeLine.textContent = exactModeMatch
+      ? `Selected group: ${activeDurableMode.label} · exact graph-grounded match`
+      : provisionalModeMatch
+        ? `Selected group: ${activeDurableMode.label} · provisional semantic match; graph/history grounding is not available yet`
+        : `Selected group: ${activeDurableMode.label} · this item has no selected-group grounding`;
+    presentation.appendChild(modeLine);
+  }
+  if (view.historyMatches.length === 0) {
+    const historyLine = document.createElement('div');
+    historyLine.style.marginTop = '3px';
+    historyLine.textContent = 'History: no retained prior watch/click evidence directly supports this score.';
+    presentation.appendChild(historyLine);
+  }
+  shell.appendChild(presentation);
+
   const graph = document.createElement('div');
   graph.dataset.personalAlgorithmExplanationGraph = 'true';
   const hasHistory = view.historyMatches.length > 0;
