@@ -834,6 +834,23 @@ Mode selection is additive rather than exclusive. The popup and Options surface 
 Mode affinity must also abstain across clear semantic-category conflicts. If a durable mode's retained support is overwhelmingly from one confident semantic category, a candidate confidently classified into a different category must not receive that mode contribution solely because an embedding match crossed the raw affinity threshold. This guards cases such as a lofi/music mode contributing to a gaming video.
 
 
+## Post-PR #231 merged trust/graph baseline
+
+PR #231 merged the read-only graph explorer and the expanded Why-this lifecycle/history/mode work. Treat the following as regression invariants rather than active feature work:
+
+- Why-this controls on native and replacement cards must recover from portal cleanup/DOM recycling and remain responsive after pause→activate, rerank, navigation-adjacent churn, and replacement refreshes;
+- Technical details preserves disclosure state through ordinary explanation rerenders;
+- comments and other non-card YouTube surfaces never receive MyAlgo Why-this controls;
+- structural relations and retained content identity do not earn recommendation score merely because they exist in the graph;
+- retained-history explanation uses concrete prior interactions and specific creator/topic/concept bridges, not generic taxonomy as causal evidence;
+- live graph Network/Lineage views stay read-only and preserve graph revision/counts while navigating, filtering, focusing, and zooming;
+- semantic/topic groups and durable modes remain distinct presentation concepts;
+- discovered durable groups are searchable and multi-select; selected groups remain pinned/retained through reclustering until explicitly deselected;
+- multiple selected groups share a bounded mode-score budget and clear cross-category conflicts abstain rather than leak score mass.
+
+New product validation should now concentrate on mutation semantics in #154/#155: preserved original baseline, versioned user edits, undo/restore, hard suppression ordering, targeted evidence deletion, and exact scorer/Why-this reconciliation after each mutation.
+
+
 ## Revisioned graph correction validation (#154)
 
 Reduce / Prefer / Mute are user-authored control overlays over existing stable graph targets. Validate the following before treating the #154 slice as complete:
