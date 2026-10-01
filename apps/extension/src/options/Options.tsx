@@ -16,6 +16,7 @@ import type { DurableSemanticModeCatalog } from '@repo/shared-types';
 export function Options() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
+  const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
@@ -68,6 +69,7 @@ export function Options() {
     chrome.storage.local.get([
       'personal-algorithm-mode',
       'personal-algorithm-active-mode-id',
+      'personal-algorithm-active-mode-ids',
       'personal-algorithm-durable-mode-catalog',
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
@@ -84,6 +86,10 @@ export function Options() {
         ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
       setMode(storedMode);
       setActiveModeId(storedModeId);
+      const storedModeIds = result['personal-algorithm-active-mode-ids'] as string[] | undefined;
+      setSelectedModeIds(Array.isArray(storedModeIds)
+        ? storedModeIds
+        : storedModeId !== 'default' ? [storedModeId] : []);
       setDurableModeCatalog(catalog);
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
@@ -108,6 +114,12 @@ export function Options() {
       if (catalogChange) setDurableModeCatalog((catalogChange.newValue as DurableSemanticModeCatalog | undefined) ?? null);
       const activeModeChange = changes['personal-algorithm-active-mode-id'];
       if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
+      const activeModeIdsChange = changes['personal-algorithm-active-mode-ids'];
+      if (activeModeIdsChange) {
+        setSelectedModeIds(Array.isArray(activeModeIdsChange.newValue)
+          ? activeModeIdsChange.newValue as string[]
+          : []);
+      }
       const modeChange = changes['personal-algorithm-mode'];
       if (modeChange) setMode((modeChange.newValue as string | undefined) ?? 'Default');
     };
@@ -141,6 +153,7 @@ export function Options() {
     setNeuralBatchSize(1);
     setMode('Default');
     setActiveModeId('default');
+    setSelectedModeIds([]);
     setDurableModeCatalog(null);
     setGraphInspector(null);
     setGraphInspectorSource(null);
@@ -158,13 +171,14 @@ export function Options() {
   const handleModeChange = async (nextModeId: string) => {
     const response = await chrome.runtime.sendMessage({
       type: 'SET_MODE',
-      payload: { modeId: nextModeId },
-    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string };
+      payload: { modeId: nextModeId, toggle: nextModeId !== 'default' },
+    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string; modeIds?: string[] };
     if (!response?.ok) {
       setStatus(response?.error ?? 'Unable to change mode.');
       return;
     }
-    setActiveModeId(response.modeId ?? nextModeId);
+    setActiveModeId(response.modeId ?? 'default');
+    setSelectedModeIds(response.modeIds ?? []);
     setMode(response.mode ?? 'Default');
     setStatus(null);
   };
@@ -360,14 +374,34 @@ export function Options() {
 
       <section style={{ marginBottom: 24 }}>
         <h2>Mode</h2>
-        <select value={activeModeId} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
-          {modeOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}{option.active ? '' : ' (dormant)'}
-            </option>
-          ))}
-        </select>
-        <p>Modes are persisted clusters over canonical Personal Algorithm concepts rather than labels from the current feed.</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {modeOptions.map((option) => {
+            const pressed = option.id === 'default'
+              ? selectedModeIds.length === 0
+              : selectedModeIds.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={pressed}
+                onClick={() => void handleModeChange(option.id)}
+                style={{
+                  borderRadius: 999,
+                  padding: '7px 11px',
+                  border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                  background: pressed ? '#dbeafe' : '#fff',
+                  fontWeight: pressed ? 700 : 500,
+                }}
+              >
+                {option.label}{option.active ? '' : ' (dormant)'}
+              </button>
+            );
+          })}
+        </div>
+        <p>
+          These are discovered interest groups from retained semantic graph support. Select any combination to shape the feed;
+          select All to clear the group filters. Repeated standalone interests can become groups once supported by at least two retained videos.
+        </p>
       </section>
 
       <section>
