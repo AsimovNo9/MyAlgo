@@ -298,6 +298,7 @@ const refreshDurableModeCatalog = async (
     minimumSharedContent: 2,
     minimumSupportJaccard: 0.5,
     minimumMembers: 2,
+    minimumSingletonSupport: 3,
   });
   const reconciled = reconcileDurableSemanticModes(
     previous,
