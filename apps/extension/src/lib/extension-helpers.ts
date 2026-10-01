@@ -352,6 +352,18 @@ export function buildGraphInspectorView(
           const semantic = node.content?.externalId
             ? semanticByExternalId.get(node.content.externalId)
             : undefined;
+          const strongestMode = [...(semantic?.modeAffinities ?? [])]
+            .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
+            .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
+          if (strongestMode) {
+            return {
+              semanticClusterId: `mode:${strongestMode.modeId}`,
+              semanticClusterLabel: strongestMode.label,
+              semanticClusterKind: 'mode' as const,
+              semanticClusterAffinity: strongestMode.affinity,
+            };
+          }
+
           const strongestGraphMatch = [...(semantic?.graphMatches ?? [])]
             .filter((entry) => (
               !entry.taxonomyOnly
@@ -396,17 +408,6 @@ export function buildGraphInspectorView(
             };
           }
 
-          const strongestMode = [...(semantic?.modeAffinities ?? [])]
-            .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
-            .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
-          if (strongestMode) {
-            return {
-              semanticClusterId: `mode:${strongestMode.modeId}`,
-              semanticClusterLabel: strongestMode.label,
-              semanticClusterKind: 'mode' as const,
-              semanticClusterAffinity: strongestMode.affinity,
-            };
-          }
           return {
             semanticClusterId: null,
             semanticClusterLabel: null,
