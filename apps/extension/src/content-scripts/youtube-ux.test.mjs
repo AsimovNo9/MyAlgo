@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldClearSourceFilteredPresentation, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getCandidateAcquisitionLabel, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldClearSourceFilteredPresentation, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -1118,4 +1118,47 @@ test('retrieved discovery never replaces a stronger native card', () => {
     ),
     [],
   );
+});
+
+
+test('candidate acquisition labels distinguish native, RSS, and search sources', () => {
+  assert.equal(getCandidateAcquisitionLabel({
+    explanation: { acquisitionMechanism: 'observed_dom' },
+  }), 'YouTube native page');
+  assert.equal(getCandidateAcquisitionLabel({
+    explanation: { acquisitionMechanism: 'rss' },
+  }), 'RSS discovery');
+  assert.equal(getCandidateAcquisitionLabel({
+    provenance: { mechanism: 'web_search', acquired_at: '2026-10-01T10:00:00.000Z' },
+  }), 'YouTube search discovery');
+  assert.equal(getCandidateAcquisitionLabel({
+    acquisition_history: [
+      { mechanism: 'rss', acquired_at: '2026-10-01T09:00:00.000Z' },
+      { mechanism: 'web_search', acquired_at: '2026-10-01T11:00:00.000Z' },
+    ],
+  }), 'YouTube search discovery');
+});
+
+test('explanation view model exposes acquisition source even without graph/history support', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'rss-ai',
+    title: 'AI candidate',
+    score: 50,
+    traceId: 'trace-rss-ai',
+    provenance: { mechanism: 'rss', acquired_at: '2026-10-01T10:00:00.000Z' },
+    explanation: {
+      rawScore: 0,
+      displayScore: 50,
+      graphRevision: 9,
+      acquisitionMechanism: 'rss',
+      contributions: [],
+      matchedPaths: [],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+  assert.equal(view.sourceLabel, 'RSS discovery');
+  assert.match(view.acquisitionLine, /RSS discovery/);
+  assert.deepEqual(view.contributions, []);
+  assert.deepEqual(view.historyMatches, []);
 });
