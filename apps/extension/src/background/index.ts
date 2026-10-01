@@ -2519,7 +2519,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval' | 'control'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -2556,6 +2556,9 @@ const handleRuntimeMessage = (
       semanticModelMode?: SemanticModelMode;
       batchSize?: number;
       generate?: boolean;
+      targetKind?: 'node' | 'edge';
+      targetId?: string;
+      action?: 'reduce' | 'prefer' | 'mute';
     };
   };
 
@@ -2795,6 +2798,97 @@ const handleRuntimeMessage = (
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to explain this content.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_SET_CONTROL') {
+    void (async () => {
+      const targetKind = payload?.targetKind;
+      const targetId = payload?.targetId?.trim() ?? '';
+      const action = payload?.action;
+      if (
+        (targetKind !== 'node' && targetKind !== 'edge')
+        || !targetId
+        || (action !== 'reduce' && action !== 'prefer' && action !== 'mute')
+      ) {
+        sendResponse({ ok: false, error: 'A valid graph target and control action are required.' });
+        return;
+      }
+      const control = await personalAlgorithmStore.setGraphControl(targetKind, targetId, action);
+      lastRankMemo = null;
+      await notifyPersonalAlgorithmChanged('control');
+      sendResponse({
+        ok: true,
+        control,
+        graph: await personalAlgorithmStore.getGraph(),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update graph control.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_REMOVE_CONTROL') {
+    void (async () => {
+      const targetKind = payload?.targetKind;
+      const targetId = payload?.targetId?.trim() ?? '';
+      if ((targetKind !== 'node' && targetKind !== 'edge') || !targetId) {
+        sendResponse({ ok: false, error: 'A valid graph target is required.' });
+        return;
+      }
+      const removed = await personalAlgorithmStore.removeGraphControl(targetKind, targetId);
+      if (removed) {
+        lastRankMemo = null;
+        await notifyPersonalAlgorithmChanged('control');
+      }
+      sendResponse({
+        ok: true,
+        removed,
+        graph: await personalAlgorithmStore.getGraph(),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to remove graph control.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_UNDO_CONTROL') {
+    void (async () => {
+      const edit = await personalAlgorithmStore.undoLastGraphEdit();
+      if (edit) {
+        lastRankMemo = null;
+        await notifyPersonalAlgorithmChanged('control');
+      }
+      sendResponse({
+        ok: true,
+        edit,
+        graph: await personalAlgorithmStore.getGraph(),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to undo graph edit.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_RESTORE_ORIGINAL') {
+    void (async () => {
+      const restored = await personalAlgorithmStore.restoreOriginalGraph();
+      if (restored) {
+        lastRankMemo = null;
+        await notifyPersonalAlgorithmChanged('control');
+      }
+      sendResponse({
+        ok: true,
+        restored,
+        graph: await personalAlgorithmStore.getGraph(),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to restore original graph.',
     }));
     return true;
   }
