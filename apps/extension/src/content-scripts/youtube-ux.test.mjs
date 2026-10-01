@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateReplacementStability } from '@repo/recommender-core';
 
-import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
+import { buildExplanationViewModel, buildModeSupplyPlan, createReplacementSelectionSeed, createReplacementSlotId, getContentPresentationLabel, getNativeCardDecision, getReplacementCandidates, getReplacementPresentationMetadata, getReplacementTextMetadata, getShelfCandidates, getSourceShelfHideReason, isDurableModeGroundedItem, isProvisionalDurableModeRelevantItem, isRenderContextStale, isReplacementEligibleNativeDecision, isStableReplacementCandidateAvailableToSource, isStableReplacementCandidateEligible, isStableReplacementSourceSlotPrebound, keepOutermostElements, navigationFinishRerankReason, planReplacementAssignments, replacementQuota, selectFeedMixAssignments, selectOpportunisticReplacementAssignments, selectOpportunisticReplacementTargets, selectRetrievedDiscoveryAssignments, shouldClearSourceFilteredPresentation, shouldInvalidateStableReplacementBindings, shouldPreserveReplacementOwnedPresentation } from './youtube-ux.ts';
 
 const lowScoreFeed = [
   { external_id: 'video-a', title: 'Video A', score: 6, visible: true },
@@ -68,11 +68,39 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
     ],
   );
   assert.equal(view.contributions[0].evidenceCount, 1);
-  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.contributions[0].actionLabel, 'Reduce');
   assert.equal(view.contributions[0].targetKind, 'node');
   assert.equal(view.contributions[0].targetId, 'topic:local-ai');
   assert.equal(view.graphRevision, 12);
   assert.equal(view.traceId, 'trace-a');
+});
+
+test('exact negative graph contributions suggest the positive correction direction', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-negative',
+    title: 'Negative example',
+    score: 40,
+    traceId: 'trace-negative',
+    explanation: {
+      rawScore: -3,
+      displayScore: 40,
+      graphRevision: 7,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [{
+        label: 'topic: gaming',
+        value: -3,
+        kind: 'feature',
+        sourceId: 'topic:gaming',
+        evidenceIds: ['e-negative'],
+      }],
+      matchedPaths: [],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+
+  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.contributions[0].targetId, 'topic:gaming');
 });
 
 test('explanation display humanizes encoded graph labels and omits relation names from the mini graph', () => {
@@ -398,6 +426,12 @@ test('explicit source-filter hides are terminal and never become replacement slo
   );
 });
 
+
+test('active reranks preserve structurally hidden source shelves', () => {
+  assert.equal(shouldClearSourceFilteredPresentation(false, true), false);
+  assert.equal(shouldClearSourceFilteredPresentation(true, true), true);
+  assert.equal(shouldClearSourceFilteredPresentation(false, false), true);
+});
 
 test('source shelf policy removes Shorts and Playables only when disabled', () => {
   assert.equal(
