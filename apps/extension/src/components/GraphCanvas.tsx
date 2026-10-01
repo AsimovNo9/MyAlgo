@@ -652,7 +652,7 @@ export function GraphCanvas({
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value / 1.18))}>−</button>
           <button type="button" onClick={resetView}>Reset</button>
           {focusedSemanticClusterId ? (
-            <button type="button" onClick={() => setFocusedSemanticClusterId(null)}>All groups</button>
+            <button type="button" onClick={() => setFocusedSemanticClusterId(null)}>All clusters</button>
           ) : null}
         </div>
       ) : null}
@@ -680,7 +680,7 @@ export function GraphCanvas({
                 key={cluster.id}
                 role="button"
                 tabIndex={0}
-                aria-label={`Focus semantic group ${cluster.label}`}
+                aria-label={`Focus ${cluster.kind === 'mode' ? 'durable group' : 'topic cluster'} ${cluster.label}`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -718,7 +718,7 @@ export function GraphCanvas({
                   fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
                   pointerEvents="none"
                 >
-                  {cluster.kind === 'mode' ? 'Mode' : 'Topic'} · {cluster.label} · {cluster.count}
+                  {cluster.kind === 'mode' ? 'Group' : 'Topic cluster'} · {cluster.label} · {cluster.count}
                 </text>
               </g>
             );
