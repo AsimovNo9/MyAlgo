@@ -865,6 +865,22 @@ New product validation should now concentrate on mutation semantics in #154/#155
 
 ## Revisioned graph correction validation (#154)
 
+### Replacement provenance, sparse explanations, and unmute UX
+
+A visible MyAlgo annotation must distinguish presentation behavior from acquisition provenance:
+
+- a native YouTube card that remains in its slot is labeled **MyAlgo reranked**;
+- a MyAlgo candidate occupying a hidden native slot is labeled **MyAlgo replaced**;
+- replacement annotations and Why-this show the candidate acquisition source (for example RSS discovery or YouTube search discovery);
+- source/provenance remains informational and never earns score by itself.
+
+When a selected durable group admits a replacement through provisional semantic matching before exact graph/history grounding exists, Why-this must say so explicitly instead of rendering an unexplained empty panel. It must also state when no retained prior watch/click evidence directly supports the score.
+
+Every scored item keeps symmetric video-level feedback even when no exact editable graph node exists: **More like this** and **Less like this** persist explicit item feedback for the next rank. Exact graph-term Prefer/Reduce/Mute remains separate and is enabled only for a concrete stable graph target.
+
+Muted graph terms must be recoverable. Options lists every live `mute` graph control with a human target label and an **Unmute** action. Unmute removes only the mute overlay, creates the normal revisioned graph-control change, and must not delete retained history/evidence.
+
+
 ### Bidirectional correction and source-filter stability
 
 Every exact preference-bearing graph term must expose both directions of correction. A positive contribution is not limited to a negative-only button and a negative contribution is not limited to a positive-only button: the user may choose **Prefer**, **Reduce**, or **Mute** for any exact node target. The UI may emphasize Reduce for a currently-positive contribution and Prefer for a currently-negative contribution, but that emphasis is advisory only. Mute remains the stronger hard suppression, and neutralization/undo remains available through the revision history.
