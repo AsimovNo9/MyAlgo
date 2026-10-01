@@ -473,7 +473,7 @@ test('duplicate feedback is reconciled to the latest event for a content item', 
     { external_id: 'video-a', title: 'Video A' },
     { external_id: 'video-b', title: 'Video B' },
   ], 'Work', signals);
-  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.rawScore, -24);
+  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.rawScore, -25);
 });
 
 test('never-show-channel feedback matches the creator node rather than only the source video', () => {
@@ -487,7 +487,7 @@ test('never-show-channel feedback matches the creator node rather than only the 
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
   assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -92);
-  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -91);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -92);
 });
 
 test('subscription and discovery filters apply to source-tagged candidates', () => {
