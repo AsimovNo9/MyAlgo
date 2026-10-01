@@ -477,15 +477,11 @@ test('Forget changes scoring when deleted evidence was the sole support for a sc
   const policy = {
     revision: 'forget-score-test',
     baseScore: 1,
-    nodeWeights: {
-      'content:youtube:score-video': 2,
-      'creator:youtube:score-creator': 3,
-    },
     edgeRelationWeights: { created_by: 4 },
   };
 
   const before = scorePersonalAlgorithm(await store.exportState(), candidate, policy);
-  assert.equal(before.score, 10);
+  assert.equal(before.score, 5);
 
   await store.forgetEvidence(evidenceId);
   const afterState = await store.exportState();
