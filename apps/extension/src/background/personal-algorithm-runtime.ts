@@ -258,6 +258,15 @@ const graphScoringKey = (state: PersonalAlgorithmState): string => hashScoringMa
             attributes: node.attributes ?? {},
           }
   )),
+  controls: (state.graph.controls ?? [])
+    .map((control) => ({
+      id: control.id,
+      targetKind: control.targetKind,
+      targetId: control.targetId,
+      action: control.action,
+      updatedAt: control.updatedAt,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id)),
   edges: state.graph.edges.map((edge) => (
     edge.relation === 'created_by'
       ? {
@@ -1245,13 +1254,19 @@ export function buildLocalScoringPolicy(state: PersonalAlgorithmState): Personal
   }
 
   return {
-    revision: 'local-mvp-p9',
+    revision: 'local-mvp-p10',
     baseScore: 0,
     nodeWeights,
     // Structural graph relations explain provenance/paths but do not earn
     // recommendation score on their own. Creator affinity is represented by
     // the creator node contribution above.
     edgeRelationWeights: {},
+    graphControls: (state.graph.controls ?? []).map((control) => ({
+      id: control.id,
+      targetKind: control.targetKind,
+      targetId: control.targetId,
+      action: control.action,
+    })),
   };
 }
 
