@@ -221,6 +221,8 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
       Number.isFinite(entry.value)
       && entry.value !== 0
       && entry.kind !== 'edge'
+      && !entry.sourceId?.startsWith('content:')
+      && !(entry.sourceIds ?? []).some((sourceId) => sourceId.startsWith('content:'))
       && !/^(created[_ ]by|related[_ ]to|influences)$/i.test(entry.label.trim())
     ))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
@@ -258,21 +260,30 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
       kind: contribution.kind as WhyThisMiniNode['kind'],
     });
   });
+  const currentContentNodeId = item.external_id
+    ? `content:youtube:${encodeURIComponent(item.external_id)}`
+    : null;
+  const normalizedCurrentTitle = (item.title ?? '').trim().toLowerCase();
   for (const path of explanation?.matchedPaths ?? []) {
-    path.nodeLabels
-      .map(humanizeGraphLabel)
-      .filter(Boolean)
-      .forEach((label, index) => {
-        if (label === item.title || label === 'This video') return;
-        const kind: WhyThisMiniNode['kind'] = item.channel_name && label === item.channel_name
-          ? 'creator'
-          : contributionKind(label, 'path');
-        addMiniNode({
-          id: `path:${path.edgeIds.join('|')}:${index}:${label}`,
-          label,
-          kind,
-        });
+    path.nodeIds.forEach((nodeId, index) => {
+      if (currentContentNodeId && nodeId === currentContentNodeId) return;
+      const label = humanizeGraphLabel(path.nodeLabels[index] ?? nodeId);
+      if (!label) return;
+      const normalizedLabel = label.trim().toLowerCase();
+      if (
+        label === 'This video'
+        || (normalizedCurrentTitle && normalizedLabel === normalizedCurrentTitle)
+        || (item.external_id && normalizedLabel === item.external_id.toLowerCase())
+      ) return;
+      const kind: WhyThisMiniNode['kind'] = item.channel_name && label === item.channel_name
+        ? 'creator'
+        : contributionKind(label, 'path');
+      addMiniNode({
+        id: `path:${path.edgeIds.join('|')}:${index}:${label}`,
+        label,
+        kind,
       });
+    });
   }
   const miniNodes: WhyThisMiniNode[] = [
     { id: item.external_id ?? 'video', label: 'This video', kind: 'video' },
