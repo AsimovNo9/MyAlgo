@@ -20,6 +20,7 @@ const storage = {
 };
 
 const { LocalPersonalAlgorithmStore } = await import('./personal-algorithm-store.ts');
+const { scorePersonalAlgorithm } = await import('@repo/recommender-core');
 
 const exposure = {
   kind: 'exposure',
@@ -443,6 +444,55 @@ test('Forget tombstones evidence so reconciliation, rebuild, undo, and restore c
     (await restarted.exportState()).forgottenEvidence.map((entry) => entry.evidenceId),
     [evidenceId],
   );
+
+  await restarted.reset();
+  const resetState = await restarted.exportState();
+  assert.deepEqual(resetState.evidence, []);
+  assert.deepEqual(resetState.forgottenEvidence, []);
+  assert.equal(resetState.graph.currentRevision, 0);
+});
+
+test('Forget changes scoring when deleted evidence was the sole support for a score-bearing path', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const evidenceId = 'interaction:watched:score-video:history';
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'score-video' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-10-01T18:10:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: { title: 'Scored video', creatorId: 'score-creator', creatorName: 'Score Creator' },
+    },
+  }, evidenceId);
+
+  const candidate = {
+    id: 'score-candidate',
+    content: { source: 'youtube', externalId: 'score-video' },
+    nodeIds: ['content:youtube:score-video'],
+    creatorNodeId: 'creator:youtube:score-creator',
+  };
+  const policy = {
+    revision: 'forget-score-test',
+    baseScore: 1,
+    nodeWeights: {
+      'content:youtube:score-video': 2,
+      'creator:youtube:score-creator': 3,
+    },
+    edgeRelationWeights: { created_by: 4 },
+  };
+
+  const before = scorePersonalAlgorithm(await store.exportState(), candidate, policy);
+  assert.equal(before.score, 10);
+
+  await store.forgetEvidence(evidenceId);
+  const afterState = await store.exportState();
+  const after = scorePersonalAlgorithm(afterState, candidate, policy);
+  assert.equal(after.score, 1);
+  assert.equal(afterState.graph.edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+  assert.equal(afterState.graph.nodes.some((node) => node.id === 'creator:youtube:score-creator'), false);
 });
 
 test('rebuildGraphFromEvidence materializes deterministic creator nodes and evidence-backed edges', async () => {
