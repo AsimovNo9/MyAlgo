@@ -688,6 +688,14 @@ const renderExplanationContent = (
 
   const contributions = document.createElement('div');
   contributions.style.cssText = 'padding:0 14px;';
+  if (view.contributions.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:10px 0;color:#94a3b8;border-bottom:1px solid #303030;font:500 11px/1.4 Roboto,Arial,sans-serif;';
+    empty.textContent = activeDurableMode && isProvisionalDurableModeRelevantItem(item, activeDurableMode)
+      ? 'No exact editable graph contribution is available yet. This replacement currently qualifies through provisional semantic mode matching.'
+      : 'No exact editable graph contribution is available for this item yet.';
+    contributions.appendChild(empty);
+  }
   for (const contribution of view.contributions) {
     const row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,auto);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
