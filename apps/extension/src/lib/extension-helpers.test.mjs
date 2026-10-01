@@ -201,6 +201,70 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
   assert.equal(view.revisions[0].revision, 7);
 });
 
+test('graph inspector anchors retained content to durable catalog groups even without cached mode affinity', () => {
+  const state = {
+    schemaVersion: 3,
+    evidence: [],
+    forgottenEvidence: [],
+    graph: {
+      currentRevision: 4,
+      userEdits: [],
+      revisions: [],
+      controls: [],
+      nodes: [{
+        id: 'content:youtube:video-a',
+        kind: 'content',
+        label: 'Video A',
+        content: { source: 'youtube', externalId: 'video-a' },
+        provenance: 'explicit',
+        confidence: null,
+        attributes: {},
+        createdAt: '2026-10-01T08:00:00.000Z',
+        updatedAt: '2026-10-01T08:00:00.000Z',
+      }],
+      edges: [],
+    },
+  };
+  const catalog = {
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 4,
+    generatedAt: '2026-10-01T09:00:00.000Z',
+    modes: [{
+      id: 'mode:systems',
+      label: 'Distributed systems',
+      revision: 2,
+      provenance: 'inferred',
+      pipelineId: 'durable-semantic-mode-cluster-v1',
+      graphRevision: 4,
+      createdAt: '2026-10-01T08:30:00.000Z',
+      lastSupportedAt: '2026-10-01T09:00:00.000Z',
+      active: true,
+      pinned: false,
+      members: [{
+        canonicalId: 'canonical:systems',
+        label: 'Distributed systems',
+        weight: 0.9,
+        sourceNodeIds: ['concept:systems'],
+        supportContentIds: ['content:youtube:video-a'],
+      }],
+    }],
+  };
+
+  const view = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: 'Technology',
+    categoryConfidence: 0.7,
+    categoryScores: { Technology: 0.7 },
+    graphMatches: [{ nodeId: 'concept:systems', nodeLabel: 'Systems', similarity: 0.75, taxonomyOnly: false }],
+    modeAffinities: [],
+  }], catalog);
+
+  assert.equal(view.nodes[0].semanticClusterId, 'mode:mode:systems');
+  assert.equal(view.nodes[0].semanticClusterLabel, 'Distributed systems');
+  assert.equal(view.nodes[0].semanticClusterKind, 'mode');
+  assert.equal(view.nodes[0].semanticClusterAffinity, 0.9);
+});
+
 test('graph inspector prefers durable groups and uses semantic topics only as a fallback', () => {
   const state = {
     schemaVersion: 2,
