@@ -3197,14 +3197,18 @@ const handleRuntimeMessage = (
     void (async () => {
       const requested = payload?.modeId ?? payload?.mode ?? 'default';
       const selection = await resolveModeSelection(requested);
-      const [currentIds, durableModeCatalog, previousDiagnostics] = await Promise.all([
+      const [storedCurrentIds, legacyActiveModeId, durableModeCatalog, previousDiagnostics] = await Promise.all([
         getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+        getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
         getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
         getStorage<RetrievalDiagnostics>(
           STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
           EMPTY_RETRIEVAL_DIAGNOSTICS,
         ),
       ]);
+      const currentIds = storedCurrentIds.length > 0
+        ? storedCurrentIds
+        : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
 
       const nextIds = selection.modeId === 'default'
         ? []
