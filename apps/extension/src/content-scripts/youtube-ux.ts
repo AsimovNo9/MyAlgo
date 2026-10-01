@@ -108,6 +108,8 @@ export type WhyThisDisplayContribution = {
   kind: string;
   evidenceCount: number;
   actionLabel: 'Reduce' | 'Mute' | 'Prefer' | null;
+  targetKind: 'node' | 'edge' | null;
+  targetId: string | null;
 };
 
 export type WhyThisMiniNode = {
@@ -229,13 +231,24 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
     .slice(0, 4)
     .map((entry) => {
       const nodeKind = contributionKind(entry.label, entry.kind);
+      const sourceNodeIds = [...new Set([
+        ...(entry.sourceId && !entry.sourceId.startsWith('canonical:') ? [entry.sourceId] : []),
+        ...(entry.sourceIds ?? []),
+      ].filter((sourceId) => (
+        !sourceId.startsWith('content:')
+        && !sourceId.startsWith('canonical:')
+        && !sourceId.startsWith('local-feedback:')
+      )))];
+      const targetId = sourceNodeIds.length === 1 ? sourceNodeIds[0]! : null;
       return {
         label: humanContributionLabel(entry.label),
         shortLabel: humanizeGraphLabel(entry.label.replace(/^[^:]+:\s*/, '').trim() || entry.label),
         value: entry.value,
         kind: nodeKind,
         evidenceCount: entry.evidenceIds?.length ?? 0,
-        actionLabel: contributionAction(nodeKind),
+        actionLabel: targetId ? contributionAction(nodeKind) : null,
+        targetKind: targetId ? 'node' as const : null,
+        targetId,
       };
     });
   const contributionLines = contributions.map((contribution) => {
