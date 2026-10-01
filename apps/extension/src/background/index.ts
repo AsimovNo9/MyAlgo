@@ -3125,37 +3125,53 @@ const handleRuntimeMessage = (
       getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
       getSemanticFeatureCacheCached(),
     ])
-      .then(([state, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache]) => sendResponse({
-        ok: true,
-        state,
-        durableModeCatalog,
-        activeModeId,
-        activeModeIds,
-        semanticContext: Object.values(semanticFeatureCache).map((record) => ({
-          externalId: record.externalId,
-          category: record.category,
-          categoryConfidence: record.categoryConfidence,
-          categoryScores: record.categoryScores,
-          graphMatches: record.graphMatches.map((match) => ({
-            nodeId: match.node_id,
-            nodeLabel: match.node_label,
-            similarity: match.similarity,
-            taxonomyOnly: match.taxonomy_only === true,
-          })),
-          modeAffinities: (record.modeAffinities ?? [])
-            .filter((affinity) => (
-              durableModeCatalog?.modes.some((mode) => (
-                mode.id === affinity.modeId
-                && mode.revision === affinity.modeRevision
-              )) === true
-            ))
-            .map((affinity) => ({
-              modeId: affinity.modeId,
-              label: affinity.label,
-              affinity: affinity.affinity,
+      .then(([state, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache]) => {
+        const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
+        const latestSemanticByExternalId = new Map<string, SemanticFeatureRecord>();
+        Object.values(semanticFeatureCache)
+          .filter((record) => (
+            record.graphRevision === state.graph.currentRevision
+            && record.modeCatalogSignature === expectedModeCatalogSignature
+          ))
+          .sort((left, right) => right.generatedAt.localeCompare(left.generatedAt))
+          .forEach((record) => {
+            if (!latestSemanticByExternalId.has(record.externalId)) {
+              latestSemanticByExternalId.set(record.externalId, record);
+            }
+          });
+
+        sendResponse({
+          ok: true,
+          state,
+          durableModeCatalog,
+          activeModeId,
+          activeModeIds,
+          semanticContext: [...latestSemanticByExternalId.values()].map((record) => ({
+            externalId: record.externalId,
+            category: record.category,
+            categoryConfidence: record.categoryConfidence,
+            categoryScores: record.categoryScores,
+            graphMatches: record.graphMatches.map((match) => ({
+              nodeId: match.node_id,
+              nodeLabel: match.node_label,
+              similarity: match.similarity,
+              taxonomyOnly: match.taxonomy_only === true,
             })),
-        })),
-      }))
+            modeAffinities: (record.modeAffinities ?? [])
+              .filter((affinity) => (
+                durableModeCatalog?.modes.some((mode) => (
+                  mode.id === affinity.modeId
+                  && mode.revision === affinity.modeRevision
+                )) === true
+              ))
+              .map((affinity) => ({
+                modeId: affinity.modeId,
+                label: affinity.label,
+                affinity: affinity.affinity,
+              })),
+          })),
+        });
+      })
       .catch((error) => sendResponse({
         ok: false,
         error: error instanceof Error ? error.message : 'Unable to inspect Personal Algorithm Graph.',
