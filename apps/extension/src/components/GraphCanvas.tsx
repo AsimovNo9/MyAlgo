@@ -124,6 +124,7 @@ export function GraphCanvas({
   const [zoom, setZoom] = React.useState(compact ? 1.25 : 1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const [focusedSemanticClusterId, setFocusedSemanticClusterId] = React.useState<string | null>(null);
+  const svgRef = React.useRef<SVGSVGElement | null>(null);
   const dragRef = React.useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   const layout = React.useMemo(() => {
@@ -596,28 +597,38 @@ export function GraphCanvas({
     }
   };
 
-  const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    if (compact) return;
-    event.preventDefault();
+  React.useEffect(() => {
+    if (compact) return undefined;
+    const svg = svgRef.current;
+    if (!svg) return undefined;
 
-    const svg = event.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
 
-    const pointerX = ((event.clientX - rect.left) / rect.width) * WIDTH;
-    const pointerY = ((event.clientY - rect.top) / rect.height) * HEIGHT;
-    const factor = event.deltaY < 0 ? 1.12 : 0.89;
-    const nextZoom = Math.max(0.45, Math.min(3.5, zoom * factor));
-    if (nextZoom === zoom) return;
+      const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
 
-    const graphX = (pointerX - pan.x) / zoom;
-    const graphY = (pointerY - pan.y) / zoom;
-    setPan({
-      x: pointerX - graphX * nextZoom,
-      y: pointerY - graphY * nextZoom,
-    });
-    setZoom(nextZoom);
-  };
+      const pointerX = ((event.clientX - rect.left) / rect.width) * WIDTH;
+      const pointerY = ((event.clientY - rect.top) / rect.height) * HEIGHT;
+      const factor = event.deltaY < 0 ? 1.12 : 0.89;
+      setZoom((currentZoom) => {
+        const nextZoom = Math.max(0.45, Math.min(3.5, currentZoom * factor));
+        if (nextZoom === currentZoom) return currentZoom;
+        setPan((currentPan) => {
+          const graphX = (pointerX - currentPan.x) / currentZoom;
+          const graphY = (pointerY - currentPan.y) / currentZoom;
+          return {
+            x: pointerX - graphX * nextZoom,
+            y: pointerY - graphY * nextZoom,
+          };
+        });
+        return nextZoom;
+      });
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel);
+  }, [compact]);
 
   return (
     <div style={{
@@ -646,6 +657,7 @@ export function GraphCanvas({
         </div>
       ) : null}
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
         aria-label={compact ? 'Why this graph' : 'Interactive Personal Algorithm Graph'}
@@ -654,7 +666,6 @@ export function GraphCanvas({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={() => { dragRef.current = null; }}
-        onWheel={handleWheel}
       >
         <defs>
           <marker id="myalgo-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
