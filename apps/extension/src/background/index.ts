@@ -593,6 +593,52 @@ async function persistNormalizedEvidence(
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
+const evidenceIdForBehaviorObservation = (observation: UserBehaviorObservation): string | null => {
+  if (observation.kind === 'clicked') {
+    return `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`;
+  }
+  if (
+    observation.kind === 'watched'
+    && observation.source === 'player'
+    && 'sessionId' in observation
+    && typeof observation.sessionId === 'string'
+  ) {
+    return `interaction:watched:${observation.videoId}:${observation.sessionId}`;
+  }
+  if (observation.kind === 'watched' && observation.source === 'history') {
+    return createHistoryEvidenceId(observation.videoId);
+  }
+  return null;
+};
+
+async function purgeConcreteEvidencePayload(evidenceId: string): Promise<{
+  historyRecords: number;
+  homeObservations: number;
+  behaviorEvents: number;
+}> {
+  const [historyEvidence, homeObservations, behaviorEvents] = await Promise.all([
+    getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []),
+    getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []),
+    getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []),
+  ]);
+
+  const nextHistory = historyEvidence.filter((item) => createHistoryEvidenceId(item.externalId) !== evidenceId);
+  const nextHome = homeObservations.filter((item) => `exposure:${item.exposureId}` !== evidenceId);
+  const nextBehavior = behaviorEvents.filter((item) => evidenceIdForBehaviorObservation(item) !== evidenceId);
+
+  const updates: Record<string, unknown> = {};
+  if (nextHistory.length !== historyEvidence.length) updates[STORAGE_KEYS.HISTORY_EVIDENCE] = nextHistory;
+  if (nextHome.length !== homeObservations.length) updates[STORAGE_KEYS.HOME_OBSERVATIONS] = nextHome;
+  if (nextBehavior.length !== behaviorEvents.length) updates[STORAGE_KEYS.SELECTION_EVENTS] = nextBehavior;
+  if (Object.keys(updates).length > 0) await setStorageBatch(updates);
+
+  return {
+    historyRecords: historyEvidence.length - nextHistory.length,
+    homeObservations: homeObservations.length - nextHome.length,
+    behaviorEvents: behaviorEvents.length - nextBehavior.length,
+  };
+}
+
 async function reconcileStoredHistoryEvidence(): Promise<void> {
   const startedAt = performance.now();
   console.info('[MyAlgo] history reconciliation started');
@@ -2908,6 +2954,9 @@ const handleRuntimeMessage = (
       }
 
       const result = await personalAlgorithmStore.forgetEvidence(evidenceId);
+      const purged = result.forgotten
+        ? await purgeConcreteEvidencePayload(evidenceId)
+        : { historyRecords: 0, homeObservations: 0, behaviorEvents: 0 };
       if (result.forgotten) {
         lastRankMemo = null;
         await notifyPersonalAlgorithmChanged('forget');
@@ -2915,6 +2964,7 @@ const handleRuntimeMessage = (
       sendResponse({
         ok: true,
         ...result,
+        purged,
       });
     })().catch((error) => sendResponse({
       ok: false,
@@ -3855,9 +3905,13 @@ const handleRuntimeMessage = (
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const forgottenEvidenceIds = new Set(await personalAlgorithmStore.listForgottenEvidenceIds());
       const validHistoryEvidence = historyEvidence
         .filter((item) => (
-          item?.externalId && item.title && item.provenance === 'youtube_history_dom'
+          item?.externalId
+          && item.title
+          && item.provenance === 'youtube_history_dom'
+          && !forgottenEvidenceIds.has(createHistoryEvidenceId(item.externalId))
         ))
         .slice(0, MAX_HISTORY_ITEMS_PER_OBSERVATION);
       const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
@@ -3912,8 +3966,12 @@ const handleRuntimeMessage = (
     void (async () => {
       const incoming = Array.isArray(payload?.observations) ? payload.observations as RecommendationObservation[] : [];
       const existing = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
+      const forgottenEvidenceIds = new Set(await personalAlgorithmStore.listForgottenEvidenceIds());
       const validIncoming = incoming.filter((observation) => (
-        observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
+        observation?.externalId
+        && observation.title
+        && observation.evidenceKind === 'surfaced'
+        && !forgottenEvidenceIds.has(`exposure:${observation.exposureId}`)
       ));
       const observations = mergeRecommendationObservations(
         existing,
