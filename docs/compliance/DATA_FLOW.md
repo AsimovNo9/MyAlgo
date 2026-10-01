@@ -122,6 +122,8 @@ Used only where required for approved display/account-fact purposes. They are no
 
 Some operational stores have explicit size caps. Evidence and graph state can persist locally until deletion/reset unless an explicit retention/expiry rule applies.
 
+Targeted Forget deletes the selected evidence payload and prunes inferred graph support that no longer has retained evidence. A minimal local deletion ledger retains only stable evidence ID, deletion timestamp, and reason so the same concrete record is excluded from later reconciliation. Full local-data deletion clears this ledger as well.
+
 - Pause: stop new observation/enforcement; retained data remains.
 - Feature toggles: stop the associated optional observation path; retained data remains.
 - Delete all local MyAlgo data: clear extension-local state, including persisted and in-memory semantic caches, plus disclosure acceptance; observation remains off until acceptance is renewed.

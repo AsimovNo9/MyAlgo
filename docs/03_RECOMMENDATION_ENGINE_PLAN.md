@@ -274,7 +274,7 @@ Examples:
 - Reduce → multiply an existing exact graph-sourced contribution by 0.5.
 - Prefer → multiply an existing exact graph-sourced contribution by 1.5.
 - Mute → hard suppression for candidates matching the exact controlled node or edge.
-- Forget → remove selected evidence/relationship.
+- Forget → remove selected concrete evidence and prune inferred relationships that no longer have retained support. The stable evidence ID is placed in a minimal local deletion ledger so later observation/reconciliation cannot silently recreate that same record. Forget creates a new graph/evidence revision boundary but is not appended to the user graph-edit undo stack.
 
 Graph correction controls are overlays over the same Personal Algorithm Graph. They do not manufacture supporting evidence and they do not rewrite inferred graph structure. A control is keyed by a stable node/edge ID and is consumed by the deterministic scorer:
 

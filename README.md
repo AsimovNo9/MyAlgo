@@ -51,11 +51,12 @@ Current execution order:
 6. **Complete — #211 / PR #228 ranking/presentation performance slice:** the warm MV3 path now uses prepared graph/lexical indexes, bounded per-candidate score reuse, batched/signature-gated persistence, compact presentation caching, shared Home DOM snapshots, and presentation-stable replacement targeting. Long-session/browser stress remains tracked in #211.
 7. **Complete — #210 / PR #229 post-canonical calibration measurement:** live batches showed no 95–100 saturation, corrected effective replacement-threshold diagnostics, and validated prepared candidate-context reuse across large Home reranks; the existing deterministic display curve remains unchanged because the measurements do not justify retuning.
 8. **Complete trust/graph inspection foundation — #153/#170 / PRs #230–#231:** scored native/replacement cards share exact trace-grounded Why-this; Settings has a read-only interactive graph explorer; compact explanations include symbolic paths, retained-history support, and scorer-backed provenance; durable groups are searchable, multi-select, and pinned while selected.
-9. **P1 — #154 + #155 correction and evidence controls:** make Reduce/Prefer/Mute/Forget real, revisioned, reversible graph/evidence operations. Preserve the original pre-user-edit baseline and keep Forget distinct from graph-edit undo.
-10. **P1 — finish #153 action integration:** wire Why-this and graph-inspector terms directly into the #154/#155 controls and evidence-record navigation once mutation semantics are safe.
-11. **P2 — #161 + #178 mode/history ownership UX:** add explicit user editing of discovered groups (rename/pin/member management/versioning) and let users choose which history clusters influence the graph/feed.
-12. **P2 release hardening — #169 + #211:** finish signed-out/offline validation plus long-session/infinite-scroll/service-worker-restart stress and detached-DOM checks.
-13. **P3 — #158 explicit user-created graph nodes, then #159 counterfactual replay.**
+9. **Complete — #154 / PR #233 revisioned correction controls:** browser-validated Reduce/Prefer/Mute, exact graph-target controls, immutable pre-edit baseline, Undo, Restore original, Unmute, and sparse-explanation fallback feedback are merged.
+10. **P1 — #155 evidence provenance + Forget:** make concrete evidence deletion durable across re-observation/rebuild without conflating it with graph-control Undo/Restore; wire exact retained evidence into the live provenance UI.
+11. **P1 — finish #153 evidence-action integration:** direct graph correction actions are live; finish concrete evidence navigation/Forget integration against #155 semantics.
+12. **P2 — #161 + #178 mode/history ownership UX:** add explicit user editing of discovered groups (rename/pin/member management/versioning) and let users choose which history clusters influence the graph/feed.
+13. **P2 release hardening — #169 + #211:** finish signed-out/offline validation plus long-session/infinite-scroll/service-worker-restart stress and detached-DOM checks.
+14. **P3 — #158 explicit user-created graph nodes, then #159 counterfactual replay.**
 14. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
 
@@ -87,7 +88,7 @@ Cloud sync, billing, managed inference, multimodal enrichment, and additional co
 
 ### Graph edit safety invariant
 
-Graph visualization is read-only. Future graph-edit controls (#158/#154/#155) must preserve an original pre-user-edit baseline before the first user mutation. Every user-authored node/edge/control change must create a versioned graph revision with reversible before/after state. Undo returns to the previous user revision; Restore original returns to the preserved baseline without deleting retained evidence. Filtering, moving, hiding, or selecting nodes in the explorer never changes recommendation state.
+Graph visualization now exposes revisioned #154 correction controls on live graph targets. Future user-created graph editing (#158) must preserve the same original pre-user-edit baseline before the first user mutation. Every user-authored node/edge/control change must create a versioned graph revision with reversible before/after state. Undo returns to the previous user revision; Restore original returns to the preserved baseline without deleting retained evidence. Filtering, moving, hiding, or selecting nodes in the explorer never changes recommendation state.
 
 
 ### Graph explorer layouts

@@ -593,6 +593,60 @@ async function persistNormalizedEvidence(
   await personalAlgorithmStore.upsertEvidence({ evidence, confidence: 1 }, id);
 }
 
+const evidenceIdForBehaviorObservation = (observation: UserBehaviorObservation): string | null => {
+  if (observation.kind !== 'watched') {
+    return `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`;
+  }
+  if (
+    observation.kind === 'watched'
+    && observation.source === 'player'
+    && 'sessionId' in observation
+    && typeof observation.sessionId === 'string'
+  ) {
+    return `interaction:watched:${observation.videoId}:${observation.sessionId}`;
+  }
+  if (observation.kind === 'watched' && observation.source === 'history') {
+    return createHistoryEvidenceId(observation.videoId);
+  }
+  return null;
+};
+
+async function purgeConcreteEvidencePayload(evidenceId: string): Promise<{
+  historyRecords: number;
+  homeObservations: number;
+  behaviorEvents: number;
+  localEvents: number;
+}> {
+  const [historyEvidence, homeObservations, behaviorEvents, localEvents] = await Promise.all([
+    getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []),
+    getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []),
+    getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []),
+    getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>('personal-algorithm-local-events', []),
+  ]);
+
+  const nextHistory = historyEvidence.filter((item) => createHistoryEvidenceId(item.externalId) !== evidenceId);
+  const nextHome = homeObservations.filter((item) => `exposure:${item.exposureId}` !== evidenceId);
+  const nextBehavior = behaviorEvents.filter((item) => evidenceIdForBehaviorObservation(item) !== evidenceId);
+  const nextLocalEvents = localEvents.filter((item) => {
+    if (item.kind !== 'selection' || !item.payload || typeof item.payload !== 'object') return true;
+    return evidenceIdForBehaviorObservation(item.payload as UserBehaviorObservation) !== evidenceId;
+  });
+
+  const updates: Record<string, unknown> = {};
+  if (nextHistory.length !== historyEvidence.length) updates[STORAGE_KEYS.HISTORY_EVIDENCE] = nextHistory;
+  if (nextHome.length !== homeObservations.length) updates[STORAGE_KEYS.HOME_OBSERVATIONS] = nextHome;
+  if (nextBehavior.length !== behaviorEvents.length) updates[STORAGE_KEYS.SELECTION_EVENTS] = nextBehavior;
+  if (nextLocalEvents.length !== localEvents.length) updates['personal-algorithm-local-events'] = nextLocalEvents;
+  if (Object.keys(updates).length > 0) await setStorageBatch(updates);
+
+  return {
+    historyRecords: historyEvidence.length - nextHistory.length,
+    homeObservations: homeObservations.length - nextHome.length,
+    behaviorEvents: behaviorEvents.length - nextBehavior.length,
+    localEvents: localEvents.length - nextLocalEvents.length,
+  };
+}
+
 async function reconcileStoredHistoryEvidence(): Promise<void> {
   const startedAt = performance.now();
   console.info('[MyAlgo] history reconciliation started');
@@ -2524,7 +2578,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval' | 'control'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval' | 'control' | 'forget'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -2563,6 +2617,7 @@ const handleRuntimeMessage = (
       generate?: boolean;
       targetKind?: 'node' | 'edge';
       targetId?: string;
+      evidenceId?: string;
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
@@ -2894,6 +2949,34 @@ const handleRuntimeMessage = (
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to restore original graph.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_FORGET_EVIDENCE') {
+    void (async () => {
+      const evidenceId = typeof payload?.evidenceId === 'string' ? payload.evidenceId.trim() : '';
+      if (!evidenceId) {
+        sendResponse({ ok: false, error: 'An evidence ID is required.' });
+        return;
+      }
+
+      const result = await personalAlgorithmStore.forgetEvidence(evidenceId);
+      const purged = result.forgotten
+        ? await purgeConcreteEvidencePayload(evidenceId)
+        : { historyRecords: 0, homeObservations: 0, behaviorEvents: 0, localEvents: 0 };
+      if (result.forgotten) {
+        lastRankMemo = null;
+        await notifyPersonalAlgorithmChanged('forget');
+      }
+      sendResponse({
+        ok: true,
+        ...result,
+        purged,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to forget evidence.',
     }));
     return true;
   }
@@ -3830,9 +3913,13 @@ const handleRuntimeMessage = (
     void (async () => {
       const historyEvidence = Array.isArray(payload?.evidence) ? payload.evidence as HistoryEvidence[] : [];
       const existing = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const forgottenEvidenceIds = new Set(await personalAlgorithmStore.listForgottenEvidenceIds());
       const validHistoryEvidence = historyEvidence
         .filter((item) => (
-          item?.externalId && item.title && item.provenance === 'youtube_history_dom'
+          item?.externalId
+          && item.title
+          && item.provenance === 'youtube_history_dom'
+          && !forgottenEvidenceIds.has(createHistoryEvidenceId(item.externalId))
         ))
         .slice(0, MAX_HISTORY_ITEMS_PER_OBSERVATION);
       const evidence = mergeHistoryEvidence(existing, validHistoryEvidence)
@@ -3887,8 +3974,12 @@ const handleRuntimeMessage = (
     void (async () => {
       const incoming = Array.isArray(payload?.observations) ? payload.observations as RecommendationObservation[] : [];
       const existing = await getStorage<RecommendationObservation[]>(STORAGE_KEYS.HOME_OBSERVATIONS, []);
+      const forgottenEvidenceIds = new Set(await personalAlgorithmStore.listForgottenEvidenceIds());
       const validIncoming = incoming.filter((observation) => (
-        observation?.externalId && observation.title && observation.evidenceKind === 'surfaced'
+        observation?.externalId
+        && observation.title
+        && observation.evidenceKind === 'surfaced'
+        && !forgottenEvidenceIds.has(`exposure:${observation.exposureId}`)
       ));
       const observations = mergeRecommendationObservations(
         existing,

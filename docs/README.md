@@ -48,7 +48,7 @@ PR #230 completed the first #153 trust slice: scored native and replacement card
 
 PR #231 completes **#170 graphical graph exploration** and folds the reusable explanation graph into Why-this. The merged surface includes Network/Lineage exploration, semantic/topic clustering, exact graph/evidence drill-down, retained-history support in explanations, multi-select searchable durable groups, and selected-group persistence through reclustering.
 
-The active product work is now **#154 + #155 correction/evidence controls**, followed by the remaining #153 direct-action integration. #161/#178 own editable group/history-selection UX. #169/#211 remain release-hardening tracks for signed-out/offline behavior and long-session/browser stress. #214's runtime/documentation work is complete.
+PR #233 completed and browser-validated **#154 revisioned Reduce/Prefer/Mute controls**, including Undo/Restore-original and Unmute recovery. The active product work is now **#155 concrete evidence provenance + Forget**, followed by the remaining #153 evidence-action/navigation integration. #161/#178 own editable group/history-selection UX. #169/#211 remain release-hardening tracks for signed-out/offline behavior and long-session/browser stress. #214's runtime/documentation work is complete.
 
 ## MVP product
 

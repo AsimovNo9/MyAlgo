@@ -1,6 +1,6 @@
 import type { ContentIdentity, NormalizedEvidence } from './evidence';
 
-export const PERSONAL_ALGORITHM_SCHEMA_VERSION = 2 as const;
+export const PERSONAL_ALGORITHM_SCHEMA_VERSION = 3 as const;
 
 export type EvidenceRetentionPolicy = 'default' | 'until_expiry' | 'indefinite';
 
@@ -13,6 +13,12 @@ export type EvidenceRecord = {
     policy: EvidenceRetentionPolicy;
     expiresAt: string | null;
   };
+};
+
+export type ForgottenEvidenceRecord = {
+  evidenceId: string;
+  deletedAt: string;
+  reason: 'forgotten';
 };
 
 export type GraphNodeKind = 'content' | 'creator' | 'concept' | 'topic' | 'user' | 'objective';
@@ -98,7 +104,7 @@ export type PersonalAlgorithmGraph = {
   revisions: GraphRevision[];
   currentRevision: number;
   /**
-   * Explicit user correction overlays. Optional for schema-v2 compatibility;
+   * Explicit user correction overlays. Optional for pre-v3 persisted-state compatibility;
    * the local store normalizes missing arrays to [].
    */
   controls?: GraphControl[];
@@ -113,6 +119,7 @@ export type PersonalAlgorithmGraph = {
 export type PersonalAlgorithmState = {
   schemaVersion: typeof PERSONAL_ALGORITHM_SCHEMA_VERSION;
   evidence: EvidenceRecord[];
+  forgottenEvidence: ForgottenEvidenceRecord[];
   graph: PersonalAlgorithmGraph;
 };
 

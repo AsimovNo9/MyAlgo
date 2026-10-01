@@ -111,11 +111,11 @@ These actions are distinct:
 - **Reduce**: lower an existing score-bearing graph contribution without deleting the node, edge, or supporting evidence. The first #154 implementation applies a deterministic 0.5 multiplier to the exact sourced contribution.
 - **Prefer**: strengthen an existing score-bearing graph contribution without inventing new evidence. The first #154 implementation applies a deterministic 1.5 multiplier to the exact sourced contribution.
 - **Mute**: hard-suppress candidates that match the exact controlled node or edge; suppression is evaluated by the deterministic scorer and remains visible in the trace.
-- **Delete/forget**: remove the selected graph/evidence relationship or evidence record. Forget remains owned by #155 and is not an alias for Reduce, Prefer, Mute, Undo, or Restore original.
+- **Delete/forget**: remove the selected concrete evidence record and any unsupported inferred relationships. Forget records only minimal deletion intent (stable evidence ID, deletion time, reason) so that same concrete record is excluded from later ingestion/rebuild. It is not an alias for Reduce, Prefer, Mute, Undo, or Restore original.
 
 The first user-authored graph correction captures an immutable pre-edit baseline containing graph nodes, edges, and control state but not retained evidence. Every correction, undo, and restore creates a new graph revision. Undo reverts the most recent unreverted user edit. Restore original returns graph/control state to the captured baseline while leaving retained evidence intact.
 
-Deleted evidence must not immediately recreate the same node from the same retained evidence.
+Deleted evidence must not immediately recreate the same node from the same retained evidence. Graph Undo/Restore original must sanitize restored snapshots against currently retained evidence so they cannot resurrect a relationship whose only support was explicitly forgotten.
 
 ## 8. Modes
 

@@ -442,7 +442,7 @@ pnpm eval:semantic
 
 The repository fixture is intentionally synthetic/test-safe. It is a deterministic regression baseline, not a claim that production user-distribution quality has been measured. Real labelled exported-state/candidate fixtures should remain local unless intentionally anonymized and reviewed before commit.
 
-The existing extension store tests continue to exercise current-schema persistence, v1→v2 migration, unknown-schema safe reset, deterministic creator-relationship rebuild and incremental evidence consistency. PR #216 adds the source-independent replay comparison/review layer over those exported-state contracts.
+The extension store tests exercise current-schema persistence, v1→v3 and v2→v3 migration, unknown-schema safe reset, deterministic creator-relationship rebuild, incremental evidence consistency, and #155 forgotten-evidence persistence/reconstruction exclusion. PR #216 adds the source-independent replay comparison/review layer over those exported-state contracts.
 
 See `docs/13_REPLAY_AND_SEMANTIC_EVALUATION.md` for the fixture and metric contract.
 

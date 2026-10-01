@@ -20,6 +20,7 @@ const storage = {
 };
 
 const { LocalPersonalAlgorithmStore } = await import('./personal-algorithm-store.ts');
+const { scorePersonalAlgorithm } = await import('@repo/recommender-core');
 
 const exposure = {
   kind: 'exposure',
@@ -142,6 +143,30 @@ test('incremental creator relationships remain evidence-backed after metadata ar
   const edge = graph.edges.find((item) => item.relation === 'created_by');
   assert.equal(edge?.targetNodeId, 'creator:youtube:creator-late');
   assert.deepEqual(edge?.evidenceIds, ['late-creator-2']);
+});
+
+test('schema v2 migrates to v3 with an empty forgotten-evidence ledger', async () => {
+  backing.clear();
+  backing.set('personal-algorithm-state', {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      nodes: [],
+      edges: [],
+      userEdits: [],
+      revisions: [],
+      currentRevision: 0,
+      controls: [],
+      originalBaseline: null,
+    },
+  });
+
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const migrated = await store.exportState();
+
+  assert.equal(migrated.schemaVersion, 3);
+  assert.deepEqual(migrated.forgottenEvidence, []);
+  assert.deepEqual(migrated.graph.controls, []);
 });
 
 test('local store persists normalized evidence and graph content nodes across restart', async () => {
@@ -332,9 +357,10 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
 
   const graph = await store.getGraph();
   assert.equal(graph.edges.length, 1);
-  assert.equal(graph.currentRevision, 2);
+  assert.equal(graph.currentRevision, 3);
   assert.equal(graph.userEdits.length, 2);
-  assert.equal(graph.revisions.length, 2);
+  assert.equal(graph.revisions.length, 3);
+  assert.equal(graph.revisions.at(-1).reason, 'graph_create_edge');
 
   assert.equal((await store.deleteEvidence('evidence-3')), true);
   assert.equal((await store.getGraph()).edges.length, 0);
@@ -356,13 +382,113 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
 
   const exported = await store.exportState();
   const exportedJson = await store.exportStateJson();
-  assert.equal(JSON.parse(exportedJson).schemaVersion, 2);
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(JSON.parse(exportedJson).schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 3);
   assert.equal(exported.graph.nodes.some((item) => item.id === 'topic:testing'), true);
 
   await store.reset();
   assert.deepEqual(await store.listEvidence(), []);
   assert.equal((await store.getGraph()).currentRevision, 0);
+});
+
+test('Forget tombstones evidence so reconciliation, rebuild, undo, and restore cannot recreate it', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const evidenceId = 'interaction:watched:forgotten-video:history';
+  const forgottenEvidence = {
+    kind: 'interaction',
+    content: { source: 'youtube', externalId: 'forgotten-video' },
+    exposureId: null,
+    interaction: 'watched',
+    observedAt: '2026-10-01T18:00:00.000Z',
+    provenance: { connector: 'youtube', mechanism: 'history_dom' },
+    metadata: { title: 'Forgotten video', creatorId: 'creator-forgotten', creatorName: 'Forgotten Creator' },
+  };
+
+  await store.upsertEvidence({ evidence: forgottenEvidence }, evidenceId);
+  const creatorId = 'creator:youtube:creator-forgotten';
+  await store.setGraphControl('node', creatorId, 'reduce');
+  const revisionBeforeForget = (await store.getGraph()).currentRevision;
+
+  const result = await store.forgetEvidence(evidenceId);
+  assert.equal(result.forgotten, true);
+  assert.equal(result.graphRevision, revisionBeforeForget + 1);
+  assert.equal(await store.getEvidence(evidenceId), null);
+
+  const afterForget = await store.exportState();
+  assert.deepEqual(afterForget.forgottenEvidence.map((entry) => entry.evidenceId), [evidenceId]);
+  assert.equal(afterForget.graph.edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  const reingested = await store.upsertEvidence({ evidence: forgottenEvidence }, evidenceId);
+  assert.equal(reingested, null);
+  const reconciled = await store.reconcileHistoryEvidence([
+    { id: evidenceId, evidence: forgottenEvidence },
+  ]);
+  assert.equal(reconciled.upserted, 0);
+
+  await store.rebuildGraphFromEvidence();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  await store.restoreOriginalGraph();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  await store.undoLastGraphEdit();
+  assert.equal(await store.getEvidence(evidenceId), null);
+  assert.equal((await store.getGraph()).edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+
+  const restarted = new LocalPersonalAlgorithmStore(storage);
+  assert.equal(await restarted.getEvidence(evidenceId), null);
+  assert.deepEqual(
+    (await restarted.exportState()).forgottenEvidence.map((entry) => entry.evidenceId),
+    [evidenceId],
+  );
+
+  await restarted.reset();
+  const resetState = await restarted.exportState();
+  assert.deepEqual(resetState.evidence, []);
+  assert.deepEqual(resetState.forgottenEvidence, []);
+  assert.equal(resetState.graph.currentRevision, 0);
+});
+
+test('Forget changes scoring when deleted evidence was the sole support for a score-bearing path', async () => {
+  backing.clear();
+  const store = new LocalPersonalAlgorithmStore(storage);
+  const evidenceId = 'interaction:watched:score-video:history';
+  await store.upsertEvidence({
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'score-video' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-10-01T18:10:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'history_dom' },
+      metadata: { title: 'Scored video', creatorId: 'score-creator', creatorName: 'Score Creator' },
+    },
+  }, evidenceId);
+
+  const candidate = {
+    id: 'score-candidate',
+    content: { source: 'youtube', externalId: 'score-video' },
+    nodeIds: ['content:youtube:score-video'],
+    creatorNodeId: 'creator:youtube:score-creator',
+  };
+  const policy = {
+    revision: 'forget-score-test',
+    baseScore: 1,
+    edgeRelationWeights: { created_by: 4 },
+  };
+
+  const before = scorePersonalAlgorithm(await store.exportState(), candidate, policy);
+  assert.equal(before.score, 5);
+
+  await store.forgetEvidence(evidenceId);
+  const afterState = await store.exportState();
+  const after = scorePersonalAlgorithm(afterState, candidate, policy);
+  assert.equal(after.score, 1);
+  assert.equal(afterState.graph.edges.some((edge) => edge.evidenceIds.includes(evidenceId)), false);
+  assert.equal(afterState.graph.nodes.some((node) => node.id === 'creator:youtube:score-creator'), false);
 });
 
 test('rebuildGraphFromEvidence materializes deterministic creator nodes and evidence-backed edges', async () => {
@@ -517,7 +643,7 @@ test('history interaction metadata hydrates content nodes and creator relationsh
   assert.equal(edge?.evidenceIds.includes('history-1'), true);
 });
 
-test('legacy schema v1 migrates to v2 without discarding evidence or nodes', async () => {
+test('legacy schema v1 migrates to v3 without discarding evidence or nodes', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
     schemaVersion: 1,
@@ -559,13 +685,14 @@ test('legacy schema v1 migrates to v2 without discarding evidence or nodes', asy
 
   const store = new LocalPersonalAlgorithmStore(storage);
   const state = await store.exportState();
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.equal(state.evidence.length, 1);
+  assert.deepEqual(state.forgottenEvidence, []);
   assert.deepEqual(state.graph.edges[0].evidenceIds, []);
-  assert.equal(backing.get('personal-algorithm-state').schemaVersion, 2);
+  assert.equal(backing.get('personal-algorithm-state').schemaVersion, 3);
 });
 
-test('invalid or unknown schema versions migrate to a safe empty v2 state', async () => {
+test('invalid or unknown schema versions migrate to a safe empty v3 state', async () => {
   backing.clear();
   backing.set('personal-algorithm-state', {
     schemaVersion: 99,
@@ -575,8 +702,9 @@ test('invalid or unknown schema versions migrate to a safe empty v2 state', asyn
 
   const store = new LocalPersonalAlgorithmStore(storage);
   const state = await store.exportState();
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.deepEqual(state.evidence, []);
+  assert.deepEqual(state.forgottenEvidence, []);
   assert.equal(state.graph.currentRevision, 0);
 });
 

@@ -442,6 +442,7 @@ export type { ContentIdentity, ContentMetadata, EvidenceConnector, EvidenceProve
 export type {
   EvidenceRecord,
   EvidenceRetentionPolicy,
+  ForgottenEvidenceRecord,
   GraphControl,
   GraphControlAction,
   GraphControlTargetKind,
