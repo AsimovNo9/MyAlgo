@@ -200,6 +200,7 @@ const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
+const MAX_HYBRID_CANDIDATES_PER_REFRESH = 4;
 const CONCEPT_EXTRACTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const NEURAL_FALLBACK_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 const METADATA_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -1683,8 +1684,15 @@ async function refreshSemanticScoreFeatures(
       // fallback record means this candidate needs a fresh semantic pass.
       return true;
     });
+    const graphMatchVerificationEnabled = (
+      requestedContext.semanticModelMode === 'neural'
+      && conceptMaterialization.diagnostics.modelExtractionSuppressedReason !== 'recent_verifier_failure'
+    );
+    const neuralCandidateLimit = graphMatchVerificationEnabled
+      ? MAX_HYBRID_CANDIDATES_PER_REFRESH
+      : MAX_NEURAL_CANDIDATES_PER_REFRESH;
     const semanticCandidates = requestedContext.semanticModelMode === 'neural'
-      ? candidatesNeedingRequestedFeatures.slice(0, MAX_NEURAL_CANDIDATES_PER_REFRESH)
+      ? candidatesNeedingRequestedFeatures.slice(0, neuralCandidateLimit)
       : candidates;
 
     await setStorage(STORAGE_KEYS.SEMANTIC_DIAGNOSTICS, {
@@ -1773,10 +1781,7 @@ async function refreshSemanticScoreFeatures(
         generatedAt: new Date().toISOString(),
       });
     };
-    const graphMatchVerifier = (
-      requestedContext.semanticModelMode === 'neural'
-      && conceptMaterialization.diagnostics.modelExtractionSuppressedReason !== 'recent_verifier_failure'
-    )
+    const graphMatchVerifier = graphMatchVerificationEnabled
       ? createLocalConceptExtractionProvider()
       : undefined;
     try {
