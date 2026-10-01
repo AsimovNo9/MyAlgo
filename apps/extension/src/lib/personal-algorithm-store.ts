@@ -1,6 +1,9 @@
 import type {
   EvidenceRecord,
   EvidenceRetentionPolicy,
+  GraphControl,
+  GraphControlAction,
+  GraphControlTargetKind,
   GraphEdge,
   GraphNode,
   PersonalAlgorithmGraph,
@@ -112,6 +115,8 @@ const createEmptyState = (): PersonalAlgorithmState => ({
     userEdits: [],
     revisions: [],
     currentRevision: 0,
+    controls: [],
+    originalBaseline: null,
   },
 });
 
@@ -139,6 +144,12 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
             ? [...new Set((edge as GraphEdge).evidenceIds.filter((id) => typeof id === 'string' && id.length > 0))]
             : [],
         })),
+        controls: Array.isArray(candidate.graph.controls)
+          ? candidate.graph.controls.map((control) => structuredClone(control))
+          : [],
+        originalBaseline: candidate.graph.originalBaseline
+          ? structuredClone(candidate.graph.originalBaseline)
+          : null,
       },
     };
   }
@@ -160,6 +171,8 @@ const migrateState = (raw: unknown): PersonalAlgorithmState => {
           ...edge,
           evidenceIds: [],
         })),
+        controls: [],
+        originalBaseline: null,
       },
     };
   }
@@ -446,6 +459,7 @@ export class LocalPersonalAlgorithmStore {
 
   async upsertNode(node: Omit<GraphNode, 'createdAt' | 'updatedAt'> & Partial<Pick<GraphNode, 'createdAt' | 'updatedAt'>>): Promise<GraphNode> {
     return this.mutate((state) => {
+      this.ensureOriginalBaseline(state);
       const timestamp = nowIso();
       const existingIndex = state.graph.nodes.findIndex((item) => item.id === node.id);
       const previous = existingIndex >= 0 ? state.graph.nodes[existingIndex] : null;
@@ -466,6 +480,7 @@ export class LocalPersonalAlgorithmStore {
     return this.mutate((state) => {
       const node = state.graph.nodes.find((item) => item.id === id);
       if (!node) return false;
+      this.ensureOriginalBaseline(state);
       state.graph.nodes = state.graph.nodes.filter((item) => item.id !== id);
       const removedEdges = state.graph.edges.filter(
         (edge) => edge.sourceNodeId === id || edge.targetNodeId === id,
@@ -480,6 +495,7 @@ export class LocalPersonalAlgorithmStore {
 
   async upsertEdge(edge: Omit<GraphEdge, 'createdAt' | 'updatedAt'> & Partial<Pick<GraphEdge, 'createdAt' | 'updatedAt'>>): Promise<GraphEdge> {
     return this.mutate((state) => {
+      this.ensureOriginalBaseline(state);
       const evidenceIds = [...new Set(edge.evidenceIds.filter((id) => typeof id === 'string' && id.length > 0))];
       if (edge.provenance === 'inferred' && evidenceIds.length === 0) {
         throw new Error('Inferred graph edges must reference supporting evidence');
@@ -511,8 +527,100 @@ export class LocalPersonalAlgorithmStore {
     return this.mutate((state) => {
       const edge = state.graph.edges.find((item) => item.id === id);
       if (!edge) return false;
+      this.ensureOriginalBaseline(state);
       state.graph.edges = state.graph.edges.filter((item) => item.id !== id);
       this.recordEdit(state, 'delete_edge', id, edge, null);
+      return true;
+    });
+  }
+
+  async setGraphControl(
+    targetKind: GraphControlTargetKind,
+    targetId: string,
+    action: GraphControlAction,
+  ): Promise<GraphControl> {
+    return this.mutate((state) => {
+      const targetExists = targetKind === 'node'
+        ? state.graph.nodes.some((node) => node.id === targetId)
+        : state.graph.edges.some((edge) => edge.id === targetId);
+      if (!targetExists) throw new Error(`Unknown graph ${targetKind}: ${targetId}`);
+
+      this.ensureOriginalBaseline(state);
+      const controls = state.graph.controls ?? (state.graph.controls = []);
+      const existingIndex = controls.findIndex((control) => (
+        control.targetKind === targetKind && control.targetId === targetId
+      ));
+      const previous = existingIndex >= 0 ? controls[existingIndex] : null;
+      const timestamp = nowIso();
+      const next: GraphControl = {
+        id: previous?.id ?? `control:${targetKind}:${encodeURIComponent(targetId)}`,
+        targetKind,
+        targetId,
+        action,
+        createdAt: previous?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      };
+      if (existingIndex >= 0) controls[existingIndex] = next;
+      else controls.push(next);
+      this.recordEdit(state, 'set_control', next.id, previous, next);
+      return structuredClone(next);
+    });
+  }
+
+  async removeGraphControl(
+    targetKind: GraphControlTargetKind,
+    targetId: string,
+  ): Promise<boolean> {
+    return this.mutate((state) => {
+      const controls = state.graph.controls ?? (state.graph.controls = []);
+      const existingIndex = controls.findIndex((control) => (
+        control.targetKind === targetKind && control.targetId === targetId
+      ));
+      if (existingIndex < 0) return false;
+      this.ensureOriginalBaseline(state);
+      const previous = controls[existingIndex]!;
+      controls.splice(existingIndex, 1);
+      this.recordEdit(state, 'remove_control', previous.id, previous, null);
+      return true;
+    });
+  }
+
+  async undoLastGraphEdit(): Promise<UserGraphEdit | null> {
+    return this.mutate((state) => {
+      const revertedIds = new Set(
+        state.graph.userEdits
+          .filter((edit) => edit.action === 'undo' && edit.revertsEditId)
+          .map((edit) => edit.revertsEditId as string),
+      );
+      const target = [...state.graph.userEdits]
+        .reverse()
+        .find((edit) => edit.action !== 'undo' && !revertedIds.has(edit.id));
+      if (!target) return null;
+
+      if (target.before == null) this.removeCreatedEditState(state, target);
+      else this.applyEditState(state, target.before);
+      const undo = this.recordEdit(
+        state,
+        'undo',
+        target.targetId,
+        target.after,
+        target.before,
+        target.id,
+      );
+      return structuredClone(undo);
+    });
+  }
+
+  async restoreOriginalGraph(): Promise<boolean> {
+    return this.mutate((state) => {
+      const baseline = state.graph.originalBaseline;
+      if (!baseline) return false;
+      const before = this.captureEditableGraphState(state);
+      state.graph.nodes = structuredClone(baseline.nodes);
+      state.graph.edges = structuredClone(baseline.edges);
+      state.graph.controls = structuredClone(baseline.controls);
+      const after = this.captureEditableGraphState(state);
+      this.recordEdit(state, 'restore_original', 'graph', before, after);
       return true;
     });
   }
@@ -642,11 +750,28 @@ export class LocalPersonalAlgorithmStore {
         }
       }
 
-      const referencedByNonOwnedEdge = new Set(
-        state.graph.edges
+      const controlledNodeIds = new Set(
+        (state.graph.controls ?? [])
+          .filter((control) => control.targetKind === 'node')
+          .map((control) => control.targetId),
+      );
+      const controlledEdgeIds = new Set(
+        (state.graph.controls ?? [])
+          .filter((control) => control.targetKind === 'edge')
+          .map((control) => control.targetId),
+      );
+      const preservedControlledEdges = state.graph.edges.filter((edge) => (
+        ownedEdge(edge)
+        && !proposedEdgeIds.has(edge.id)
+        && controlledEdgeIds.has(edge.id)
+      ));
+      const referencedByNonOwnedEdge = new Set([
+        ...state.graph.edges
           .filter((edge) => !ownedEdge(edge))
           .flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
-      );
+        ...preservedControlledEdges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+        ...controlledNodeIds,
+      ]);
       const preservedReferencedNodes = state.graph.nodes.filter((node) => (
         ownedNode(node)
         && !proposedNodeIds.has(node.id)
@@ -682,7 +807,8 @@ export class LocalPersonalAlgorithmStore {
         ...preservedReferencedNodes,
       ].sort((left, right) => left.id.localeCompare(right.id));
 
-      const nextOwnedEdges: GraphEdge[] = input.edges
+      const nextOwnedEdges: GraphEdge[] = [
+        ...input.edges
         .map((edge) => {
           const evidenceIdsForEdge = [...new Set(edge.evidenceIds)].sort();
           const previous = existingEdgeById.get(edge.id);
@@ -706,8 +832,9 @@ export class LocalPersonalAlgorithmStore {
             createdAt: previous?.createdAt ?? timestamp,
             updatedAt: unchanged && previous ? previous.updatedAt : timestamp,
           };
-        })
-        .sort((left, right) => left.id.localeCompare(right.id));
+        }),
+        ...preservedControlledEdges,
+      ].sort((left, right) => left.id.localeCompare(right.id));
 
       const projectionSignature = (nodes: GraphNode[], edges: GraphEdge[]) => JSON.stringify({
         nodes: nodes
@@ -899,13 +1026,100 @@ export class LocalPersonalAlgorithmStore {
     });
   }
 
+  private captureEditableGraphState(state: PersonalAlgorithmState) {
+    return {
+      nodes: structuredClone(state.graph.nodes),
+      edges: structuredClone(state.graph.edges),
+      controls: structuredClone(state.graph.controls ?? []),
+    };
+  }
+
+  private ensureOriginalBaseline(state: PersonalAlgorithmState): void {
+    if (state.graph.originalBaseline) return;
+    state.graph.originalBaseline = {
+      revision: state.graph.currentRevision,
+      capturedAt: nowIso(),
+      ...this.captureEditableGraphState(state),
+    };
+  }
+
+  private applyEditState(state: PersonalAlgorithmState, snapshot: unknown): void {
+    if (!snapshot || typeof snapshot !== 'object') {
+      // Null "before" snapshots correspond to create operations.
+      return;
+    }
+    const value = snapshot as Record<string, unknown>;
+    if (Array.isArray(value.nodes) && Array.isArray(value.edges) && Array.isArray(value.controls)) {
+      state.graph.nodes = structuredClone(value.nodes as GraphNode[]);
+      state.graph.edges = structuredClone(value.edges as GraphEdge[]);
+      state.graph.controls = structuredClone(value.controls as GraphControl[]);
+      return;
+    }
+
+    const control = value as unknown as GraphControl;
+    if (
+      (control.targetKind === 'node' || control.targetKind === 'edge')
+      && typeof control.targetId === 'string'
+      && typeof control.id === 'string'
+    ) {
+      const controls = state.graph.controls ?? (state.graph.controls = []);
+      const index = controls.findIndex((entry) => entry.id === control.id);
+      if (index >= 0) controls[index] = structuredClone(control);
+      else controls.push(structuredClone(control));
+      return;
+    }
+
+    if ('node' in value && value.node) {
+      const node = structuredClone(value.node as GraphNode);
+      state.graph.nodes = state.graph.nodes.filter((entry) => entry.id !== node.id);
+      state.graph.nodes.push(node);
+      for (const edge of structuredClone((value.removedEdges ?? []) as GraphEdge[])) {
+        if (!state.graph.edges.some((entry) => entry.id === edge.id)) state.graph.edges.push(edge);
+      }
+      return;
+    }
+
+    const node = value as unknown as GraphNode;
+    if (typeof node.id === 'string' && typeof node.kind === 'string' && 'label' in node) {
+      const index = state.graph.nodes.findIndex((entry) => entry.id === node.id);
+      if (index >= 0) state.graph.nodes[index] = structuredClone(node);
+      else state.graph.nodes.push(structuredClone(node));
+      return;
+    }
+
+    const edge = value as unknown as GraphEdge;
+    if (
+      typeof edge.id === 'string'
+      && typeof edge.sourceNodeId === 'string'
+      && typeof edge.targetNodeId === 'string'
+    ) {
+      const index = state.graph.edges.findIndex((entry) => entry.id === edge.id);
+      if (index >= 0) state.graph.edges[index] = structuredClone(edge);
+      else state.graph.edges.push(structuredClone(edge));
+    }
+  }
+
+  private removeCreatedEditState(state: PersonalAlgorithmState, edit: UserGraphEdit): void {
+    if (edit.action === 'create_node') {
+      state.graph.nodes = state.graph.nodes.filter((node) => node.id !== edit.targetId);
+      state.graph.edges = state.graph.edges.filter((edge) => (
+        edge.sourceNodeId !== edit.targetId && edge.targetNodeId !== edit.targetId
+      ));
+    } else if (edit.action === 'create_edge') {
+      state.graph.edges = state.graph.edges.filter((edge) => edge.id !== edit.targetId);
+    } else if (edit.action === 'set_control' && edit.before == null) {
+      state.graph.controls = (state.graph.controls ?? []).filter((control) => control.id !== edit.targetId);
+    }
+  }
+
   private recordEdit(
     state: PersonalAlgorithmState,
     action: UserGraphEdit['action'],
     targetId: string,
     before: unknown,
     after: unknown,
-  ): void {
+    revertsEditId: string | null = null,
+  ): UserGraphEdit {
     const timestamp = nowIso();
     state.graph.currentRevision += 1;
     state.graph.revisions.push({
@@ -914,14 +1128,17 @@ export class LocalPersonalAlgorithmStore {
       reason: `graph_${action}`,
       createdAt: timestamp,
     });
-    state.graph.userEdits.push({
+    const edit: UserGraphEdit = {
       id: makeId('edit'),
       action,
       targetId,
       before: structuredClone(before),
       after: structuredClone(after),
+      ...(revertsEditId ? { revertsEditId } : {}),
       createdAt: timestamp,
-    });
+    };
+    state.graph.userEdits.push(edit);
+    return edit;
   }
 }
 
