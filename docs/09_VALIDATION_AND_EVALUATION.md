@@ -912,3 +912,17 @@ Reduce / Prefer / Mute are user-authored control overlays over existing stable g
 12. after each action, the next score/trace uses the new graph revision and exact controlled contribution, while the prior trace remains internally consistent.
 
 Browser validation should exercise one creator/node correction from Why-this and one semantic node/edge correction from the graph inspector, then undo and Restore original while confirming the feed reranks and retained history/evidence counts do not change.
+
+
+## Durable group ownership validation (#161)
+
+For the first user-ownership slice, validate rename/pin state independently from inferred mode semantics and active feed selection:
+
+1. renaming a durable group changes its user-facing label while retaining the same stable mode ID, inferred label, semantic revision, members, and evidence;
+2. explicit Pin/Unpin is independent of whether the group is currently selected for feed intent;
+3. selecting/deselecting a group does not itself create an ownership revision;
+4. rename/pin edits increment the local ownership-config revision and survive Settings reload and semantic reclustering;
+5. Undo creates a new ownership revision that restores the immediately prior rename/pin state without changing graph/evidence state;
+6. reset-name restores the reconciler-owned inferred label while preserving other ownership fields such as explicit pin;
+7. selected or explicitly pinned dormant groups remain identity-retained through reclustering, while the persisted `pinned` flag represents explicit ownership only;
+8. full local-data deletion clears ownership configuration along with the durable mode catalog.
