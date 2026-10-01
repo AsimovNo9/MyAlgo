@@ -2563,6 +2563,7 @@ const handleRuntimeMessage = (
       generate?: boolean;
       targetKind?: 'node' | 'edge';
       targetId?: string;
+      evidenceId?: string;
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
