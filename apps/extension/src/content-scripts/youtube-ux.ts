@@ -130,6 +130,7 @@ export type WhyThisHistoryMatch = {
 export type ExplanationViewModel = {
   scoreLine: string;
   acquisitionLine: string | null;
+  sourceLabel: string;
   pathLines: string[];
   contributionLines: string[];
   contributions: WhyThisDisplayContribution[];
@@ -187,23 +188,28 @@ const humanContributionLabel = (label: string): string => {
   return humanizeGraphLabel(raw);
 };
 
+export function getCandidateAcquisitionLabel(item: RankedFeedItem): string {
+  const mechanism = item.explanation?.acquisitionMechanism
+    ?? item.provenance?.mechanism
+    ?? [...(item.acquisition_history ?? [])]
+      .sort((left, right) => String(right.acquired_at ?? '').localeCompare(String(left.acquired_at ?? '')))[0]
+      ?.mechanism
+    ?? null;
+  if (mechanism === 'observed_dom') return 'YouTube native page';
+  if (mechanism === 'rss') return 'RSS discovery';
+  if (mechanism === 'web_search') return 'YouTube search discovery';
+  if (mechanism === 'exploration') return 'MyAlgo exploration';
+  if (mechanism) return `MyAlgo candidate pool · ${mechanism}`;
+  return 'MyAlgo candidate pool';
+}
+
 export function buildExplanationViewModel(item: RankedFeedItem): ExplanationViewModel {
   const explanation = item.explanation;
   const scoreLine = explanation
     ? `Score ${explanation.displayScore}/100 · raw ${explanation.rawScore} · graph r${explanation.graphRevision}`
     : `Score ${item.score ?? 0}/100 · trace ${item.traceId ?? 'unavailable'}`;
-  const mechanismLabel = explanation?.acquisitionMechanism === 'observed_dom'
-    ? 'Observed on the current YouTube page'
-    : explanation?.acquisitionMechanism === 'web_search'
-      ? 'Discovered via YouTube search'
-      : explanation?.acquisitionMechanism === 'rss'
-        ? 'Discovered via RSS'
-        : explanation?.acquisitionMechanism
-          ? `Acquired via ${explanation.acquisitionMechanism}`
-          : null;
-  const acquisitionLine = mechanismLabel
-    ? `${mechanismLabel} · source is not preference evidence`
-    : null;
+  const sourceLabel = getCandidateAcquisitionLabel(item);
+  const acquisitionLine = `${sourceLabel} · acquisition source is not preference evidence`;
   const pathLines = (explanation?.matchedPaths ?? [])
     .slice(0, 3)
     .map((path) => {
@@ -306,6 +312,7 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
   return {
     scoreLine,
     acquisitionLine,
+    sourceLabel,
     pathLines,
     contributionLines,
     contributions,
