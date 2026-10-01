@@ -974,9 +974,10 @@ const createReplacementCard = (
   const replacementBadge = document.createElement('span');
   replacementBadge.dataset.personalAlgorithmBadge = 'true';
   const contentLabel = getContentPresentationLabel(item);
+  const replacementSourceLabel = getCandidateAcquisitionLabel(item);
   replacementBadge.textContent = contentLabel
-    ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
-    : `MyAlgo replacement · ${metadata.score}`;
+    ? `${contentLabel} · MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`
+    : `MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`;
   replacementBadge.style.cssText = 'position:absolute;z-index:30;top:8px;left:8px;max-width:calc(100% - 104px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#0f172a;color:#fff;font:700 11px/1.2 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
   card.appendChild(replacementBadge);
 
@@ -1077,9 +1078,10 @@ const refreshReplacementCardPresentation = (
 
   const badge = card.querySelector<HTMLElement>('[data-personal-algorithm-badge]');
   if (badge) {
+    const replacementSourceLabel = getCandidateAcquisitionLabel(item);
     badge.textContent = contentLabel
-      ? `${contentLabel} · MyAlgo replacement · ${metadata.score}`
-      : `MyAlgo replacement · ${metadata.score}`;
+      ? `${contentLabel} · MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`
+      : `MyAlgo replaced · ${replacementSourceLabel} · ${metadata.score}`;
   }
 
   const link = card.querySelector<HTMLAnchorElement>('a[data-personal-algorithm-video-id]');
@@ -1590,8 +1592,8 @@ const applyRankedFeed = (
     }
     const contentLabel = getContentPresentationLabel(item);
     badge.textContent = contentLabel
-      ? `${contentLabel} · ${score}`
-      : `MyAlgo · ${score}`;
+      ? `${contentLabel} · MyAlgo reranked · ${score}`
+      : `MyAlgo reranked · ${score}`;
     ensureNativeExplanationControl(element, item);
   });
 
