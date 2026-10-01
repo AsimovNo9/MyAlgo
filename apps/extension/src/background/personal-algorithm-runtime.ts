@@ -1018,7 +1018,7 @@ const groundedDurableModeFeatures = (
           index.evidenceIdsByNodeId.has(nodeId)
         )),
       }))
-      .filter((member) => member.weightedAffinity >= 0.55 && member.sourceNodeIds.length > 0)
+      .filter((member) => member.weightedAffinity > 0 && member.sourceNodeIds.length > 0)
       .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)) ?? [];
     if (!affinity || members.length === 0) continue;
 
