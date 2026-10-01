@@ -275,6 +275,11 @@ export class LocalPersonalAlgorithmStore {
     return structuredClone(state.evidence);
   }
 
+  async listForgottenEvidenceIds(): Promise<string[]> {
+    const state = await this.getState();
+    return state.forgottenEvidence.map((entry) => entry.evidenceId);
+  }
+
   async getEvidence(id: string): Promise<EvidenceRecord | null> {
     const state = await this.getState();
     const record = state.evidence.find((item) => item.id === id);
