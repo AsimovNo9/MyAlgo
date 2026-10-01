@@ -55,9 +55,123 @@ test('explanation view model preserves graph paths, acquisition boundary, and ex
   assert.deepEqual(
     view.contributionLines,
     [
-      'semantic neighbourhood: local AI: +10',
-      'explicit feedback: not_interested: -5',
+      'Concept: local AI: +10',
+      'explicit feedback: not interested: -5',
     ],
+  );
+  assert.deepEqual(
+    view.miniNodes,
+    [
+      { id: 'video-a', label: 'This video', kind: 'video' },
+      { id: 'contribution:0:local AI', label: 'local AI', kind: 'concept' },
+      { id: 'path:edge:created_by:a:1:Example Creator', label: 'Example Creator', kind: 'creator' },
+    ],
+  );
+  assert.equal(view.contributions[0].evidenceCount, 1);
+  assert.equal(view.contributions[0].actionLabel, 'Prefer');
+  assert.equal(view.graphRevision, 12);
+  assert.equal(view.traceId, 'trace-a');
+});
+
+test('explanation display humanizes encoded graph labels and omits relation names from the mini graph', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'video-x',
+    title: 'Example video',
+    channel_name: 'Angry Birds',
+    score: 68,
+    traceId: 'trace-x',
+    explanation: {
+      rawScore: 11,
+      displayScore: 68,
+      graphRevision: 4,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [
+        { label: 'creator: youtube:Angry%20Birds', value: 8, kind: 'node', evidenceIds: ['e1'] },
+        { label: 'created_by', value: 2, kind: 'edge', evidenceIds: ['e1'] },
+      ],
+      matchedPaths: [{
+        nodeIds: ['creator:youtube:Angry%20Birds', 'topic:games'],
+        nodeLabels: ['youtube:Angry%20Birds', 'Gaming'],
+        edgeIds: ['edge:games'],
+        evidenceIds: ['e1', 'e2'],
+      }],
+      modeGrounding: null,
+      historySupport: {
+        scoreSharePercent: 67,
+        matchedVideoCount: 1,
+        matches: [{
+          evidenceId: 'e1',
+          externalId: 'past-video',
+          title: 'Past Angry Birds video',
+          observedAt: '2026-09-29T12:00:00.000Z',
+          interaction: 'watched',
+          matchedBy: ['creator: Angry Birds'],
+        }],
+      },
+    },
+  });
+
+  assert.equal(view.pathLines[0], 'Graph path: Angry Birds ↔ Gaming · 2 evidence items');
+  assert.equal(view.contributionLines.some((line) => /created by/i.test(line)), false);
+  assert.equal(view.miniNodes.some((node) => node.label === 'created by'), false);
+  assert.equal(view.miniNodes.some((node) => node.label === 'Angry Birds'), true);
+  assert.equal(view.historyScoreSharePercent, 67);
+  assert.equal(view.historyMatches[0].title, 'Past Angry Birds video');
+});
+
+test('Why-this omits the current content node even when its graph label is the full video title', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'hfAJNg5Zbdo',
+    title: 'There’s Something Evil Happening To People... Be Careful 15 minutes',
+    channel_name: 'Everyday Life Unfiltered',
+    score: 65,
+    traceId: 'trace-current-node',
+    explanation: {
+      rawScore: 8,
+      displayScore: 65,
+      graphRevision: 18,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [
+        {
+          label: 'hfAJNg5Zbdo',
+          value: 1,
+          kind: 'node',
+          sourceId: 'content:youtube:hfAJNg5Zbdo',
+          evidenceIds: ['e-current'],
+        },
+        {
+          label: 'creator: Everyday Life Unfiltered',
+          value: 8,
+          kind: 'node',
+          sourceId: 'creator:youtube:everyday',
+          evidenceIds: ['e-history'],
+        },
+      ],
+      matchedPaths: [{
+        nodeIds: [
+          'content:youtube:hfAJNg5Zbdo',
+          'creator:youtube:everyday',
+        ],
+        nodeLabels: [
+          'There’s Something Evil Happening To People... Be Careful 15 minutes',
+          'Everyday Life Unfiltered',
+        ],
+        edgeIds: ['edge:created-by'],
+        evidenceIds: ['e-current'],
+      }],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+
+  assert.equal(view.contributionLines.some((line) => line.includes('hfAJNg5Zbdo')), false);
+  assert.equal(
+    view.miniNodes.filter((node) => node.label.includes('Something Evil')).length,
+    0,
+  );
+  assert.equal(
+    view.miniNodes.filter((node) => node.label === 'Everyday Life Unfiltered').length,
+    1,
   );
 });
 

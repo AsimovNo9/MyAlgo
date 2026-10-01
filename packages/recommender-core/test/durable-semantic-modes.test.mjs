@@ -128,6 +128,24 @@ test('durable mode clustering groups co-supported canonical concepts and exclude
   assert.equal(result.diagnostics.assignedConceptCount, 3);
 });
 
+test('strongly repeated standalone concepts can become durable singleton modes', () => {
+  const state = fixtureState();
+  const ceramics = state.graph.nodes.find((node) => node.id === 'topic:ceramics');
+  state.graph.nodes.push(contentNode('content:youtube:ceramic-c'));
+  state.graph.edges.push(aboutEdge(ceramics.id, 'content:youtube:ceramic-c', 'ceramic-c'));
+
+  const result = buildDurableSemanticModeClusters(state, undefined, {
+    minimumSingletonSupport: 3,
+  });
+
+  const ceramicMode = result.proposals.find((proposal) => (
+    proposal.members.length === 1
+    && proposal.members[0].label === 'Ceramic glazing'
+  ));
+  assert.ok(ceramicMode);
+  assert.equal(ceramicMode.members[0].supportContentIds.length, 3);
+});
+
 test('mode clustering is insertion-order deterministic and consumes cluster metrics', () => {
   const firstState = fixtureState();
   const first = buildDurableSemanticModeClusters(firstState);

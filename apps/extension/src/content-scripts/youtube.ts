@@ -21,6 +21,18 @@ import {
 const videoSelectors = youtubeConnector.cardSelectors;
 const videoLinkSelector = youtubeConnector.videoLinkSelector;
 
+const YOUTUBE_COMMENT_SURFACE_SELECTOR = [
+  '#comments',
+  'ytd-comment-thread-renderer',
+  'ytd-comment-view-model',
+  'yt-comment-thread-renderer',
+  'yt-comment-view-model',
+].join(', ');
+
+const isYouTubeCommentSurfaceElement = (element: Element | null): boolean => (
+  Boolean(element?.closest(YOUTUBE_COMMENT_SURFACE_SELECTOR))
+);
+
 type PresentationCache = {
   mode: string;
   activeModeId: string;
@@ -58,6 +70,7 @@ let watchSessionSequence = 0;
 let replacementBindingRevision = 0;
 let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
 let navigationInvalidationPending = false;
+let explanationPanelSequence = 0;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
@@ -226,6 +239,15 @@ const clearExtensionPresentation = (
         || element.closest('[data-personal-algorithm-replacement]')
       )
     ) return;
+
+    if (preserveReplacements && element.matches('[data-personal-algorithm-explanation-panel]') && !element.hidden) {
+      return;
+    }
+    if (preserveReplacements && element.matches('[data-personal-algorithm-explanation]')) {
+      const panelId = element.getAttribute('aria-controls');
+      const panel = panelId ? document.getElementById(panelId) : null;
+      if (panel && !panel.hidden) return;
+    }
     element.remove();
   });
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-badge]').forEach((badge) => {
@@ -267,54 +289,442 @@ const clearExtensionPresentation = (
   }
 };
 
+const getExplanationTrigger = (panel: HTMLElement): HTMLElement | null => {
+  const triggerId = panel.dataset.personalAlgorithmExplanationTriggerId;
+  return triggerId ? document.getElementById(triggerId) : null;
+};
+
+const positionExplanationPanel = (trigger: HTMLElement, panel: HTMLElement) => {
+  const rect = trigger.getBoundingClientRect();
+  const margin = 8;
+  const width = Math.min(520, Math.max(300, window.innerWidth - margin * 2));
+  const left = Math.min(
+    window.innerWidth - width - margin,
+    Math.max(margin, rect.right - width),
+  );
+  const belowSpace = window.innerHeight - rect.bottom - margin;
+  const aboveSpace = rect.top - margin;
+  const openBelow = belowSpace >= Math.min(360, aboveSpace);
+  const maxHeight = Math.max(220, Math.min(560, openBelow ? belowSpace : aboveSpace));
+  panel.style.position = 'fixed';
+  panel.style.zIndex = '2147483646';
+  panel.style.left = `${left}px`;
+  panel.style.width = `${width}px`;
+  panel.style.maxWidth = `calc(100vw - ${margin * 2}px)`;
+  panel.style.maxHeight = `${maxHeight}px`;
+  panel.style.right = 'auto';
+  if (openBelow) {
+    panel.style.top = `${Math.min(window.innerHeight - maxHeight - margin, rect.bottom + margin)}px`;
+    panel.style.bottom = 'auto';
+  } else {
+    panel.style.bottom = `${Math.max(margin, window.innerHeight - rect.top + margin)}px`;
+    panel.style.top = 'auto';
+  }
+};
+
+const setExplanationPanelOpen = (panel: HTMLElement, open: boolean) => {
+  const trigger = getExplanationTrigger(panel);
+  if (open && trigger) positionExplanationPanel(trigger, panel);
+  panel.hidden = !open;
+  trigger?.setAttribute('aria-expanded', String(open));
+};
+
 const closeOtherExplanationPanels = (keep: HTMLElement) => {
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-explanation-panel]').forEach((panel) => {
     if (panel === keep || panel.hidden) return;
-    panel.hidden = true;
-    const host = panel.parentElement;
-    host?.querySelector<HTMLElement>('[data-personal-algorithm-explanation]')?.setAttribute('aria-expanded', 'false');
+    setExplanationPanelOpen(panel, false);
   });
+};
+
+const createExplanationPortal = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+): HTMLElement => {
+  explanationPanelSequence += 1;
+  const suffix = `${instanceId}-${explanationPanelSequence}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+  if (!trigger.id) trigger.id = `myalgo-explanation-trigger-${suffix}`;
+  const panel = document.createElement('div');
+  panel.id = `myalgo-explanation-panel-${suffix}`;
+  panel.dataset.personalAlgorithmExplanationPanel = kind;
+  panel.dataset.personalAlgorithmExplanationTriggerId = trigger.id;
+  panel.hidden = true;
+  panel.style.cssText = 'position:fixed;z-index:2147483646;overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 12px 40px rgba(0,0,0,.65);';
+  panel.addEventListener('pointerdown', (event) => event.stopPropagation());
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  trigger.setAttribute('aria-controls', panel.id);
+  document.body.appendChild(panel);
+  return panel;
+};
+
+const ensureExplanationPortalForTrigger = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+): HTMLElement => {
+  if (trigger.id) {
+    const firstWithId = document.getElementById(trigger.id);
+    if (firstWithId && firstWithId !== trigger) {
+      trigger.removeAttribute('id');
+      trigger.removeAttribute('aria-controls');
+    }
+  }
+
+  const controlledPanelId = trigger.getAttribute('aria-controls');
+  let panel = controlledPanelId
+    ? document.getElementById(controlledPanelId) as HTMLElement | null
+    : null;
+  const ownsPanel = Boolean(
+    panel
+    && trigger.id
+    && panel.dataset.personalAlgorithmExplanationTriggerId === trigger.id
+    && getExplanationTrigger(panel) === trigger
+  );
+  if (!ownsPanel) {
+    trigger.removeAttribute('aria-controls');
+    panel = createExplanationPortal(trigger, kind);
+  }
+  return panel!;
+};
+
+const bindExplanationTrigger = (
+  trigger: HTMLButtonElement,
+  kind: 'native' | 'replacement',
+  item: RankedFeedItem,
+) => {
+  // Assign through onclick rather than a copied DOM marker. YouTube can clone
+  // renderer subtrees, which copies data attributes but not event listeners.
+  // Reassigning the property is idempotent for a live element and repairs clones.
+  delete trigger.dataset.personalAlgorithmExplanationBound;
+  trigger.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Recover lazily as well as during presentation refresh. This closes the
+    // window where cleanup removed a body-level portal but the visible card
+    // survived long enough to be clicked before the next rerank/refresh.
+    const existingPanelId = trigger.getAttribute('aria-controls');
+    const existingPanel = existingPanelId ? document.getElementById(existingPanelId) : null;
+    const panel = existingPanel ?? ensureExplanationPortalForTrigger(trigger, kind);
+    if (!existingPanel) renderExplanationContent(panel, item);
+
+    const opening = panel.hidden;
+    if (opening) closeOtherExplanationPanels(panel);
+    setExplanationPanelOpen(panel, opening);
+  };
+};
+
+const whyNodeAccent = (kind: string): { border: string; background: string } => {
+  if (kind === 'creator') return { border: '#fb923c', background: 'rgba(124,45,18,.86)' };
+  if (kind === 'topic') return { border: '#34d399', background: 'rgba(6,78,59,.86)' };
+  if (kind === 'format') return { border: '#a78bfa', background: 'rgba(76,29,149,.86)' };
+  if (kind === 'concept' || kind === 'mode') return { border: '#60a5fa', background: 'rgba(30,64,175,.86)' };
+  return { border: '#94a3b8', background: 'rgba(51,65,85,.9)' };
 };
 
 const renderExplanationContent = (
   container: HTMLElement,
   item: RankedFeedItem,
 ) => {
+  const technicalDetailsOpen = container
+    .querySelector<HTMLDetailsElement>('[data-personal-algorithm-technical-details]')
+    ?.open === true;
+  const previousScrollTop = container.scrollTop;
   const view = buildExplanationViewModel(item);
   container.replaceChildren();
+  container.style.padding = '0';
+  container.style.overflow = 'auto';
 
-  const scoreLine = document.createElement('div');
-  scoreLine.textContent = view.scoreLine;
-  scoreLine.style.cssText = 'font-weight:700;';
-  container.appendChild(scoreLine);
+  const shell = document.createElement('div');
+  shell.style.cssText = 'display:block;background:#171717;color:#f8fafc;font:500 12px/1.4 Roboto,Arial,sans-serif;';
 
-  if (item.traceId) {
-    const traceLine = document.createElement('div');
-    traceLine.textContent = `Trace ${item.traceId}`;
-    traceLine.style.cssText = 'margin-top:3px;color:#94a3b8;font-size:11px;overflow-wrap:anywhere;';
-    container.appendChild(traceLine);
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #353535;';
+  const identity = document.createElement('div');
+  identity.style.cssText = 'min-width:0;';
+  const title = document.createElement('div');
+  title.textContent = item.title?.trim() || 'This video';
+  title.style.cssText = 'font:700 15px/1.25 Roboto,Arial,sans-serif;color:#fff;white-space:normal;';
+  identity.appendChild(title);
+  if (item.channel_name?.trim()) {
+    const creator = document.createElement('div');
+    creator.textContent = item.channel_name.trim();
+    creator.style.cssText = 'margin-top:3px;color:#cbd5e1;font:500 12px/1.3 Roboto,Arial,sans-serif;';
+    identity.appendChild(creator);
+  }
+  header.appendChild(identity);
+  const headerMeta = document.createElement('div');
+  headerMeta.style.cssText = 'display:flex;align-items:center;gap:6px;flex:0 0 auto;';
+  const categoryLabel = getContentPresentationLabel(item);
+  if (categoryLabel) {
+    const chip = document.createElement('span');
+    chip.textContent = categoryLabel;
+    chip.style.cssText = 'padding:4px 8px;border-radius:999px;background:#052e16;color:#86efac;font:700 10px/1.1 Roboto,Arial,sans-serif;';
+    headerMeta.appendChild(chip);
+  }
+  const score = document.createElement('span');
+  score.textContent = String(item.score ?? item.explanation?.displayScore ?? 0);
+  score.setAttribute('aria-label', view.scoreLine);
+  score.style.cssText = 'flex:0 0 auto;padding:5px 9px;border-radius:999px;background:#0f172a;color:#fff;font:700 12px/1 Roboto,Arial,sans-serif;';
+  headerMeta.appendChild(score);
+  header.appendChild(headerMeta);
+  shell.appendChild(header);
+
+  const graph = document.createElement('div');
+  graph.dataset.personalAlgorithmExplanationGraph = 'true';
+  const hasHistory = view.historyMatches.length > 0;
+  graph.style.cssText = `position:relative;height:${hasHistory ? 300 : 180}px;margin:0 14px;border-bottom:1px solid #353535;overflow:hidden;`;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+  graph.appendChild(svg);
+
+  const centerNode = document.createElement('div');
+  centerNode.textContent = 'This video';
+  centerNode.style.cssText = `position:absolute;left:50%;top:${hasHistory ? 18 : 53}%;transform:translate(-50%,-50%);max-width:150px;padding:8px 16px;border:1px solid #a3a3a3;border-radius:12px;background:#404040;color:#fff;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+  graph.appendChild(centerNode);
+
+  if (hasHistory) {
+    const cleanSignalLabel = (value: string): string => (
+      value
+        .replace(/^Graph path:\s*/i, '')
+        .replace(/^[^:]+:\s*/, '')
+        .trim()
+    );
+    const signalLabels = [...new Set(
+      view.historyMatches
+        .flatMap((match) => match.matchedBy)
+        .map(cleanSignalLabel)
+        .filter(Boolean),
+    )].slice(0, 2);
+    if (signalLabels.length === 0) {
+      signalLabels.push(...view.miniNodes.slice(1, 3).map((node) => node.label));
+    }
+
+    const signalPositions = signalLabels.length === 1
+      ? [{ x: 50, y: 47 }]
+      : [{ x: 30, y: 47 }, { x: 70, y: 47 }];
+
+    signalLabels.forEach((label, index) => {
+      const position = signalPositions[index];
+      if (!position) return;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', '50');
+      line.setAttribute('y1', '23');
+      line.setAttribute('x2', String(position.x));
+      line.setAttribute('y2', String(position.y - 5));
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+
+      const sourceNode = view.miniNodes.find((node) => node.label.toLowerCase() === label.toLowerCase());
+      const accent = whyNodeAccent(sourceNode?.kind ?? 'concept');
+      const pill = document.createElement('div');
+      pill.textContent = label;
+      pill.title = label;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+
+    const historyHeading = document.createElement('div');
+    historyHeading.textContent = 'Past videos supporting this';
+    historyHeading.style.cssText = 'position:absolute;left:50%;top:64%;transform:translateX(-50%);color:#94a3b8;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
+    graph.appendChild(historyHeading);
+
+    const visibleHistory = view.historyMatches.slice(0, 3);
+    const historyPositions = visibleHistory.length === 1
+      ? [{ x: 50, y: 84 }]
+      : visibleHistory.length === 2
+        ? [{ x: 28, y: 84 }, { x: 72, y: 84 }]
+        : [{ x: 18, y: 84 }, { x: 50, y: 84 }, { x: 82, y: 84 }];
+
+    visibleHistory.forEach((match, index) => {
+      const position = historyPositions[index];
+      if (!position) return;
+      const matchedSignals = match.matchedBy
+        .map(cleanSignalLabel)
+        .filter(Boolean);
+      let signalIndex = signalLabels.findIndex((label) => matchedSignals.includes(label));
+      if (signalIndex < 0) signalIndex = Math.min(index, signalPositions.length - 1);
+      const signalPosition = signalPositions[Math.max(0, signalIndex)] ?? { x: 50, y: 47 };
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', String(position.x));
+      line.setAttribute('y1', String(position.y - 6));
+      line.setAttribute('x2', String(signalPosition.x));
+      line.setAttribute('y2', String(signalPosition.y + 5));
+      line.setAttribute('stroke', '#475569');
+      line.setAttribute('stroke-width', '0.9');
+      line.setAttribute('stroke-dasharray', '3 2');
+      svg.appendChild(line);
+
+      const pill = document.createElement('div');
+      pill.textContent = match.title;
+      pill.title = match.title;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:29%;padding:7px 9px;border:1px solid #64748b;border-radius:10px;background:#1e293b;color:#e2e8f0;text-align:center;font:600 10px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+  } else {
+    const positions = [
+      { x: 24, y: 28 },
+      { x: 76, y: 28 },
+      { x: 50, y: 82 },
+    ];
+    view.miniNodes.slice(1, 4).forEach((node, index) => {
+      const position = positions[index];
+      if (!position) return;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', '50');
+      line.setAttribute('y1', '53');
+      line.setAttribute('x2', String(position.x));
+      line.setAttribute('y2', String(position.y));
+      line.setAttribute('stroke', '#64748b');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+
+      const accent = whyNodeAccent(node.kind);
+      const pill = document.createElement('div');
+      pill.textContent = node.label;
+      pill.title = node.label;
+      pill.style.cssText = `position:absolute;left:${position.x}%;top:${position.y}%;transform:translate(-50%,-50%);max-width:38%;padding:7px 10px;border:1px solid ${accent.border};border-radius:11px;background:${accent.background};color:#fff;text-align:center;font:600 11px/1.2 Roboto,Arial,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+      graph.appendChild(pill);
+    });
+  }
+  shell.appendChild(graph);
+
+  if (hasHistory) {
+    const history = document.createElement('div');
+    history.style.cssText = 'padding:10px 14px;border-bottom:1px solid #303030;background:#111827;';
+    const heading = document.createElement('div');
+    const share = view.historyScoreSharePercent;
+    heading.textContent = share == null
+      ? 'Past history support'
+      : `Past history support · ${share}% of positive score is history-backed`;
+    heading.style.cssText = 'font:700 11px/1.2 Roboto,Arial,sans-serif;color:#f8fafc;text-transform:uppercase;letter-spacing:.04em;';
+    history.appendChild(heading);
+
+    const note = document.createElement('div');
+    note.textContent = 'Scroll to inspect retained prior videos. This is scorer attribution, not a probability estimate.';
+    note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+    history.appendChild(note);
+
+    const historyList = document.createElement('div');
+    historyList.style.cssText = 'max-height:150px;margin-top:6px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;';
+    for (const match of view.historyMatches) {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:8px 0;border-top:1px solid #263244;';
+      const title = document.createElement('div');
+      title.textContent = match.title;
+      title.style.cssText = 'color:#e2e8f0;font:600 11px/1.3 Roboto,Arial,sans-serif;white-space:normal;';
+      row.appendChild(title);
+      const meta = document.createElement('div');
+      const matchedByLabels = match.matchedBy
+        .map((label) => label.replace(/^[^:]+:\s*/, '').trim())
+        .filter(Boolean)
+        .filter((label, index, labels) => (
+          labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index
+        ))
+        .slice(0, 3);
+      const matchedBy = matchedByLabels.join(' · ');
+      meta.textContent = [
+        match.interaction === 'watched' ? 'Watched before' : match.interaction,
+        matchedBy ? `supports via ${matchedBy}` : null,
+      ].filter(Boolean).join(' · ');
+      meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+      row.appendChild(meta);
+      historyList.appendChild(row);
+    }
+    history.appendChild(historyList);
+    shell.appendChild(history);
   }
 
+  if (view.pathLines.length > 0) {
+    const reasons = document.createElement('div');
+    reasons.style.cssText = 'padding:10px 14px 8px;border-bottom:1px solid #303030;background:#141414;';
+    const heading = document.createElement('div');
+    heading.textContent = 'Why it matched';
+    heading.style.cssText = 'font:700 11px/1.2 Roboto,Arial,sans-serif;color:#f8fafc;text-transform:uppercase;letter-spacing:.04em;';
+    reasons.appendChild(heading);
+    for (const pathLine of view.pathLines.slice(0, 2)) {
+      const row = document.createElement('div');
+      row.textContent = pathLine.replace(/^Graph path:\s*/i, '');
+      row.style.cssText = 'margin-top:6px;color:#cbd5e1;font:500 11px/1.35 Roboto,Arial,sans-serif;white-space:normal;';
+      reasons.appendChild(row);
+    }
+    shell.appendChild(reasons);
+  }
+
+  const contributions = document.createElement('div');
+  contributions.style.cssText = 'padding:0 14px;';
+  for (const contribution of view.contributions) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #303030;';
+    const label = document.createElement('div');
+    label.style.cssText = 'min-width:0;font-weight:700;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    const accent = document.createElement('span');
+    const nodeKind = view.miniNodes.find((node) => node.label === contribution.shortLabel)?.kind ?? contribution.kind;
+    const accentStyle = whyNodeAccent(nodeKind);
+    accent.style.cssText = `display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:${accentStyle.border};`;
+    label.appendChild(accent);
+    label.append(document.createTextNode(contribution.label));
+    row.appendChild(label);
+
+    const value = document.createElement('strong');
+    value.textContent = `${contribution.value > 0 ? '+' : ''}${contribution.value}`;
+    value.style.cssText = 'color:#e2e8f0;font-variant-numeric:tabular-nums;';
+    row.appendChild(value);
+
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.textContent = contribution.actionLabel ?? 'Inspect';
+    action.disabled = true;
+    action.title = contribution.actionLabel
+      ? 'Available after revisioned preference controls land.'
+      : 'No direct preference action for this contribution yet.';
+    action.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.72;';
+    row.appendChild(action);
+    contributions.appendChild(row);
+  }
+  shell.appendChild(contributions);
+
+  const footer = document.createElement('div');
+  footer.style.cssText = 'padding:10px 14px 12px;';
+  const details = document.createElement('details');
+  details.dataset.personalAlgorithmTechnicalDetails = 'true';
+  details.open = technicalDetailsOpen;
+  const summary = document.createElement('summary');
+  summary.textContent = 'Technical details';
+  summary.style.cssText = 'cursor:pointer;color:#cbd5e1;font-weight:600;';
+  details.appendChild(summary);
+  const detailBody = document.createElement('div');
+  detailBody.style.cssText = 'margin-top:8px;padding:8px 10px;border-radius:8px;background:#0f172a;color:#cbd5e1;font-size:11px;overflow-wrap:anywhere;';
+  const scoreLine = document.createElement('div');
+  scoreLine.textContent = view.scoreLine;
+  detailBody.appendChild(scoreLine);
+  if (view.traceId) {
+    const trace = document.createElement('div');
+    trace.textContent = `Trace ${view.traceId}`;
+    trace.style.marginTop = '4px';
+    detailBody.appendChild(trace);
+  }
   if (view.acquisitionLine) {
     const acquired = document.createElement('div');
     acquired.textContent = view.acquisitionLine;
-    acquired.style.cssText = 'margin-top:5px;color:#cbd5e1;';
-    container.appendChild(acquired);
+    acquired.style.marginTop = '4px';
+    detailBody.appendChild(acquired);
   }
-
   for (const pathLine of view.pathLines) {
-    const row = document.createElement('div');
-    row.textContent = pathLine;
-    row.style.cssText = 'margin-top:6px;color:#e2e8f0;';
-    container.appendChild(row);
+    const path = document.createElement('div');
+    path.textContent = pathLine;
+    path.style.marginTop = '4px';
+    detailBody.appendChild(path);
   }
+  details.appendChild(detailBody);
+  footer.appendChild(details);
 
-  for (const contributionLine of view.contributionLines) {
-    const row = document.createElement('div');
-    row.textContent = contributionLine;
-    row.style.cssText = 'margin-top:4px;';
-    container.appendChild(row);
-  }
+  shell.appendChild(footer);
+
+  container.appendChild(shell);
+  container.scrollTop = previousScrollTop;
 };
 
 const ensureNativeExplanationControl = (
@@ -329,9 +739,12 @@ const ensureNativeExplanationControl = (
     host.style.position = 'relative';
     host.dataset.personalAlgorithmPositionPatched = 'true';
   }
+  if (getComputedStyle(card).position === 'static') {
+    card.style.position = 'relative';
+    card.dataset.personalAlgorithmPositionPatched = 'true';
+  }
 
   let why = host.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation="native"]');
-  let panel = host.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel="native"]');
   if (!why) {
     why = document.createElement('button');
     why.type = 'button';
@@ -342,21 +755,8 @@ const ensureNativeExplanationControl = (
     why.style.cssText = 'position:absolute;z-index:1000;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
     host.appendChild(why);
   }
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.dataset.personalAlgorithmExplanationPanel = 'native';
-    panel.hidden = true;
-    panel.style.cssText = 'position:absolute;z-index:1001;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
-    host.appendChild(panel);
-    why.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const opening = panel!.hidden;
-      if (opening) closeOtherExplanationPanels(panel!);
-      panel!.hidden = !opening;
-      why!.setAttribute('aria-expanded', String(opening));
-    });
-  }
+  const panel = ensureExplanationPortalForTrigger(why, 'native');
+  bindExplanationTrigger(why, 'native', item);
 
   why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
   renderExplanationContent(panel, item);
@@ -474,24 +874,11 @@ const createReplacementCard = (
   // Replacement cards intentionally use a fixed native slot height + overflow
   // clipping, so a normal-flow control appended below metadata can disappear.
   why.style.cssText = 'position:absolute;z-index:35;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,.75);background:rgba(15,23,42,.94);color:#fff;font:700 11px/1.2 sans-serif;cursor:pointer;appearance:none;-webkit-appearance:none;box-shadow:0 2px 8px rgba(0,0,0,.35);';
-  const explanation = document.createElement('div');
-  explanation.dataset.personalAlgorithmExplanationPanel = 'true';
-  explanation.hidden = true;
-  explanation.style.cssText = 'position:absolute;z-index:40;top:44px;left:8px;right:8px;max-height:calc(100% - 52px);overflow:auto;padding:9px 10px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(15,23,42,.96);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.45);';
-
-  renderExplanationContent(explanation, item);
-
-  why.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const opening = explanation.hidden;
-    if (opening) closeOtherExplanationPanels(explanation);
-    explanation.hidden = !opening;
-    why.setAttribute('aria-expanded', String(opening));
-  });
   why.setAttribute('aria-expanded', 'false');
   card.appendChild(why);
-  card.appendChild(explanation);
+  const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
+  renderExplanationContent(explanation, item);
+  bindExplanationTrigger(why, 'replacement', item);
 
   return card;
 };
@@ -580,12 +967,15 @@ const refreshReplacementCardPresentation = (
       : `MyAlgo · ${item.score ?? 0}/100`;
   }
 
-  const why = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation]');
-  if (why) why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
-  const explanation = card.querySelector<HTMLElement>('[data-personal-algorithm-explanation-panel]');
-  if (!explanation) return;
-  explanation.replaceChildren();
+  const why = card.querySelector<HTMLButtonElement>('[data-personal-algorithm-explanation]');
+  if (!why) return;
+  why.dataset.personalAlgorithmTraceId = item.traceId ?? '';
 
+  // Replacement cards can survive while their body-level portal is removed by
+  // cleanup/navigation churn. Revalidate ownership and rebind every refresh
+  // instead of assuming aria-controls still points at a live panel.
+  const explanation = ensureExplanationPortalForTrigger(why, 'replacement');
+  bindExplanationTrigger(why, 'replacement', item);
   renderExplanationContent(explanation, item);
 };
 
@@ -645,7 +1035,7 @@ const sendActivity = (externalId: string, eventType: 'opened' | 'revisited') => 
 };
 
 const getCardForVideoLink = (link: HTMLAnchorElement) => {
-  if (isMyAlgoInjectedElement(link)) return null;
+  if (isMyAlgoInjectedElement(link) || isYouTubeCommentSurfaceElement(link)) return null;
   const knownCard = link.closest(videoSelectors.join(',')) as HTMLElement | null;
   if (knownCard) return knownCard;
 
@@ -673,7 +1063,10 @@ const getVideoElements = (diagnoseInjected = false) => {
     .filter((element): element is HTMLElement => Boolean(element));
   const uniqueElements = Array.from(new Set([...knownElements, ...linkElements]));
   const nativeElements = keepOutermostElements(
-    uniqueElements.filter((element) => !isMyAlgoInjectedElement(element)),
+    uniqueElements.filter((element) => (
+      !isMyAlgoInjectedElement(element)
+      && !isYouTubeCommentSurfaceElement(element)
+    )),
     (parent, child) => parent.contains(child),
   );
   const skippedInjected = uniqueElements.length - uniqueElements.filter(
@@ -742,7 +1135,7 @@ const collectCandidates = () => {
     .slice(0, youtubeConnector.presentation.candidateLimit);
 
   const anchorCandidates = Array.from(document.querySelectorAll<HTMLAnchorElement>(videoLinkSelector))
-    .filter((link) => !isMyAlgoInjectedElement(link))
+    .filter((link) => !isMyAlgoInjectedElement(link) && !isYouTubeCommentSurfaceElement(link))
     .map((link) => ({
       external_id: youtubeConnector.getExternalId(link.href) ?? '',
       title: normalizeText(youtubeConnector.getLinkTitle({
@@ -2210,6 +2603,15 @@ const scheduleOptimisticPresentation = () => {
 };
 
 const pageObserver = new MutationObserver((records) => {
+  const hasNonInjectedMutation = records.some((record) => {
+    const changedNodes = [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)];
+    return changedNodes.some((node) => {
+      if (!(node instanceof Element)) return false;
+      return !node.matches(MYALGO_INJECTED_SELECTOR)
+        && !node.closest(MYALGO_INJECTED_SELECTOR);
+    });
+  });
+
   const hasNativeVideoMutation = records.some((record) => Array.from(record.addedNodes).some((node) => {
     if (!(node instanceof Element)) return false;
     if (node.closest(MYALGO_INJECTED_SELECTOR)) return false;
@@ -2244,9 +2646,11 @@ const pageObserver = new MutationObserver((records) => {
     syncSourceFilteredContainers();
   }
 
-  if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
-  if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
-  attachTemporalWatchObserver();
+  if (hasNonInjectedMutation) {
+    if (isYouTubeHistoryPage(location.pathname)) scheduleHistoryObservation();
+    if (isYouTubeHomePage(location.pathname)) scheduleHomeRecommendationObservation();
+    attachTemporalWatchObserver();
+  }
 });
 pageObserver.observe(document.documentElement, { childList: true, subtree: true });
 

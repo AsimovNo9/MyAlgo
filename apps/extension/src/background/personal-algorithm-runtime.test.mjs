@@ -111,13 +111,13 @@ test('local runtime scores candidates from the persisted graph and returns deter
   ], 'Work');
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 11);
-  assert.equal(ranked[0].score, calibrateLocalScore(11));
-  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p7');
+  assert.equal(ranked[0].rawScore, 8);
+  assert.equal(ranked[0].score, calibrateLocalScore(8));
+  assert.equal(ranked[0].trace.policyRevision, 'local-mvp-p9');
   assert.equal(ranked[0].trace.graphRevision, 4);
-  assert.equal(ranked[0].trace.finalScore, 11);
-  assert.equal(ranked[0].trace.edgeContributions.length, 1);
-  assert.equal(ranked[0].trace.nodeContributions.length, 2);
+  assert.equal(ranked[0].trace.finalScore, 8);
+  assert.equal(ranked[0].trace.edgeContributions.length, 0);
+  assert.equal(ranked[0].trace.nodeContributions.length, 1);
   assert.equal(ranked[0].trace.suppressed, false);
   assert.deepEqual(ranked[0].semantic_mode_affinities, [{
     modeId: 'mode:inferred:v1:test',
@@ -285,6 +285,107 @@ test('durable active mode score is split across exact canonical members and sour
   assert.equal(metrics.reconciliationRate, 1);
 });
 
+test('multiple selected durable modes share one bounded mode-score budget', () => {
+  const fixture = structuredClone(state);
+  fixture.graph.nodes.push(
+    {
+      id: 'topic:mode-a',
+      kind: 'topic',
+      label: 'Mode A topic',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'topic:mode-b',
+      kind: 'topic',
+      label: 'Mode B topic',
+      provenance: 'inferred',
+      confidence: 0.9,
+      attributes: { sourceKinds: ['model_topic'] },
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.edges.push(
+    {
+      id: 'edge:mode:a',
+      sourceNodeId: 'topic:mode-a',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-a'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+    {
+      id: 'edge:mode:b',
+      sourceNodeId: 'topic:mode-b',
+      targetNodeId: 'content:youtube:video-a',
+      relation: 'about',
+      provenance: 'inferred',
+      confidence: 0.9,
+      evidenceIds: ['e-mode-b'],
+      attributes: {},
+      createdAt: '2026-09-27T00:00:00.000Z',
+      updatedAt: '2026-09-27T00:00:00.000Z',
+    },
+  );
+  fixture.graph.currentRevision += 1;
+
+  const modeA = { id: 'mode:a', label: 'Mode A', revision: 1 };
+  const modeB = { id: 'mode:b', label: 'Mode B', revision: 1 };
+  const ranked = scoreLocalCandidates(fixture, [{
+    external_id: 'multi-mode-candidate',
+    title: 'Neutral candidate',
+    semantic_mode_affinities: [
+      {
+        modeId: modeA.id,
+        modeRevision: modeA.revision,
+        label: modeA.label,
+        affinity: 0.8,
+        matchedCanonicalIds: ['canonical:a'],
+        sourceNodeIds: ['topic:mode-a'],
+        memberAffinities: [{
+          canonicalId: 'canonical:a',
+          label: 'Mode A topic',
+          memberWeight: 1,
+          similarity: 0.8,
+          weightedAffinity: 0.8,
+          sourceNodeIds: ['topic:mode-a'],
+        }],
+      },
+      {
+        modeId: modeB.id,
+        modeRevision: modeB.revision,
+        label: modeB.label,
+        affinity: 0.8,
+        matchedCanonicalIds: ['canonical:b'],
+        sourceNodeIds: ['topic:mode-b'],
+        memberAffinities: [{
+          canonicalId: 'canonical:b',
+          label: 'Mode B topic',
+          memberWeight: 1,
+          similarity: 0.8,
+          weightedAffinity: 0.8,
+          sourceNodeIds: ['topic:mode-b'],
+        }],
+      },
+    ],
+  }], 'Mode A + Mode B', [], {}, [modeA, modeB])[0];
+
+  assert.equal(ranked.rawScore, 14);
+  assert.equal(ranked.trace.modeContributions.length, 2);
+  assert.deepEqual(
+    ranked.trace.modeContributions.map((item) => [item.modeId, item.value]).sort(),
+    [['mode:a', 7], ['mode:b', 7]],
+  );
+});
+
 test('durable mode revision mismatch abstains instead of using stale or free-floating mode similarity', () => {
   const ranked = scoreLocalCandidates(state, [{
     external_id: 'stale-mode-affinity',
@@ -441,9 +542,9 @@ test('explicit local feedback changes the score without treating watch evidence 
 
   assert.equal(ranked[0].external_id, 'video-b');
   assert.equal(ranked[0].external_id, 'video-b');
-  assert.equal(ranked[0].rawScore, 21);
-  assert.equal(ranked[0].score, calibrateLocalScore(21));
-  assert.equal(ranked[1].rawScore, 11);
+  assert.equal(ranked[0].rawScore, 20);
+  assert.equal(ranked[0].score, calibrateLocalScore(20));
+  assert.equal(ranked[1].rawScore, 8);
 });
 
 test('explicit not-interested feedback lowers the matching candidate score', () => {
@@ -456,9 +557,9 @@ test('explicit not-interested feedback lowers the matching candidate score', () 
   ], 'Work', signals);
 
   assert.equal(ranked[0].external_id, 'video-a');
-  assert.equal(ranked[0].rawScore, 11);
+  assert.equal(ranked[0].rawScore, 8);
   assert.equal(ranked[1].external_id, 'video-b');
-  assert.equal(ranked[1].rawScore, -24);
+  assert.equal(ranked[1].rawScore, -25);
   assert.equal(ranked[1].trace.feedbackContributions.length, 1);
   assert.equal(ranked[1].trace.feedbackContributions[0].value, -25);
 });
@@ -473,7 +574,7 @@ test('duplicate feedback is reconciled to the latest event for a content item', 
     { external_id: 'video-a', title: 'Video A' },
     { external_id: 'video-b', title: 'Video B' },
   ], 'Work', signals);
-  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.rawScore, -24);
+  assert.equal(ranked.find((item) => item.external_id === 'video-b')?.rawScore, -25);
 });
 
 test('never-show-channel feedback matches the creator node rather than only the source video', () => {
@@ -486,8 +587,8 @@ test('never-show-channel feedback matches the creator node rather than only the 
     { external_id: 'video-c', title: 'Video C' },
   ], 'Work', signals);
   assert.equal(signals[0].nodeId, 'creator:youtube:Creator%20A');
-  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -89);
-  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -89);
+  assert.equal(ranked.find((item) => item.external_id === 'video-a')?.rawScore, -92);
+  assert.equal(ranked.find((item) => item.external_id === 'video-c')?.rawScore, -92);
 });
 
 test('subscription and discovery filters apply to source-tagged candidates', () => {
@@ -514,9 +615,9 @@ test('source filters remain local visibility rules', () => {
 test('local policy is graph-derived and does not use candidate base scores', () => {
   const policy = buildLocalScoringPolicy(state);
   assert.equal(policy.baseScore, 0);
-  assert.equal(policy.nodeWeights?.['content:youtube:video-a'], 1);
+  assert.equal(policy.nodeWeights?.['content:youtube:video-a'], undefined);
   assert.equal(policy.nodeWeights?.['creator:youtube:Creator%20A'], 8);
-  assert.equal(policy.edgeRelationWeights?.created_by, 2);
+  assert.equal(policy.edgeRelationWeights?.created_by, undefined);
 });
 
 
@@ -1383,11 +1484,10 @@ test('created-by exposure support churn keeps scoring state stable but refreshes
 
   const second = scoreLocalCandidates(nextState, [{ ...candidate }], 'Default')[0];
   const diagnostics = getLocalScoringDiagnostics();
-  const edgeContribution = second.trace.edgeContributions
-    .find((item) => item.id === 'edge:edge:created_by:video-a');
 
   assert.equal(second.rawScore, first.rawScore);
+  assert.notEqual(second.trace.id, first.trace.id);
   assert.equal(diagnostics.contextHits, 1);
   assert.equal(diagnostics.contextMisses, 0);
-  assert.deepEqual(edgeContribution?.evidenceIds, ['e1', 'exposure:two']);
+  assert.equal(second.trace.edgeContributions.length, 0);
 });

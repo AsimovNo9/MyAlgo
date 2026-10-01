@@ -1,11 +1,23 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
-import { buildDurableModeOptions } from '../lib/extension-helpers';
+import {
+  buildDurableModeOptions,
+  buildExplanationGraphView,
+  buildGraphInspectorView,
+  buildGraphModeOverlay,
+  parseGraphInspectorExport,
+  type ContentExplanation,
+  type GraphInspectorSemanticContext,
+  type GraphInspectorView,
+} from '../lib/extension-helpers';
+import { GraphCanvas } from '../components/GraphCanvas';
 import type { DurableSemanticModeCatalog } from '@repo/shared-types';
 
 export function Options() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
+  const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
+  const [modeSearch, setModeSearch] = React.useState('');
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
@@ -28,11 +40,37 @@ export function Options() {
   } | null>(null);
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
+  const [graphInspector, setGraphInspector] = React.useState<GraphInspectorView | null>(null);
+  const [graphInspectorSource, setGraphInspectorSource] = React.useState<'live' | 'offline' | null>(null);
+  const [graphQuery, setGraphQuery] = React.useState('');
+  const [graphModeId, setGraphModeId] = React.useState('all');
+  const [graphFocusOnly, setGraphFocusOnly] = React.useState(true);
+  const [graphLayoutMode, setGraphLayoutMode] = React.useState<'network' | 'lineage'>('network');
+  const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
+  const [contentExplanation, setContentExplanation] = React.useState<ContentExplanation | null>(null);
+  const [contentExplanationLoading, setContentExplanationLoading] = React.useState(false);
+  const [contentExplanationError, setContentExplanationError] = React.useState<string | null>(null);
+  const [offlineGraphJson, setOfflineGraphJson] = React.useState('');
+  const graphInspectorDetailRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!selectedNodeId && !selectedEdgeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      graphInspectorDetailRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+      graphInspectorDetailRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedNodeId, selectedEdgeId]);
 
   React.useEffect(() => {
     chrome.storage.local.get([
       'personal-algorithm-mode',
       'personal-algorithm-active-mode-id',
+      'personal-algorithm-active-mode-ids',
       'personal-algorithm-durable-mode-catalog',
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
@@ -49,6 +87,10 @@ export function Options() {
         ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
       setMode(storedMode);
       setActiveModeId(storedModeId);
+      const storedModeIds = result['personal-algorithm-active-mode-ids'] as string[] | undefined;
+      setSelectedModeIds(Array.isArray(storedModeIds)
+        ? storedModeIds
+        : storedModeId !== 'default' ? [storedModeId] : []);
       setDurableModeCatalog(catalog);
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
@@ -73,6 +115,12 @@ export function Options() {
       if (catalogChange) setDurableModeCatalog((catalogChange.newValue as DurableSemanticModeCatalog | undefined) ?? null);
       const activeModeChange = changes['personal-algorithm-active-mode-id'];
       if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
+      const activeModeIdsChange = changes['personal-algorithm-active-mode-ids'];
+      if (activeModeIdsChange) {
+        setSelectedModeIds(Array.isArray(activeModeIdsChange.newValue)
+          ? activeModeIdsChange.newValue as string[]
+          : []);
+      }
       const modeChange = changes['personal-algorithm-mode'];
       if (modeChange) setMode((modeChange.newValue as string | undefined) ?? 'Default');
     };
@@ -106,20 +154,32 @@ export function Options() {
     setNeuralBatchSize(1);
     setMode('Default');
     setActiveModeId('default');
+    setSelectedModeIds([]);
     setDurableModeCatalog(null);
+    setGraphInspector(null);
+    setGraphInspectorSource(null);
+    setGraphModeId('all');
+    setGraphFocusOnly(true);
+    setGraphLayoutMode('network');
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setContentExplanation(null);
+    setContentExplanationError(null);
+    setOfflineGraphJson('');
     setStatus('Local MyAlgo data deleted. Accept the disclosure again before observation resumes.');
   };
 
   const handleModeChange = async (nextModeId: string) => {
     const response = await chrome.runtime.sendMessage({
       type: 'SET_MODE',
-      payload: { modeId: nextModeId },
-    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string };
+      payload: { modeId: nextModeId, toggle: nextModeId !== 'default' },
+    }) as { ok?: boolean; error?: string; mode?: string; modeId?: string; modeIds?: string[] };
     if (!response?.ok) {
       setStatus(response?.error ?? 'Unable to change mode.');
       return;
     }
-    setActiveModeId(response.modeId ?? nextModeId);
+    setActiveModeId(response.modeId ?? 'default');
+    setSelectedModeIds(response.modeIds ?? []);
     setMode(response.mode ?? 'Default');
     setStatus(null);
   };
@@ -152,6 +212,75 @@ export function Options() {
     setSemanticModelMode(response.semanticModelMode === 'neural' ? 'neural' : 'hash');
   };
 
+  const handleLoadLiveGraph = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'PERSONAL_ALGORITHM_INSPECT' }) as {
+      ok?: boolean;
+      state?: unknown;
+      durableModeCatalog?: DurableSemanticModeCatalog | null;
+      activeModeId?: string;
+      semanticContext?: GraphInspectorSemanticContext[];
+      error?: string;
+    };
+    if (!response?.ok || !response.state) {
+      setStatus(response?.error ?? 'Unable to inspect the local Personal Algorithm Graph.');
+      return;
+    }
+    try {
+      const view = buildGraphInspectorView(response.state, response.semanticContext ?? []);
+      setGraphInspector(view);
+      setGraphInspectorSource('live');
+      setDurableModeCatalog(response.durableModeCatalog ?? null);
+      setActiveModeId(response.activeModeId ?? 'default');
+      setGraphModeId('all');
+      setGraphFocusOnly(true);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setContentExplanation(null);
+      setContentExplanationError(null);
+      setStatus(null);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to inspect the local Personal Algorithm Graph.');
+    }
+  };
+
+  const handleInspectOfflineGraph = () => {
+    try {
+      const view = parseGraphInspectorExport(offlineGraphJson);
+      setGraphInspector(view);
+      setGraphInspectorSource('offline');
+      setGraphModeId('all');
+      setGraphFocusOnly(true);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setStatus(null);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to inspect the pasted graph export.');
+    }
+  };
+
+  const handleExplainSelectedContent = async () => {
+    if (!selectedGraphNode?.contentExternalId) return;
+    setContentExplanationLoading(true);
+    setContentExplanationError(null);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'PERSONAL_ALGORITHM_EXPLAIN_CONTENT',
+        payload: { externalId: selectedGraphNode.contentExternalId },
+      }) as { ok?: boolean; item?: ContentExplanation; error?: string };
+      if (!response?.ok || !response.item) {
+        setContentExplanation(null);
+        setContentExplanationError(response?.error ?? 'Unable to explain this content.');
+        return;
+      }
+      setContentExplanation(response.item);
+    } catch (error) {
+      setContentExplanation(null);
+      setContentExplanationError(error instanceof Error ? error.message : 'Unable to explain this content.');
+    } finally {
+      setContentExplanationLoading(false);
+    }
+  };
+
   const handleNeuralBatchSizeChange = async (nextBatchSize: number) => {
     const batchSize = Math.max(1, Math.min(16, Math.floor(nextBatchSize)));
     setNeuralBatchSize(batchSize);
@@ -168,9 +297,76 @@ export function Options() {
   };
 
   const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
+  const selectedModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default' && selectedModeIds.includes(option.id)
+  ));
+  const normalizedModeSearch = modeSearch.trim().toLowerCase();
+  const searchableModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default'
+    && (!normalizedModeSearch
+      || option.label.toLowerCase().includes(normalizedModeSearch)
+      || option.id.toLowerCase().includes(normalizedModeSearch))
+  ));
+  const normalizedGraphQuery = graphQuery.trim().toLowerCase();
+  const filteredGraphNodes = (graphInspector?.nodes ?? []).filter((node) => (
+    !normalizedGraphQuery
+    || node.label.toLowerCase().includes(normalizedGraphQuery)
+    || node.id.toLowerCase().includes(normalizedGraphQuery)
+    || node.kind.toLowerCase().includes(normalizedGraphQuery)
+  )).slice(0, 80);
+  const filteredGraphEdges = (graphInspector?.edges ?? []).filter((edge) => (
+    !normalizedGraphQuery
+    || edge.relation.toLowerCase().includes(normalizedGraphQuery)
+    || edge.sourceLabel.toLowerCase().includes(normalizedGraphQuery)
+    || edge.targetLabel.toLowerCase().includes(normalizedGraphQuery)
+    || edge.id.toLowerCase().includes(normalizedGraphQuery)
+  )).slice(0, 80);
+  const graphModeCatalog = graphInspectorSource === 'live' ? durableModeCatalog : null;
+  const graphModeOverlay = graphInspector
+    ? buildGraphModeOverlay(graphInspector, graphModeCatalog, graphModeId)
+    : buildGraphModeOverlay({
+        schemaVersion: 2,
+        graphRevision: 0,
+        evidenceCount: 0,
+        nodeCount: 0,
+        edgeCount: 0,
+        nodesByKind: [],
+        edgesByRelation: [],
+        nodes: [],
+        edges: [],
+        revisions: [],
+      }, durableModeCatalog, 'all');
+  const selectedGraphNode = graphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedGraphEdge = graphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedGraphNodeEdges = selectedGraphNode
+    ? (graphInspector?.edges ?? []).filter((edge) => (
+        edge.sourceNodeId === selectedGraphNode.id || edge.targetNodeId === selectedGraphNode.id
+      )).slice(0, 16)
+    : [];
+  const explanationGraphView = graphInspector && selectedGraphNode && contentExplanation
+    ? buildExplanationGraphView(
+        graphInspector,
+        selectedGraphNode.id,
+        contentExplanation.explanation,
+      )
+    : null;
+  const explanationGraphOverlay = explanationGraphView
+    ? buildGraphModeOverlay(explanationGraphView, null, 'all')
+    : null;
+  const graphSearchResults = normalizedGraphQuery
+    ? [
+        ...filteredGraphNodes.slice(0, 8).map((node) => ({ id: node.id, label: node.label, kind: node.kind, type: 'node' as const })),
+        ...filteredGraphEdges.slice(0, 5).map((edge) => ({
+          id: edge.id,
+          label: `${edge.sourceLabel} → ${edge.targetLabel}`,
+          kind: edge.relation,
+          type: 'edge' as const,
+        })),
+      ]
+    : [];
 
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'sans-serif' }}>
+    <main style={{ maxWidth: 1240, margin: '0 auto', padding: 24, fontFamily: 'sans-serif', color: '#0f172a' }}>
       <h1>Personal Algorithm settings</h1>
 
       <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
@@ -188,15 +384,90 @@ export function Options() {
       </section>
 
       <section style={{ marginBottom: 24 }}>
-        <h2>Mode</h2>
-        <select value={activeModeId} onChange={(event) => void handleModeChange(event.target.value)} style={{ padding: 8, minWidth: 240 }}>
-          {modeOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}{option.active ? '' : ' (dormant)'}
-            </option>
+        <h2>Modes / groups</h2>
+        <p>
+          Selected groups stay pinned even if a later graph refresh makes them dormant or discovers a broader parent group.
+          Deselect a pinned bubble explicitly to remove it from the active feed intent.
+        </p>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            aria-pressed={selectedModeIds.length === 0}
+            onClick={() => void handleModeChange('default')}
+            style={{
+              borderRadius: 999,
+              padding: '7px 11px',
+              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
+              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
+              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
+            }}
+          >
+            All
+          </button>
+          {selectedModeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed="true"
+              title="Click to deselect"
+              onClick={() => void handleModeChange(option.id)}
+              style={{
+                borderRadius: 999,
+                padding: '7px 11px',
+                border: '2px solid #2563eb',
+                background: '#dbeafe',
+                fontWeight: 700,
+              }}
+            >
+              {option.label}{option.active ? '' : ' · retained'}
+            </button>
           ))}
-        </select>
-        <p>Modes are persisted clusters over canonical Personal Algorithm concepts rather than labels from the current feed.</p>
+        </div>
+
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Browse discovered groups ({Math.max(0, modeOptions.length - 1)})
+          </summary>
+          <label htmlFor="mode-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
+            Search groups
+          </label>
+          <input
+            id="mode-search"
+            type="search"
+            value={modeSearch}
+            onChange={(event) => setModeSearch(event.target.value)}
+            placeholder="Search by group name"
+            style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
+            {searchableModeOptions.map((option) => {
+              const pressed = selectedModeIds.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={pressed}
+                  onClick={() => void handleModeChange(option.id)}
+                  style={{
+                    borderRadius: 999,
+                    padding: '7px 11px',
+                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                    background: pressed ? '#dbeafe' : '#fff',
+                    fontWeight: pressed ? 700 : 500,
+                  }}
+                >
+                  {option.label}{option.active ? '' : ' (retained)'}
+                </button>
+              );
+            })}
+            {searchableModeOptions.length === 0 ? <span>No matching groups.</span> : null}
+          </div>
+        </details>
+        <p>
+          Groups are discovered from retained semantic graph support. Repeated standalone interests can become groups once supported
+          by at least two retained videos; parent/child reclustering does not silently clear a user selection.
+        </p>
       </section>
 
       <section>
@@ -301,6 +572,470 @@ export function Options() {
           Record visible YouTube Home recommendations as context
         </label>
         <p>When enabled, MyAlgo stores visible video IDs, titles, creators, position, section, and observation time only in this browser. A surfaced recommendation is not treated as a preference; clicks and later history matches are recorded separately.</p>
+      </section>
+
+      <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+        <h2>Personal Algorithm Graph explorer</h2>
+        <p>
+          Explore the current local graph visually, search stable graph IDs, switch between durable mode overlays,
+          and inspect exact retained evidence. Live snapshots also use retained semantic affinities to cluster content by
+          its strongest durable mode or semantic topic without creating synthetic graph edges. This surface is read-only
+          and does not edit preferences.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+          <button type="button" onClick={() => void handleLoadLiveGraph()}>Load live graph</button>
+          {graphInspector ? (
+            <span>
+              {graphInspectorSource === 'live' ? 'Live snapshot' : 'Offline pasted snapshot'}
+              {' · '}graph r{graphInspector.graphRevision}
+              {' · '}{graphInspector.nodeCount} nodes
+              {' · '}{graphInspector.edgeCount} edges
+              {' · '}{graphInspector.evidenceCount} evidence records
+            </span>
+          ) : null}
+        </div>
+
+        <details style={{ marginBottom: 16 }}>
+          <summary>Inspect an exported graph snapshot offline</summary>
+          <p style={{ marginBottom: 8 }}>
+            Paste a MyAlgo export. Parsing stays in this Settings page and never writes the pasted snapshot into live graph state.
+          </p>
+          <textarea
+            value={offlineGraphJson}
+            onChange={(event) => setOfflineGraphJson(event.target.value)}
+            rows={7}
+            placeholder="Paste myalgo-personal-algorithm-state.json here"
+            style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace' }}
+          />
+          <button
+            type="button"
+            disabled={!offlineGraphJson.trim()}
+            onClick={handleInspectOfflineGraph}
+            style={{ marginTop: 8 }}
+          >
+            Inspect pasted snapshot
+          </button>
+        </details>
+
+        {graphInspector ? (
+          <div style={{
+            border: '1px solid #1e293b',
+            borderRadius: 16,
+            background: '#0b0f16',
+            color: '#e2e8f0',
+            padding: 16,
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(240px, 300px) minmax(0, 1fr)',
+              gap: 14,
+              alignItems: 'start',
+            }}>
+              <aside style={{
+                padding: 12,
+                border: '1px solid #263244',
+                borderRadius: 12,
+                background: '#111827',
+              }}>
+                <label htmlFor="graph-layout-mode">
+                  <strong>Layout</strong>
+                  <select
+                    id="graph-layout-mode"
+                    value={graphLayoutMode}
+                    onChange={(event) => setGraphLayoutMode(event.target.value === 'lineage' ? 'lineage' : 'network')}
+                    style={{ display: 'block', width: '100%', marginTop: 6, padding: 8 }}
+                  >
+                    <option value="network">Network</option>
+                    <option value="lineage">Lineage / family tree</option>
+                  </select>
+                </label>
+
+                <p style={{ margin: '6px 0 14px', color: '#94a3b8', fontSize: 11 }}>
+                  Lineage layers content/history toward the leaves, then creators/topics/concepts, then objectives/user-level nodes.
+                  It uses only stored graph edges; it does not invent ancestry.
+                </p>
+
+                <label htmlFor="graph-mode-overlay">
+                  <strong>Mode overlay</strong>
+                  <select
+                    id="graph-mode-overlay"
+                    value={graphModeId}
+                    disabled={graphInspectorSource !== 'live'}
+                    onChange={(event) => {
+                      setGraphModeId(event.target.value);
+                      setSelectedNodeId(null);
+                      setSelectedEdgeId(null);
+                    }}
+                    style={{ display: 'block', width: '100%', marginTop: 6, padding: 8 }}
+                  >
+                    <option value="all">All graph</option>
+                    {(graphModeCatalog?.modes ?? []).map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label} · r{entry.revision}{entry.active ? '' : ' · dormant'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label htmlFor="graph-inspector-search" style={{ display: 'block', marginTop: 14 }}>
+                  <strong>Search graph</strong>
+                  <input
+                    id="graph-inspector-search"
+                    type="search"
+                    value={graphQuery}
+                    onChange={(event) => setGraphQuery(event.target.value)}
+                    placeholder="creator, concept, relation, or ID"
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, padding: 8 }}
+                  />
+                </label>
+
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 12,
+                  color: '#cbd5e1',
+                  fontSize: 12,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={graphFocusOnly}
+                    onChange={(event) => setGraphFocusOnly(event.target.checked)}
+                  />
+                  Focus only on selected mode/search/selection
+                </label>
+                <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 11 }}>
+                  Turn this off to keep unrelated graph context visible.
+                </p>
+
+                {graphSearchResults.length > 0 ? (
+                  <div style={{ marginTop: 8, maxHeight: 210, overflow: 'auto' }}>
+                    {graphSearchResults.map((result) => (
+                      <button
+                        key={`${result.type}:${result.id}`}
+                        type="button"
+                        onClick={() => {
+                          if (result.type === 'node') {
+                            setSelectedNodeId(result.id);
+                            setSelectedEdgeId(null);
+                            setContentExplanation(null);
+                            setContentExplanationError(null);
+                          } else {
+                            setSelectedEdgeId(result.id);
+                            setSelectedNodeId(null);
+                            setContentExplanation(null);
+                            setContentExplanationError(null);
+                          }
+                        }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          border: 0,
+                          borderTop: '1px solid #263244',
+                          padding: '8px 4px',
+                          background: 'transparent',
+                          color: '#e2e8f0',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <strong>{result.label}</strong>
+                        <div style={{ color: '#94a3b8', fontSize: 11 }}>{result.kind} · {result.type}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {graphInspectorSource !== 'live' ? (
+                  <p style={{ marginTop: 10, color: '#94a3b8', fontSize: 12 }}>
+                    Mode overlays are disabled for pasted snapshots because the durable mode catalog is stored separately from graph exports.
+                  </p>
+                ) : null}
+
+                <div style={{ marginTop: 16, color: '#cbd5e1', fontSize: 12 }}>
+                  <strong>Mode connection</strong>
+                  <div style={{ marginTop: 4 }}>
+                    {graphModeOverlay.modeId === 'all'
+                      ? 'Showing the full graph.'
+                      : `${graphModeOverlay.memberNodeIds.length} exact member nodes · ${graphModeOverlay.connectedNodeIds.length} connected nodes · ${graphModeOverlay.connectedEdgeIds.length} connecting edges`}
+                  </div>
+                </div>
+
+                <details style={{ marginTop: 14 }}>
+                  <summary>Graph summary</summary>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                    <div>
+                      <strong>Node kinds</strong>
+                      <ul style={{ paddingLeft: 18 }}>
+                        {graphInspector.nodesByKind.map((entry) => (
+                          <li key={entry.key}>{entry.key}: {entry.count}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Relations</strong>
+                      <ul style={{ paddingLeft: 18 }}>
+                        {graphInspector.edgesByRelation.map((entry) => (
+                          <li key={entry.key}>{entry.key}: {entry.count}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </details>
+
+                <details style={{ marginTop: 10 }}>
+                  <summary>Recent revisions</summary>
+                  <ul style={{ paddingLeft: 18 }}>
+                    {graphInspector.revisions.slice(0, 8).map((revision) => (
+                      <li key={`${revision.revision}:${revision.createdAt}`}>
+                        r{revision.revision} · {revision.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </aside>
+
+              <div>
+                <GraphCanvas
+                  nodes={graphInspector.nodes}
+                  edges={graphInspector.edges}
+                  modeOverlay={graphModeOverlay}
+                  searchQuery={graphQuery}
+                  selectedNodeId={selectedNodeId}
+                  selectedEdgeId={selectedEdgeId}
+                  onNodeSelect={(nodeId) => {
+                    setSelectedNodeId(nodeId);
+                    setSelectedEdgeId(null);
+                    setContentExplanation(null);
+                    setContentExplanationError(null);
+                  }}
+                  onEdgeSelect={(edgeId) => {
+                    setSelectedEdgeId(edgeId);
+                    setSelectedNodeId(null);
+                    setContentExplanation(null);
+                    setContentExplanationError(null);
+                  }}
+                  height={640}
+                  focusOnly={graphFocusOnly}
+                  layoutMode={graphLayoutMode}
+                />
+
+                <div
+                  ref={graphInspectorDetailRef}
+                  tabIndex={-1}
+                  aria-live="polite"
+                  style={{
+                  marginTop: 12,
+                  padding: 12,
+                  border: '1px solid #263244',
+                  borderRadius: 12,
+                  background: '#111827',
+                  minHeight: 110,
+                  outline: 'none',
+                }}>
+                  {selectedGraphNode ? (
+                    <>
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        {selectedGraphNode.thumbnailUrl ? (
+                          <img
+                            src={selectedGraphNode.thumbnailUrl}
+                            alt=""
+                            width={160}
+                            height={90}
+                            style={{
+                              width: 160,
+                              height: 90,
+                              objectFit: 'cover',
+                              borderRadius: 10,
+                              border: '1px solid #334155',
+                              background: '#0f172a',
+                              flex: '0 0 auto',
+                            }}
+                          />
+                        ) : null}
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ margin: '0 0 6px' }}>{selectedGraphNode.label}</h3>
+                          {selectedGraphNode.creatorName ? (
+                            <p style={{ margin: '0 0 6px', color: '#cbd5e1' }}>{selectedGraphNode.creatorName}</p>
+                          ) : null}
+                          <p style={{ margin: '4px 0' }}>
+                            {selectedGraphNode.kind} · {selectedGraphNode.provenance}
+                            {' · '}{selectedGraphNode.supportCount} support item{selectedGraphNode.supportCount === 1 ? '' : 's'}
+                            {selectedGraphNode.confidence == null ? '' : ` · confidence ${selectedGraphNode.confidence.toFixed(2)}`}
+                          </p>
+                          <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
+                        </div>
+                      </div>
+
+                      {selectedGraphNode.kind === 'content' && selectedGraphNode.contentExternalId ? (
+                        <div style={{ marginTop: 14, borderTop: '1px solid #263244', paddingTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => void handleExplainSelectedContent()}
+                              disabled={contentExplanationLoading}
+                            >
+                              {contentExplanationLoading ? 'Explaining…' : contentExplanation ? 'Refresh Why this?' : 'Why this?'}
+                            </button>
+                            {contentExplanation ? (
+                              <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                                exact local score · graph r{contentExplanation.explanation?.graphRevision ?? '—'}
+                              </span>
+                            ) : null}
+                          </div>
+                          {contentExplanationError ? (
+                            <p style={{ color: '#fca5a5', marginBottom: 0 }}>{contentExplanationError}</p>
+                          ) : null}
+
+                          {contentExplanation && explanationGraphView && explanationGraphOverlay ? (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 12,
+                                alignItems: 'baseline',
+                                marginBottom: 8,
+                              }}>
+                                <div>
+                                  <strong>Why this?</strong>
+                                  <div style={{ color: '#cbd5e1', fontSize: 12, marginTop: 2 }}>
+                                    Score {contentExplanation.score}/100 · raw {contentExplanation.explanation?.rawScore ?? contentExplanation.rawScore}
+                                  </div>
+                                </div>
+                                <code style={{ color: '#94a3b8', fontSize: 10, overflowWrap: 'anywhere' }}>
+                                  {contentExplanation.traceId}
+                                </code>
+                              </div>
+
+                              <GraphCanvas
+                                nodes={explanationGraphView.nodes}
+                                edges={explanationGraphView.edges}
+                                modeOverlay={explanationGraphOverlay}
+                                selectedNodeId={selectedGraphNode.id}
+                                compact
+                                layoutMode="lineage"
+                                height={240}
+                              />
+
+                              {contentExplanation.explanation?.acquisitionMechanism ? (
+                                <p style={{ color: '#94a3b8', fontSize: 11, margin: '8px 0 0' }}>
+                                  Acquired via {contentExplanation.explanation.acquisitionMechanism} · source is not preference evidence
+                                </p>
+                              ) : null}
+
+                              <div style={{ marginTop: 10 }}>
+                                {(contentExplanation.explanation?.contributions ?? []).map((contribution, index) => (
+                                  <div
+                                    key={`${contribution.kind}:${contribution.label}:${index}`}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto',
+                                      gap: 10,
+                                      padding: '8px 0',
+                                      borderTop: '1px solid #263244',
+                                    }}
+                                  >
+                                    <div>
+                                      <strong>{contribution.label}</strong>
+                                      <div style={{ color: '#94a3b8', fontSize: 11 }}>
+                                        {contribution.kind}
+                                        {contribution.evidenceIds.length > 0
+                                          ? ` · ${contribution.evidenceIds.length} evidence item${contribution.evidenceIds.length === 1 ? '' : 's'}`
+                                          : ''}
+                                      </div>
+                                    </div>
+                                    <strong style={{ color: contribution.value >= 0 ? '#86efac' : '#fca5a5' }}>
+                                      {contribution.value > 0 ? '+' : ''}{contribution.value}
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 0 }}>
+                                Reduce / Mute / Prefer actions remain disabled until #154/#155 land with revisioned undo/restore semantics.
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div style={{ marginTop: 14, borderTop: '1px solid #263244', paddingTop: 10 }}>
+                        <strong>Connected relationships</strong>
+                        {selectedGraphNodeEdges.length > 0 ? (
+                          <div style={{ marginTop: 6 }}>
+                            {selectedGraphNodeEdges.map((edge) => {
+                              const outbound = edge.sourceNodeId === selectedGraphNode.id;
+                              const otherLabel = outbound ? edge.targetLabel : edge.sourceLabel;
+                              return (
+                                <button
+                                  key={edge.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEdgeId(edge.id);
+                                    setSelectedNodeId(null);
+                                  }}
+                                  style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    border: 0,
+                                    borderTop: '1px solid #263244',
+                                    padding: '8px 0',
+                                    background: 'transparent',
+                                    color: '#e2e8f0',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <strong>{outbound ? '→' : '←'} {otherLabel}</strong>
+                                  <div style={{ color: '#94a3b8', fontSize: 11 }}>
+                                    {edge.relation} · {edge.provenance} · {edge.evidenceIds.length} support item{edge.evidenceIds.length === 1 ? '' : 's'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p style={{ color: '#94a3b8' }}>No visible graph relationships for this node.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : selectedGraphEdge ? (
+                    <>
+                      <h3 style={{ margin: '0 0 8px' }}>Relationship provenance</h3>
+                      <p style={{ margin: '4px 0' }}>
+                        <strong>{selectedGraphEdge.sourceLabel}</strong> → <strong>{selectedGraphEdge.targetLabel}</strong>
+                        {' · '}{selectedGraphEdge.relation}
+                        {' · '}{selectedGraphEdge.provenance}
+                      </p>
+                      <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphEdge.id}</code>
+                      {selectedGraphEdge.evidence.length > 0 ? (
+                        <ul style={{ marginBottom: 0 }}>
+                          {selectedGraphEdge.evidence.slice(0, 12).map((evidence) => (
+                            <li key={evidence.id} style={{ marginTop: 8 }}>
+                              <strong>{evidence.kind === 'interaction' ? evidence.interaction : 'surfaced'}</strong>
+                              {' · '}{evidence.contentLabel}
+                              {' · '}{evidence.connector}/{evidence.mechanism}
+                              {' · '}{evidence.observedAt}
+                              <br />
+                              <code style={{ color: '#94a3b8' }}>{evidence.id}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No retained supporting evidence is available for this relationship.</p>
+                      )}
+                    </>
+                  ) : (
+                    <p style={{ margin: 0, color: '#94a3b8' }}>
+                      Select a node or relationship in the graph, or search for one by label or stable ID.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>

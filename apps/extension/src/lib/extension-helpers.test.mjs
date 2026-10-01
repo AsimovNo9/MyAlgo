@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDurableModeOptions, summarizeFeed } from './extension-helpers.ts';
+import { buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -109,4 +109,315 @@ test('summarizeFeed discovers recurring mode categories from soft semantic score
     { category: 'AI tooling', count: 3 },
     { category: 'Personal finance', count: 2 },
   ]);
+});
+
+
+test('graph inspector summarizes nodes, edges, revisions, and supporting evidence', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [
+      {
+        id: 'e1',
+        evidence: {
+          kind: 'interaction',
+          content: { source: 'youtube', externalId: 'video-a' },
+          exposureId: null,
+          interaction: 'watched',
+          observedAt: '2026-09-30T08:00:00.000Z',
+          provenance: { connector: 'youtube', mechanism: 'player_watch' },
+          metadata: { title: 'Video A', creatorName: 'Creator A' },
+        },
+        confidence: 1,
+        retainedAt: '2026-09-30T08:00:00.000Z',
+        retention: { policy: 'default', expiresAt: null },
+      },
+    ],
+    graph: {
+      currentRevision: 7,
+      userEdits: [],
+      revisions: [
+        { id: 'r6', revision: 6, reason: 'older', createdAt: '2026-09-30T07:00:00.000Z' },
+        { id: 'r7', revision: 7, reason: 'derived_graph_reconcile:test', createdAt: '2026-09-30T08:01:00.000Z' },
+      ],
+      nodes: [
+        {
+          id: 'content:youtube:video-a', kind: 'content', label: 'Video A',
+          content: { source: 'youtube', externalId: 'video-a' },
+          provenance: 'explicit', confidence: null,
+          attributes: {
+            metadata: {
+              creatorName: 'Creator A',
+              thumbnailUrl: 'https://i.ytimg.com/vi/video-a/mqdefault.jpg',
+            },
+          },
+          createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+        {
+          id: 'creator:youtube:creator-a', kind: 'creator', label: 'Creator A',
+          provenance: 'inferred', confidence: 1, attributes: {},
+          createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge:created_by:a',
+          sourceNodeId: 'content:youtube:video-a',
+          targetNodeId: 'creator:youtube:creator-a',
+          relation: 'created_by',
+          provenance: 'inferred',
+          confidence: 1,
+          evidenceIds: ['e1'],
+          attributes: {},
+          createdAt: '2026-09-30T08:00:00.000Z',
+          updatedAt: '2026-09-30T08:00:00.000Z',
+        },
+      ],
+    },
+  };
+
+  const view = buildGraphInspectorView(state);
+  assert.equal(view.graphRevision, 7);
+  assert.equal(view.evidenceCount, 1);
+  assert.deepEqual(view.nodesByKind, [
+    { key: 'content', count: 1 },
+    { key: 'creator', count: 1 },
+  ]);
+  assert.deepEqual(view.edgesByRelation, [{ key: 'created_by', count: 1 }]);
+  assert.equal(view.nodes.find((node) => node.id === 'creator:youtube:creator-a').supportCount, 1);
+  const contentNode = view.nodes.find((node) => node.id === 'content:youtube:video-a');
+  assert.equal(contentNode.thumbnailUrl, 'https://i.ytimg.com/vi/video-a/mqdefault.jpg');
+  assert.equal(contentNode.creatorName, 'Creator A');
+  assert.equal(contentNode.contentExternalId, 'video-a');
+  assert.deepEqual(view.edges[0].evidence, [{
+    id: 'e1',
+    kind: 'interaction',
+    interaction: 'watched',
+    connector: 'youtube',
+    mechanism: 'player_watch',
+    observedAt: '2026-09-30T08:00:00.000Z',
+    contentLabel: 'Video A',
+  }]);
+  assert.equal(view.revisions[0].revision, 7);
+});
+
+test('graph inspector prefers semantic topic grouping and uses durable mode only as a fallback', () => {
+  const state = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: {
+      currentRevision: 1,
+      userEdits: [],
+      revisions: [],
+      nodes: [{
+        id: 'content:youtube:video-a',
+        kind: 'content',
+        label: 'Video A',
+        content: { source: 'youtube', externalId: 'video-a' },
+        provenance: 'explicit',
+        confidence: null,
+        attributes: {},
+        createdAt: '2026-09-30T08:00:00.000Z',
+        updatedAt: '2026-09-30T08:00:00.000Z',
+      }],
+      edges: [],
+    },
+  };
+
+  const graphMatchView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: 'AI tooling',
+    categoryConfidence: 0.81,
+    categoryScores: { 'AI tooling': 0.81, 'People & Blogs': 0.31 },
+    graphMatches: [
+      { nodeId: 'concept:agents', nodeLabel: 'AI agents', similarity: 0.72, taxonomyOnly: false },
+      { nodeId: 'concept:generic', nodeLabel: 'Technology', similarity: 0.91, taxonomyOnly: true },
+    ],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
+  }]);
+  assert.equal(graphMatchView.nodes[0].semanticClusterId, 'topic:concept:agents');
+  assert.equal(graphMatchView.nodes[0].semanticClusterLabel, 'AI agents');
+  assert.equal(graphMatchView.nodes[0].semanticClusterKind, 'topic');
+  assert.equal(graphMatchView.nodes[0].semanticClusterAffinity, 0.72);
+
+  const categoryView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: 'AI tooling',
+    categoryConfidence: 0.44,
+    categoryScores: { 'AI tooling': 0.44, 'People & Blogs': 0.29 },
+    graphMatches: [],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
+  }]);
+  assert.equal(categoryView.nodes[0].semanticClusterId, 'topic:ai tooling');
+  assert.equal(categoryView.nodes[0].semanticClusterLabel, 'AI tooling');
+  assert.equal(categoryView.nodes[0].semanticClusterKind, 'topic');
+  assert.equal(categoryView.nodes[0].semanticClusterAffinity, 0.44);
+
+  const modeFallbackView = buildGraphInspectorView(state, [{
+    externalId: 'video-a',
+    category: null,
+    categoryConfidence: 0,
+    categoryScores: {},
+    graphMatches: [],
+    modeAffinities: [{ modeId: 'mode:ai', label: 'AI work', affinity: 0.84 }],
+  }]);
+  assert.equal(modeFallbackView.nodes[0].semanticClusterId, 'mode:mode:ai');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterLabel, 'AI work');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterKind, 'mode');
+  assert.equal(modeFallbackView.nodes[0].semanticClusterAffinity, 0.84);
+});
+
+test('graph inspector parses exported JSON without mutating live state and rejects invalid snapshots', () => {
+  const empty = {
+    schemaVersion: 2,
+    evidence: [],
+    graph: { nodes: [], edges: [], userEdits: [], revisions: [], currentRevision: 0 },
+  };
+  assert.equal(parseGraphInspectorExport(JSON.stringify(empty)).nodeCount, 0);
+  assert.throws(() => parseGraphInspectorExport('{'), /not valid JSON/);
+  assert.throws(
+    () => buildGraphInspectorView({ schemaVersion: 1, evidence: [], graph: {} }),
+    /not a valid MyAlgo Personal Algorithm export/,
+  );
+});
+
+
+test('graph mode overlay highlights exact mode members and their immediate graph neighbourhood', () => {
+  const view = {
+    schemaVersion: 2,
+    graphRevision: 8,
+    evidenceCount: 0,
+    nodeCount: 4,
+    edgeCount: 3,
+    nodesByKind: [],
+    edgesByRelation: [],
+    revisions: [],
+    nodes: [
+      { id: 'concept:ai', label: 'AI', kind: 'concept', provenance: 'inferred', confidence: 1, supportCount: 2 },
+      { id: 'topic:systems', label: 'Systems', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2 },
+      { id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 1 },
+      { id: 'content:a', label: 'Video A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1 },
+    ],
+    edges: [
+      {
+        id: 'edge:ai-systems', relation: 'related_to', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'concept:ai', sourceLabel: 'AI', targetNodeId: 'topic:systems', targetLabel: 'Systems',
+        evidenceIds: [], evidence: [],
+      },
+      {
+        id: 'edge:systems-creator', relation: 'influences', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'topic:systems', sourceLabel: 'Systems', targetNodeId: 'creator:a', targetLabel: 'Creator A',
+        evidenceIds: [], evidence: [],
+      },
+      {
+        id: 'edge:creator-content', relation: 'created_by', provenance: 'inferred', confidence: 1,
+        sourceNodeId: 'content:a', sourceLabel: 'Video A', targetNodeId: 'creator:a', targetLabel: 'Creator A',
+        evidenceIds: [], evidence: [],
+      },
+    ],
+  };
+  const catalog = {
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 8,
+    generatedAt: '2026-09-30T09:00:00.000Z',
+    modes: [{
+      id: 'mode:systems',
+      label: 'Systems mode',
+      revision: 4,
+      provenance: 'inferred',
+      pipelineId: 'durable-semantic-mode-cluster-v1',
+      graphRevision: 8,
+      createdAt: '2026-09-30T08:00:00.000Z',
+      lastSupportedAt: '2026-09-30T09:00:00.000Z',
+      active: true,
+      pinned: false,
+      members: [{
+        canonicalId: 'canonical:systems',
+        label: 'Systems',
+        weight: 1,
+        sourceNodeIds: ['topic:systems'],
+        supportContentIds: ['content:a'],
+      }],
+    }],
+  };
+
+  const overlay = buildGraphModeOverlay(view, catalog, 'mode:systems');
+  assert.deepEqual(overlay.memberNodeIds, ['topic:systems']);
+  assert.deepEqual(overlay.connectedNodeIds, ['concept:ai', 'creator:a', 'topic:systems']);
+  assert.deepEqual(overlay.connectedEdgeIds, ['edge:ai-systems', 'edge:systems-creator']);
+  assert.equal(overlay.modeRevision, 4);
+});
+
+test('graph mode overlay returns the full-graph sentinel without inventing membership', () => {
+  const overlay = buildGraphModeOverlay({
+    schemaVersion: 2,
+    graphRevision: 0,
+    evidenceCount: 0,
+    nodeCount: 0,
+    edgeCount: 0,
+    nodesByKind: [],
+    edgesByRelation: [],
+    nodes: [],
+    edges: [],
+    revisions: [],
+  }, null, 'all');
+
+  assert.deepEqual(overlay, {
+    modeId: 'all',
+    modeLabel: 'All graph',
+    modeRevision: null,
+    memberNodeIds: [],
+    connectedNodeIds: [],
+    connectedEdgeIds: [],
+  });
+});
+
+
+test('explanation graph view contains only exact trace nodes and stored connecting edges', () => {
+  const view = {
+    schemaVersion: 2,
+    graphRevision: 12,
+    evidenceCount: 2,
+    nodeCount: 4,
+    edgeCount: 3,
+    nodesByKind: [],
+    edgesByRelation: [],
+    revisions: [],
+    nodes: [
+      { id: 'content:a', label: 'Video A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1, contentSource: 'youtube', contentExternalId: 'a', creatorName: 'Creator A', thumbnailUrl: null },
+      { id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 1, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+      { id: 'topic:systems', label: 'Systems', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+      { id: 'topic:music', label: 'Music', kind: 'topic', provenance: 'inferred', confidence: 1, supportCount: 2, contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null },
+    ],
+    edges: [
+      { id: 'edge:created', relation: 'created_by', provenance: 'inferred', confidence: 1, sourceNodeId: 'content:a', sourceLabel: 'Video A', targetNodeId: 'creator:a', targetLabel: 'Creator A', evidenceIds: ['e1'], evidence: [] },
+      { id: 'edge:systems', relation: 'related_to', provenance: 'inferred', confidence: 1, sourceNodeId: 'creator:a', sourceLabel: 'Creator A', targetNodeId: 'topic:systems', targetLabel: 'Systems', evidenceIds: ['e2'], evidence: [] },
+      { id: 'edge:music', relation: 'related_to', provenance: 'inferred', confidence: 1, sourceNodeId: 'creator:a', sourceLabel: 'Creator A', targetNodeId: 'topic:music', targetLabel: 'Music', evidenceIds: [], evidence: [] },
+    ],
+  };
+
+  const explanation = {
+    rawScore: 17,
+    displayScore: 76,
+    graphRevision: 12,
+    policyRevision: 'policy-v1',
+    acquisitionMechanism: 'observed_dom',
+    contributions: [
+      { label: 'Systems', value: 8, kind: 'node', sourceId: 'topic:systems', evidenceIds: ['e2'] },
+    ],
+    matchedPaths: [
+      { nodeIds: ['creator:a', 'topic:systems'], nodeLabels: ['Creator A', 'Systems'], edgeIds: ['edge:systems'], evidenceIds: ['e2'] },
+    ],
+    modeGrounding: null,
+  };
+
+  const subgraph = buildExplanationGraphView(view, 'content:a', explanation);
+  assert.deepEqual(
+    subgraph.nodes.map((node) => node.id).sort(),
+    ['content:a', 'creator:a', 'topic:systems'],
+  );
+  assert.deepEqual(
+    subgraph.edges.map((edge) => edge.id).sort(),
+    ['edge:created', 'edge:systems'],
+  );
+  assert.equal(subgraph.edges.some((edge) => edge.id === 'edge:music'), false);
 });

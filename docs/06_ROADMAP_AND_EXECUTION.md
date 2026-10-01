@@ -224,10 +224,10 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #223/#221 through PR #229 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
+PR #223/#221 through PR #230 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
 
-1. **Active P1 — #153 trust UX.** Extend exact trace explanations to scored native cards, carry symbolic matched graph paths and evidence provenance, and keep acquisition provenance explicitly separate from preference/ranking reasons.
-2. **Next P1 — #170 graph inspection.** Build the read-only Personal Algorithm Graph/provenance explorer on the same node/edge/evidence identifiers exposed by #153.
+1. **Complete first trust slice — #153 / PR #230.** Scored native and replacement cards now expose one trace-grounded Why-this contract with exact contributions, matched symbolic graph paths, trace/revision identity, and separated acquisition provenance. #153 remains open for direct actions and deeper evidence navigation.
+2. **Active P1 — #170 graphical graph explorer.** Build the read-only interactive Personal Algorithm Graph on the same stable identifiers exposed by #153: deterministic bounded Network and Lineage/family-tree layouts, pointer-centered pan/zoom, progressive lineage disclosure, search/focus, rich node/edge provenance inspection, exact scorer-backed Why-this for retained content nodes, live/offline snapshot review, and durable-mode overlays that highlight exact member/source nodes plus their connecting neighbourhood. Network and lineage are two projections of the same canonical graph, not separate models.
 3. **P1/P2 — #155 + #154 + #178 correction/provenance/history controls.** Let users forget evidence, reduce/prefer/mute graph terms, and explicitly choose history clusters.
 4. **P2 — remaining #161 + #158.** Add user-authored/versioned modes and explicit graph nodes once inspection/correction semantics are established.
 5. **P3 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot.
@@ -278,12 +278,18 @@ Only expand retrieval or model complexity when a measured failure justifies it.
 
 ## Phase 4 — Graph editing
 
+Inspection/search/mode overlays move earlier into #170 because users need to understand the graph before editing it. Phase 4 is therefore mutation-focused:
+
+### Graph revision safety invariant
+
+Before the first explicit user mutation, preserve a durable original graph baseline. Every user-authored node/edge/control mutation creates a new graph revision with reversible before/after state. Undo restores the prior user revision; Restore original returns to the preserved baseline without erasing retained evidence. Forget remains an evidence operation, not a graph-edit undo.
+
 1. node editing
 2. edge/path editing
 3. deletion semantics
 4. user-created nodes
-5. graph search
-6. mode overlays
+5. edit confirmation and revision history
+6. rollback/counterfactual handoff
 
 ## Phase 5 — Counterfactuals
 

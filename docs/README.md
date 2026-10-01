@@ -40,11 +40,13 @@ This separation is a compliance design decision, not merely an implementation de
 
 ## Current implementation status
 
-The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. The semantic/runtime sequence through PR #229 is merged: evidence-backed concept materialization, canonical semantic neighbourhoods, durable inferred modes, graph-grounded mode scoring, mode-aware retrieval/supply, stable source→replacement bindings, bounded warm-path ranking, and measured post-canonical score calibration.
+The evidence → graph → deterministic scoring → extension-local runtime foundation is implemented. The semantic/runtime sequence through PR #230 is merged: evidence-backed concept materialization, canonical semantic neighbourhoods, durable inferred modes, graph-grounded mode scoring, mode-aware retrieval/supply, stable source→replacement bindings, bounded warm-path ranking, and measured post-canonical score calibration.
 
 PR #229 found no top-end display-score saturation that justified retuning the existing deterministic mapping. It also corrected effective replacement-threshold diagnostics and validated prepared candidate-context reuse across large Home reranks.
 
-The active implementation task is **#153 trust UX**: extend exact trace explanations to native cards and carry symbolic graph-path/evidence provenance through the live explanation contract. **#170** follows with a read-only Personal Algorithm Graph inspector.
+PR #230 completed the first #153 trust slice: scored native and replacement cards share one exact trace-grounded explanation renderer with matched symbolic graph paths, evidence support counts, stable trace/graph revision identity, and acquisition provenance kept separate from preference evidence.
+
+The active implementation task is **#170 graphical graph exploration**: add a read-only interactive Settings graph with pan/zoom, search, node/edge focus, stable durable-mode overlays, current/pasted snapshots, provenance/evidence drill-down, and revision inspection. The same renderer will be reused by the next #153 compact Why-this graph slice. #153 remains open for direct graph actions and tighter Why-this → graph/evidence navigation.
 
 #211 remains open only for long-session/browser stress validation and measured follow-up; it is not the primary architecture task. #214's runtime/documentation work is complete.
 

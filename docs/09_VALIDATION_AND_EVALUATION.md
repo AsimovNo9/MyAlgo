@@ -753,3 +753,82 @@ For #153 explanation validation, require:
 5. acquisition mechanism is shown separately and explicitly not presented as preference evidence;
 6. repeated presentation refreshes update the explanation for the current trace without duplicating controls or changing native card identity.
 
+
+
+## Interactive graph explorer validation (#170)
+
+The first #170 slice is a graphical inspection surface, not a graph mutation path.
+
+Validate all of the following:
+
+1. opening/reloading the live explorer does not change graph revision, evidence count, node count, edge count, or user-edit history;
+2. node-kind and edge-relation summaries reconcile to the inspected snapshot;
+3. the SVG graph remains stable across repeated loads of the same snapshot and uses bounded deterministic density rather than rendering unbounded history;
+4. pan, zoom, reset, node selection, edge selection, search/focus, and the focus-only toggle work on a bootstrap-sized graph without layout feedback into graph state; trackpad/wheel zoom preserves the graph-space point under the pointer/gesture focal point rather than zooming toward the SVG origin;
+5. a searched or selected low-degree node remains renderable even when the graph exceeds the canvas density cap;
+6. explicit vs inferred provenance and evidence-support counts are visible without exposing raw storage objects as the primary UI;
+7. selecting an inferred edge shows retained supporting evidence records, including connector, mechanism, observed time, and content label;
+8. selecting a durable mode highlights its exact persisted member/source graph nodes and immediate connecting edges/neighbours; with Focus only enabled, unrelated graph material is removed from the rendered subgraph, and disabling Focus only restores wider graph context;
+9. mode overlays are disabled for pasted graph-only snapshots because durable mode catalog state is stored separately and must not be borrowed from the live graph;
+10. pasted export JSON is parsed only in the Settings page and does not overwrite/persist live graph state;
+11. malformed or wrong-schema pasted snapshots fail clearly and leave the previous live graph unchanged;
+12. the explorer uses current graph node/edge/evidence identifiers so #153 Why-this paths can reuse the same renderer without identifier translation;
+13. Network and Lineage/family-tree layouts render the same graph state; lineage uses only stored graph edges and does not invent ancestry;
+14. lineage places content/history-like content toward leaves, creator/topic/concept nodes in intermediate layers, and objective/user-level nodes toward the root while retained evidence remains an edge drill-down until evidence itself becomes a first-class graph node;
+15. content leaves remain collapsed by default in lineage overview; selecting/searching a branch or choosing a mode reveals only related content leaves, and disabling Focus only restores higher-level context without expanding unrelated content;
+16. miniature content thumbnails are rendered only from thumbnail URLs already observed and retained from YouTube metadata; graph inspection must not synthesize bulk thumbnail URLs or introduce a new thumbnail-fetch pipeline;
+17. clicking a content/creator/topic/concept node populates an inspectable detail card with stable identity, provenance/support, and connected relationships, and relationship selection continues into retained evidence drill-down;
+18. lineage overview uses a bounded creator-branch overview when many creators have only downward content edges: all higher-level-connected creators remain visible, only a deterministic top subset of isolated creators is shown across multiple rows, hidden-branch count is disclosed, and any hidden creator remains searchable/selectable without mutating graph state;
+19. each visible creator branch includes only a small deterministic sample of real content children; preview content leaves are anchored directly under their actual creator and connected with the stored `created_by` edge rather than redistributed into a global content row;
+20. clicking a visible node opens a rich inspector card with stable identity, provenance/support, and connected relationships; retained content shows thumbnail/title/creator where available;
+21. content-node Why-this is scorer-backed, not adjacency-derived: it must return the current display/raw score, trace ID, graph revision, policy outcome, matched paths, and additive contributions from the same local scoring path used by Home;
+22. the compact Why-this graph contains only the selected content node, trace-matched/contributing nodes, and real stored edges among those nodes; it must not invent explanation edges or silently mutate graph/scoring state.
+
+The first slice deliberately avoids graph mutation, scoring, preference inference, and a heavyweight graph-rendering dependency. The follow-on #153 mini graph must render only the current trace subgraph and preserve the same trace/graph revision as the textual Why-this explanation.
+
+
+Future mutation validation must also preserve the pre-user-edit graph baseline, verify monotonic revision history for every user edit/undo/restore, prove Restore original does not erase retained evidence, and prove explorer-only interactions never create graph revisions.
+
+
+### Expanded Why-this product card validation
+
+The feed-card explanation surface should default to a product explanation, not a raw trace dump. Validate:
+
+1. expanded Why-this shows content title/creator and score/category metadata first;
+2. the visible mini graph is bounded, deterministic, centered on This video, and limited to the strongest contributing creator/topic/concept/format nodes;
+3. contribution rows show exact scorer values without recomputation;
+4. Reduce/Mute/Prefer affordances and the Light touch ↔ Strict control remain visibly disabled until revisioned mutation/undo semantics ship;
+5. trace ID, graph revision, acquisition provenance, and matched paths are available under a collapsed Technical details disclosure rather than dominating the default UI;
+6. the same item/trace refresh updates the product card without duplicate controls or stale contribution rows.
+
+
+### Interaction regressions from live validation
+
+Validate that expanded Why-this is not clipped by the thumbnail or native card paint boundary: the full explanation remains reachable/scrollable while the closed card retains its normal geometry, and opening/closing restores prior overflow/contain styles. In the graph explorer, lineage thumbnail nodes must be clickable with a generous hit target, must not initiate canvas panning on pointer-down, must support Enter/Space activation, and must reveal/focus the node inspector immediately after selection.
+
+
+### Why-this portal and mode-hydration regressions
+
+Validate that expanded Why-this is rendered as a body-level fixed portal anchored to its trigger, remains open while interacting with Technical details/contribution content, survives ordinary rerank cleanup without duplicate click bindings, and does not cause MyAlgo-only DOM mutations to schedule Home observation/rerank feedback. The visible explanation must include human-readable matched graph paths/evidence counts while raw trace/revision material remains under Technical details.
+
+The Technical details disclosure must preserve its open/closed state across ordinary explanation rerenders, including score/semantic/metadata reranks, rather than collapsing because the portal body was rebuilt. The removed Light touch ↔ Strict placeholder slider must not appear in the feed-card explanation until there is a real revisioned preference-strength control.
+
+After Deactivated → Activated without a page reload, every newly rendered or recycled Why-this trigger must open its own portal. Binding must not rely on a copied data attribute because YouTube renderer cloning can preserve attributes while dropping event listeners; duplicate/cloned trigger IDs must not cause one card to target another card's portal.
+
+Loading the live graph must also hydrate the durable-mode catalog and active mode ID from the same background inspection response so persisted mode overlays appear immediately and do not depend on a storage-listener race.
+
+For the Network projection, durable modes and visual semantic groups are intentionally distinct. A small durable-mode catalog must not collapse the whole visualization into only those mode regions: content should first group by its strongest non-taxonomy semantic graph match, then semantic category, with durable mode only as a fallback when no finer topic signal exists. Semantic group halos/labels must be keyboard- and pointer-activatable; activating one focuses that group's content plus its immediate real graph neighbours, and activating it again or choosing All groups restores the wider graph. This is a presentation filter only and must not create graph edges or mutate graph revision/state.
+
+Why-this score attribution must distinguish semantic/creator preference signals from structural graph plumbing. Relations such as `created_by` remain valid graph edges for provenance/path display, but must not receive their own additive recommendation weight or appear as a ranked contribution row. Creator affinity may still contribute through the creator node itself.
+
+Retained content identity is also graph bookkeeping, not preference evidence. The exact `content:youtube:<id>` node for a candidate must not receive an additive score merely because that video has already been materialized in the graph; opaque YouTube IDs must therefore never appear as a positive ranking reason. Exact-item user feedback can still affect ranking through explicit feedback signals, while titles remain presentation metadata rather than identities used as score weights.
+
+Interactive graph wheel zoom must register a native non-passive `wheel` listener before calling `preventDefault()`. Extension options validation should include zooming the SVG while watching the extension error console and must produce no passive-listener warning.
+
+Why-this should also resolve retained scorer evidence back to concrete prior interactions when available. The expanded explanation should show a bounded list of matching past watched/clicked/saved/shared videos, the semantic/creator signal through which each supported the current item, and the share of positive scorer contribution backed by those prior interactions. That percentage is scorer attribution, not a calibrated probability, and must be labelled accordingly.
+
+Durable modes may consist of either a co-supported multi-concept cluster or one repeated standalone semantic concept. In the extension catalog, a singleton durable mode requires at least two supporting retained content items; one-off topics remain below the durable-mode threshold. This permits distinct recurring interests such as gaming, software, or lofi to become selectable groups without turning every observed topic into a persistent mode.
+
+Mode selection is additive rather than exclusive. The popup and Options surface render mode/group choices as toggleable bubbles; selecting multiple groups shapes one feed against the selected set, while All clears the selection. Multiple selected groups share a bounded total mode-score budget so selecting more bubbles cannot linearly inflate every candidate score. The legacy single active-mode key remains mirrored to the first selected group for compatibility only.
+
+Mode affinity must also abstain across clear semantic-category conflicts. If a durable mode's retained support is overwhelmingly from one confident semantic category, a candidate confidently classified into a different category must not receive that mode contribution solely because an embedding match crossed the raw affinity threshold. This guards cases such as a lofi/music mode contributing to a gaming video.

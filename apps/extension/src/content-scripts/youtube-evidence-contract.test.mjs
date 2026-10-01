@@ -11,6 +11,7 @@ test('YouTube connector maps content identity and exposure without leaking YouTu
     exposureId: 'abc123|home||4',
     title: 'Example video',
     creator: 'Example creator',
+    thumbnailUrl: 'https://i.ytimg.com/vi/abc123/mqdefault.jpg',
     position: 4,
     section: null,
     observedAt: '2026-09-25T20:00:00.000Z',
@@ -28,6 +29,7 @@ test('YouTube connector maps content identity and exposure without leaking YouTu
     mechanism: 'home_dom',
   });
   assert.equal(exposure.metadata?.title, 'Example video');
+  assert.equal(exposure.metadata?.thumbnailUrl, 'https://i.ytimg.com/vi/abc123/mqdefault.jpg');
 });
 
 test('selection and player-style watch evidence map to generic interactions', () => {
@@ -113,6 +115,7 @@ test('History watched evidence preserves title and creator metadata', () => {
     language: null,
     format: null,
     contentType: null,
+    thumbnailUrl: null,
   });
 });
 

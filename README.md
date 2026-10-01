@@ -50,11 +50,13 @@ Current execution order:
 5. **Complete — #214 / PR #227 replacement stability:** valid source→replacement bindings and rendered replacement nodes survive ordinary mutation/metadata/semantic/retrieval reranks; rotation is limited to explicit hard invalidation or source/candidate invalidity.
 6. **Complete — #211 / PR #228 ranking/presentation performance slice:** the warm MV3 path now uses prepared graph/lexical indexes, bounded per-candidate score reuse, batched/signature-gated persistence, compact presentation caching, shared Home DOM snapshots, and presentation-stable replacement targeting. Long-session/browser stress remains tracked in #211.
 7. **Complete — #210 / PR #229 post-canonical calibration measurement:** live batches showed no 95–100 saturation, corrected effective replacement-threshold diagnostics, and validated prepared candidate-context reuse across large Home reranks; the existing deterministic display curve remains unchanged because the measurements do not justify retuning.
-8. **Active P1 — #153 trust UX, then #170 graph inspection:** extend exact trace explanations to native cards, carry symbolic graph paths/evidence provenance, then add the read-only Personal Algorithm Graph inspector.
-9. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #169 is now only offline/signed-out local-runtime validation.
-10. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
+8. **Complete first trust slice — #153 / PR #230:** scored native and replacement cards now share exact trace-grounded Why-this with graph paths, evidence support counts, trace/revision identity, and acquisition provenance separated from ranking reasons.
+9. **Active P1 — #170 graphical graph explorer:** add a read-only interactive Settings graph with pan/zoom, search, focus-only filtering, node/edge focus, durable-mode overlays, live/offline snapshots, revisions, provenance, and evidence drill-down. The renderer is intentionally reusable by the next #153 compact Why-this graph slice.
+10. **P1/P2 — #154 + #155 + #178, then remaining #161/#158/#159:** correction, Forget/history controls, editable modes, graph editing, and counterfactual replay. #153 remains open for direct graph actions/evidence navigation integration; #169 remains the offline/signed-out validation track.
+11. **Later — #163/#164/#165/#166:** portability, optional sync, paid-value validation, and a second connector.
 
-PR #223/#221 through PR #229 are merged. Canonical semantic neighbourhoods feed durable modes whose scoring and retrieval resolve through stable mode revisions to exact graph provenance, slider-relative supply is bounded by the existing scored reservoir, and source→replacement identity survives ordinary DOM/metadata/semantic/retrieval churn. PR #228 established the bounded warm ranking/presentation path. PR #229 then measured the corrected post-canonical score distribution, found no top-end saturation that would justify changing the deterministic display curve, corrected effective replacement-threshold diagnostics, and live-validated prepared-context reuse on a 295-candidate Home working set. #153 is now the active trust-surface slice.
+
+PR #223/#221 through PR #230 are merged. Canonical semantic neighbourhoods feed durable modes whose scoring and retrieval resolve through stable mode revisions to exact graph provenance, slider-relative supply is bounded by the existing scored reservoir, and source→replacement identity survives ordinary DOM/metadata/semantic/retrieval churn. PR #228 established the bounded warm ranking/presentation path. PR #229 then measured the corrected post-canonical score distribution, found no top-end saturation that would justify changing the deterministic display curve, corrected effective replacement-threshold diagnostics, and live-validated prepared-context reuse on a 295-candidate Home working set. PR #230 extended the exact Why-this surface to native cards and carried matched symbolic graph paths/evidence support into one shared explanation renderer. #170 is now the active graphical graph/provenance explorer slice: interactive pan/zoom/search plus durable-mode overlays over the same stable graph IDs used by Why-this traces.
 
 The intended hierarchy is:
 
@@ -78,3 +80,23 @@ Display-score calibration remains a presentation layer, not preference authority
 Safe native-feed replacement slots remain merged via PR #205 (#160), and native-card enforcement/self-observation hardening remain complete via PR #204 (#152/#171). The audited no-YouTube-Data-API launch boundary remains enforced by CI (#168).
 
 Cloud sync, billing, managed inference, multimodal enrichment, and additional connectors remain deferred until the local product loop demonstrates value.
+
+
+### Graph edit safety invariant
+
+Graph visualization is read-only. Future graph-edit controls (#158/#154/#155) must preserve an original pre-user-edit baseline before the first user mutation. Every user-authored node/edge/control change must create a versioned graph revision with reversible before/after state. Undo returns to the previous user revision; Restore original returns to the preserved baseline without deleting retained evidence. Filtering, moving, hiding, or selecting nodes in the explorer never changes recommendation state.
+
+
+### Graph explorer layouts
+
+The read-only #170 explorer supports both Network and Lineage / family-tree projections over the same canonical graph. Network is for cross-link exploration; Lineage layers content toward the leaves, creator/topic/concept nodes through the middle, and objective/user-level nodes toward the root. Neither layout creates or changes graph state. Search/mode focus can hide unrelated material entirely, and trackpad zoom is pointer-centered rather than SVG-origin-centered.
+
+
+### Progressive lineage
+
+The lineage/family-tree explorer keeps retained content leaves collapsed by default so the high-level graph remains readable. A selected/search/mode branch reveals only related content leaves; turning Focus only off restores wider high-level context without expanding unrelated content. Visible content leaves may use miniature thumbnails only from thumbnail URLs already observed and retained from YouTube; the explorer does not create a new thumbnail-fetch pipeline. Clicking a node opens its inspectable card and connected relationships, with edge selection continuing into retained evidence provenance.
+
+
+### Exact Why-this from graph nodes
+
+The graph explorer does not reconstruct recommendation reasons from adjacency. Clicking a retained content node can request the exact current local scorer explanation from the same candidate reservoir/graph/feedback/mode/semantic pipeline used by Home. The node inspector renders a compact trace subgraph from the explanation's stable node/edge IDs plus the scorer's additive contribution rows. Preference mutation controls remain deferred until revisioned undo/restore semantics are implemented.

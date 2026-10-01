@@ -9,6 +9,7 @@ export type RecommendationObservation = {
   exposureId: string;
   title: string;
   creator: string | null;
+  thumbnailUrl?: string | null;
   position: number;
   section: string | null;
   observedAt: string;
@@ -21,6 +22,7 @@ export type RecommendationObservationCandidate = {
   href: string;
   title?: string | null;
   creator?: string | null;
+  thumbnailUrl?: string | null;
   section?: string | null;
   injected?: boolean;
 };
@@ -81,6 +83,7 @@ export function collectRecommendationObservations(
       exposureId,
       title,
       creator: normalizeYouTubeText(candidate.creator ?? '') || null,
+      thumbnailUrl: normalizeYouTubeText(candidate.thumbnailUrl ?? '') || null,
       position,
       section,
       observedAt,
@@ -115,6 +118,9 @@ export function collectRecommendationObservationsFromDom(document: Document, obs
             textContent: titleNode?.textContent,
           }),
       creator,
+      thumbnailUrl: card.querySelector<HTMLImageElement>('yt-image img, img')?.currentSrc
+        || card.querySelector<HTMLImageElement>('yt-image img, img')?.src
+        || null,
       section: sectionNode?.textContent,
       injected: Boolean(card.closest(MYALGO_INJECTED_SELECTOR)),
     };
@@ -180,6 +186,7 @@ export function toNormalizedExposure(observation: RecommendationObservation): Ex
     metadata: youtubeConnector.normalizeMetadata({
       title: observation.title,
       creatorName: observation.creator,
+      thumbnailUrl: observation.thumbnailUrl,
     }),
   });
 }

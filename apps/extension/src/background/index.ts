@@ -50,6 +50,9 @@ type CandidatePoolItem = PageCandidate & {
   firstSeenAt: string;
   lastSeenAt: string;
   lastAcquiredAt?: string;
+  semantic_category?: SemanticCategoryId | null;
+  semantic_category_confidence?: number | null;
+  semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;
   semantic_mode_affinities?: CandidateModeAffinity[];
 };
 
@@ -145,6 +148,18 @@ type LocalFeedItem = CandidatePoolItem & {
         value: number;
         sourceIds: string[];
         evidenceIds: string[];
+      }>;
+    } | null;
+    historySupport: {
+      scoreSharePercent: number;
+      matchedVideoCount: number;
+      matches: Array<{
+        evidenceId: string;
+        externalId: string;
+        title: string;
+        observedAt: string;
+        interaction: string;
+        matchedBy: string[];
       }>;
     } | null;
   };
@@ -288,16 +303,30 @@ const durableModeCatalogSignature = (
 const refreshDurableModeCatalog = async (
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
 ): Promise<DurableSemanticModeCatalog> => {
-  const previous = await getStorage<DurableSemanticModeCatalog | null>(
-    STORAGE_KEYS.DURABLE_MODE_CATALOG,
-    null,
-  );
+  const [storedPrevious, selectedModeIds] = await Promise.all([
+    getStorage<DurableSemanticModeCatalog | null>(
+      STORAGE_KEYS.DURABLE_MODE_CATALOG,
+      null,
+    ),
+    getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+  ]);
+  const selectedModeIdSet = new Set(selectedModeIds);
+  const previous = storedPrevious
+    ? {
+        ...storedPrevious,
+        modes: storedPrevious.modes.map((mode) => ({
+          ...mode,
+          pinned: selectedModeIdSet.has(mode.id),
+        })),
+      }
+    : null;
   const canonical = buildCanonicalSemanticConcepts(state);
   const clustered = buildDurableSemanticModeClusters(state, canonical, {
     minimumSupportPerConcept: 2,
     minimumSharedContent: 2,
     minimumSupportJaccard: 0.5,
     minimumMembers: 2,
+    minimumSingletonSupport: 2,
   });
   const reconciled = reconcileDurableSemanticModes(
     previous,
@@ -306,7 +335,7 @@ const refreshDurableModeCatalog = async (
     new Date().toISOString(),
     {
       minimumIdentityJaccard: 0.5,
-      maxModes: 12,
+      maxModes: 32,
     },
   );
 
@@ -323,25 +352,47 @@ const refreshDurableModeCatalog = async (
   });
 
   const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
-  let activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
-  if (!activeModeId) {
+  let legacyActiveModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, '');
+  if (!legacyActiveModeId) {
     const migrated = storedMode.toLowerCase() === 'default'
       ? null
       : reconciled.catalog.modes.find((mode) => (
           mode.label.toLowerCase() === storedMode.toLowerCase()
         ));
-    activeModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
-    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, activeModeId);
+    legacyActiveModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
+    await setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, legacyActiveModeId);
   }
 
-  const activeMode = resolveDurableMode(reconciled.catalog, activeModeId);
-  if (activeMode && storedMode !== activeMode.label) {
-    await setStorage(STORAGE_KEYS.MODE, activeMode.label);
+  const effectiveSelectedIds = selectedModeIds.length > 0
+    ? selectedModeIds
+    : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
+  const selectedModes = effectiveSelectedIds
+    .map((modeId) => resolveDurableMode(reconciled.catalog, modeId))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const primary = selectedModes[0] ?? null;
+  const selectedLabel = selectedModes.length > 0
+    ? selectedModes.map((entry) => entry.label).join(' + ')
+    : 'Default';
+
+  if (
+    storedMode !== selectedLabel
+    || legacyActiveModeId !== (primary?.id ?? 'default')
+  ) {
+    await Promise.all([
+      setStorage(STORAGE_KEYS.MODE, selectedLabel),
+      setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
+    ]);
     const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
     await Promise.all(tabs.map((tab) => tab.id
       ? chrome.tabs.sendMessage(tab.id, {
         type: 'MODE_CHANGED',
-        payload: { mode: activeMode.label, modeId: activeMode.id },
+        payload: {
+          mode: selectedLabel,
+          modeId: primary?.id ?? 'default',
+          modeIds: selectedModes.map((entry) => entry.id),
+          modeRevision: primary?.revision ?? null,
+          memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
+        },
       }).catch(() => undefined)
       : undefined));
   }
@@ -417,8 +468,7 @@ let lastRankMemo: {
   state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportStateForRead']>>;
   mode: string;
   sourceFiltersSignature: string;
-  activeModeId: string;
-  activeModeRevision: number | null;
+  activeModeSignature: string;
   durableModeSignature: string;
   feedbackSignature: string;
   candidateIdsSignature: string;
@@ -1452,7 +1502,13 @@ async function refreshSemanticScoreFeatures(
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
   const state = await personalAlgorithmStore.exportState();
   const durableModeCatalog = await refreshDurableModeCatalog(state);
-  const activeModeId = await getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default');
+  const [activeModeId, storedActiveModeIds] = await Promise.all([
+    getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+  ]);
+  const activeModeIds = storedActiveModeIds.length > 0
+    ? storedActiveModeIds
+    : activeModeId === 'default' ? [] : [activeModeId];
   const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
   const requestedContext = await getSemanticProviderContext();
   const refreshKey = `${state.graph.currentRevision}:${mode.trim().toLowerCase()}:${requestedContext.semanticModelIdentity}`;
@@ -1737,7 +1793,7 @@ async function refreshSemanticScoreFeatures(
           candidate.semantic_graph_matches,
           durableModeCatalog,
           {
-            includeModeIds: activeModeId === 'default' ? [] : [activeModeId],
+            includeModeIds: activeModeIds,
           },
         ),
         modeAffinityPipelineId: DURABLE_MODE_AFFINITY_PIPELINE_ID,
@@ -1875,10 +1931,13 @@ async function rankLocalCandidates(
   const [
     state,
     feedbackEvents,
-    activeModeId,
+    legacyActiveModeId,
+    storedActiveModeIds,
     durableModeCatalog,
     semanticContext,
     semanticFeatureCache,
+    videoStore,
+    candidatePoolIndex,
   ] = await Promise.all([
     personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
@@ -1886,14 +1945,29 @@ async function rankLocalCandidates(
       [],
     ),
     getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+    getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
     getStorage<DurableSemanticModeCatalog | null>(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
     ),
     getSemanticProviderContext(),
     getSemanticFeatureCacheCached(),
+    getVideoStoreCached(),
+    getCandidatePoolIndexCached(),
   ]);
-  const activeDurableMode = resolveDurableMode(durableModeCatalog, activeModeId);
+  const activeModeIds = [...new Set(
+    (storedActiveModeIds.length > 0
+      ? storedActiveModeIds
+      : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [])
+      .filter(Boolean),
+  )];
+  const activeDurableModes = activeModeIds
+    .map((modeId) => resolveDurableMode(durableModeCatalog, modeId))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const activeModeSignature = activeDurableModes
+    .map((entry) => `${entry.id}@${entry.revision}`)
+    .sort()
+    .join('|');
   const sourceFiltersSignature = JSON.stringify(sourceFilters);
   const feedbackSignature = JSON.stringify(
     feedbackEvents
@@ -1910,8 +1984,7 @@ async function rankLocalCandidates(
     && lastRankMemo.state === state
     && lastRankMemo.mode === mode
     && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
-    && lastRankMemo.activeModeId === activeModeId
-    && lastRankMemo.activeModeRevision === (activeDurableMode?.revision ?? null)
+    && lastRankMemo.activeModeSignature === activeModeSignature
     && lastRankMemo.durableModeSignature === durableModeSignature
     && lastRankMemo.feedbackSignature === feedbackSignature
     && lastRankMemo.candidateIdsSignature === candidateIdsSignature
@@ -1947,19 +2020,66 @@ async function rankLocalCandidates(
     semanticFeatureCache,
     durableModeCatalog,
   );
+
+  // Guard selected-mode scoring against obvious cross-domain leakage. A mode
+  // supported overwhelmingly by one semantic category (for example Music)
+  // must not contribute to a candidate confidently classified into another
+  // category (for example Gaming) merely because one embedding match crossed
+  // the affinity threshold.
+  const latestSemanticByExternalId = new Map<string, SemanticFeatureRecord>();
+  for (const record of Object.values(semanticFeatureCache)) {
+    const previous = latestSemanticByExternalId.get(record.externalId);
+    if (!previous || record.generatedAt > previous.generatedAt) {
+      latestSemanticByExternalId.set(record.externalId, record);
+    }
+  }
+  const categorySupportByModeId = new Map<string, Map<string, number>>();
+  for (const durableMode of durableModeCatalog?.modes ?? []) {
+    const counts = new Map<string, number>();
+    for (const supportContentId of durableMode.members.flatMap((member) => member.supportContentIds)) {
+      const prefix = 'content:youtube:';
+      const encodedExternalId = supportContentId.startsWith(prefix)
+        ? supportContentId.slice(prefix.length)
+        : '';
+      if (!encodedExternalId) continue;
+      let externalId = encodedExternalId;
+      try { externalId = decodeURIComponent(encodedExternalId); } catch { /* retain encoded id */ }
+      const support = latestSemanticByExternalId.get(externalId);
+      const category = support?.category?.trim().toLowerCase();
+      if (!category || Number(support?.categoryConfidence ?? 0) < 0.45) continue;
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    categorySupportByModeId.set(durableMode.id, counts);
+  }
+
+  const coherentCandidates = candidatesWithSemanticFeatures.map((candidate) => {
+    const candidateCategory = candidate.semantic_category?.trim().toLowerCase();
+    if (!candidateCategory || Number(candidate.semantic_category_confidence ?? 0) < 0.45) return candidate;
+    const affinities = (candidate.semantic_mode_affinities ?? []).filter((affinity) => {
+      const counts = categorySupportByModeId.get(affinity.modeId);
+      if (!counts || counts.size === 0) return true;
+      const total = [...counts.values()].reduce((sum, value) => sum + value, 0);
+      const matching = counts.get(candidateCategory) ?? 0;
+      const strongest = Math.max(0, ...counts.values());
+      const dominantRatio = total > 0 ? strongest / total : 0;
+      return matching > 0 || dominantRatio < 0.75;
+    });
+    return affinities.length === (candidate.semantic_mode_affinities ?? []).length
+      ? candidate
+      : { ...candidate, semantic_mode_affinities: affinities };
+  });
+
   const ranked = scoreLocalCandidates(
     state,
-    candidatesWithSemanticFeatures,
+    coherentCandidates,
     mode,
     feedbackSignals,
     sourceFilters,
-    activeDurableMode
-      ? {
-          id: activeDurableMode.id,
-          label: activeDurableMode.label,
-          revision: activeDurableMode.revision,
-        }
-      : null,
+    activeDurableModes.map((activeDurableMode) => ({
+      id: activeDurableMode.id,
+      label: activeDurableMode.label,
+      revision: activeDurableMode.revision,
+    })),
   );
 
   const traces = ranked.slice(0, 60).map((item) => ({
@@ -1976,25 +2096,84 @@ async function rankLocalCandidates(
     });
   }
 
+  const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
+  const graphNodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const historyEvidenceByContentNodeId = new Map<string, typeof state.evidence>();
+  for (const record of state.evidence) {
+    const evidence = record.evidence;
+    if (
+      evidence.kind !== 'interaction'
+      || !['watched', 'clicked', 'saved', 'shared'].includes(evidence.interaction)
+    ) continue;
+    const contentId = `content:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(evidence.content.externalId)}`;
+    const records = historyEvidenceByContentNodeId.get(contentId) ?? [];
+    records.push(record);
+    historyEvidenceByContentNodeId.set(contentId, records);
+  }
+  for (const records of historyEvidenceByContentNodeId.values()) {
+    records.sort((left, right) => (
+      right.evidence.observedAt.localeCompare(left.evidence.observedAt)
+      || left.id.localeCompare(right.id)
+    ));
+  }
+
+  // Build a reverse neighbourhood from preference-bearing graph nodes to
+  // content. This supports a three-hop explanation:
+  // prior watched video -> shared creator/topic/concept -> current video.
+  // Broad platform taxonomy labels such as People & Blogs are not specific
+  // enough to justify a historical recommendation explanation.
+  const nonSpecificHistoryLabels = new Set([
+    'people & blogs',
+    'people and blogs',
+    'video',
+    'videos',
+  ]);
+  const historyContentBySignalNodeId = new Map<string, Set<string>>();
+  for (const edge of state.graph.edges) {
+    const source = graphNodeById.get(edge.sourceNodeId);
+    const target = graphNodeById.get(edge.targetNodeId);
+    if (!source || !target || source.kind === target.kind) continue;
+
+    const content = source.kind === 'content' ? source : target.kind === 'content' ? target : null;
+    const signal = source.kind === 'content' ? target : target.kind === 'content' ? source : null;
+    if (!content || !signal || signal.kind === 'content') continue;
+    if (nonSpecificHistoryLabels.has(signal.label.trim().toLowerCase())) continue;
+
+    const connected = historyContentBySignalNodeId.get(signal.id) ?? new Set<string>();
+    connected.add(content.id);
+    historyContentBySignalNodeId.set(signal.id, connected);
+  }
+
   const feed = ranked.map(({ trace, ...item }) => {
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
         contribution.modeId
         && Number.isInteger(contribution.modeRevision)
         && contribution.canonicalId
-      ))
-      .sort((left, right) => (
-        (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '')
       ));
-    const firstGroundedMode = groundedModeContributions[0];
-    const modeGrounding = firstGroundedMode
+    const groundedByMode = new Map<string, typeof groundedModeContributions>();
+    for (const contribution of groundedModeContributions) {
+      const modeId = contribution.modeId!;
+      const group = groundedByMode.get(modeId) ?? [];
+      group.push(contribution);
+      groundedByMode.set(modeId, group);
+    }
+    const primaryGroundedMode = [...groundedByMode.entries()]
+      .map(([modeId, contributions]) => ({
+        modeId,
+        contributions: [...contributions].sort((left, right) => (
+          (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '')
+        )),
+        total: contributions.reduce((sum, contribution) => sum + contribution.value, 0),
+      }))
+      .sort((left, right) => right.total - left.total || left.modeId.localeCompare(right.modeId))[0];
+    const firstGroundedMode = primaryGroundedMode?.contributions[0];
+    const modeGrounding = firstGroundedMode && primaryGroundedMode
       ? {
           modeId: firstGroundedMode.modeId!,
           modeRevision: firstGroundedMode.modeRevision!,
-          total: Number(groundedModeContributions
-            .reduce((sum, contribution) => sum + contribution.value, 0)
-            .toFixed(2)),
-          members: groundedModeContributions.map((contribution) => ({
+          total: Number(primaryGroundedMode.total.toFixed(2)),
+          members: primaryGroundedMode.contributions.map((contribution) => ({
             canonicalId: contribution.canonicalId!,
             label: contribution.label,
             value: contribution.value,
@@ -2012,12 +2191,16 @@ async function rankLocalCandidates(
       evidenceIds: path.evidenceIds,
     }));
 
-    const contributions = [
+    const allScoringContributions = [
       ...trace.featureContributions,
       ...trace.nodeContributions,
-      ...trace.edgeContributions,
       ...trace.feedbackContributions,
       ...trace.modeContributions,
+    ].filter((contribution) => contribution.value !== 0);
+
+    const contributions = [
+      ...allScoringContributions,
+      ...trace.edgeContributions,
     ]
       .filter((contribution) => contribution.value !== 0)
       .sort((left, right) => Math.abs(right.value) - Math.abs(left.value) || left.label.localeCompare(right.label))
@@ -2034,6 +2217,130 @@ async function rankLocalCandidates(
         evidenceIds: contribution.evidenceIds,
       }));
 
+    const historyEvidenceIds = new Set<string>();
+    const matchedByEvidenceId = new Map<string, Set<string>>();
+    const historyBackedContributionIds = new Set<string>();
+    const registerHistoryEvidence = (evidenceId: string, label: string) => {
+      const record = evidenceById.get(evidenceId);
+      if (!record) return;
+      const evidence = record.evidence;
+      if (
+        evidence.kind !== 'interaction'
+        || evidence.content.externalId === item.external_id
+        || !['watched', 'clicked', 'saved', 'shared'].includes(evidence.interaction)
+      ) return;
+      historyEvidenceIds.add(evidenceId);
+      const labels = matchedByEvidenceId.get(evidenceId) ?? new Set<string>();
+      if (label.trim()) labels.add(label.trim());
+      matchedByEvidenceId.set(evidenceId, labels);
+    };
+
+    for (const contribution of allScoringContributions) {
+      let contributionHistoryBacked = false;
+      for (const evidenceId of contribution.evidenceIds ?? []) {
+        const before = historyEvidenceIds.size;
+        registerHistoryEvidence(evidenceId, contribution.label);
+        if (historyEvidenceIds.size > before || historyEvidenceIds.has(evidenceId)) {
+          contributionHistoryBacked = true;
+        }
+      }
+
+      const sourceIds = [
+        contribution.sourceId,
+        ...(contribution.sourceIds ?? []),
+      ].filter((sourceId): sourceId is string => Boolean(sourceId && !sourceId.startsWith('content:')));
+
+      for (const sourceId of sourceIds) {
+        const signalLabel = nodeLabelById.get(sourceId) ?? contribution.label;
+        for (const contentNodeId of historyContentBySignalNodeId.get(sourceId) ?? []) {
+          const contentNode = graphNodeById.get(contentNodeId);
+          if (
+            !contentNode?.content
+            || contentNode.content.externalId === item.external_id
+          ) continue;
+          const priorRecords = historyEvidenceByContentNodeId.get(contentNodeId) ?? [];
+          for (const record of priorRecords.slice(0, 2)) {
+            registerHistoryEvidence(record.id, signalLabel);
+            contributionHistoryBacked = true;
+          }
+        }
+      }
+
+      if (contributionHistoryBacked) historyBackedContributionIds.add(contribution.id);
+    }
+
+    // Matched paths may carry supporting retained history even when the
+    // corresponding scorer contribution was canonicalized into another source.
+    for (const path of trace.matchedPaths) {
+      const currentContentId = `content:youtube:${encodeURIComponent(item.external_id)}`;
+      const pathLabels = path.nodeIds
+        .filter((nodeId) => nodeId !== currentContentId)
+        .map((nodeId) => nodeLabelById.get(nodeId) ?? '')
+        .filter(Boolean);
+      const pathLabel = pathLabels.join(' ↔ ');
+      for (const evidenceId of path.evidenceIds) registerHistoryEvidence(evidenceId, pathLabel);
+    }
+
+    const historyMatches = [...historyEvidenceIds]
+      .map((evidenceId) => {
+        const record = evidenceById.get(evidenceId)!;
+        const evidence = record.evidence;
+        const externalId = evidence.content.externalId;
+        const contentNodeId = `content:${encodeURIComponent(evidence.content.source)}:${encodeURIComponent(externalId)}`;
+        const graphLabel = graphNodeById.get(contentNodeId)?.label?.trim() ?? '';
+        const storedVideoTitle = videoStore[externalId]?.title?.trim() ?? '';
+        const pooledTitle = candidatePoolIndex.get(externalId)?.title?.trim() ?? '';
+        const title = [
+          evidence.metadata?.title?.trim(),
+          graphLabel && graphLabel !== externalId ? graphLabel : '',
+          storedVideoTitle && storedVideoTitle !== externalId ? storedVideoTitle : '',
+          pooledTitle && pooledTitle !== externalId ? pooledTitle : '',
+        ].find(Boolean) || 'Past YouTube video';
+
+        const matchedBy = [...(matchedByEvidenceId.get(evidenceId) ?? [])]
+          .map((label) => label.trim())
+          .filter(Boolean)
+          .filter((label, index, labels) => (
+            labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index
+          ))
+          .sort()
+          .slice(0, 3);
+
+        return {
+          evidenceId,
+          externalId,
+          title,
+          observedAt: evidence.observedAt,
+          interaction: evidence.kind === 'interaction' ? evidence.interaction : 'observed',
+          matchedBy,
+        };
+      })
+      .sort((left, right) => right.observedAt.localeCompare(left.observedAt) || left.evidenceId.localeCompare(right.evidenceId))
+      .slice(0, 6);
+
+    const positiveContributionTotal = allScoringContributions
+      .reduce((sum, contribution) => sum + Math.max(0, contribution.value), 0);
+    const historyBackedContributionTotal = allScoringContributions
+      .filter((contribution) => (
+        contribution.value > 0
+        && (
+          historyBackedContributionIds.has(contribution.id)
+          || (contribution.evidenceIds ?? []).some((evidenceId) => historyEvidenceIds.has(evidenceId))
+        )
+      ))
+      .reduce((sum, contribution) => sum + contribution.value, 0);
+    const historySupport = historyMatches.length > 0
+      ? {
+          scoreSharePercent: positiveContributionTotal > 0
+            ? Math.max(0, Math.min(100, Math.round(
+                historyBackedContributionTotal / positiveContributionTotal * 100,
+              )))
+            : 0,
+          matchedVideoCount: historyMatches.length,
+          matches: historyMatches,
+        }
+      : null;
+
     return {
       ...item,
       suppressed: trace.suppressed,
@@ -2049,6 +2356,7 @@ async function rankLocalCandidates(
         contributions,
         matchedPaths,
         modeGrounding,
+        historySupport,
       },
     };
   });
@@ -2057,8 +2365,7 @@ async function rankLocalCandidates(
     state,
     mode,
     sourceFiltersSignature,
-    activeModeId,
-    activeModeRevision: activeDurableMode?.revision ?? null,
+    activeModeSignature,
     durableModeSignature,
     feedbackSignature,
     candidateIdsSignature,
@@ -2233,6 +2540,7 @@ const handleRuntimeMessage = (
     payload?: {
       mode?: string;
       modeId?: string;
+      toggle?: boolean;
       algorithmId?: string;
       enabled?: boolean;
       contentItemId?: string;
@@ -2435,6 +2743,105 @@ const handleRuntimeMessage = (
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to load privacy disclosure state.',
     }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_EXPLAIN_CONTENT') {
+    void (async () => {
+      const externalId = typeof payload?.externalId === 'string' ? payload.externalId.trim() : '';
+      if (!externalId) {
+        sendResponse({ ok: false, error: 'A content ID is required.' });
+        return;
+      }
+
+      const [candidateIndex, sourceFilters, mode] = await Promise.all([
+        getCandidatePoolIndexCached(),
+        getStorage<FeedSourceFilters>(STORAGE_KEYS.SOURCE_FILTERS, {}),
+        getStorage<string>(STORAGE_KEYS.MODE, 'Default'),
+      ]);
+      const candidate = candidateIndex.get(externalId);
+      if (!candidate) {
+        sendResponse({
+          ok: false,
+          error: 'This content is no longer available in the local candidate reservoir.',
+        });
+        return;
+      }
+
+      const [hydrated] = await hydrateCandidatePool([candidate]);
+      const [ranked] = await rankLocalCandidates([hydrated], sourceFilters, mode);
+      if (!ranked) {
+        sendResponse({ ok: false, error: 'Unable to score this content.' });
+        return;
+      }
+
+      sendResponse({
+        ok: true,
+        item: {
+          external_id: ranked.external_id,
+          title: ranked.title,
+          channel_name: ranked.channel_name ?? null,
+          thumbnail_url: ranked.thumbnail_url ?? null,
+          score: ranked.score,
+          rawScore: ranked.rawScore,
+          traceId: ranked.traceId,
+          visible: ranked.visible,
+          suppressed: ranked.suppressed,
+          policyOutcome: ranked.policyOutcome,
+          semantic_category: ranked.semantic_category ?? null,
+          explanation: ranked.explanation ?? null,
+        },
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to explain this content.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_INSPECT') {
+    void Promise.all([
+      personalAlgorithmStore.exportState(),
+      getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+      getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+      getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+      getSemanticFeatureCacheCached(),
+    ])
+      .then(([state, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache]) => sendResponse({
+        ok: true,
+        state,
+        durableModeCatalog,
+        activeModeId,
+        activeModeIds,
+        semanticContext: Object.values(semanticFeatureCache).map((record) => ({
+          externalId: record.externalId,
+          category: record.category,
+          categoryConfidence: record.categoryConfidence,
+          categoryScores: record.categoryScores,
+          graphMatches: record.graphMatches.map((match) => ({
+            nodeId: match.node_id,
+            nodeLabel: match.node_label,
+            similarity: match.similarity,
+            taxonomyOnly: match.taxonomy_only === true,
+          })),
+          modeAffinities: (record.modeAffinities ?? [])
+            .filter((affinity) => (
+              durableModeCatalog?.modes.some((mode) => (
+                mode.id === affinity.modeId
+                && mode.revision === affinity.modeRevision
+              )) === true
+            ))
+            .map((affinity) => ({
+              modeId: affinity.modeId,
+              label: affinity.label,
+              affinity: affinity.affinity,
+            })),
+        })),
+      }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unable to inspect Personal Algorithm Graph.',
+      }));
     return true;
   }
 
@@ -2834,20 +3241,58 @@ const handleRuntimeMessage = (
 
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     void (async () => {
-      const selection = await resolveModeSelection(payload?.modeId ?? payload?.mode ?? 'default');
-      const previousDiagnostics = await getStorage<RetrievalDiagnostics>(
-        STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
-        EMPTY_RETRIEVAL_DIAGNOSTICS,
-      );
+      const requested = payload?.modeId ?? payload?.mode ?? 'default';
+      const selection = await resolveModeSelection(requested);
+      const [storedCurrentIds, legacyActiveModeId, durableModeCatalog, previousDiagnostics] = await Promise.all([
+        getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+        getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
+        getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+        getStorage<RetrievalDiagnostics>(
+          STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS,
+          EMPTY_RETRIEVAL_DIAGNOSTICS,
+        ),
+      ]);
+      const currentIds = storedCurrentIds.length > 0
+        ? storedCurrentIds
+        : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
+
+      const nextIds = selection.modeId === 'default'
+        ? []
+        : payload?.toggle === true
+          ? currentIds.includes(selection.modeId)
+            ? currentIds.filter((id) => id !== selection.modeId)
+            : [...currentIds, selection.modeId]
+          : [selection.modeId];
+
+      const selectedModes = nextIds
+        .map((id) => resolveDurableMode(durableModeCatalog, id))
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      const primary = selectedModes[0] ?? null;
+      const modeLabel = selectedModes.length === 0
+        ? 'Default'
+        : selectedModes.map((entry) => entry.label).join(' + ');
+
       const nextDiagnostics = reconcileModeSupplyForSelection(
         previousDiagnostics,
-        selection.modeId,
-        selection.revision,
+        primary?.id ?? 'default',
+        primary?.revision ?? null,
       );
+      const selectedIdSet = new Set(selectedModes.map((entry) => entry.id));
+      const pinnedCatalog = durableModeCatalog
+        ? {
+            ...durableModeCatalog,
+            modes: durableModeCatalog.modes.map((entry) => ({
+              ...entry,
+              pinned: selectedIdSet.has(entry.id),
+            })),
+          }
+        : null;
       await Promise.all([
-        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, selection.modeId),
-        setStorage(STORAGE_KEYS.MODE, selection.label),
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_IDS, selectedModes.map((entry) => entry.id)),
+        setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
+        setStorage(STORAGE_KEYS.MODE, modeLabel),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
+        ...(pinnedCatalog ? [setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, pinnedCatalog)] : []),
       ]);
       lastRankMemo = null;
       if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
@@ -2867,30 +3312,41 @@ const handleRuntimeMessage = (
         ? chrome.tabs.sendMessage(tab.id, {
           type: 'MODE_CHANGED',
           payload: {
-            mode: selection.label,
-            modeId: selection.modeId,
-            modeRevision: selection.revision,
-            memberLabels: selection.memberLabels,
+            mode: modeLabel,
+            modeId: primary?.id ?? 'default',
+            modeIds: selectedModes.map((entry) => entry.id),
+            modeRevision: primary?.revision ?? null,
+            memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
           },
         }).catch(() => undefined)
         : undefined));
 
-      // Selection takes effect immediately; re-grounding and acquisition happen
-      // automatically behind it rather than requiring a manual refresh.
-      void refreshSelectedModeSemantics(selection, tabs).catch((error) => {
-        console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
-      });
-      if (settings.webSearchEnabled) {
-        void refreshWebSearchCandidates(true, selection.label).then(async (refresh) => {
+      // Re-ground each selected bubble so the feed can respond to a combination
+      // of interests instead of one exclusive mode.
+      for (const selectedMode of selectedModes.slice(0, 6)) {
+        void refreshSelectedModeSemantics({
+          modeId: selectedMode.id,
+          label: selectedMode.label,
+          revision: selectedMode.revision,
+          memberLabels: selectedMode.members.map((member) => member.label),
+        }, tabs).catch((error) => {
+          console.warn('[MyAlgo] selected-mode semantic refresh failed', error);
+        });
+      }
+
+      if (settings.webSearchEnabled && selectedModes.length > 0) {
+        const combinedIntent = selectedModes.map((entry) => entry.label).join(' ');
+        void refreshWebSearchCandidates(true, combinedIntent).then(async (refresh) => {
           if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
         }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
       }
 
       sendResponse({
         ok: true,
-        mode: selection.label,
-        modeId: selection.modeId,
-        modeRevision: selection.revision,
+        mode: modeLabel,
+        modeId: primary?.id ?? 'default',
+        modeIds: selectedModes.map((entry) => entry.id),
+        modeRevision: primary?.revision ?? null,
       });
     })().catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to change mode.' }));
     return true;
