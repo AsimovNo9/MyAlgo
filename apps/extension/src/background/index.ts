@@ -14,7 +14,7 @@ import { buildLocalFeedbackSignals, getLocalScoringDiagnostics, scoreLocalCandid
 import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
-import { buildYoutubeRssFeedUrl, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
+import { buildYoutubeRssFeedUrl, isYoutubeSearchBlockedError, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
 import { createLocalConceptExtractionProvider } from '../lib/concept-extraction-provider';
@@ -1003,11 +1003,15 @@ async function refreshWebSearchCandidates(
   let candidates: PageCandidate[] = [];
   let succeeded = 0;
   let failureMessage: string | null = null;
+  let providerBlocked = false;
   try {
     candidates = await acquireWebSearchCandidates(provider, plans, acquiredAt, plans.length, 8);
     succeeded = plans.length;
   } catch (error) {
-    failureMessage = error instanceof Error ? error.message : 'Web search failed.';
+    providerBlocked = isYoutubeSearchBlockedError(error);
+    failureMessage = providerBlocked
+      ? 'YouTube temporarily blocked automated search discovery. MyAlgo paused web discovery for 6 hours.'
+      : error instanceof Error ? error.message : 'Web search failed.';
   }
 
   const unique = [...new Map(candidates.map((item) => [item.external_id, item])).values()];
@@ -1027,7 +1031,7 @@ async function refreshWebSearchCandidates(
   const diagnostics: RetrievalDiagnostics = {
     ...previous,
     lastWebSearchAt: acquiredAt,
-    nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, consecutiveFailures),
+    nextWebSearchAllowedAt: nextWebSearchAllowedAt(nowMs, consecutiveFailures, providerBlocked),
     webSearchPlansAttempted: plans.length,
     webSearchPlansSucceeded: succeeded,
     webSearchCandidatesFetched: unique.length,
@@ -1050,6 +1054,7 @@ async function refreshWebSearchCandidates(
     fetched: unique.length,
     added: addedCount,
     failed,
+    providerBlocked,
   });
 
   return { diagnostics: persistedDiagnostics, changed: addedCount > 0 };
