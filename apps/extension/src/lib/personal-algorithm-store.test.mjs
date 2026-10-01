@@ -360,7 +360,7 @@ test('local store supports evidence CRUD, targeted deletion, graph edits, revisi
   assert.equal(graph.currentRevision, 3);
   assert.equal(graph.userEdits.length, 2);
   assert.equal(graph.revisions.length, 3);
-  assert.equal(graph.revisions.at(-1).reason.startsWith('create_edge:'), true);
+  assert.equal(graph.revisions.at(-1).reason, 'graph_create_edge');
 
   assert.equal((await store.deleteEvidence('evidence-3')), true);
   assert.equal((await store.getGraph()).edges.length, 0);
