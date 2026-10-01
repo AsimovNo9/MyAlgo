@@ -832,3 +832,23 @@ Durable modes may consist of either a co-supported multi-concept cluster or one 
 Mode selection is additive rather than exclusive. The popup and Options surface render mode/group choices as toggleable bubbles; selecting multiple groups shapes one feed against the selected set, while All clears the selection. Multiple selected groups share a bounded total mode-score budget so selecting more bubbles cannot linearly inflate every candidate score. The legacy single active-mode key remains mirrored to the first selected group for compatibility only.
 
 Mode affinity must also abstain across clear semantic-category conflicts. If a durable mode's retained support is overwhelmingly from one confident semantic category, a candidate confidently classified into a different category must not receive that mode contribution solely because an embedding match crossed the raw affinity threshold. This guards cases such as a lofi/music mode contributing to a gaming video.
+
+
+## Revisioned graph correction validation (#154)
+
+Reduce / Prefer / Mute are user-authored control overlays over existing stable graph targets. Validate the following before treating the #154 slice as complete:
+
+1. the first user correction captures exactly one immutable pre-edit baseline containing nodes, edges, and control state but not evidence;
+2. Reduce changes only the exact score-bearing node/edge contribution selected by the user and applies the deterministic 0.5 multiplier;
+3. Prefer changes only the exact score-bearing node/edge contribution selected by the user and applies the deterministic 1.5 multiplier;
+4. Mute is evaluated as a hard exact-target suppression before additive scoring and produces a suppressed trace with score 0;
+5. controls never create new evidence, semantic nodes, graph relationships, or candidate matches merely to make the action take effect;
+6. every set/change/remove/undo/restore operation increments graph revision and leaves an inspectable user-edit/revision record;
+7. Undo reverts the most recent unreverted user edit and is itself a revision;
+8. Restore original returns nodes/edges/control state to the captured baseline, preserves retained evidence byte-for-byte, and is itself undoable;
+9. a controlled rebuildable semantic node/edge remains addressable across derived projection refreshes until its control is cleared, preventing a user edit from disappearing underneath reclustering;
+10. Why-this inline actions are enabled only when the scorer explanation resolves to one exact graph node. Aggregated canonical/multi-source contributions must remain non-destructive until the user selects a concrete graph target;
+11. live graph-inspector controls support Reduce, Prefer, Mute, Clear control, Undo last edit, and Restore original; pasted/offline snapshots remain read-only;
+12. after each action, the next score/trace uses the new graph revision and exact controlled contribution, while the prior trace remains internally consistent.
+
+Browser validation should exercise one creator/node correction from Why-this and one semantic node/edge correction from the graph inspector, then undo and Restore original while confirming the feed reranks and retained history/evidence counts do not change.
