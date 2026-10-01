@@ -119,6 +119,62 @@ test('explanation display humanizes encoded graph labels and omits relation name
   assert.equal(view.historyMatches[0].title, 'Past Angry Birds video');
 });
 
+test('Why-this omits the current content node even when its graph label is the full video title', () => {
+  const view = buildExplanationViewModel({
+    external_id: 'hfAJNg5Zbdo',
+    title: 'There’s Something Evil Happening To People... Be Careful 15 minutes',
+    channel_name: 'Everyday Life Unfiltered',
+    score: 65,
+    traceId: 'trace-current-node',
+    explanation: {
+      rawScore: 8,
+      displayScore: 65,
+      graphRevision: 18,
+      acquisitionMechanism: 'observed_dom',
+      contributions: [
+        {
+          label: 'hfAJNg5Zbdo',
+          value: 1,
+          kind: 'node',
+          sourceId: 'content:youtube:hfAJNg5Zbdo',
+          evidenceIds: ['e-current'],
+        },
+        {
+          label: 'creator: Everyday Life Unfiltered',
+          value: 8,
+          kind: 'node',
+          sourceId: 'creator:youtube:everyday',
+          evidenceIds: ['e-history'],
+        },
+      ],
+      matchedPaths: [{
+        nodeIds: [
+          'content:youtube:hfAJNg5Zbdo',
+          'creator:youtube:everyday',
+        ],
+        nodeLabels: [
+          'There’s Something Evil Happening To People... Be Careful 15 minutes',
+          'Everyday Life Unfiltered',
+        ],
+        edgeIds: ['edge:created-by'],
+        evidenceIds: ['e-current'],
+      }],
+      modeGrounding: null,
+      historySupport: null,
+    },
+  });
+
+  assert.equal(view.contributionLines.some((line) => line.includes('hfAJNg5Zbdo')), false);
+  assert.equal(
+    view.miniNodes.filter((node) => node.label.includes('Something Evil')).length,
+    0,
+  );
+  assert.equal(
+    view.miniNodes.filter((node) => node.label === 'Everyday Life Unfiltered').length,
+    1,
+  );
+});
+
 test('explanation provenance uses user-facing labels without becoming a ranking reason', () => {
   assert.equal(
     buildExplanationViewModel({
