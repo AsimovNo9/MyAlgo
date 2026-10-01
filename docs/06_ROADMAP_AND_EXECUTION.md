@@ -224,15 +224,16 @@ Web search is now implemented in PR #212 through YouTube's normal search-result 
 
 ## Current execution order
 
-PR #223/#221 through PR #230 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
+PR #223/#221 through PR #231 are merged. Canonical semantic regions, durable modes, graph-grounded mode contributions, mode-aware supply, stable replacement identity, bounded warm ranking/presentation, and measured post-canonical calibration are now foundations rather than active architecture work.
 
-1. **Complete first trust slice — #153 / PR #230.** Scored native and replacement cards now expose one trace-grounded Why-this contract with exact contributions, matched symbolic graph paths, trace/revision identity, and separated acquisition provenance. #153 remains open for direct actions and deeper evidence navigation.
-2. **Active P1 — #170 graphical graph explorer.** Build the read-only interactive Personal Algorithm Graph on the same stable identifiers exposed by #153: deterministic bounded Network and Lineage/family-tree layouts, pointer-centered pan/zoom, progressive lineage disclosure, search/focus, rich node/edge provenance inspection, exact scorer-backed Why-this for retained content nodes, live/offline snapshot review, and durable-mode overlays that highlight exact member/source nodes plus their connecting neighbourhood. Network and lineage are two projections of the same canonical graph, not separate models.
-3. **P1/P2 — #155 + #154 + #178 correction/provenance/history controls.** Let users forget evidence, reduce/prefer/mute graph terms, and explicitly choose history clusters.
-4. **P2 — remaining #161 + #158.** Add user-authored/versioned modes and explicit graph nodes once inspection/correction semantics are established.
-5. **P3 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot.
-6. **Release-validation track — #169 + #211.** Validate signed-out/offline behavior plus long/infinite-scroll/service-worker-restart stability without blocking the primary product loop unless a measured regression appears.
-7. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
+1. **Complete — #153/#170 trust and graph-inspection foundation / PRs #230–#231.** Native/replacement Why-this, exact scorer-backed graph paths, retained-history support, read-only Network/Lineage exploration, evidence drill-down, semantic/topic grouping, and searchable multi-select durable groups are merged. #170 is complete; #153 remains open only for direct actions/evidence-navigation integration.
+2. **P1 — #154 + #155 correction and evidence controls.** Implement Reduce/Prefer/Mute/Forget as persistent, revisioned, reversible operations. Preserve the original pre-user-edit baseline before the first mutation; keep Forget/evidence deletion separate from graph-edit undo/restore.
+3. **P1 — finish #153 direct-action integration.** Wire Why-this contribution/path terms and graph-inspector nodes/edges into the #154/#155 operations and direct evidence-record navigation.
+4. **P2 — #161 + #178 mode/history ownership UX.** Let users explicitly edit discovered groups (rename/pin/member management/versioning) and choose which history clusters influence the Personal Algorithm.
+5. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
+6. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
+7. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
+8. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
 
 
 ## Phase 1 scope discipline
