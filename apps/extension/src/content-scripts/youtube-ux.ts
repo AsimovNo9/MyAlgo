@@ -150,11 +150,12 @@ const contributionKind = (label: string, kind: string): WhyThisMiniNode['kind'] 
   return 'other';
 };
 
-const contributionAction = (nodeKind: WhyThisMiniNode['kind']): WhyThisDisplayContribution['actionLabel'] => {
-  if (nodeKind === 'creator') return 'Reduce';
-  if (nodeKind === 'topic') return 'Mute';
-  if (nodeKind === 'format' || nodeKind === 'concept') return 'Prefer';
-  return null;
+const contributionAction = (
+  value: number,
+  targetId: string | null,
+): WhyThisDisplayContribution['actionLabel'] => {
+  if (!targetId || value === 0) return null;
+  return value > 0 ? 'Reduce' : 'Prefer';
 };
 
 const humanizeGraphLabel = (value: string): string => {
@@ -246,7 +247,7 @@ export function buildExplanationViewModel(item: RankedFeedItem): ExplanationView
         value: entry.value,
         kind: nodeKind,
         evidenceCount: entry.evidenceIds?.length ?? 0,
-        actionLabel: targetId ? contributionAction(nodeKind) : null,
+        actionLabel: contributionAction(entry.value, targetId),
         targetKind: targetId ? 'node' as const : null,
         targetId,
       };
