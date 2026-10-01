@@ -184,6 +184,7 @@ export type GraphInspectorEvidence = {
   connector: string;
   mechanism: string;
   observedAt: string;
+  confidence: number;
   contentLabel: string;
 };
 
@@ -323,6 +324,7 @@ export function buildGraphInspectorView(
       connector: evidence.provenance.connector,
       mechanism: evidence.provenance.mechanism,
       observedAt: evidence.observedAt,
+      confidence: record.confidence,
       contentLabel,
     };
   };
