@@ -243,6 +243,70 @@ export function Options() {
     }
   };
 
+  const handleGraphControl = async (
+    targetKind: 'node' | 'edge',
+    targetId: string,
+    action: 'reduce' | 'prefer' | 'mute',
+  ) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'PERSONAL_ALGORITHM_SET_CONTROL',
+      payload: { targetKind, targetId, action },
+    }) as { ok?: boolean; error?: string };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update graph control.');
+      return;
+    }
+    await handleLoadLiveGraph();
+    if (targetKind === 'node') setSelectedNodeId(targetId);
+    else setSelectedEdgeId(targetId);
+    setStatus(`${action === 'prefer' ? 'Prefer' : action === 'reduce' ? 'Reduce' : 'Mute'} saved as a revisioned graph control.`);
+  };
+
+  const handleRemoveGraphControl = async (
+    targetKind: 'node' | 'edge',
+    targetId: string,
+  ) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'PERSONAL_ALGORITHM_REMOVE_CONTROL',
+      payload: { targetKind, targetId },
+    }) as { ok?: boolean; error?: string; removed?: boolean };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to remove graph control.');
+      return;
+    }
+    await handleLoadLiveGraph();
+    if (targetKind === 'node') setSelectedNodeId(targetId);
+    else setSelectedEdgeId(targetId);
+    setStatus(response.removed ? 'Graph control cleared.' : 'No graph control was set for this target.');
+  };
+
+  const handleUndoGraphEdit = async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'PERSONAL_ALGORITHM_UNDO_CONTROL',
+    }) as { ok?: boolean; error?: string; edit?: unknown };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to undo the last graph edit.');
+      return;
+    }
+    await handleLoadLiveGraph();
+    setStatus(response.edit ? 'Last graph edit undone.' : 'There is no graph edit to undo.');
+  };
+
+  const handleRestoreOriginalGraph = async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'PERSONAL_ALGORITHM_RESTORE_ORIGINAL',
+    }) as { ok?: boolean; error?: string; restored?: boolean };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to restore the original graph.');
+      return;
+    }
+    await handleLoadLiveGraph();
+    setStatus(response.restored
+      ? 'Original pre-edit graph restored. Retained evidence was not deleted.'
+      : 'No pre-edit graph baseline has been captured yet.');
+  };
+
+
   const handleInspectOfflineGraph = () => {
     try {
       const view = parseGraphInspectorExport(offlineGraphJson);
@@ -579,12 +643,18 @@ export function Options() {
         <p>
           Explore the current local graph visually, search stable graph IDs, switch between durable mode overlays,
           and inspect exact retained evidence. Live snapshots also use retained semantic affinities to cluster content by
-          its strongest durable mode or semantic topic without creating synthetic graph edges. This surface is read-only
-          and does not edit preferences.
+          its strongest durable mode or semantic topic without creating synthetic graph edges. Selecting a live node or
+          relationship also exposes revisioned Reduce / Prefer / Mute controls. Offline pasted snapshots remain read-only.
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
           <button type="button" onClick={() => void handleLoadLiveGraph()}>Load live graph</button>
+          {graphInspectorSource === 'live' ? (
+            <>
+              <button type="button" onClick={() => void handleUndoGraphEdit()}>Undo last edit</button>
+              <button type="button" onClick={() => void handleRestoreOriginalGraph()}>Restore original</button>
+            </>
+          ) : null}
           {graphInspector ? (
             <span>
               {graphInspectorSource === 'live' ? 'Live snapshot' : 'Offline pasted snapshot'}
@@ -865,6 +935,14 @@ export function Options() {
                             {selectedGraphNode.confidence == null ? '' : ` · confidence ${selectedGraphNode.confidence.toFixed(2)}`}
                           </p>
                           <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
+                          {graphInspectorSource === 'live' && selectedGraphNode.kind !== 'content' ? (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                              <button type="button" onClick={() => void handleGraphControl('node', selectedGraphNode.id, 'reduce')}>Reduce</button>
+                              <button type="button" onClick={() => void handleGraphControl('node', selectedGraphNode.id, 'prefer')}>Prefer</button>
+                              <button type="button" onClick={() => void handleGraphControl('node', selectedGraphNode.id, 'mute')}>Mute</button>
+                              <button type="button" onClick={() => void handleRemoveGraphControl('node', selectedGraphNode.id)}>Clear control</button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
 
@@ -953,7 +1031,7 @@ export function Options() {
                               </div>
 
                               <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 0 }}>
-                                Reduce / Mute / Prefer actions remain disabled until #154/#155 land with revisioned undo/restore semantics.
+                                Use the selected graph term controls above, or the inline Why-this action on YouTube. Every change creates a graph revision and can be undone.
                               </p>
                             </div>
                           ) : null}
@@ -1009,6 +1087,17 @@ export function Options() {
                         {' · '}{selectedGraphEdge.provenance}
                       </p>
                       <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphEdge.id}</code>
+                      {graphInspectorSource === 'live' ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                          <button type="button" onClick={() => void handleGraphControl('edge', selectedGraphEdge.id, 'reduce')}>Reduce</button>
+                          <button type="button" onClick={() => void handleGraphControl('edge', selectedGraphEdge.id, 'prefer')}>Prefer</button>
+                          <button type="button" onClick={() => void handleGraphControl('edge', selectedGraphEdge.id, 'mute')}>Mute</button>
+                          <button type="button" onClick={() => void handleRemoveGraphControl('edge', selectedGraphEdge.id)}>Clear control</button>
+                        </div>
+                      ) : null}
+                      <p style={{ color: '#94a3b8', fontSize: 11 }}>
+                        Reduce/Prefer adjust an edge only when that edge already carries score. Mute is a hard exact-edge suppression.
+                      </p>
                       {selectedGraphEdge.evidence.length > 0 ? (
                         <ul style={{ marginBottom: 0 }}>
                           {selectedGraphEdge.evidence.slice(0, 12).map((evidence) => (
