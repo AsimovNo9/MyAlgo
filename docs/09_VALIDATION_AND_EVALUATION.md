@@ -319,6 +319,10 @@ Validate the combined local model path separately from metadata concept extracti
 9. semantic-feature cache identity changes with the combined pipeline so pre-verifier cached graph matches cannot be silently reused;
 10. compare precision/abstention, rank changes, verifier invocation rate, WASM latency, and memory against the embedding-only baseline before changing thresholds.
 
+Fresh-state bootstrap must not depend on manual page reloads. After Delete all local data, re-enable local neural semantics, collect History evidence, and open Home once. The asynchronous semantic scheduler must continue bounded drain passes after first paint until the current semantic slice and interaction-supported concept-verifier queue are caught up or the hard background work budget is exhausted. Repeated browser refreshes may trigger additional work but must not be the mechanism required for modes to emerge.
+
+For this validation, confirm `GET_SEMANTIC_DIAGNOSTICS` progresses across background passes, `conceptExtraction.pending` decreases without reloading the page, and `durableModeDiagnostics.activeModeCount` can become non-zero once the normal support thresholds are met.
+
 ## Post-#213 category/mode and Home-stability validation (#214)
 
 Live review after PR #213 exposed two distinct failure classes that must be evaluated separately.
