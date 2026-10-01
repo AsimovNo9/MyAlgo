@@ -17,6 +17,7 @@ export function Options() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
   const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
+  const [modeSearch, setModeSearch] = React.useState('');
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
@@ -296,6 +297,16 @@ export function Options() {
   };
 
   const modeOptions = buildDurableModeOptions(activeModeId, durableModeCatalog, mode);
+  const selectedModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default' && selectedModeIds.includes(option.id)
+  ));
+  const normalizedModeSearch = modeSearch.trim().toLowerCase();
+  const searchableModeOptions = modeOptions.filter((option) => (
+    option.id !== 'default'
+    && (!normalizedModeSearch
+      || option.label.toLowerCase().includes(normalizedModeSearch)
+      || option.id.toLowerCase().includes(normalizedModeSearch))
+  ));
   const normalizedGraphQuery = graphQuery.trim().toLowerCase();
   const filteredGraphNodes = (graphInspector?.nodes ?? []).filter((node) => (
     !normalizedGraphQuery
@@ -373,34 +384,89 @@ export function Options() {
       </section>
 
       <section style={{ marginBottom: 24 }}>
-        <h2>Mode</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {modeOptions.map((option) => {
-            const pressed = option.id === 'default'
-              ? selectedModeIds.length === 0
-              : selectedModeIds.includes(option.id);
-            return (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={pressed}
-                onClick={() => void handleModeChange(option.id)}
-                style={{
-                  borderRadius: 999,
-                  padding: '7px 11px',
-                  border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
-                  background: pressed ? '#dbeafe' : '#fff',
-                  fontWeight: pressed ? 700 : 500,
-                }}
-              >
-                {option.label}{option.active ? '' : ' (dormant)'}
-              </button>
-            );
-          })}
-        </div>
+        <h2>Modes / groups</h2>
         <p>
-          These are discovered interest groups from retained semantic graph support. Select any combination to shape the feed;
-          select All to clear the group filters. Repeated standalone interests can become groups once supported by at least two retained videos.
+          Selected groups stay pinned even if a later graph refresh makes them dormant or discovers a broader parent group.
+          Deselect a pinned bubble explicitly to remove it from the active feed intent.
+        </p>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            aria-pressed={selectedModeIds.length === 0}
+            onClick={() => void handleModeChange('default')}
+            style={{
+              borderRadius: 999,
+              padding: '7px 11px',
+              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
+              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
+              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
+            }}
+          >
+            All
+          </button>
+          {selectedModeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed="true"
+              title="Click to deselect"
+              onClick={() => void handleModeChange(option.id)}
+              style={{
+                borderRadius: 999,
+                padding: '7px 11px',
+                border: '2px solid #2563eb',
+                background: '#dbeafe',
+                fontWeight: 700,
+              }}
+            >
+              {option.label}{option.active ? '' : ' · retained'}
+            </button>
+          ))}
+        </div>
+
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Browse discovered groups ({Math.max(0, modeOptions.length - 1)})
+          </summary>
+          <label htmlFor="mode-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
+            Search groups
+          </label>
+          <input
+            id="mode-search"
+            type="search"
+            value={modeSearch}
+            onChange={(event) => setModeSearch(event.target.value)}
+            placeholder="Search by group name"
+            style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
+            {searchableModeOptions.map((option) => {
+              const pressed = selectedModeIds.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={pressed}
+                  onClick={() => void handleModeChange(option.id)}
+                  style={{
+                    borderRadius: 999,
+                    padding: '7px 11px',
+                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                    background: pressed ? '#dbeafe' : '#fff',
+                    fontWeight: pressed ? 700 : 500,
+                  }}
+                >
+                  {option.label}{option.active ? '' : ' (retained)'}
+                </button>
+              );
+            })}
+            {searchableModeOptions.length === 0 ? <span>No matching groups.</span> : null}
+          </div>
+        </details>
+        <p>
+          Groups are discovered from retained semantic graph support. Repeated standalone interests can become groups once supported
+          by at least two retained videos; parent/child reclustering does not silently clear a user selection.
         </p>
       </section>
 
