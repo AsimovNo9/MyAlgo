@@ -2524,7 +2524,7 @@ async function recordLocalEvent(kind: 'activity' | 'feedback' | 'selection', pay
   ]);
 }
 
-async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval' | 'control'): Promise<void> {
+async function notifyPersonalAlgorithmChanged(reason: 'feedback' | 'rebuild' | 'retrieval' | 'control' | 'forget'): Promise<void> {
   const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
   await Promise.all(tabs.map((tab) => tab.id
     ? chrome.tabs.sendMessage(tab.id, {
@@ -2894,6 +2894,30 @@ const handleRuntimeMessage = (
     })().catch((error) => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : 'Unable to restore original graph.',
+    }));
+    return true;
+  }
+
+  if (type === 'PERSONAL_ALGORITHM_FORGET_EVIDENCE') {
+    void (async () => {
+      const evidenceId = typeof payload?.evidenceId === 'string' ? payload.evidenceId.trim() : '';
+      if (!evidenceId) {
+        sendResponse({ ok: false, error: 'An evidence ID is required.' });
+        return;
+      }
+
+      const result = await personalAlgorithmStore.forgetEvidence(evidenceId);
+      if (result.forgotten) {
+        lastRankMemo = null;
+        await notifyPersonalAlgorithmChanged('forget');
+      }
+      sendResponse({
+        ok: true,
+        ...result,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to forget evidence.',
     }));
     return true;
   }
