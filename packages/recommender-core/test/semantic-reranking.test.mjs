@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildCandidateEmbeddingText,
   buildGraphNodeEmbeddingText,
+  buildSemanticGraphVerificationText,
   classifySemanticCategory,
   createLocalHashEmbeddingProvider,
   createMemoryEmbeddingCache,
@@ -95,6 +96,20 @@ test('candidate and graph texts preserve enriched semantic context', () => {
   assert.match(
     buildGraphNodeEmbeddingText(state.graph.nodes[0]),
     /Build reliable distributed systems.*Practical software architecture and implementation/,
+  );
+});
+
+test('graph verifier premise uses bounded content evidence without embedding topic hints', () => {
+  assert.equal(
+    buildSemanticGraphVerificationText({
+      external_id: 'candidate',
+      title: 'CRDT implementation',
+      description: 'Local-first architecture',
+      topics: ['metadata topic that should not be copied into the NLI premise'],
+      content_type: 'Education',
+      channel_name: 'Systems Lab',
+    }),
+    'CRDT implementation\nLocal-first architecture\nCategory: Education',
   );
 });
 
