@@ -676,11 +676,46 @@ const renderExplanationContent = (
     const action = document.createElement('button');
     action.type = 'button';
     action.textContent = contribution.actionLabel ?? 'Inspect';
-    action.disabled = true;
-    action.title = contribution.actionLabel
-      ? 'Available after revisioned preference controls land.'
-      : 'No direct preference action for this contribution yet.';
-    action.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.72;';
+    const actionable = Boolean(
+      contribution.actionLabel
+      && contribution.targetKind
+      && contribution.targetId,
+    );
+    action.disabled = !actionable;
+    action.title = actionable
+      ? `${contribution.actionLabel} this graph term. The edit is revisioned and can be undone in Options.`
+      : 'This contribution is aggregated or has no direct graph target.';
+    action.style.cssText = `padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:${actionable ? '1' : '.5'};cursor:${actionable ? 'pointer' : 'default'};`;
+    if (actionable) {
+      action.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const originalLabel = action.textContent;
+        action.disabled = true;
+        action.textContent = 'Applying…';
+        void chrome.runtime.sendMessage({
+          type: 'PERSONAL_ALGORITHM_SET_CONTROL',
+          payload: {
+            targetKind: contribution.targetKind,
+            targetId: contribution.targetId,
+            action: contribution.actionLabel!.toLowerCase(),
+          },
+        }).then((response: { ok?: boolean; error?: string }) => {
+          if (!response?.ok) {
+            action.disabled = false;
+            action.textContent = originalLabel;
+            action.title = response?.error ?? 'Unable to update this graph control.';
+            return;
+          }
+          action.textContent = 'Applied';
+          action.title = 'Saved as a revisioned graph control. Use Options to undo or restore original.';
+        }).catch((error) => {
+          action.disabled = false;
+          action.textContent = originalLabel;
+          action.title = error instanceof Error ? error.message : 'Unable to update this graph control.';
+        });
+      });
+    }
     row.appendChild(action);
     contributions.appendChild(row);
   }
