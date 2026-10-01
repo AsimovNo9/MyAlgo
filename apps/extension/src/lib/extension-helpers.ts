@@ -285,6 +285,7 @@ const isPersonalAlgorithmState = (value: unknown): value is PersonalAlgorithmSta
 export function buildGraphInspectorView(
   input: unknown,
   semanticContext: readonly GraphInspectorSemanticContext[] = [],
+  durableModeCatalog: DurableSemanticModeCatalog | null | undefined = null,
 ): GraphInspectorView {
   if (!isPersonalAlgorithmState(input)) {
     throw new Error('This is not a valid MyAlgo Personal Algorithm export.');
@@ -298,6 +299,36 @@ export function buildGraphInspectorView(
       .filter((entry) => entry.externalId.trim())
       .map((entry) => [entry.externalId, entry]),
   );
+  const durableGroupByContentNodeId = new Map<string, {
+    modeId: string;
+    label: string;
+    affinity: number;
+  }>();
+  for (const mode of durableModeCatalog?.modes ?? []) {
+    const supportWeightByContentId = new Map<string, number>();
+    for (const member of mode.members) {
+      for (const contentId of member.supportContentIds) {
+        supportWeightByContentId.set(
+          contentId,
+          (supportWeightByContentId.get(contentId) ?? 0) + Math.max(0, Number(member.weight ?? 0)),
+        );
+      }
+    }
+    for (const [contentId, affinity] of supportWeightByContentId.entries()) {
+      const previous = durableGroupByContentNodeId.get(contentId);
+      if (
+        !previous
+        || affinity > previous.affinity
+        || (affinity === previous.affinity && mode.label.localeCompare(previous.label) < 0)
+      ) {
+        durableGroupByContentNodeId.set(contentId, {
+          modeId: mode.id,
+          label: mode.label,
+          affinity,
+        });
+      }
+    }
+  }
   const supportByNodeId = new Map<string, Set<string>>();
 
   for (const edge of state.graph.edges) {
@@ -352,6 +383,16 @@ export function buildGraphInspectorView(
           const semantic = node.content?.externalId
             ? semanticByExternalId.get(node.content.externalId)
             : undefined;
+          const durableGroup = durableGroupByContentNodeId.get(node.id);
+          if (durableGroup) {
+            return {
+              semanticClusterId: `mode:${durableGroup.modeId}`,
+              semanticClusterLabel: durableGroup.label,
+              semanticClusterKind: 'mode' as const,
+              semanticClusterAffinity: durableGroup.affinity,
+            };
+          }
+
           const strongestMode = [...(semantic?.modeAffinities ?? [])]
             .filter((entry) => Number.isFinite(entry.affinity) && entry.affinity > 0)
             .sort((left, right) => right.affinity - left.affinity || left.label.localeCompare(right.label))[0];
