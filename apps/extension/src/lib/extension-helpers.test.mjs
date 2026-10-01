@@ -69,18 +69,18 @@ test('buildDurableModeOptions uses persisted stable mode IDs instead of feed cat
   assert.deepEqual(
     buildDurableModeOptions('default', catalog),
     [
-      { id: 'default', label: 'All', revision: null, active: true },
-      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
-      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
+      { id: 'default', label: 'All', inferredLabel: null, revision: null, active: true, pinned: false },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', inferredLabel: 'Distributed systems', revision: 3, active: true, pinned: false },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', inferredLabel: 'Ambient music', revision: 2, active: false, pinned: false },
     ],
   );
 
   assert.deepEqual(
     buildDurableModeOptions('mode:inferred:v1:ambient', catalog),
     [
-      { id: 'default', label: 'All', revision: null, active: true },
-      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
-      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
+      { id: 'default', label: 'All', inferredLabel: null, revision: null, active: true, pinned: false },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', inferredLabel: 'Distributed systems', revision: 3, active: true, pinned: false },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', inferredLabel: 'Ambient music', revision: 2, active: false, pinned: false },
     ],
   );
 });
