@@ -594,7 +594,7 @@ async function persistNormalizedEvidence(
 }
 
 const evidenceIdForBehaviorObservation = (observation: UserBehaviorObservation): string | null => {
-  if (observation.kind === 'clicked') {
+  if (observation.kind !== 'watched') {
     return `interaction:clicked:${observation.videoId}:${observation.observedAt}:${observation.exposureId ?? ''}`;
   }
   if (
