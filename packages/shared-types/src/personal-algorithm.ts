@@ -104,7 +104,7 @@ export type PersonalAlgorithmGraph = {
   revisions: GraphRevision[];
   currentRevision: number;
   /**
-   * Explicit user correction overlays. Optional for schema-v2 compatibility;
+   * Explicit user correction overlays. Optional for pre-v3 persisted-state compatibility;
    * the local store normalizes missing arrays to [].
    */
   controls?: GraphControl[];
