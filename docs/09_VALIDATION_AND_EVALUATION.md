@@ -821,6 +821,10 @@ For the Network projection, durable modes and visual semantic groups are intenti
 
 Why-this score attribution must distinguish semantic/creator preference signals from structural graph plumbing. Relations such as `created_by` remain valid graph edges for provenance/path display, but must not receive their own additive recommendation weight or appear as a ranked contribution row. Creator affinity may still contribute through the creator node itself.
 
+Retained content identity is also graph bookkeeping, not preference evidence. The exact `content:youtube:<id>` node for a candidate must not receive an additive score merely because that video has already been materialized in the graph; opaque YouTube IDs must therefore never appear as a positive ranking reason. Exact-item user feedback can still affect ranking through explicit feedback signals, while titles remain presentation metadata rather than identities used as score weights.
+
+Interactive graph wheel zoom must register a native non-passive `wheel` listener before calling `preventDefault()`. Extension options validation should include zooming the SVG while watching the extension error console and must produce no passive-listener warning.
+
 Why-this should also resolve retained scorer evidence back to concrete prior interactions when available. The expanded explanation should show a bounded list of matching past watched/clicked/saved/shared videos, the semantic/creator signal through which each supported the current item, and the share of positive scorer contribution backed by those prior interactions. That percentage is scorer attribution, not a calibrated probability, and must be labelled accordingly.
 
 Durable modes may consist of either a co-supported multi-concept cluster or one strongly repeated standalone semantic concept. A singleton durable mode requires at least three supporting retained content items; one-off or two-item singleton topics remain below the durable-mode threshold. This permits distinct recurring interests to become modes without turning every observed topic into a persistent mode.
