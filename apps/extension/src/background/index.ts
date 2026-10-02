@@ -107,6 +107,7 @@ type SemanticFeatureRecord = {
 
 type TranscriptEnrichmentRecord = {
   externalId: string;
+  pipelineVersion: string;
   status: 'available' | 'unavailable';
   text: string | null;
   language: string | null;
@@ -240,6 +241,7 @@ const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_TRANSCRIPT_ENRICHMENT_CACHE = 160;
 const TRANSCRIPT_REFRESH_MS = 24 * 60 * 60 * 1000;
+const TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION = 'youtube-caption-innertube-v2';
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const MAX_HYBRID_CANDIDATES_PER_REFRESH = 4;
@@ -807,6 +809,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
       transcript: transcriptEnabled
         ? {
             externalId: candidate.external_id,
+            pipelineVersion: TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION,
             status: transcript?.text?.trim() ? 'available' : 'unavailable',
             text: transcript?.text?.trim() || null,
             language: transcript?.language ?? null,
@@ -874,6 +877,7 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
           cacheSize: transcriptRecords.length,
           maxCacheSize: MAX_TRANSCRIPT_ENRICHMENT_CACHE,
           refreshMs: TRANSCRIPT_REFRESH_MS,
+          pipelineVersion: TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION,
           generatedAt: new Date().toISOString(),
         }),
       );
@@ -1366,7 +1370,7 @@ const needsTranscriptRefresh = (
   record: TranscriptEnrichmentRecord | undefined,
   nowMs: number,
 ): boolean => {
-  if (!record) return true;
+  if (!record || record.pipelineVersion !== TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION) return true;
   const checkedAt = Date.parse(record.checkedAt);
   return !Number.isFinite(checkedAt) || nowMs - checkedAt > TRANSCRIPT_REFRESH_MS;
 };
