@@ -49,6 +49,7 @@ export type SemanticRerankingDiagnostics = {
   graphVerificationBackend: string | null;
   graphVerificationModelVersion: string | null;
   graphVerificationFallbackReason: string | null;
+  transcriptAssistedCandidateCount: number;
 };
 
 export type SemanticRerankingResult<T extends RecommendationCandidate> = {
@@ -72,7 +73,11 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
       verification_status?: 'not_required' | 'verified' | 'fallback';
       verification_model_version?: string;
       verification_pipeline_id?: string;
+      input_sources?: Array<'metadata' | 'transcript'>;
+      transcript_source?: 'youtube_caption_track';
+      transcript_language?: string;
     }>;
+    semantic_input_sources?: Array<'metadata' | 'transcript'>;
   }>;
   modeProfile: SemanticModeProfile;
   diagnostics: SemanticRerankingDiagnostics;
@@ -195,6 +200,7 @@ const normalizeText = (value: string | null | undefined): string =>
   (value ?? '').replace(/\s+/g, ' ').trim();
 
 export function buildCandidateEmbeddingText(candidate: RecommendationCandidate): string {
+  const transcript = normalizeText(candidate.semantic_transcript ?? '');
   const parts = [
     candidate.title,
     candidate.description ?? '',
@@ -202,6 +208,7 @@ export function buildCandidateEmbeddingText(candidate: RecommendationCandidate):
     candidate.content_type ?? '',
     candidate.format ?? '',
     candidate.channel_name ?? '',
+    transcript ? `Transcript excerpt: ${transcript}` : '',
   ].map(normalizeText).filter(Boolean);
   return [...new Set(parts)].join(' | ').slice(0, 6000);
 }
@@ -210,10 +217,12 @@ export function buildSemanticGraphVerificationText(candidate: RecommendationCand
   const title = normalizeText(candidate.title).slice(0, 220);
   const description = normalizeText(candidate.description ?? '').slice(0, 700);
   const category = normalizeText(candidate.content_type ?? '').slice(0, 80);
+  const transcript = normalizeText(candidate.semantic_transcript ?? '').slice(0, 900);
   return [
     title,
     description,
     category ? `Category: ${category}` : '',
+    transcript ? `Transcript excerpt: ${transcript}` : '',
   ].filter(Boolean).join('\n');
 }
 
@@ -684,8 +693,13 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       category = { category: null, confidence: 0 };
     }
 
+    const semanticInputSources: Array<'metadata' | 'transcript'> = item.candidate.semantic_transcript?.trim()
+      ? ['metadata', 'transcript']
+      : ['metadata'];
+
     return {
       ...item.candidate,
+      semantic_input_sources: semanticInputSources,
       semantic_similarity: graphSimilarity,
       semantic_graph_similarity: graphSimilarity,
       semantic_mode_similarity: positiveSimilarity(item.embedding, modeCentroid),
@@ -705,6 +719,13 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
         verification_status: match.verification_status,
         verification_model_version: match.verification_model_version,
         verification_pipeline_id: match.verification_pipeline_id,
+        input_sources: semanticInputSources,
+        transcript_source: semanticInputSources.includes('transcript')
+          ? item.candidate.semantic_transcript_source ?? undefined
+          : undefined,
+        transcript_language: semanticInputSources.includes('transcript')
+          ? item.candidate.semantic_transcript_language ?? undefined
+          : undefined,
       })),
     };
   });
@@ -730,6 +751,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       graphVerificationBackend,
       graphVerificationModelVersion: verificationModelVersion,
       graphVerificationFallbackReason,
+      transcriptAssistedCandidateCount: candidates.filter((candidate) => Boolean(candidate.semantic_transcript?.trim())).length,
     },
   };
 }
