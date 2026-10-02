@@ -82,3 +82,8 @@ MyAlgo's use of information received through Chrome extension capabilities will 
 ## Contact and policy source
 
 The implementation and this policy are maintained in the MyAlgo project repository. Before Chrome Web Store publication, the developer must provide a working public URL for this policy in the Developer Dashboard and keep that URL current.
+
+
+## Optional YouTube caption enrichment
+
+When the user separately enables **YouTube caption enrichment** together with local neural semantics, MyAlgo may discover an English caption track from the canonical YouTube watch page and request that track from a YouTube-owned caption endpoint. MyAlgo keeps only a bounded normalized excerpt (up to 2,400 characters, sampled from the beginning, middle, and end) in a separate local derived cache. Caption text is used only as additional input to the packaged local semantic models; it is not stored as Personal Algorithm evidence, does not enter deterministic lexical scoring, and is not sent to a MyAlgo server or model host. The experiment is off by default. Disabling it stops new caption acquisition; **Delete all local MyAlgo data** clears the caption cache and setting.
