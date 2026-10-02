@@ -146,7 +146,9 @@ No future transfer is authorized merely because it appears on the roadmap.
 ```text
 explicit transcript-enrichment toggle + local neural semantics
         ↓
-canonical youtube.com/watch player response
+canonical youtube.com/watch page
+        ↓ provider config / INNERTUBE_API_KEY
+bounded YouTube-owned player request (iOS → Android fallback)
         ↓ caption-track discovery
 YouTube-owned /api/timedtext request (English track, manual preferred)
         ↓
