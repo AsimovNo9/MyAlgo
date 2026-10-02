@@ -20,6 +20,7 @@ export function Options() {
   const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
   const [modeSearch, setModeSearch] = React.useState('');
   const [modeNameDrafts, setModeNameDrafts] = React.useState<Record<string, string>>({});
+  const [modeMemberDrafts, setModeMemberDrafts] = React.useState<Record<string, string>>({});
   const [modeConfigRevision, setModeConfigRevision] = React.useState(0);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
@@ -167,6 +168,7 @@ export function Options() {
     setActiveModeId('default');
     setSelectedModeIds([]);
     setModeNameDrafts({});
+    setModeMemberDrafts({});
     setModeConfigRevision(0);
     setDurableModeCatalog(null);
     setGraphInspector(null);
@@ -247,6 +249,44 @@ export function Options() {
     setStatus(`${pinned ? 'Pinned' : 'Unpinned'} group independently of feed selection. Ownership config r${response.configRevision ?? modeConfigRevision}.`);
   };
 
+  const handleModeMembershipChange = async (
+    modeId: string,
+    memberAction: 'add' | 'remove' | 'reset',
+    memberCanonicalId?: string,
+  ) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'DURABLE_MODE_CONFIG_UPDATE',
+      payload: {
+        modeId,
+        memberAction,
+        ...(memberCanonicalId ? { memberCanonicalId } : {}),
+      },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      configRevision?: number;
+      catalog?: DurableSemanticModeCatalog | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update group membership.');
+      return;
+    }
+    if (response.catalog) setDurableModeCatalog(response.catalog);
+    setModeConfigRevision(response.configRevision ?? modeConfigRevision);
+    setModeMemberDrafts((current) => {
+      const next = { ...current };
+      delete next[modeId];
+      return next;
+    });
+    setStatus(
+      memberAction === 'add'
+        ? `Member added. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+        : memberAction === 'remove'
+          ? `Member removed from this group without deleting graph/evidence state. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+          : `Group membership reset to inferred members. Ownership config r${response.configRevision ?? modeConfigRevision}.`,
+    );
+  };
+
   const handleUndoModeConfig = async () => {
     const response = await chrome.runtime.sendMessage({
       type: 'DURABLE_MODE_CONFIG_UNDO',
@@ -264,6 +304,7 @@ export function Options() {
     if (response.catalog) setDurableModeCatalog(response.catalog);
     setModeConfigRevision(response.configRevision ?? modeConfigRevision);
     setModeNameDrafts({});
+    setModeMemberDrafts({});
     setStatus(response.reverted
       ? `Last group edit undone. Ownership config r${response.configRevision ?? modeConfigRevision}.`
       : 'There is no group ownership edit to undo.');
@@ -530,6 +571,13 @@ export function Options() {
     .filter((control) => control.action === 'mute')
     .sort((left, right) => left.targetLabel.localeCompare(right.targetLabel));
 
+  const discoveredModeMemberPool = [...new Map(
+    (durableModeCatalog?.modes ?? [])
+      .flatMap((entry) => entry.inferredMembers ?? entry.members)
+      .map((member) => [member.canonicalId, member] as const),
+  ).values()]
+    .sort((left, right) => left.label.localeCompare(right.label) || left.canonicalId.localeCompare(right.canonicalId));
+
   const graphSearchResults = normalizedGraphQuery
     ? [
         ...filteredGraphNodes.slice(0, 8).map((node) => ({ id: node.id, label: node.label, kind: node.kind, type: 'node' as const })),
@@ -646,8 +694,8 @@ export function Options() {
             Manage group ownership · config r{modeConfigRevision}
           </summary>
           <p>
-            Rename and pin are durable user-owned overlays. Pinning is independent of whether a group is currently selected for the feed.
-            Undo reverses the latest rename/pin edit without changing retained evidence or inferred group membership.
+            Rename, pin, and member edits are durable user-owned overlays. Pinning is independent of whether a group is currently selected for the feed.
+            Undo reverses the latest ownership edit without changing retained evidence or the reconciler-owned inferred label/membership.
           </p>
           <button type="button" onClick={() => void handleUndoModeConfig()}>
             Undo last group edit
@@ -700,6 +748,94 @@ export function Options() {
                     </button>
                   ) : null}
                 </div>
+                {(() => {
+                  const configuredMode = durableModeCatalog?.modes.find((entry) => entry.id === option.id);
+                  if (!configuredMode) return null;
+                  const inferredMembers = configuredMode.inferredMembers ?? configuredMode.members;
+                  const inferredIds = new Set(inferredMembers.map((member) => member.canonicalId));
+                  const effectiveIds = new Set(configuredMode.members.map((member) => member.canonicalId));
+                  const membershipEdited = (
+                    configuredMode.members.length !== inferredMembers.length
+                    || configuredMode.members.some((member) => !inferredIds.has(member.canonicalId))
+                    || inferredMembers.some((member) => !effectiveIds.has(member.canonicalId))
+                  );
+                  const availableMembers = discoveredModeMemberPool.filter((member) => !effectiveIds.has(member.canonicalId));
+                  return (
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                        Members ({configuredMode.members.length}{membershipEdited ? ' · edited' : ''})
+                      </summary>
+                      <p style={{ fontSize: 12, color: '#64748b' }}>
+                        Membership edits change this group lens only. They do not delete evidence, graph nodes, or the reconciler-owned inferred membership.
+                      </p>
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {configuredMode.members.map((member) => (
+                          <div
+                            key={member.canonicalId}
+                            style={{
+                              display: 'flex',
+                              gap: 8,
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 8px',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 8,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <strong>{member.label}</strong>
+                              <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere' }}>
+                                {member.canonicalId}{inferredIds.has(member.canonicalId) ? ' · inferred' : ' · user-added'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleModeMembershipChange(option.id, 'remove', member.canonicalId)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        {configuredMode.members.length === 0 ? (
+                          <span style={{ fontSize: 12, color: '#64748b' }}>No effective members. Add one below or reset inferred membership.</span>
+                        ) : null}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                        <select
+                          aria-label={`Add member to ${option.label}`}
+                          value={modeMemberDrafts[option.id] ?? ''}
+                          onChange={(event) => setModeMemberDrafts((current) => ({
+                            ...current,
+                            [option.id]: event.target.value,
+                          }))}
+                          style={{ flex: '1 1 260px', minWidth: 220, padding: 7 }}
+                        >
+                          <option value="">Choose discovered member…</option>
+                          {availableMembers.map((member) => (
+                            <option key={member.canonicalId} value={member.canonicalId}>
+                              {member.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!modeMemberDrafts[option.id]}
+                          onClick={() => {
+                            const memberId = modeMemberDrafts[option.id];
+                            if (memberId) void handleModeMembershipChange(option.id, 'add', memberId);
+                          }}
+                        >
+                          Add member
+                        </button>
+                        {membershipEdited ? (
+                          <button type="button" onClick={() => void handleModeMembershipChange(option.id, 'reset')}>
+                            Reset members
+                          </button>
+                        ) : null}
+                      </div>
+                    </details>
+                  );
+                })()}
               </div>
             ))}
           </div>

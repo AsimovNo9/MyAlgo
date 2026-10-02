@@ -1,6 +1,6 @@
 import { createMessage, EXTENSION_MESSAGE_TYPES } from '../lib/messaging';
 import { STORAGE_KEYS, getStorage, setStorage, setStorageBatch } from '../lib/storage';
-import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
+import type { CandidateAcquisitionProvenance, CandidateModeAffinity, DurableSemanticModeCatalog, DurableSemanticModeMember, FeedSourceFilters, ModeSupplyDiagnostics, RetrievalDiagnostics, RetrievalSettings, SemanticCategoryId } from '@repo/shared-types';
 import { youtubeConnector } from '../connectors/youtube';
 import { createHistoryEvidenceId, mergeHistoryEvidence, type HistoryEvidence, type HistoryObservationMetrics } from '../content-scripts/youtube-history';
 import { mergeRecommendationObservations, type RecommendationObservation, type RecommendationObservationMetrics } from '../content-scripts/youtube-recommendations';
@@ -2773,6 +2773,8 @@ const handleRuntimeMessage = (
       evidenceId?: string;
       label?: string | null;
       pinned?: boolean;
+      memberAction?: 'add' | 'remove' | 'reset';
+      memberCanonicalId?: string;
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
@@ -3611,12 +3613,39 @@ const handleRuntimeMessage = (
         return;
       }
 
+      let memberChange: {
+        addMember?: DurableSemanticModeMember;
+        removeMemberCanonicalId?: string;
+        resetMembers?: boolean;
+      } = {};
+      if (payload?.memberAction === 'add') {
+        const canonicalId = payload.memberCanonicalId?.trim() ?? '';
+        const candidateMember = catalog.modes
+          .flatMap((mode) => mode.inferredMembers ?? mode.members)
+          .find((member) => member.canonicalId === canonicalId);
+        if (!candidateMember) {
+          sendResponse({ ok: false, error: 'That discovered member is no longer available.' });
+          return;
+        }
+        memberChange = { addMember: candidateMember };
+      } else if (payload?.memberAction === 'remove') {
+        const canonicalId = payload.memberCanonicalId?.trim() ?? '';
+        if (!canonicalId) {
+          sendResponse({ ok: false, error: 'A durable group member ID is required.' });
+          return;
+        }
+        memberChange = { removeMemberCanonicalId: canonicalId };
+      } else if (payload?.memberAction === 'reset') {
+        memberChange = { resetMembers: true };
+      }
+
       const config = updateDurableModeUserConfig(
         normalizeDurableModeUserConfig(rawConfig),
         modeId,
         {
           ...('label' in (payload ?? {}) ? { label: payload?.label ?? null } : {}),
           ...(typeof payload?.pinned === 'boolean' ? { pinned: payload.pinned } : {}),
+          ...memberChange,
         },
       );
       const configuredCatalog = applyDurableModeUserConfig(catalog, config) ?? catalog;
@@ -3650,6 +3679,18 @@ const handleRuntimeMessage = (
           },
         }).catch(() => undefined)
         : undefined));
+
+      const updatedMode = configuredCatalog.modes.find((entry) => entry.id === modeId) ?? null;
+      if (payload?.memberAction && updatedMode && selectedModeIds.includes(modeId)) {
+        void refreshSelectedModeSemantics({
+          modeId: updatedMode.id,
+          label: updatedMode.label,
+          revision: updatedMode.revision,
+          memberLabels: updatedMode.members.map((member) => member.label),
+        }, tabs).catch((error) => {
+          console.warn('[MyAlgo] durable-mode membership semantic refresh failed', error);
+        });
+      }
 
       sendResponse({
         ok: true,

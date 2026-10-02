@@ -54,7 +54,7 @@ Current execution order:
 9. **Complete — #154 / PR #233 revisioned correction controls:** browser-validated Reduce/Prefer/Mute, exact graph-target controls, immutable pre-edit baseline, Undo, Restore original, Unmute, and sparse-explanation fallback feedback are merged.
 10. **Complete core semantics — #155 / PR #234 evidence provenance + Forget:** browser-validated exact evidence deletion, minimal deletion ledger, staging-store purge, reconstruction exclusion, and graph Undo/Restore separation are merged.
 11. **Complete — #153 / PR #235 exact Why-this evidence actions:** browser-validated exact-record provenance/Forget is now integrated directly into native and replacement explanations with post-delete trace/revision reconciliation.
-12. **Active P2 — #161 durable-group ownership:** separate feed selection from durable ownership, add rename + explicit pin/unpin with local revision history/undo, then follow with member editing.
+12. **Active P2 — #161 durable-group ownership:** PR #236 merged/browser-validated rename + explicit pin/unpin ownership. The current slice adds revisioned member include/exclude/reset over the preserved inferred membership baseline, with Undo and immediate scoring/graph-overlay use.
 13. **Next P2 — #178 history-cluster ownership:** reuse the durable ownership interaction model to let users choose which retained history clusters influence the graph/feed without deleting evidence.
 14. **P2 release hardening — #169 + #211:** finish signed-out/offline validation plus long-session/infinite-scroll/service-worker-restart stress and detached-DOM checks.
 15. **P3 — #158 explicit user-created graph nodes, then #159 counterfactual replay.**

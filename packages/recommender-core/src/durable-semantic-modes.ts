@@ -256,8 +256,14 @@ export function buildDurableSemanticModeClusters(
   };
 }
 
-const memberIdSet = (mode: Pick<DurableSemanticMode, 'members'>): Set<string> =>
-  new Set(mode.members.map((member) => member.canonicalId));
+const inferredMemberList = (
+  mode: Pick<DurableSemanticMode, 'members' | 'inferredMembers'>,
+): readonly DurableSemanticModeMember[] => mode.inferredMembers ?? mode.members;
+
+const memberIdSet = (
+  mode: Pick<DurableSemanticMode, 'members' | 'inferredMembers'>,
+): Set<string> =>
+  new Set(inferredMemberList(mode).map((member) => member.canonicalId));
 
 const proposalMemberIdSet = (proposal: DurableSemanticModeProposal): Set<string> =>
   new Set(proposal.members.map((member) => member.canonicalId));
@@ -278,7 +284,7 @@ const modeSemanticSignature = (mode: DurableSemanticMode): string =>
     id: mode.id,
     inferredLabel: mode.inferredLabel ?? mode.label,
     revision: mode.revision,
-    members: memberSignature(mode.members),
+    inferredMembers: memberSignature(inferredMemberList(mode)),
     provenance: mode.provenance,
     pipelineId: mode.pipelineId,
     graphRevision: mode.graphRevision,
@@ -355,7 +361,7 @@ export function reconcileDurableSemanticModes(
 
     const id = prior?.id ?? modeIdForMembers(proposal.members.map((member) => member.canonicalId));
     const semanticChanged = !prior
-      || memberSignature(prior.members) !== memberSignature(proposal.members)
+      || memberSignature(inferredMemberList(prior)) !== memberSignature(proposal.members)
       || prior.active !== true;
 
     return {
@@ -364,6 +370,11 @@ export function reconcileDurableSemanticModes(
       inferredLabel: proposal.label,
       revision: prior ? prior.revision + Number(semanticChanged) : 1,
       members: proposal.members.map((member) => ({
+        ...member,
+        sourceNodeIds: [...member.sourceNodeIds],
+        supportContentIds: [...member.supportContentIds],
+      })),
+      inferredMembers: proposal.members.map((member) => ({
         ...member,
         sourceNodeIds: [...member.sourceNodeIds],
         supportContentIds: [...member.supportContentIds],

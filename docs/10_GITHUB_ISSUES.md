@@ -9,7 +9,7 @@ The semantic/runtime sequence through PR #229 and the trust/graph sequence throu
 1. **Complete — #154 / PR #233 correction controls.** Reduce/Prefer/Mute, baseline preservation, revisioned Undo/Restore original, Why-this/graph-target actions, fallback feedback, and Unmute are merged and browser validated.
 2. **Complete core semantics — #155 / PR #234 evidence provenance + Forget.** Browser validation confirms targeted deletion, durable reconstruction exclusion, full-reset cleanup, and separation from graph Undo/Restore.
 3. **Complete — #153 / PR #235 evidence-action/navigation.** Exact feed-card evidence actions and post-Forget reconciliation are browser validated.
-4. **Active P2 — #161 durable-group ownership.** Implement user rename and explicit pin/unpin as revisioned overlays independent of active selection; preserve inferred identity/membership and support undo.
+4. **Active P2 — #161 durable-group ownership.** Rename/pin ownership is merged/browser validated in PR #236. Current work adds revisioned effective membership: remove inferred members from the lens, add existing discovered semantic members, reset to inferred membership, and undo without deleting graph/evidence state.
 5. **Next P2 — #178 history-cluster ownership.** Reuse the resulting ownership UX/versioning for explicit history-cluster inclusion/exclusion.
 6. **P2 — #169 + #211 release hardening.** Finish signed-out/offline behavior plus long-session/infinite-scroll/service-worker-restart and detached-DOM validation.
 7. **P3 — #158 explicit user-created graph nodes.** Add user-authored interests/concepts/creators/formats after edit/undo semantics are stable.

@@ -254,7 +254,10 @@ export interface DurableSemanticMode {
   /** Reconciler-owned inferred label, retained so a user rename can be reset safely. */
   inferredLabel?: string;
   revision: number;
+  /** Effective user-facing membership after local ownership overlays. */
   members: DurableSemanticModeMember[];
+  /** Reconciler-owned inferred membership, retained so user edits can be reset safely. */
+  inferredMembers?: DurableSemanticModeMember[];
   provenance: 'inferred';
   pipelineId: string;
   graphRevision: number;
