@@ -970,14 +970,17 @@ Validate metadata-only and caption-assisted runs against the same replay/browser
 
 1. the experiment is off by default and requires both current disclosure acceptance and local neural semantics;
 2. disabled mode issues no caption-track/timed-text request;
-3. eligible English captions prefer manual over auto-generated tracks; non-English-only or missing captions abstain to metadata-only semantics;
-4. retained transcript text is normalized, at most 2,400 characters, sampled across beginning/middle/end, stored only in the dedicated cache, and the cache is bounded to 160 records;
-5. mxbai and DeBERTa input hashes change when the transcript excerpt changes, while transcript phrases never enter deterministic lexical scoring;
-6. Why-this identifies transcript-assisted semantic input and states that captions are not preference evidence;
-7. Personal Algorithm evidence/graph state, candidate reservoir, feed cache, and traces contain provenance only—not raw transcript text;
-8. caption fetch/parsing failure cannot fail metadata enrichment, ranking, or first paint;
-9. service-worker restart reuses the local caption cache; disabling stops new acquisition; full local-data deletion clears cache + toggle;
-10. compare semantic precision/abstention and rank deltas on vague titles, sparse descriptions, lectures, podcasts/interviews, news/commentary and misleading description boilerplate before enabling by default.
+3. valid 11-character YouTube IDs only enter transcript acquisition; pseudo IDs derived from ads/playables such as `title:...` make no transcript network request and are removed from the transcript cache;
+4. caption acquisition prefers iOS InnerTube, falls back to Android, and uses the WEB/watch-page caption URL only when non-WEB clients expose no English track;
+5. eligible English captions prefer manual over auto-generated tracks; non-English-only or missing captions abstain to metadata-only semantics;
+6. retained transcript text is normalized, at most 2,400 characters, sampled across beginning/middle/end, stored only in the dedicated cache, and the cache is bounded to 160 records;
+7. cache entries expose acquisition strategy and failure reason; `caption_payload_empty` is distinct from `no_english_caption_track` and `player_request_failed`;
+8. mxbai and DeBERTa input hashes change when the transcript excerpt changes, while transcript phrases never enter deterministic lexical scoring;
+9. Why-this identifies transcript-assisted semantic input and states that captions are not preference evidence;
+10. Personal Algorithm evidence/graph state, candidate reservoir, feed cache, and traces contain provenance only—not raw transcript text;
+11. caption fetch/parsing failure cannot fail metadata enrichment, ranking, or first paint;
+12. service-worker restart reuses the local caption cache; disabling stops new acquisition; full local-data deletion clears cache + toggle;
+13. compare semantic precision/abstention and rank deltas on vague titles, sparse descriptions, lectures, podcasts/interviews, news/commentary and misleading description boilerplate before enabling by default.
 
 Browser validation should inspect `GET_SEMANTIC_DIAGNOSTICS`: `transcriptEnrichment.enabled`, cache counts, and `diagnostics.transcriptAssistedCandidateCount`. Why-this on an assisted candidate must say `metadata + YouTube captions`. Search a distinctive caption phrase in `personal-algorithm-state`, candidate pool, and video store: it must be absent outside the dedicated transcript cache.
 
