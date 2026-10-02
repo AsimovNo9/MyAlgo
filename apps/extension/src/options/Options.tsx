@@ -20,6 +20,7 @@ export function Options() {
   const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
   const [modeSearch, setModeSearch] = React.useState('');
   const [modeNameDrafts, setModeNameDrafts] = React.useState<Record<string, string>>({});
+  const [modeMemberDrafts, setModeMemberDrafts] = React.useState<Record<string, string>>({});
   const [modeConfigRevision, setModeConfigRevision] = React.useState(0);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
@@ -167,6 +168,7 @@ export function Options() {
     setActiveModeId('default');
     setSelectedModeIds([]);
     setModeNameDrafts({});
+    setModeMemberDrafts({});
     setModeConfigRevision(0);
     setDurableModeCatalog(null);
     setGraphInspector(null);
@@ -247,6 +249,44 @@ export function Options() {
     setStatus(`${pinned ? 'Pinned' : 'Unpinned'} group independently of feed selection. Ownership config r${response.configRevision ?? modeConfigRevision}.`);
   };
 
+  const handleModeMembershipChange = async (
+    modeId: string,
+    memberAction: 'add' | 'remove' | 'reset',
+    memberCanonicalId?: string,
+  ) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'DURABLE_MODE_CONFIG_UPDATE',
+      payload: {
+        modeId,
+        memberAction,
+        ...(memberCanonicalId ? { memberCanonicalId } : {}),
+      },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      configRevision?: number;
+      catalog?: DurableSemanticModeCatalog | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update group membership.');
+      return;
+    }
+    if (response.catalog) setDurableModeCatalog(response.catalog);
+    setModeConfigRevision(response.configRevision ?? modeConfigRevision);
+    setModeMemberDrafts((current) => {
+      const next = { ...current };
+      delete next[modeId];
+      return next;
+    });
+    setStatus(
+      memberAction === 'add'
+        ? `Member added. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+        : memberAction === 'remove'
+          ? `Member removed from this group without deleting graph/evidence state. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+          : `Group membership reset to inferred members. Ownership config r${response.configRevision ?? modeConfigRevision}.`,
+    );
+  };
+
   const handleUndoModeConfig = async () => {
     const response = await chrome.runtime.sendMessage({
       type: 'DURABLE_MODE_CONFIG_UNDO',
@@ -264,6 +304,7 @@ export function Options() {
     if (response.catalog) setDurableModeCatalog(response.catalog);
     setModeConfigRevision(response.configRevision ?? modeConfigRevision);
     setModeNameDrafts({});
+    setModeMemberDrafts({});
     setStatus(response.reverted
       ? `Last group edit undone. Ownership config r${response.configRevision ?? modeConfigRevision}.`
       : 'There is no group ownership edit to undo.');
