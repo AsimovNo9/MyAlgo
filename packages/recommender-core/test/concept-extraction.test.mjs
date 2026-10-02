@@ -39,6 +39,20 @@ test('concept verification input is bounded and deterministic', () => {
   ]);
 });
 
+test('transcript enriches the NLI premise without becoming a candidate label source', () => {
+  const transcriptCandidate = {
+    ...candidate,
+    semantic_transcript: 'This spoken section explains vector clocks, causal consistency, and CRDT merge semantics.',
+  };
+  const input = buildConceptVerificationInput(transcriptCandidate);
+  assert.match(input.text, /Transcript excerpt: This spoken section explains vector clocks/);
+  assert.deepEqual(input.labels, buildConceptCandidateLabels(candidate));
+  assert.notEqual(
+    conceptExtractionInputHash(transcriptCandidate),
+    conceptExtractionInputHash(candidate),
+  );
+});
+
 test('candidate labels reject generic metadata noise and duplicates', () => {
   assert.deepEqual(
     buildConceptCandidateLabels({
