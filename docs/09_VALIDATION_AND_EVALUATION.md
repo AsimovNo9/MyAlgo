@@ -948,3 +948,17 @@ For the first user-ownership slice, validate rename/pin state independently from
 6. reset-name restores the reconciler-owned inferred label while preserving other ownership fields such as explicit pin;
 7. selected or explicitly pinned dormant groups remain identity-retained through reclustering, while the persisted `pinned` flag represents explicit ownership only;
 8. full local-data deletion clears ownership configuration along with the durable mode catalog.
+
+
+## Durable group membership validation (#161 follow-up)
+
+For effective membership editing, validate the user-owned overlay separately from reconciler-owned inferred membership:
+
+1. removing a member changes only the effective group lens; retained evidence, graph nodes, inferred membership, stable mode ID, and semantic mode revision remain intact;
+2. adding a member is limited to an already discovered semantic member and stores enough local member metadata for the ownership edit to survive reclustering;
+3. Reset members restores the current reconciler-owned inferred membership while preserving rename/pin state;
+4. every add/remove/reset creates an ownership-config revision and Undo restores the immediately prior effective membership;
+5. schema-v1 rename/pin ownership state migrates to the membership-capable config schema without data loss;
+6. active-mode scoring and Why-this grounding use effective members after the edit; membership changes invalidate the mode-affinity catalog signature and trigger bounded semantic refresh for an affected selected mode;
+7. graph mode focus/Network/Lineage use the effective member list while the inferred baseline remains inspectable/resettable;
+8. member removal never deletes evidence or graph nodes, and full local reset clears all ownership membership edits.
