@@ -43,11 +43,27 @@ export type ProviderTranscriptEnrichment = {
   language: string;
   source: 'youtube_caption_track';
   auto_generated: boolean;
+  acquisition_strategy: 'innertube_ios' | 'innertube_android' | 'watch_page';
+};
+
+export type ProviderTranscriptEnrichmentDiagnostics = {
+  attempted: boolean;
+  strategy: 'innertube_ios' | 'innertube_android' | 'watch_page' | null;
+  reason:
+    | 'available'
+    | 'invalid_video_id'
+    | 'missing_innertube_api_key'
+    | 'no_english_caption_track'
+    | 'player_request_failed'
+    | 'caption_payload_empty'
+    | 'caption_request_failed'
+    | null;
 };
 
 export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
   view_count?: number | null;
   transcript?: ProviderTranscriptEnrichment | null;
+  transcript_diagnostics?: ProviderTranscriptEnrichmentDiagnostics | null;
 };
 
 export type ProviderEnrichmentOptions = {
