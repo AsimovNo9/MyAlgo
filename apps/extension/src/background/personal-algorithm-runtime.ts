@@ -194,6 +194,7 @@ type LocalScoringIndex = {
   canonicalConcepts: CanonicalSemanticConcept[];
   canonicalByNodeId: Map<string, CanonicalSemanticConcept>;
   evidenceIdsByNodeId: Map<string, string[]>;
+  passiveHomeExposureIdsByExternalId: Map<string, Set<string>>;
 };
 
 type CachedCandidateScore = {
@@ -340,6 +341,19 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
     ]),
   );
 
+  const passiveHomeExposureIdsByExternalId = new Map<string, Set<string>>();
+  for (const record of state.evidence) {
+    const evidence = record.evidence;
+    if (
+      evidence.kind !== 'exposure'
+      || evidence.content.source !== 'youtube'
+      || evidence.provenance.mechanism !== 'home_dom'
+    ) continue;
+    const ids = passiveHomeExposureIdsByExternalId.get(evidence.content.externalId) ?? new Set<string>();
+    ids.add(record.id);
+    passiveHomeExposureIdsByExternalId.set(evidence.content.externalId, ids);
+  }
+
   const canonical = buildCanonicalSemanticConcepts(state);
   const canonicalById = new Map(canonical.concepts.map((concept) => [concept.id, concept]));
   const canonicalByNodeId = new Map<string, CanonicalSemanticConcept>();
@@ -361,6 +375,7 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
     canonicalConcepts: canonical.concepts,
     canonicalByNodeId,
     evidenceIdsByNodeId,
+    passiveHomeExposureIdsByExternalId,
   };
 }
 
@@ -369,19 +384,8 @@ const candidateIndependentEvidenceIndex = (
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex,
 ): Map<string, string[]> => {
-  const passiveSelfExposureIds = new Set(
-    state.evidence
-      .filter((record) => {
-        const evidence = record.evidence;
-        return (
-          evidence.kind === 'exposure'
-          && evidence.content.source === 'youtube'
-          && evidence.content.externalId === candidate.external_id
-          && evidence.provenance.mechanism === 'home_dom'
-        );
-      })
-      .map((record) => record.id),
-  );
+  const passiveSelfExposureIds = index.passiveHomeExposureIdsByExternalId
+    .get(candidate.external_id) ?? new Set<string>();
   const nodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
   const result = new Map<string, string[]>();
   for (const [nodeId, evidenceIds] of index.evidenceIdsByNodeId) {
