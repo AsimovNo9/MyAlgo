@@ -480,6 +480,12 @@ const renderExplanationContent = (
     ? `Presentation: replaced a YouTube card · Source: ${view.sourceLabel}`
     : 'Presentation: native YouTube card reranked in place · Source: YouTube native page';
   presentation.appendChild(sourceLine);
+  if (view.semanticInputLine) {
+    const semanticInput = document.createElement('div');
+    semanticInput.style.marginTop = '3px';
+    semanticInput.textContent = view.semanticInputLine;
+    presentation.appendChild(semanticInput);
+  }
   if (activeDurableMode) {
     const exactModeMatch = isDurableModeGroundedItem(item, activeDurableMode);
     const provisionalModeMatch = !exactModeMatch
