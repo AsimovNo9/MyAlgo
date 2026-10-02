@@ -1,17 +1,30 @@
-import type { DurableSemanticModeCatalog } from '@repo/shared-types';
+import type {
+  DurableSemanticModeCatalog,
+  DurableSemanticModeMember,
+} from '@repo/shared-types';
 
-export const DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION = 1 as const;
+export const DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION = 2 as const;
 export const MAX_DURABLE_MODE_USER_CONFIG_REVISIONS = 50;
 
 export type DurableModeUserOverride = {
   label?: string;
   pinned?: boolean;
+  addedMembers?: DurableSemanticModeMember[];
+  excludedMemberCanonicalIds?: string[];
 };
 
 export type DurableModeUserConfigRevision = {
   revision: number;
   createdAt: string;
-  action: 'rename' | 'pin' | 'unpin' | 'reset_label' | 'undo';
+  action:
+    | 'rename'
+    | 'pin'
+    | 'unpin'
+    | 'reset_label'
+    | 'add_member'
+    | 'remove_member'
+    | 'reset_members'
+    | 'undo';
   modeId: string;
   before: DurableModeUserOverride | null;
   after: DurableModeUserOverride | null;
@@ -38,21 +51,109 @@ const cleanLabel = (value: unknown): string | undefined => {
   return normalized ? normalized.slice(0, 80) : undefined;
 };
 
+const cleanStringArray = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = [...new Set(
+    value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  )].sort();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const cleanMember = (value: unknown): DurableSemanticModeMember | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<DurableSemanticModeMember>;
+  const canonicalId = typeof raw.canonicalId === 'string' ? raw.canonicalId.trim() : '';
+  const label = typeof raw.label === 'string' ? raw.label.trim().replace(/\s+/g, ' ') : '';
+  const weight = Number(raw.weight);
+  if (!canonicalId || !label || !Number.isFinite(weight)) return null;
+  return {
+    canonicalId,
+    label: label.slice(0, 120),
+    weight,
+    sourceNodeIds: cleanStringArray(raw.sourceNodeIds) ?? [],
+    supportContentIds: cleanStringArray(raw.supportContentIds) ?? [],
+  };
+};
+
+const cleanMembers = (value: unknown): DurableSemanticModeMember[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const byCanonicalId = new Map<string, DurableSemanticModeMember>();
+  for (const entry of value) {
+    const member = cleanMember(entry);
+    if (member) byCanonicalId.set(member.canonicalId, member);
+  }
+  const members = [...byCanonicalId.values()]
+    .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId));
+  return members.length > 0 ? members : undefined;
+};
+
 const cleanOverride = (value: unknown): DurableModeUserOverride | null => {
   if (!value || typeof value !== 'object') return null;
   const raw = value as DurableModeUserOverride;
   const label = cleanLabel(raw.label);
   const pinned = typeof raw.pinned === 'boolean' ? raw.pinned : undefined;
-  if (label == null && pinned == null) return null;
+  const addedMembers = cleanMembers(raw.addedMembers);
+  const excludedMemberCanonicalIds = cleanStringArray(raw.excludedMemberCanonicalIds);
+  if (
+    label == null
+    && pinned == null
+    && addedMembers == null
+    && excludedMemberCanonicalIds == null
+  ) return null;
   return {
     ...(label != null ? { label } : {}),
     ...(pinned != null ? { pinned } : {}),
+    ...(addedMembers != null ? { addedMembers } : {}),
+    ...(excludedMemberCanonicalIds != null ? { excludedMemberCanonicalIds } : {}),
+  };
+};
+
+const normalizeV1 = (value: Partial<DurableModeUserConfigState>): DurableModeUserConfigState => {
+  const overrides: Record<string, DurableModeUserOverride> = {};
+  if (value.overrides && typeof value.overrides === 'object') {
+    for (const [modeId, override] of Object.entries(value.overrides)) {
+      const cleanId = modeId.trim();
+      const cleaned = cleanOverride(override);
+      if (cleanId && cleaned) overrides[cleanId] = cleaned;
+    }
+  }
+  const revisions = Array.isArray(value.revisions)
+    ? value.revisions
+      .filter((entry): entry is DurableModeUserConfigRevision => (
+        Boolean(entry)
+        && Number.isInteger(entry.revision)
+        && typeof entry.createdAt === 'string'
+        && typeof entry.modeId === 'string'
+        && ['rename', 'pin', 'unpin', 'reset_label', 'undo'].includes(entry.action)
+      ))
+      .slice(-MAX_DURABLE_MODE_USER_CONFIG_REVISIONS)
+      .map((entry) => ({
+        ...entry,
+        modeId: entry.modeId.trim(),
+        before: cleanOverride(entry.before),
+        after: cleanOverride(entry.after),
+        revertsRevision: Number.isInteger(entry.revertsRevision) ? entry.revertsRevision : null,
+      }))
+    : [];
+
+  return {
+    schemaVersion: DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION,
+    currentRevision: Math.max(
+      Number.isInteger(value.currentRevision) ? Number(value.currentRevision) : 0,
+      revisions.at(-1)?.revision ?? 0,
+    ),
+    overrides,
+    revisions,
   };
 };
 
 export const normalizeDurableModeUserConfig = (value: unknown): DurableModeUserConfigState => {
   if (!value || typeof value !== 'object') return createEmptyDurableModeUserConfig();
-  const raw = value as Partial<DurableModeUserConfigState>;
+  const raw = value as Partial<DurableModeUserConfigState> & { schemaVersion?: number };
+  if (raw.schemaVersion === 1) return normalizeV1(raw);
   if (raw.schemaVersion !== DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION) {
     return createEmptyDurableModeUserConfig();
   }
@@ -66,6 +167,16 @@ export const normalizeDurableModeUserConfig = (value: unknown): DurableModeUserC
     }
   }
 
+  const allowedActions: DurableModeUserConfigRevision['action'][] = [
+    'rename',
+    'pin',
+    'unpin',
+    'reset_label',
+    'add_member',
+    'remove_member',
+    'reset_members',
+    'undo',
+  ];
   const revisions = Array.isArray(raw.revisions)
     ? raw.revisions
       .filter((entry): entry is DurableModeUserConfigRevision => (
@@ -73,7 +184,7 @@ export const normalizeDurableModeUserConfig = (value: unknown): DurableModeUserC
         && Number.isInteger(entry.revision)
         && typeof entry.createdAt === 'string'
         && typeof entry.modeId === 'string'
-        && ['rename', 'pin', 'unpin', 'reset_label', 'undo'].includes(entry.action)
+        && allowedActions.includes(entry.action)
       ))
       .slice(-MAX_DURABLE_MODE_USER_CONFIG_REVISIONS)
       .map((entry) => ({
@@ -124,7 +235,13 @@ const appendRevision = (
 export const updateDurableModeUserConfig = (
   input: DurableModeUserConfigState,
   modeIdInput: string,
-  change: { label?: string | null; pinned?: boolean },
+  change: {
+    label?: string | null;
+    pinned?: boolean;
+    addMember?: DurableSemanticModeMember;
+    removeMemberCanonicalId?: string;
+    resetMembers?: boolean;
+  },
   now = new Date().toISOString(),
 ): DurableModeUserConfigState => {
   const state = normalizeDurableModeUserConfig(input);
@@ -148,6 +265,33 @@ export const updateDurableModeUserConfig = (
   if (typeof change.pinned === 'boolean') {
     next.pinned = change.pinned;
     action = change.pinned ? 'pin' : 'unpin';
+  }
+  if (change.addMember) {
+    const member = cleanMember(change.addMember);
+    if (!member) throw new Error('A valid durable group member is required.');
+    const added = new Map((next.addedMembers ?? []).map((entry) => [entry.canonicalId, entry]));
+    added.set(member.canonicalId, member);
+    next.addedMembers = [...added.values()].sort((left, right) => left.canonicalId.localeCompare(right.canonicalId));
+    next.excludedMemberCanonicalIds = (next.excludedMemberCanonicalIds ?? [])
+      .filter((canonicalId) => canonicalId !== member.canonicalId);
+    if (next.excludedMemberCanonicalIds.length === 0) delete next.excludedMemberCanonicalIds;
+    action = 'add_member';
+  }
+  if (change.removeMemberCanonicalId) {
+    const canonicalId = change.removeMemberCanonicalId.trim();
+    if (!canonicalId) throw new Error('A durable group member ID is required.');
+    next.addedMembers = (next.addedMembers ?? []).filter((member) => member.canonicalId !== canonicalId);
+    if (next.addedMembers.length === 0) delete next.addedMembers;
+    next.excludedMemberCanonicalIds = [...new Set([
+      ...(next.excludedMemberCanonicalIds ?? []),
+      canonicalId,
+    ])].sort();
+    action = 'remove_member';
+  }
+  if (change.resetMembers === true) {
+    delete next.addedMembers;
+    delete next.excludedMemberCanonicalIds;
+    action = 'reset_members';
   }
   if (!action) return state;
 
@@ -203,11 +347,22 @@ export const applyDurableModeUserConfig = (
     modes: catalog.modes.map((mode) => {
       const override = state.overrides[mode.id];
       const inferredLabel = mode.inferredLabel ?? mode.label;
+      const excluded = new Set(override?.excludedMemberCanonicalIds ?? []);
+      const memberByCanonicalId = new Map(
+        mode.members
+          .filter((member) => !excluded.has(member.canonicalId))
+          .map((member) => [member.canonicalId, member]),
+      );
+      for (const member of override?.addedMembers ?? []) {
+        if (!excluded.has(member.canonicalId)) memberByCanonicalId.set(member.canonicalId, member);
+      }
       return {
         ...mode,
         inferredLabel,
         label: override?.label ?? inferredLabel,
         pinned: override?.pinned === true,
+        members: [...memberByCanonicalId.values()]
+          .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId)),
       };
     }),
   };
