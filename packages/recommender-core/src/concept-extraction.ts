@@ -11,6 +11,7 @@ export type ConceptExtractionCandidate = {
   topics?: string[];
   content_type?: string | null;
   channel_name?: string | null;
+  semantic_transcript?: string | null;
 };
 
 export type ConceptVerificationInput = {
@@ -39,11 +40,13 @@ export function buildConceptVerificationText(
   const title = normalize(candidate.title).slice(0, 220);
   const description = normalize(candidate.description ?? '').slice(0, 700);
   const category = normalize(candidate.content_type ?? '').slice(0, 80);
+  const transcript = normalize(candidate.semantic_transcript ?? '').slice(0, 900);
 
   return [
     title,
     description,
     category ? `Category: ${category}` : '',
+    transcript ? `Transcript excerpt: ${transcript}` : '',
   ].filter(Boolean).join('\n');
 }
 
