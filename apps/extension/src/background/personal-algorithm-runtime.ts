@@ -1535,6 +1535,19 @@ export function scoreLocalCandidates(
         if (!isScoreTraceConsistent(result.trace)) {
           throw new Error(`Local score trace is inconsistent for ${candidate.external_id}`);
         }
+        const passiveSelfExposureIds = scoringIndex.passiveHomeExposureIdsByExternalId
+          .get(candidate.external_id) ?? new Set<string>();
+        const trace = passiveSelfExposureIds.size > 0
+          ? {
+              ...result.trace,
+              matchedPaths: result.trace.matchedPaths.map((path) => ({
+                ...path,
+                evidenceIds: path.evidenceIds.filter((evidenceId) => (
+                  !passiveSelfExposureIds.has(evidenceId)
+                )),
+              })),
+            }
+          : result.trace;
         scoreResult = {
           signature,
           modeKey,
@@ -1543,7 +1556,7 @@ export function scoreLocalCandidates(
           rawScore: result.score,
           score: calibrateLocalScore(result.score),
           classification,
-          trace: result.trace,
+          trace,
         };
         prepared.candidateScoreCache.set(candidate.external_id, scoreResult);
         while (prepared.candidateScoreCache.size > MAX_CANDIDATE_SCORE_CACHE) {
