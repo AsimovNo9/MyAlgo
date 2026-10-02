@@ -129,6 +129,188 @@ test('local runtime scores candidates from the persisted graph and returns deter
   }]);
 });
 
+test('current-card Home exposures cannot support scoring or Why-this paths for that same video', () => {
+  const fixture = structuredClone(state);
+  fixture.evidence = [
+    {
+      id: 'e-self-home',
+      evidence: {
+        kind: 'exposure',
+        exposureId: 'home-self',
+        content: { source: 'youtube', externalId: 'video-a' },
+        surface: 'home',
+        section: 'home',
+        position: 0,
+        observedAt: '2026-10-02T21:33:00.000Z',
+        provenance: { connector: 'youtube', mechanism: 'home_dom' },
+        metadata: { title: 'How do Graphics Cards Work?', creatorName: 'Branch Education' },
+      },
+      confidence: 1,
+      retainedAt: '2026-10-02T21:33:00.000Z',
+      retention: { policy: 'default', expiresAt: null },
+    },
+  ];
+  fixture.graph.edges = fixture.graph.edges.map((edge) => (
+    edge.id === 'edge:created_by:video-a'
+      ? { ...edge, evidenceIds: ['e-self-home'] }
+      : edge
+  ));
+  fixture.graph.edges = fixture.graph.edges.filter((edge) => edge.id !== 'edge:created_by:video-c');
+  fixture.graph.currentRevision += 1;
+
+  const selfOnly = scoreLocalCandidates(fixture, [{
+    external_id: 'video-a',
+    title: 'How do Graphics Cards Work?',
+    channel_name: 'Creator A',
+  }], 'Default')[0];
+
+  assert.equal(selfOnly.rawScore, 0);
+  assert.equal(selfOnly.trace.nodeContributions.length, 0);
+  assert.equal(
+    selfOnly.trace.matchedPaths.some((path) => path.evidenceIds.includes('e-self-home')),
+    false,
+  );
+
+  fixture.evidence.push({
+    id: 'e-prior-watch',
+    evidence: {
+      kind: 'interaction',
+      content: { source: 'youtube', externalId: 'video-c' },
+      exposureId: null,
+      interaction: 'watched',
+      observedAt: '2026-10-01T20:00:00.000Z',
+      provenance: { connector: 'youtube', mechanism: 'player_telemetry' },
+      metadata: { title: 'Prior creator video', creatorName: 'Creator A' },
+    },
+    confidence: 1,
+    retainedAt: '2026-10-01T20:00:00.000Z',
+    retention: { policy: 'default', expiresAt: null },
+  });
+  fixture.graph.edges.push({
+    id: 'edge:created_by:video-c:prior',
+    sourceNodeId: 'content:youtube:video-c',
+    targetNodeId: 'creator:youtube:Creator%20A',
+    relation: 'created_by',
+    provenance: 'inferred',
+    confidence: 1,
+    evidenceIds: ['e-prior-watch'],
+    attributes: {},
+    createdAt: '2026-10-01T20:00:00.000Z',
+    updatedAt: '2026-10-01T20:00:00.000Z',
+  });
+  fixture.graph.currentRevision += 1;
+
+  const independentlySupported = scoreLocalCandidates(fixture, [{
+    external_id: 'video-a',
+    title: 'How do Graphics Cards Work?',
+    channel_name: 'Creator A',
+  }], 'Default')[0];
+
+  assert.equal(independentlySupported.rawScore, 8);
+  assert.equal(independentlySupported.trace.nodeContributions.length, 1);
+  assert.equal(
+    independentlySupported.trace.matchedPaths.some((path) => path.evidenceIds.includes('e-self-home')),
+    false,
+  );
+});
+
+test('semantic features retain unrelated support while removing current-card exposure evidence', () => {
+  const fixture = structuredClone(state);
+  fixture.evidence = [
+    {
+      id: 'e-self-home',
+      evidence: {
+        kind: 'exposure',
+        exposureId: 'home-self',
+        content: { source: 'youtube', externalId: 'video-a' },
+        surface: 'home',
+        observedAt: '2026-10-02T21:33:00.000Z',
+        provenance: { connector: 'youtube', mechanism: 'home_dom' },
+        metadata: { title: 'How do Graphics Cards Work?' },
+      },
+      confidence: 1,
+      retainedAt: '2026-10-02T21:33:00.000Z',
+      retention: { policy: 'default', expiresAt: null },
+    },
+    {
+      id: 'e-prior-watch',
+      evidence: {
+        kind: 'interaction',
+        content: { source: 'youtube', externalId: 'video-c' },
+        exposureId: null,
+        interaction: 'watched',
+        observedAt: '2026-10-01T20:00:00.000Z',
+        provenance: { connector: 'youtube', mechanism: 'player_telemetry' },
+        metadata: { title: 'Prior education video' },
+      },
+      confidence: 1,
+      retainedAt: '2026-10-01T20:00:00.000Z',
+      retention: { policy: 'default', expiresAt: null },
+    },
+  ];
+  fixture.graph.nodes.push({
+    id: 'concept:education',
+    kind: 'concept',
+    label: 'Education',
+    provenance: 'inferred',
+    confidence: 1,
+    attributes: {},
+    createdAt: '2026-10-01T20:00:00.000Z',
+    updatedAt: '2026-10-02T21:33:00.000Z',
+  });
+  fixture.graph.edges.push(
+    {
+      id: 'edge:education:self',
+      sourceNodeId: 'content:youtube:video-a',
+      targetNodeId: 'concept:education',
+      relation: 'related_to',
+      provenance: 'inferred',
+      confidence: 1,
+      evidenceIds: ['e-self-home'],
+      attributes: {},
+      createdAt: '2026-10-02T21:33:00.000Z',
+      updatedAt: '2026-10-02T21:33:00.000Z',
+    },
+    {
+      id: 'edge:education:prior',
+      sourceNodeId: 'content:youtube:video-c',
+      targetNodeId: 'concept:education',
+      relation: 'related_to',
+      provenance: 'inferred',
+      confidence: 1,
+      evidenceIds: ['e-prior-watch'],
+      attributes: {},
+      createdAt: '2026-10-01T20:00:00.000Z',
+      updatedAt: '2026-10-01T20:00:00.000Z',
+    },
+  );
+  fixture.graph.currentRevision += 1;
+
+  const features = extractLocalCandidateFeatures(fixture, {
+    external_id: 'video-a',
+    title: 'How do Graphics Cards Work?',
+    topics: ['Education'],
+  });
+  const education = features.features.find((item) => item.label.includes('Education'));
+
+  assert.ok(education);
+  assert.deepEqual(education.evidenceIds, ['e-prior-watch']);
+
+  const selfOnlyFixture = structuredClone(fixture);
+  selfOnlyFixture.evidence = selfOnlyFixture.evidence.filter((record) => record.id !== 'e-prior-watch');
+  selfOnlyFixture.graph.edges = selfOnlyFixture.graph.edges.filter((edge) => edge.id !== 'edge:education:prior');
+  selfOnlyFixture.graph.currentRevision += 1;
+  const selfOnlyFeatures = extractLocalCandidateFeatures(selfOnlyFixture, {
+    external_id: 'video-a',
+    title: 'How do Graphics Cards Work?',
+    topics: ['Education'],
+  });
+  assert.equal(
+    selfOnlyFeatures.features.some((item) => item.label.includes('Education')),
+    false,
+  );
+});
+
 test('durable active mode score is split across exact canonical members and source graph nodes', () => {
   const fixture = structuredClone(state);
   fixture.graph.nodes.push(
