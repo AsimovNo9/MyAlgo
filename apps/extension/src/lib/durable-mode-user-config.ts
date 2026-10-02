@@ -348,8 +348,9 @@ export const applyDurableModeUserConfig = (
       const override = state.overrides[mode.id];
       const inferredLabel = mode.inferredLabel ?? mode.label;
       const excluded = new Set(override?.excludedMemberCanonicalIds ?? []);
+      const inferredMembers = mode.inferredMembers ?? mode.members;
       const memberByCanonicalId = new Map(
-        mode.members
+        inferredMembers
           .filter((member) => !excluded.has(member.canonicalId))
           .map((member) => [member.canonicalId, member]),
       );
@@ -359,6 +360,11 @@ export const applyDurableModeUserConfig = (
       return {
         ...mode,
         inferredLabel,
+        inferredMembers: inferredMembers.map((member) => ({
+          ...member,
+          sourceNodeIds: [...member.sourceNodeIds],
+          supportContentIds: [...member.supportContentIds],
+        })),
         label: override?.label ?? inferredLabel,
         pinned: override?.pinned === true,
         members: [...memberByCanonicalId.values()]
