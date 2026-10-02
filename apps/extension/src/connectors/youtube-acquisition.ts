@@ -638,6 +638,8 @@ export async function enrichYoutubeCandidate(
     if (options.includeTranscript === true && !rich.isLive) {
       const apiKey = extractYoutubeInnertubeApiKey(html);
       let sawEnglishTrack = false;
+      let sawPlayerResponse = false;
+      let sawPlayerRequestFailure = false;
       let sawCaptionRequestFailure = false;
       let sawEmptyCaptionPayload = false;
 
@@ -650,9 +652,10 @@ export async function enrichYoutubeCandidate(
             client,
           );
           if (tracks == null) {
-            sawCaptionRequestFailure = true;
+            sawPlayerRequestFailure = true;
             continue;
           }
+          sawPlayerResponse = true;
           const track = selectYoutubeCaptionTrack(tracks);
           if (!track) continue;
           sawEnglishTrack = true;
@@ -683,7 +686,7 @@ export async function enrichYoutubeCandidate(
       // The WEB/watch-page URL is retained only as a last-resort fallback for
       // videos not currently PoToken-gated. Current YouTube commonly returns an
       // empty 200 body here, so do not prefer it over non-WEB InnerTube clients.
-      if (!transcript) {
+      if (!transcript && !sawEnglishTrack) {
         const track = selectYoutubeCaptionTrack(extractYouTubeCaptionTracksFromHtml(html));
         if (track) {
           sawEnglishTrack = true;
@@ -717,13 +720,15 @@ export async function enrichYoutubeCandidate(
           strategy: null,
           reason: !apiKey
             ? 'missing_innertube_api_key'
-            : !sawEnglishTrack
-              ? 'no_english_caption_track'
-              : sawEmptyCaptionPayload
-                ? 'caption_payload_empty'
-                : sawCaptionRequestFailure
-                  ? 'caption_request_failed'
-                  : 'player_request_failed',
+            : !sawPlayerResponse && sawPlayerRequestFailure
+              ? 'player_request_failed'
+              : !sawEnglishTrack
+                ? 'no_english_caption_track'
+                : sawEmptyCaptionPayload
+                  ? 'caption_payload_empty'
+                  : sawCaptionRequestFailure
+                    ? 'caption_request_failed'
+                    : 'player_request_failed',
         };
       }
     }
