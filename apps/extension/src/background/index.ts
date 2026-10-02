@@ -2387,6 +2387,18 @@ async function rankLocalCandidates(
   }
 
   const evidenceById = new Map(state.evidence.map((record) => [record.id, record]));
+  const passiveHomeExposureIdsByExternalId = new Map<string, Set<string>>();
+  for (const record of state.evidence) {
+    const evidence = record.evidence;
+    if (
+      evidence.kind !== 'exposure'
+      || evidence.content.source !== 'youtube'
+      || evidence.provenance.mechanism !== 'home_dom'
+    ) continue;
+    const ids = passiveHomeExposureIdsByExternalId.get(evidence.content.externalId) ?? new Set<string>();
+    ids.add(record.id);
+    passiveHomeExposureIdsByExternalId.set(evidence.content.externalId, ids);
+  }
   const graphNodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
   const historyEvidenceByContentNodeId = new Map<string, typeof state.evidence>();
   for (const record of state.evidence) {
@@ -2435,19 +2447,8 @@ async function rankLocalCandidates(
   }
 
   const feed = ranked.map(({ trace, ...item }) => {
-    const passiveSelfExposureIds = new Set(
-      state.evidence
-        .filter((record) => {
-          const evidence = record.evidence;
-          return (
-            evidence.kind === 'exposure'
-            && evidence.content.source === 'youtube'
-            && evidence.content.externalId === item.external_id
-            && evidence.provenance.mechanism === 'home_dom'
-          );
-        })
-        .map((record) => record.id),
-    );
+    const passiveSelfExposureIds = passiveHomeExposureIdsByExternalId
+      .get(item.external_id) ?? new Set<string>();
     const explanationEvidenceIds = (evidenceIds: readonly string[]): string[] => (
       evidenceIds.filter((evidenceId) => !passiveSelfExposureIds.has(evidenceId))
     );
