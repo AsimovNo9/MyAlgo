@@ -139,3 +139,24 @@ Cloud sync, telemetry, hosted inference, enrichment, or a new connector changes 
 5. define security, retention, deletion, and failure behavior.
 
 No future transfer is authorized merely because it appears on the roadmap.
+
+
+## Optional YouTube caption enrichment (#238)
+
+```text
+explicit transcript-enrichment toggle + local neural semantics
+        ↓
+canonical youtube.com/watch player response
+        ↓ caption-track discovery
+YouTube-owned /api/timedtext request (English track, manual preferred)
+        ↓
+normalized bounded excerpt (≤ 2,400 chars; beginning/middle/end sample)
+        ↓
+dedicated chrome.storage.local transcript-enrichment cache (≤ 160 records; 24h refresh)
+        ↓
+transient mxbai + DeBERTa semantic input
+        ↓
+derived semantic feature provenance only
+```
+
+Caption text does not enter `EvidenceRecord`, graph state, the candidate reservoir, deterministic lexical scoring, feed cache, or recommendation traces. Missing captions abstain to metadata-only semantics. Full local-data deletion clears the cache; disabling the feature stops new caption acquisition but is not deletion.
