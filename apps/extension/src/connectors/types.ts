@@ -50,9 +50,16 @@ export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
   transcript?: ProviderTranscriptEnrichment | null;
 };
 
+export type ProviderEnrichmentOptions = {
+  includeTranscript?: boolean;
+};
+
 export type ProviderAcquisitionConnector = {
   readonly search?: WebSearchProvider;
-  enrich(candidate: ProviderEnrichmentInput): Promise<ProviderEnrichmentResult | null>;
+  enrich(
+    candidate: ProviderEnrichmentInput,
+    options?: ProviderEnrichmentOptions,
+  ): Promise<ProviderEnrichmentResult | null>;
 };
 
 export type ProviderCapabilities = {
