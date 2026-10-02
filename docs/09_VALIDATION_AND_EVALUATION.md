@@ -296,7 +296,7 @@ Required invariants:
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
-12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
+12. upgrading to disclosure v7 requires renewed affirmative acceptance before observation/ranking resumes; prior v6 acceptance is insufficient because optional caption enrichment adds a new locally retained data category;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
 14. the production artifact contains the pinned mxbai embedding model and DeBERTa `nli-deberta-v3-xsmall` verifier/tokenizer assets plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, verified concept labels, graph state, history, feedback, embeddings, or traces outside the extension;
 15. mxbai embedding execution prefers WebGPU and can fall back to local WASM/hash behavior without blocking first paint; the DeBERTa verifier deliberately runs q8 WASM in its bounded asynchronous slice. Neither path may block canonical graph/evidence updates.
