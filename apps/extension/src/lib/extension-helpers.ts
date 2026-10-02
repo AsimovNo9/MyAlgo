@@ -116,8 +116,10 @@ export function summarizeFeed(items: FeedItem[]): FeedSummary {
 export type DurableModeOption = {
   id: string;
   label: string;
+  inferredLabel: string | null;
   revision: number | null;
   active: boolean;
+  pinned: boolean;
 };
 
 export function buildDurableModeOptions(
@@ -129,8 +131,10 @@ export function buildDurableModeOptions(
   const result: DurableModeOption[] = [{
     id: 'default',
     label: 'All',
+    inferredLabel: null,
     revision: null,
     active: true,
+    pinned: false,
   }];
   const seen = new Set(['default']);
   const modes = [...(catalog?.modes ?? [])]
@@ -147,8 +151,10 @@ export function buildDurableModeOptions(
     result.push({
       id: mode.id,
       label: mode.label,
+      inferredLabel: mode.inferredLabel ?? mode.label,
       revision: mode.revision,
       active: mode.active,
+      pinned: mode.pinned,
     });
     seen.add(mode.id);
   }
@@ -160,15 +166,19 @@ export function buildDurableModeOptions(
       result.push({
         id: current.id,
         label: current.label,
+        inferredLabel: current.inferredLabel ?? current.label,
         revision: current.revision,
         active: current.active,
+        pinned: current.pinned,
       });
     } else if (currentId !== 'default') {
       result.push({
         id: currentId,
         label: currentModeLabel.trim() || currentId,
+        inferredLabel: null,
         revision: null,
         active: false,
+        pinned: false,
       });
     }
   }
@@ -488,6 +498,29 @@ export function buildGraphInspectorView(
         createdAt: revision.createdAt,
       })),
   };
+}
+
+export function applyDurableModeLabelsToGraphInspector(
+  view: GraphInspectorView,
+  catalog: DurableSemanticModeCatalog | null | undefined,
+): GraphInspectorView {
+  if (!catalog || catalog.modes.length === 0) return view;
+  const labelByModeId = new Map(catalog.modes.map((mode) => [mode.id, mode.label]));
+  let changed = false;
+  const nodes = view.nodes.map((node) => {
+    if (node.semanticClusterKind !== 'mode' || !node.semanticClusterId) return node;
+    const modeId = node.semanticClusterId.startsWith('mode:')
+      ? node.semanticClusterId.slice('mode:'.length)
+      : node.semanticClusterId;
+    const label = labelByModeId.get(modeId);
+    if (!label || label === node.semanticClusterLabel) return node;
+    changed = true;
+    return {
+      ...node,
+      semanticClusterLabel: label,
+    };
+  });
+  return changed ? { ...view, nodes } : view;
 }
 
 export function parseGraphInspectorExport(json: string): GraphInspectorView {

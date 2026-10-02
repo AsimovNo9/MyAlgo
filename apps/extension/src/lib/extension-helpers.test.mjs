@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
+import { applyDurableModeLabelsToGraphInspector, buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -69,22 +69,78 @@ test('buildDurableModeOptions uses persisted stable mode IDs instead of feed cat
   assert.deepEqual(
     buildDurableModeOptions('default', catalog),
     [
-      { id: 'default', label: 'All', revision: null, active: true },
-      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
-      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
+      { id: 'default', label: 'All', inferredLabel: null, revision: null, active: true, pinned: false },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', inferredLabel: 'Distributed systems', revision: 3, active: true, pinned: false },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', inferredLabel: 'Ambient music', revision: 2, active: false, pinned: false },
     ],
   );
 
   assert.deepEqual(
     buildDurableModeOptions('mode:inferred:v1:ambient', catalog),
     [
-      { id: 'default', label: 'All', revision: null, active: true },
-      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', revision: 3, active: true },
-      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', revision: 2, active: false },
+      { id: 'default', label: 'All', inferredLabel: null, revision: null, active: true, pinned: false },
+      { id: 'mode:inferred:v1:systems', label: 'Distributed systems', inferredLabel: 'Distributed systems', revision: 3, active: true, pinned: false },
+      { id: 'mode:inferred:v1:ambient', label: 'Ambient music', inferredLabel: 'Ambient music', revision: 2, active: false, pinned: false },
     ],
   );
 });
 
+
+test('graph inspector mode cluster labels follow user-facing durable group labels', () => {
+  const view = {
+    schemaVersion: 3,
+    graphRevision: 7,
+    evidenceCount: 1,
+    forgottenEvidenceCount: 0,
+    nodeCount: 1,
+    edgeCount: 0,
+    nodesByKind: [{ key: 'content', count: 1 }],
+    edgesByRelation: [],
+    nodes: [{
+      id: 'content:youtube:abc',
+      label: 'Example',
+      kind: 'content',
+      provenance: 'inferred',
+      confidence: 1,
+      supportCount: 1,
+      contentSource: 'youtube',
+      contentExternalId: 'abc',
+      creatorName: null,
+      thumbnailUrl: null,
+      semanticClusterId: 'mode:mode:inferred:v1:systems',
+      semanticClusterLabel: 'Distributed systems',
+      semanticClusterKind: 'mode',
+      semanticClusterAffinity: 0.8,
+    }],
+    edges: [],
+    controls: [],
+    revisions: [],
+  };
+  const catalog = {
+    pipelineId: 'durable-semantic-mode-cluster-v1',
+    graphRevision: 7,
+    generatedAt: '2026-10-01T20:00:00.000Z',
+    modes: [{
+      id: 'mode:inferred:v1:systems',
+      label: 'Deep work',
+      inferredLabel: 'Distributed systems',
+      revision: 3,
+      members: [],
+      provenance: 'inferred',
+      pipelineId: 'durable-semantic-mode-cluster-v1',
+      graphRevision: 7,
+      createdAt: '2026-10-01T18:00:00.000Z',
+      lastSupportedAt: '2026-10-01T20:00:00.000Z',
+      active: true,
+      pinned: true,
+    }],
+  };
+
+  const relabeled = applyDurableModeLabelsToGraphInspector(view, catalog);
+  assert.equal(relabeled.nodes[0].semanticClusterLabel, 'Deep work');
+  assert.equal(relabeled.nodes[0].semanticClusterId, 'mode:mode:inferred:v1:systems');
+  assert.equal(view.nodes[0].semanticClusterLabel, 'Distributed systems');
+});
 
 test('summarizeFeed discovers recurring mode categories from soft semantic scores without forcing badges', () => {
   const summary = summarizeFeed([

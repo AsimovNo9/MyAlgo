@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   ACTIVE_MODE_ID: 'personal-algorithm-active-mode-id',
   ACTIVE_MODE_IDS: 'personal-algorithm-active-mode-ids',
   DURABLE_MODE_CATALOG: 'personal-algorithm-durable-mode-catalog',
+  DURABLE_MODE_USER_CONFIG: 'personal-algorithm-durable-mode-user-config',
   DURABLE_MODE_DIAGNOSTICS: 'personal-algorithm-durable-mode-diagnostics',
   ENABLED: 'personal-algorithm-enabled',
   FEED_CACHE: 'personal-algorithm-feed-cache',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import {
+  applyDurableModeLabelsToGraphInspector,
   buildDurableModeOptions,
   buildExplanationGraphView,
   buildGraphInspectorView,
@@ -18,6 +19,8 @@ export function Options() {
   const [activeModeId, setActiveModeId] = React.useState('default');
   const [selectedModeIds, setSelectedModeIds] = React.useState<string[]>([]);
   const [modeSearch, setModeSearch] = React.useState('');
+  const [modeNameDrafts, setModeNameDrafts] = React.useState<Record<string, string>>({});
+  const [modeConfigRevision, setModeConfigRevision] = React.useState(0);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
@@ -72,6 +75,7 @@ export function Options() {
       'personal-algorithm-active-mode-id',
       'personal-algorithm-active-mode-ids',
       'personal-algorithm-durable-mode-catalog',
+      'personal-algorithm-durable-mode-user-config',
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
@@ -92,6 +96,8 @@ export function Options() {
         ? storedModeIds
         : storedModeId !== 'default' ? [storedModeId] : []);
       setDurableModeCatalog(catalog);
+      const modeUserConfig = result['personal-algorithm-durable-mode-user-config'] as { currentRevision?: number } | undefined;
+      setModeConfigRevision(Number.isInteger(modeUserConfig?.currentRevision) ? Number(modeUserConfig?.currentRevision) : 0);
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
@@ -113,6 +119,11 @@ export function Options() {
       }
       const catalogChange = changes['personal-algorithm-durable-mode-catalog'];
       if (catalogChange) setDurableModeCatalog((catalogChange.newValue as DurableSemanticModeCatalog | undefined) ?? null);
+      const modeConfigChange = changes['personal-algorithm-durable-mode-user-config'];
+      if (modeConfigChange) {
+        const config = modeConfigChange.newValue as { currentRevision?: number } | undefined;
+        setModeConfigRevision(Number.isInteger(config?.currentRevision) ? Number(config?.currentRevision) : 0);
+      }
       const activeModeChange = changes['personal-algorithm-active-mode-id'];
       if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
       const activeModeIdsChange = changes['personal-algorithm-active-mode-ids'];
@@ -155,6 +166,8 @@ export function Options() {
     setMode('Default');
     setActiveModeId('default');
     setSelectedModeIds([]);
+    setModeNameDrafts({});
+    setModeConfigRevision(0);
     setDurableModeCatalog(null);
     setGraphInspector(null);
     setGraphInspectorSource(null);
@@ -182,6 +195,78 @@ export function Options() {
     setSelectedModeIds(response.modeIds ?? []);
     setMode(response.mode ?? 'Default');
     setStatus(null);
+  };
+
+  const handleRenameMode = async (
+    modeId: string,
+    inferredLabel: string | null,
+    explicitLabel?: string | null,
+  ) => {
+    const label = (explicitLabel === undefined ? modeNameDrafts[modeId] ?? '' : explicitLabel ?? '').trim();
+    const response = await chrome.runtime.sendMessage({
+      type: 'DURABLE_MODE_CONFIG_UPDATE',
+      payload: { modeId, label: label || null },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      configRevision?: number;
+      catalog?: DurableSemanticModeCatalog | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to rename this group.');
+      return;
+    }
+    if (response.catalog) setDurableModeCatalog(response.catalog);
+    setModeConfigRevision(response.configRevision ?? modeConfigRevision);
+    setModeNameDrafts((current) => {
+      const next = { ...current };
+      delete next[modeId];
+      return next;
+    });
+    setStatus(label
+      ? `Group renamed. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+      : `Group name reset to ${inferredLabel ?? 'its inferred label'}. Ownership config r${response.configRevision ?? modeConfigRevision}.`);
+  };
+
+  const handlePinMode = async (modeId: string, pinned: boolean) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'DURABLE_MODE_CONFIG_UPDATE',
+      payload: { modeId, pinned },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      configRevision?: number;
+      catalog?: DurableSemanticModeCatalog | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update this group pin.');
+      return;
+    }
+    if (response.catalog) setDurableModeCatalog(response.catalog);
+    setModeConfigRevision(response.configRevision ?? modeConfigRevision);
+    setStatus(`${pinned ? 'Pinned' : 'Unpinned'} group independently of feed selection. Ownership config r${response.configRevision ?? modeConfigRevision}.`);
+  };
+
+  const handleUndoModeConfig = async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'DURABLE_MODE_CONFIG_UNDO',
+    }) as {
+      ok?: boolean;
+      error?: string;
+      reverted?: { action?: string; modeId?: string } | null;
+      configRevision?: number;
+      catalog?: DurableSemanticModeCatalog | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to undo the last group edit.');
+      return;
+    }
+    if (response.catalog) setDurableModeCatalog(response.catalog);
+    setModeConfigRevision(response.configRevision ?? modeConfigRevision);
+    setModeNameDrafts({});
+    setStatus(response.reverted
+      ? `Last group edit undone. Ownership config r${response.configRevision ?? modeConfigRevision}.`
+      : 'There is no group ownership edit to undo.');
   };
 
   const handleHistoryObservationChange = async (enabled: boolean) => {
@@ -389,14 +474,17 @@ export function Options() {
       || option.label.toLowerCase().includes(normalizedModeSearch)
       || option.id.toLowerCase().includes(normalizedModeSearch))
   ));
+  const effectiveGraphInspector = graphInspector && graphInspectorSource === 'live'
+    ? applyDurableModeLabelsToGraphInspector(graphInspector, durableModeCatalog)
+    : graphInspector;
   const normalizedGraphQuery = graphQuery.trim().toLowerCase();
-  const filteredGraphNodes = (graphInspector?.nodes ?? []).filter((node) => (
+  const filteredGraphNodes = (effectiveGraphInspector?.nodes ?? []).filter((node) => (
     !normalizedGraphQuery
     || node.label.toLowerCase().includes(normalizedGraphQuery)
     || node.id.toLowerCase().includes(normalizedGraphQuery)
     || node.kind.toLowerCase().includes(normalizedGraphQuery)
   )).slice(0, 80);
-  const filteredGraphEdges = (graphInspector?.edges ?? []).filter((edge) => (
+  const filteredGraphEdges = (effectiveGraphInspector?.edges ?? []).filter((edge) => (
     !normalizedGraphQuery
     || edge.relation.toLowerCase().includes(normalizedGraphQuery)
     || edge.sourceLabel.toLowerCase().includes(normalizedGraphQuery)
@@ -404,8 +492,8 @@ export function Options() {
     || edge.id.toLowerCase().includes(normalizedGraphQuery)
   )).slice(0, 80);
   const graphModeCatalog = graphInspectorSource === 'live' ? durableModeCatalog : null;
-  const graphModeOverlay = graphInspector
-    ? buildGraphModeOverlay(graphInspector, graphModeCatalog, graphModeId)
+  const graphModeOverlay = effectiveGraphInspector
+    ? buildGraphModeOverlay(effectiveGraphInspector, graphModeCatalog, graphModeId)
     : buildGraphModeOverlay({
         schemaVersion: 2,
         graphRevision: 0,
@@ -420,16 +508,16 @@ export function Options() {
         controls: [],
         revisions: [],
       }, durableModeCatalog, 'all');
-  const selectedGraphNode = graphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const selectedGraphEdge = graphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedGraphNode = effectiveGraphInspector?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedGraphEdge = effectiveGraphInspector?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
   const selectedGraphNodeEdges = selectedGraphNode
-    ? (graphInspector?.edges ?? []).filter((edge) => (
+    ? (effectiveGraphInspector?.edges ?? []).filter((edge) => (
         edge.sourceNodeId === selectedGraphNode.id || edge.targetNodeId === selectedGraphNode.id
       )).slice(0, 16)
     : [];
-  const explanationGraphView = graphInspector && selectedGraphNode && contentExplanation
+  const explanationGraphView = effectiveGraphInspector && selectedGraphNode && contentExplanation
     ? buildExplanationGraphView(
-        graphInspector,
+        effectiveGraphInspector,
         selectedGraphNode.id,
         contentExplanation.explanation,
       )
@@ -550,6 +638,69 @@ export function Options() {
               );
             })}
             {searchableModeOptions.length === 0 ? <span>No matching groups.</span> : null}
+          </div>
+        </details>
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Manage group ownership · config r{modeConfigRevision}
+          </summary>
+          <p>
+            Rename and pin are durable user-owned overlays. Pinning is independent of whether a group is currently selected for the feed.
+            Undo reverses the latest rename/pin edit without changing retained evidence or inferred group membership.
+          </p>
+          <button type="button" onClick={() => void handleUndoModeConfig()}>
+            Undo last group edit
+          </button>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {searchableModeOptions.map((option) => (
+              <div
+                key={`manage:${option.id}`}
+                style={{ padding: 10, border: '1px solid #cbd5e1', borderRadius: 10 }}
+              >
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div>
+                    <strong>{option.label}</strong>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      {option.active ? 'active' : 'dormant'} · semantic r{option.revision ?? '?'} · {option.pinned ? 'pinned' : 'not pinned'}
+                    </div>
+                    {option.inferredLabel && option.inferredLabel !== option.label ? (
+                      <div style={{ fontSize: 12, color: '#64748b' }}>Inferred name: {option.inferredLabel}</div>
+                    ) : null}
+                  </div>
+                  <button type="button" onClick={() => void handlePinMode(option.id, !option.pinned)}>
+                    {option.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    aria-label={`Rename ${option.label}`}
+                    value={modeNameDrafts[option.id] ?? ''}
+                    placeholder={option.label}
+                    maxLength={80}
+                    onChange={(event) => setModeNameDrafts((current) => ({
+                      ...current,
+                      [option.id]: event.target.value,
+                    }))}
+                    style={{ flex: '1 1 240px', minWidth: 180, padding: 7 }}
+                  />
+                  <button type="button" onClick={() => void handleRenameMode(option.id, option.inferredLabel)}>
+                    Save name
+                  </button>
+                  {option.inferredLabel && option.label !== option.inferredLabel ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModeNameDrafts((current) => ({ ...current, [option.id]: '' }));
+                        void handleRenameMode(option.id, option.inferredLabel, null);
+                      }}
+                    >
+                      Reset name
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
           </div>
         </details>
         <p>
@@ -908,7 +1059,7 @@ export function Options() {
                     <div>
                       <strong>Node kinds</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {graphInspector.nodesByKind.map((entry) => (
+                        {(effectiveGraphInspector?.nodesByKind ?? []).map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -916,7 +1067,7 @@ export function Options() {
                     <div>
                       <strong>Relations</strong>
                       <ul style={{ paddingLeft: 18 }}>
-                        {graphInspector.edgesByRelation.map((entry) => (
+                        {(effectiveGraphInspector?.edgesByRelation ?? []).map((entry) => (
                           <li key={entry.key}>{entry.key}: {entry.count}</li>
                         ))}
                       </ul>
@@ -927,7 +1078,7 @@ export function Options() {
                 <details style={{ marginTop: 10 }}>
                   <summary>Recent revisions</summary>
                   <ul style={{ paddingLeft: 18 }}>
-                    {graphInspector.revisions.slice(0, 8).map((revision) => (
+                    {(effectiveGraphInspector?.revisions ?? []).slice(0, 8).map((revision) => (
                       <li key={`${revision.revision}:${revision.createdAt}`}>
                         r{revision.revision} · {revision.reason}
                       </li>
@@ -938,8 +1089,8 @@ export function Options() {
 
               <div>
                 <GraphCanvas
-                  nodes={graphInspector.nodes}
-                  edges={graphInspector.edges}
+                  nodes={effectiveGraphInspector?.nodes ?? []}
+                  edges={effectiveGraphInspector?.edges ?? []}
                   modeOverlay={graphModeOverlay}
                   searchQuery={graphQuery}
                   selectedNodeId={selectedNodeId}

@@ -18,6 +18,14 @@ import { buildYoutubeRssFeedUrl, isYoutubeSearchBlockedError, needsYoutubeMetada
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
 import { createLocalConceptExtractionProvider } from '../lib/concept-extraction-provider';
+import {
+  applyDurableModeUserConfig,
+  createEmptyDurableModeUserConfig,
+  normalizeDurableModeUserConfig,
+  undoLastDurableModeUserConfigEdit,
+  updateDurableModeUserConfig,
+  type DurableModeUserConfigState,
+} from '../lib/durable-mode-user-config';
 
 type PageCandidate = {
   external_id: string;
@@ -314,20 +322,28 @@ const durableModeCatalogSignature = (
 const refreshDurableModeCatalog = async (
   state: Awaited<ReturnType<typeof personalAlgorithmStore.exportState>>,
 ): Promise<DurableSemanticModeCatalog> => {
-  const [storedPrevious, selectedModeIds] = await Promise.all([
+  const [storedPrevious, selectedModeIds, rawUserConfig] = await Promise.all([
     getStorage<DurableSemanticModeCatalog | null>(
       STORAGE_KEYS.DURABLE_MODE_CATALOG,
       null,
     ),
     getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
+    getStorage<DurableModeUserConfigState>(
+      STORAGE_KEYS.DURABLE_MODE_USER_CONFIG,
+      createEmptyDurableModeUserConfig(),
+    ),
   ]);
+  const userConfig = normalizeDurableModeUserConfig(rawUserConfig);
   const selectedModeIdSet = new Set(selectedModeIds);
   const previous = storedPrevious
     ? {
         ...storedPrevious,
         modes: storedPrevious.modes.map((mode) => ({
           ...mode,
-          pinned: selectedModeIdSet.has(mode.id),
+          // Selection is temporary feed intent. Explicit user pinning is durable
+          // ownership state. Both protect identity during reconciliation, but
+          // only the user-config overlay remains pinned in the persisted catalog.
+          pinned: selectedModeIdSet.has(mode.id) || userConfig.overrides[mode.id]?.pinned === true,
         })),
       }
     : null;
@@ -349,9 +365,10 @@ const refreshDurableModeCatalog = async (
       maxModes: 32,
     },
   );
+  const configuredCatalog = applyDurableModeUserConfig(reconciled.catalog, userConfig) ?? reconciled.catalog;
 
-  if (reconciled.changed || !previous) {
-    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, reconciled.catalog);
+  if (reconciled.changed || !storedPrevious || JSON.stringify(storedPrevious) !== JSON.stringify(configuredCatalog)) {
+    await setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, configuredCatalog);
   }
   await setStorage(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, {
     status: 'completed',
@@ -359,7 +376,7 @@ const refreshDurableModeCatalog = async (
     graphRevision: state.graph.currentRevision,
     ...clustered.diagnostics,
     ...reconciled.diagnostics,
-    generatedAt: reconciled.catalog.generatedAt,
+    generatedAt: configuredCatalog.generatedAt,
   });
 
   const storedMode = await getStorage<string>(STORAGE_KEYS.MODE, 'Default');
@@ -367,7 +384,7 @@ const refreshDurableModeCatalog = async (
   if (!legacyActiveModeId) {
     const migrated = storedMode.toLowerCase() === 'default'
       ? null
-      : reconciled.catalog.modes.find((mode) => (
+      : configuredCatalog.modes.find((mode) => (
           mode.label.toLowerCase() === storedMode.toLowerCase()
         ));
     legacyActiveModeId = migrated?.id ?? (storedMode.toLowerCase() === 'default' ? 'default' : storedMode);
@@ -378,7 +395,7 @@ const refreshDurableModeCatalog = async (
     ? selectedModeIds
     : legacyActiveModeId !== 'default' ? [legacyActiveModeId] : [];
   const selectedModes = effectiveSelectedIds
-    .map((modeId) => resolveDurableMode(reconciled.catalog, modeId))
+    .map((modeId) => resolveDurableMode(configuredCatalog, modeId))
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
   const primary = selectedModes[0] ?? null;
   const selectedLabel = selectedModes.length > 0
@@ -408,7 +425,7 @@ const refreshDurableModeCatalog = async (
       : undefined));
   }
 
-  return reconciled.catalog;
+  return configuredCatalog;
 };
 
 const resolveModeSelection = async (
@@ -2674,6 +2691,8 @@ const handleRuntimeMessage = (
       targetKind?: 'node' | 'edge';
       targetId?: string;
       evidenceId?: string;
+      label?: string | null;
+      pinned?: boolean;
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
@@ -3477,6 +3496,143 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'DURABLE_MODE_CONFIG_UPDATE') {
+    void (async () => {
+      const modeId = payload?.modeId?.trim() ?? '';
+      if (!modeId || modeId === 'default') {
+        sendResponse({ ok: false, error: 'A durable group ID is required.' });
+        return;
+      }
+      const [catalog, rawConfig] = await Promise.all([
+        getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+        getStorage<DurableModeUserConfigState>(
+          STORAGE_KEYS.DURABLE_MODE_USER_CONFIG,
+          createEmptyDurableModeUserConfig(),
+        ),
+      ]);
+      if (!catalog?.modes.some((mode) => mode.id === modeId)) {
+        sendResponse({ ok: false, error: 'That durable group is no longer available.' });
+        return;
+      }
+
+      const config = updateDurableModeUserConfig(
+        normalizeDurableModeUserConfig(rawConfig),
+        modeId,
+        {
+          ...('label' in (payload ?? {}) ? { label: payload?.label ?? null } : {}),
+          ...(typeof payload?.pinned === 'boolean' ? { pinned: payload.pinned } : {}),
+        },
+      );
+      const configuredCatalog = applyDurableModeUserConfig(catalog, config) ?? catalog;
+      const selectedModeIds = await getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []);
+      const selectedModes = selectedModeIds
+        .map((id) => resolveDurableMode(configuredCatalog, id))
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      const primary = selectedModes[0] ?? null;
+      const modeLabel = selectedModes.length > 0
+        ? selectedModes.map((entry) => entry.label).join(' + ')
+        : 'Default';
+
+      await setStorageBatch({
+        [STORAGE_KEYS.DURABLE_MODE_USER_CONFIG]: config,
+        [STORAGE_KEYS.DURABLE_MODE_CATALOG]: configuredCatalog,
+        [STORAGE_KEYS.MODE]: modeLabel,
+        [STORAGE_KEYS.ACTIVE_MODE_ID]: primary?.id ?? 'default',
+      });
+      lastRankMemo = null;
+
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'MODE_CHANGED',
+          payload: {
+            mode: modeLabel,
+            modeId: primary?.id ?? 'default',
+            modeIds: selectedModes.map((entry) => entry.id),
+            modeRevision: primary?.revision ?? null,
+            memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
+          },
+        }).catch(() => undefined)
+        : undefined));
+
+      sendResponse({
+        ok: true,
+        configRevision: config.currentRevision,
+        catalog: configuredCatalog,
+        mode: configuredCatalog.modes.find((entry) => entry.id === modeId) ?? null,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update durable group configuration.',
+    }));
+    return true;
+  }
+
+  if (type === 'DURABLE_MODE_CONFIG_UNDO') {
+    void (async () => {
+      const [catalog, rawConfig] = await Promise.all([
+        getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
+        getStorage<DurableModeUserConfigState>(
+          STORAGE_KEYS.DURABLE_MODE_USER_CONFIG,
+          createEmptyDurableModeUserConfig(),
+        ),
+      ]);
+      const undone = undoLastDurableModeUserConfigEdit(normalizeDurableModeUserConfig(rawConfig));
+      if (!undone.reverted) {
+        sendResponse({
+          ok: true,
+          reverted: null,
+          configRevision: undone.state.currentRevision,
+          catalog,
+        });
+        return;
+      }
+
+      const configuredCatalog = applyDurableModeUserConfig(catalog, undone.state);
+      const selectedModeIds = await getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []);
+      const selectedModes = selectedModeIds
+        .map((id) => resolveDurableMode(configuredCatalog, id))
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      const primary = selectedModes[0] ?? null;
+      const modeLabel = selectedModes.length > 0
+        ? selectedModes.map((entry) => entry.label).join(' + ')
+        : 'Default';
+
+      await setStorageBatch({
+        [STORAGE_KEYS.DURABLE_MODE_USER_CONFIG]: undone.state,
+        ...(configuredCatalog ? { [STORAGE_KEYS.DURABLE_MODE_CATALOG]: configuredCatalog } : {}),
+        [STORAGE_KEYS.MODE]: modeLabel,
+        [STORAGE_KEYS.ACTIVE_MODE_ID]: primary?.id ?? 'default',
+      });
+      lastRankMemo = null;
+
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'MODE_CHANGED',
+          payload: {
+            mode: modeLabel,
+            modeId: primary?.id ?? 'default',
+            modeIds: selectedModes.map((entry) => entry.id),
+            modeRevision: primary?.revision ?? null,
+            memberLabels: selectedModes.flatMap((entry) => entry.members.map((member) => member.label)),
+          },
+        }).catch(() => undefined)
+        : undefined));
+
+      sendResponse({
+        ok: true,
+        reverted: undone.reverted,
+        configRevision: undone.state.currentRevision,
+        catalog: configuredCatalog,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to undo durable group configuration.',
+    }));
+    return true;
+  }
+
   if (type === EXTENSION_MESSAGE_TYPES.SET_MODE) {
     void (async () => {
       const requested = payload?.modeId ?? payload?.mode ?? 'default';
@@ -3515,22 +3671,11 @@ const handleRuntimeMessage = (
         primary?.id ?? 'default',
         primary?.revision ?? null,
       );
-      const selectedIdSet = new Set(selectedModes.map((entry) => entry.id));
-      const pinnedCatalog = durableModeCatalog
-        ? {
-            ...durableModeCatalog,
-            modes: durableModeCatalog.modes.map((entry) => ({
-              ...entry,
-              pinned: selectedIdSet.has(entry.id),
-            })),
-          }
-        : null;
       await Promise.all([
         setStorage(STORAGE_KEYS.ACTIVE_MODE_IDS, selectedModes.map((entry) => entry.id)),
         setStorage(STORAGE_KEYS.ACTIVE_MODE_ID, primary?.id ?? 'default'),
         setStorage(STORAGE_KEYS.MODE, modeLabel),
         setStorage(STORAGE_KEYS.RETRIEVAL_DIAGNOSTICS, nextDiagnostics),
-        ...(pinnedCatalog ? [setStorage(STORAGE_KEYS.DURABLE_MODE_CATALOG, pinnedCatalog)] : []),
       ]);
       lastRankMemo = null;
       if (rankSemanticRefreshTimer) clearTimeout(rankSemanticRefreshTimer);
