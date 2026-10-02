@@ -147,7 +147,7 @@ Graph-derived query planning, RSS acquisition, and zero-config YouTube search-pa
 Prefer a layered approach:
 
 1. deterministic metadata extraction;
-2. transcript/text enrichment where legitimately available;
+2. optional bounded transcript/text enrichment where legitimately available (#238 uses YouTube captions first, not local speech-to-text);
 3. local embeddings/semantic matching when justified;
 4. vision analysis for measured visual gaps;
 5. local generative disambiguation/explanation synthesis only where deterministic methods are insufficient.
@@ -648,3 +648,10 @@ There is no arbitrary time-to-live for a valid binding. Stability ends because i
 ### Evaluation-first rule
 
 Threshold changes, clustering heuristics, model replacement, and any future fine-tuning must be evaluated on fixed labelled replay fixtures first. Live feed review remains a validation surface, not the sole quality metric.
+
+
+## Caption-assisted semantic input (#238)
+
+Transcript enrichment does not add a third model and does not create a new preference signal. The existing candidate semantic text becomes `metadata + optional bounded caption excerpt`; mxbai embeds that combined text and DeBERTa may use the same bounded excerpt as independent supporting premise text. Transcript phrases are deliberately excluded from exact lexical scoring and do not directly create durable graph edges. When caption text participates, derived semantic matches carry input-source provenance rather than claiming the caption alone caused a match.
+
+The launch experiment accepts English caption tracks only and prefers creator captions to auto-generated captions. Videos without an eligible caption track continue through the metadata-only path. A future multilingual or local Whisper path requires separate package-size, latency, privacy, and accuracy evaluation.
