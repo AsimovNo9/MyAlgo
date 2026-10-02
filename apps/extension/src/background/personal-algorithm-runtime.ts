@@ -391,7 +391,12 @@ const candidateIndependentEvidenceIndex = (
   for (const [nodeId, evidenceIds] of index.evidenceIdsByNodeId) {
     const node = nodeById.get(nodeId);
     const filtered = evidenceIds.filter((evidenceId) => !passiveSelfExposureIds.has(evidenceId));
-    if (node?.provenance === 'explicit' || filtered.length > 0) {
+    const supportedWithoutEvidenceIds = evidenceIds.length === 0;
+    if (
+      node?.provenance === 'explicit'
+      || supportedWithoutEvidenceIds
+      || filtered.length > 0
+    ) {
       result.set(nodeId, filtered);
     }
   }
