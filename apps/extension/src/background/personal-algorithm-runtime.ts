@@ -364,34 +364,29 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
   };
 }
 
-const isPassiveSelfExposure = (
-  state: PersonalAlgorithmState,
-  candidate: LocalRuntimeCandidate,
-  evidenceId: string,
-): boolean => {
-  const record = state.evidence.find((entry) => entry.id === evidenceId);
-  if (!record) return false;
-  const evidence = record.evidence;
-  return (
-    evidence.kind === 'exposure'
-    && evidence.content.source === 'youtube'
-    && evidence.content.externalId === candidate.external_id
-    && evidence.provenance.mechanism === 'home_dom'
-  );
-};
-
 const candidateIndependentEvidenceIndex = (
   state: PersonalAlgorithmState,
   candidate: LocalRuntimeCandidate,
   index: LocalScoringIndex,
 ): Map<string, string[]> => {
+  const passiveSelfExposureIds = new Set(
+    state.evidence
+      .filter((record) => {
+        const evidence = record.evidence;
+        return (
+          evidence.kind === 'exposure'
+          && evidence.content.source === 'youtube'
+          && evidence.content.externalId === candidate.external_id
+          && evidence.provenance.mechanism === 'home_dom'
+        );
+      })
+      .map((record) => record.id),
+  );
   const nodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
   const result = new Map<string, string[]>();
   for (const [nodeId, evidenceIds] of index.evidenceIdsByNodeId) {
     const node = nodeById.get(nodeId);
-    const filtered = evidenceIds.filter((evidenceId) => (
-      !isPassiveSelfExposure(state, candidate, evidenceId)
-    ));
+    const filtered = evidenceIds.filter((evidenceId) => !passiveSelfExposureIds.has(evidenceId));
     if (node?.provenance === 'explicit' || filtered.length > 0) {
       result.set(nodeId, filtered);
     }
@@ -584,6 +579,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
   featureLexicalById: ReadonlyMap<string, PreparedLexicalText> = new Map(
     featureNodes.map((node) => [node.id, prepareLexicalText(node.label)]),
   ),
+  supportedNodeIds: ReadonlySet<string> | null = null,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
   const lexicalFields = candidateLexicalFields(candidate);
   const nodeIds: string[] = [];
@@ -600,8 +596,11 @@ const extractLocalCandidateFeaturesWithCanonical = (
     const canonicalId = match.canonical_id?.trim();
     if (!canonicalId) continue;
     const sourceNodeIds = [...new Set(
-      (match.source_node_ids?.length ? match.source_node_ids : [match.node_id]).filter(Boolean),
+      (match.source_node_ids?.length ? match.source_node_ids : [match.node_id])
+        .filter(Boolean)
+        .filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId)),
     )].sort();
+    if (sourceNodeIds.length === 0) continue;
     matchMetadataByCanonicalId.set(canonicalId, {
       label: match.node_label,
       taxonomyOnly: Boolean(match.taxonomy_only),
@@ -677,9 +676,12 @@ const extractLocalCandidateFeaturesWithCanonical = (
     const overrideId = canonicalOverrideByNodeId.get(node.id);
     const canonicalId = overrideId ?? deterministic?.id ?? `canonical:semantic:raw:${node.id}`;
     const overrideMetadata = overrideId ? matchMetadataByCanonicalId.get(overrideId) : undefined;
-    const sourceNodeIds = overrideMetadata?.sourceNodeIds
+    const sourceNodeIds = (
+      overrideMetadata?.sourceNodeIds
       ?? deterministic?.sourceNodeIds
-      ?? [node.id];
+      ?? [node.id]
+    ).filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId));
+    if (sourceNodeIds.length === 0) continue;
     const accumulator = ensureAccumulator(
       canonicalId,
       overrideMetadata?.label ?? deterministic?.label ?? node.label,
@@ -729,9 +731,12 @@ const extractLocalCandidateFeaturesWithCanonical = (
     }>();
 
     for (const match of rawSemanticMatches) {
-      const sourceNodeIdsForSupport = match.source_node_ids?.length
-        ? match.source_node_ids
-        : [match.node_id];
+      const sourceNodeIdsForSupport = (
+        match.source_node_ids?.length
+          ? match.source_node_ids
+          : [match.node_id]
+      ).filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId));
+      if (sourceNodeIdsForSupport.length === 0) continue;
       const hasLexicalSupport = lexicalMatch(match.node_label, lexicalFields) > 0
         || sourceNodeIdsForSupport.some((nodeId) => (
           lexicalMatchPrepared(
@@ -752,8 +757,11 @@ const extractLocalCandidateFeaturesWithCanonical = (
       const sourceNodeIds = [...new Set(
         (match.source_node_ids?.length
           ? match.source_node_ids
-          : deterministic?.sourceNodeIds ?? [match.node_id]).filter(Boolean),
+          : deterministic?.sourceNodeIds ?? [match.node_id])
+          .filter(Boolean)
+          .filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId)),
       )].sort();
+      if (sourceNodeIds.length === 0) continue;
       const weight = Number.isFinite(match.weight) && match.weight > 0
         ? match.weight
         : match.similarity;
