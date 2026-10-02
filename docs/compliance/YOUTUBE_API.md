@@ -42,7 +42,7 @@ The 2026-09-26 audit of `main` found:
 | API downstream consumers | No API-derived evidence, graph, scorer, trace, or explanation consumer exists | absent |
 | Server/backend API-ranked runtime | No server/backend application exists in the current repository tree | absent from current launch tree |
 | Browser page metadata fetch | The extension may fetch the canonical `youtube.com/watch?v=...` page to enrich candidate metadata | browser/page path, not YouTube Data API |
-| Optional caption enrichment | With explicit local transcript enrichment enabled, the connector may follow a caption-track URL exposed in that watch-page player response to YouTube-owned `/api/timedtext`; only a bounded local excerpt is used for derived semantics | browser/provider page enrichment, not YouTube Data API |
+| Optional caption enrichment | With explicit local transcript enrichment enabled, the connector may read provider configuration from the watch page, call YouTube's provider-owned non-WEB `youtubei/v1/player` interface for caption-track metadata, and fetch the selected YouTube-owned `/api/timedtext` URL; only a bounded local excerpt is used for derived semantics | browser/provider page enrichment, not YouTube Data API |
 | Connector capability flags | `search`, `subscriptions`, and `userContent` flags describe provider/page capabilities; they do not instantiate a Data API client | local connector metadata |
 | Candidate acquisition provenance | Shared types separate connector/provider from acquisition mechanism (`observed_dom`, `rss`, `web_search`, `exploration`) and query lane; provider/API-like labels were removed in #202/#206 | source-neutral planning/runtime provenance |
 
@@ -121,7 +121,7 @@ MyAlgo currently derives evidence from the YouTube browser experience itself:
 - temporal HTML media playback;
 - user selections and explicit feedback;
 - YouTube watch-page metadata enrichment;
-- explicitly enabled YouTube watch-page caption-track/timed-text enrichment for bounded local semantic input.
+- explicitly enabled provider-page/non-WEB player caption-track + timed-text enrichment for bounded local semantic input.
 
 That browser-observed evidence is governed by the project's privacy/product rules and applicable platform/legal requirements, but it is not being represented here as YouTube Data API Data.
 
