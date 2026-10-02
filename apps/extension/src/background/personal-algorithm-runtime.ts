@@ -918,26 +918,21 @@ export function extractLocalCandidateFeatures(
   candidate: LocalRuntimeCandidate,
   featureNodes: PersonalAlgorithmState['graph']['nodes'] = state.graph.nodes,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } {
-  const canonical = buildCanonicalSemanticConcepts(state);
-  const evidenceIdsByNodeId = new Map<string, string[]>(
-    featureNodes.map((node) => [node.id, []]),
-  );
-  for (const edge of state.graph.edges) {
-    for (const nodeId of [edge.sourceNodeId, edge.targetNodeId]) {
-      if (!evidenceIdsByNodeId.has(nodeId)) continue;
-      evidenceIdsByNodeId.set(nodeId, [
-        ...new Set([
-          ...(evidenceIdsByNodeId.get(nodeId) ?? []),
-          ...(edge.evidenceIds ?? []),
-        ]),
-      ].sort());
-    }
-  }
+  const index = buildLocalScoringIndex(state);
+  const independentEvidence = candidateIndependentEvidenceIndex(state, candidate, index);
+  const supportedFeatureNodes = featureNodes.filter((node) => (
+    ['objective', 'topic', 'concept'].includes(node.kind)
+    && independentEvidence.has(node.id)
+  ));
+  const supportedNodeIds = new Set(independentEvidence.keys());
   return extractLocalCandidateFeaturesWithCanonical(
     candidate,
-    featureNodes,
-    canonicalByNodeIdFromConcepts(canonical.concepts),
-    evidenceIdsByNodeId,
+    supportedFeatureNodes,
+    index.canonicalByNodeId,
+    independentEvidence,
+    new Map(supportedFeatureNodes.map((node) => [node.id, node])),
+    new Map(supportedFeatureNodes.map((node) => [node.id, prepareLexicalText(node.label)])),
+    supportedNodeIds,
   );
 }
 
@@ -1240,13 +1235,17 @@ const candidateContext = (
 ): ScoreCandidate => {
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
+  const independentEvidence = candidateIndependentEvidenceIndex(state, candidate, index);
+  const supportedNodeIds = new Set(independentEvidence.keys());
+  const supportedFeatureNodes = index.featureNodes.filter((node) => supportedNodeIds.has(node.id));
   const extracted = extractLocalCandidateFeaturesWithCanonical(
     candidate,
-    index.featureNodes,
+    supportedFeatureNodes,
     index.canonicalByNodeId,
-    index.evidenceIdsByNodeId,
-    index.featureNodeById,
-    index.featureLexicalById,
+    independentEvidence,
+    new Map(supportedFeatureNodes.map((node) => [node.id, node])),
+    new Map(supportedFeatureNodes.map((node) => [node.id, prepareLexicalText(node.label)])),
+    supportedNodeIds,
   );
   const selectedDurableModes = Array.isArray(activeDurableModes)
     ? activeDurableModes
@@ -1264,17 +1263,23 @@ const candidateContext = (
   extracted.features.push(...semanticAlignmentFeatures(candidate, mode, !hasDurableMode));
   const durableModeFeatures = groundedDurableModeFeatures(
     candidate,
-    index,
+    {
+      ...index,
+      evidenceIdsByNodeId: independentEvidence,
+    },
     selectedDurableModes,
   );
   const channelCreatorId = candidate.channel_id
     ? `creator:youtube:${encodeURIComponent(candidate.channel_id)}`
     : null;
-  const creatorNodeId = index.creatorByContent.get(contentId)
+  const resolvedCreatorNodeId = index.creatorByContent.get(contentId)
     ?? (channelCreatorId && index.creatorIds.has(channelCreatorId) ? channelCreatorId : null)
     ?? (candidate.channel_name
       ? index.creatorByLabel.get(candidate.channel_name.trim().toLowerCase()) ?? null
       : null);
+  const creatorNodeId = resolvedCreatorNodeId && independentEvidence.has(resolvedCreatorNodeId)
+    ? resolvedCreatorNodeId
+    : null;
 
   return {
     id: `youtube:${candidate.external_id}`,
