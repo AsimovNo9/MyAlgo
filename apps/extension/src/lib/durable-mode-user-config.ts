@@ -152,9 +152,10 @@ const normalizeV1 = (value: Partial<DurableModeUserConfigState>): DurableModeUse
 
 export const normalizeDurableModeUserConfig = (value: unknown): DurableModeUserConfigState => {
   if (!value || typeof value !== 'object') return createEmptyDurableModeUserConfig();
-  const raw = value as Partial<DurableModeUserConfigState> & { schemaVersion?: number };
-  if (raw.schemaVersion === 1) return normalizeV1(raw);
-  if (raw.schemaVersion !== DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION) {
+  const raw = value as Partial<DurableModeUserConfigState>;
+  const schemaVersion = Number((value as { schemaVersion?: unknown }).schemaVersion);
+  if (schemaVersion === 1) return normalizeV1(raw);
+  if (schemaVersion !== DURABLE_MODE_USER_CONFIG_SCHEMA_VERSION) {
     return createEmptyDurableModeUserConfig();
   }
 
