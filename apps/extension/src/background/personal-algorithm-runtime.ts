@@ -316,19 +316,19 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
   }
 
   const creatorByContent = new Map<string, string>();
-  const semanticNodeIds = new Set(featureNodes.map((node) => node.id));
+  const graphNodeIds = new Set(state.graph.nodes.map((node) => node.id));
   const evidenceSetsByNodeId = new Map<string, Set<string>>(
-    featureNodes.map((node) => [node.id, new Set<string>()]),
+    state.graph.nodes.map((node) => [node.id, new Set<string>()]),
   );
   for (const edge of state.graph.edges) {
     if (edge.relation === 'created_by' && creatorIds.has(edge.targetNodeId) && !creatorByContent.has(edge.sourceNodeId)) {
       creatorByContent.set(edge.sourceNodeId, edge.targetNodeId);
     }
-    if (semanticNodeIds.has(edge.sourceNodeId)) {
+    if (graphNodeIds.has(edge.sourceNodeId)) {
       const evidence = evidenceSetsByNodeId.get(edge.sourceNodeId);
       for (const evidenceId of edge.evidenceIds ?? []) evidence?.add(evidenceId);
     }
-    if (semanticNodeIds.has(edge.targetNodeId)) {
+    if (graphNodeIds.has(edge.targetNodeId)) {
       const evidence = evidenceSetsByNodeId.get(edge.targetNodeId);
       for (const evidenceId of edge.evidenceIds ?? []) evidence?.add(evidenceId);
     }
@@ -363,6 +363,41 @@ function buildLocalScoringIndex(state: PersonalAlgorithmState): LocalScoringInde
     evidenceIdsByNodeId,
   };
 }
+
+const isPassiveSelfExposure = (
+  state: PersonalAlgorithmState,
+  candidate: LocalRuntimeCandidate,
+  evidenceId: string,
+): boolean => {
+  const record = state.evidence.find((entry) => entry.id === evidenceId);
+  if (!record) return false;
+  const evidence = record.evidence;
+  return (
+    evidence.kind === 'exposure'
+    && evidence.content.source === 'youtube'
+    && evidence.content.externalId === candidate.external_id
+    && evidence.provenance.mechanism === 'home_dom'
+  );
+};
+
+const candidateIndependentEvidenceIndex = (
+  state: PersonalAlgorithmState,
+  candidate: LocalRuntimeCandidate,
+  index: LocalScoringIndex,
+): Map<string, string[]> => {
+  const nodeById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const result = new Map<string, string[]>();
+  for (const [nodeId, evidenceIds] of index.evidenceIdsByNodeId) {
+    const node = nodeById.get(nodeId);
+    const filtered = evidenceIds.filter((evidenceId) => (
+      !isPassiveSelfExposure(state, candidate, evidenceId)
+    ));
+    if (node?.provenance === 'explicit' || filtered.length > 0) {
+      result.set(nodeId, filtered);
+    }
+  }
+  return result;
+};
 
 const getPreparedLocalScoringState = (
   state: PersonalAlgorithmState,
