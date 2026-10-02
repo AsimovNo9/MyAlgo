@@ -204,11 +204,11 @@ export function buildCandidateEmbeddingText(candidate: RecommendationCandidate):
   const parts = [
     candidate.title,
     candidate.description ?? '',
+    transcript ? `Transcript excerpt: ${transcript}` : '',
     ...(candidate.topics ?? []),
     candidate.content_type ?? '',
     candidate.format ?? '',
     candidate.channel_name ?? '',
-    transcript ? `Transcript excerpt: ${transcript}` : '',
   ].map(normalizeText).filter(Boolean);
   return [...new Set(parts)].join(' | ').slice(0, 6000);
 }
