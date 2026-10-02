@@ -38,8 +38,16 @@ export type ProviderEnrichmentInput = {
   is_live?: boolean;
 };
 
+export type ProviderTranscriptEnrichment = {
+  text: string;
+  language: string;
+  source: 'youtube_caption_track';
+  auto_generated: boolean;
+};
+
 export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
   view_count?: number | null;
+  transcript?: ProviderTranscriptEnrichment | null;
 };
 
 export type ProviderAcquisitionConnector = {
