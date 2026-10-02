@@ -588,7 +588,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
   featureLexicalById: ReadonlyMap<string, PreparedLexicalText> = new Map(
     featureNodes.map((node) => [node.id, prepareLexicalText(node.label)]),
   ),
-  supportedNodeIds: ReadonlySet<string> | null = null,
+  excludedSelfSupportedNodeIds: ReadonlySet<string> | null = null,
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } => {
   const lexicalFields = candidateLexicalFields(candidate);
   const nodeIds: string[] = [];
@@ -607,7 +607,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
     const sourceNodeIds = [...new Set(
       (match.source_node_ids?.length ? match.source_node_ids : [match.node_id])
         .filter(Boolean)
-        .filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId)),
+        .filter((nodeId) => !excludedSelfSupportedNodeIds || !excludedSelfSupportedNodeIds.has(nodeId)),
     )].sort();
     if (sourceNodeIds.length === 0) continue;
     matchMetadataByCanonicalId.set(canonicalId, {
@@ -689,7 +689,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
       overrideMetadata?.sourceNodeIds
       ?? deterministic?.sourceNodeIds
       ?? [node.id]
-    ).filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId));
+    ).filter((nodeId) => !excludedSelfSupportedNodeIds || !excludedSelfSupportedNodeIds.has(nodeId));
     if (sourceNodeIds.length === 0) continue;
     const accumulator = ensureAccumulator(
       canonicalId,
@@ -744,7 +744,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
         match.source_node_ids?.length
           ? match.source_node_ids
           : [match.node_id]
-      ).filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId));
+      ).filter((nodeId) => !excludedSelfSupportedNodeIds || !excludedSelfSupportedNodeIds.has(nodeId));
       if (sourceNodeIdsForSupport.length === 0) continue;
       const hasLexicalSupport = lexicalMatch(match.node_label, lexicalFields) > 0
         || sourceNodeIdsForSupport.some((nodeId) => (
@@ -768,7 +768,7 @@ const extractLocalCandidateFeaturesWithCanonical = (
           ? match.source_node_ids
           : deterministic?.sourceNodeIds ?? [match.node_id])
           .filter(Boolean)
-          .filter((nodeId) => !supportedNodeIds || supportedNodeIds.has(nodeId)),
+          .filter((nodeId) => !excludedSelfSupportedNodeIds || !excludedSelfSupportedNodeIds.has(nodeId)),
       )].sort();
       if (sourceNodeIds.length === 0) continue;
       const weight = Number.isFinite(match.weight) && match.weight > 0
@@ -929,11 +929,13 @@ export function extractLocalCandidateFeatures(
 ): { nodeIds: string[]; features: ScoreFeatureSignal[] } {
   const index = buildLocalScoringIndex(state);
   const independentEvidence = candidateIndependentEvidenceIndex(state, candidate, index);
+  const excludedSelfSupportedNodeIds = new Set(
+    [...index.evidenceIdsByNodeId.keys()].filter((nodeId) => !independentEvidence.has(nodeId)),
+  );
   const supportedFeatureNodes = featureNodes.filter((node) => (
     ['objective', 'topic', 'concept'].includes(node.kind)
-    && independentEvidence.has(node.id)
+    && !excludedSelfSupportedNodeIds.has(node.id)
   ));
-  const supportedNodeIds = new Set(independentEvidence.keys());
   return extractLocalCandidateFeaturesWithCanonical(
     candidate,
     supportedFeatureNodes,
@@ -941,7 +943,7 @@ export function extractLocalCandidateFeatures(
     independentEvidence,
     new Map(supportedFeatureNodes.map((node) => [node.id, node])),
     new Map(supportedFeatureNodes.map((node) => [node.id, prepareLexicalText(node.label)])),
-    supportedNodeIds,
+    excludedSelfSupportedNodeIds,
   );
 }
 
@@ -1245,8 +1247,12 @@ const candidateContext = (
   const contentId = contentNodeId('youtube', candidate.external_id);
   const contentNode = index.contentNodes.get(contentId);
   const independentEvidence = candidateIndependentEvidenceIndex(state, candidate, index);
-  const supportedNodeIds = new Set(independentEvidence.keys());
-  const supportedFeatureNodes = index.featureNodes.filter((node) => supportedNodeIds.has(node.id));
+  const excludedSelfSupportedNodeIds = new Set(
+    [...index.evidenceIdsByNodeId.keys()].filter((nodeId) => !independentEvidence.has(nodeId)),
+  );
+  const supportedFeatureNodes = index.featureNodes.filter((node) => (
+    !excludedSelfSupportedNodeIds.has(node.id)
+  ));
   const extracted = extractLocalCandidateFeaturesWithCanonical(
     candidate,
     supportedFeatureNodes,
@@ -1254,7 +1260,7 @@ const candidateContext = (
     independentEvidence,
     new Map(supportedFeatureNodes.map((node) => [node.id, node])),
     new Map(supportedFeatureNodes.map((node) => [node.id, prepareLexicalText(node.label)])),
-    supportedNodeIds,
+    excludedSelfSupportedNodeIds,
   );
   const selectedDurableModes = Array.isArray(activeDurableModes)
     ? activeDurableModes
