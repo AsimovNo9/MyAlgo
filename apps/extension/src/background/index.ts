@@ -3001,6 +3001,43 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'SET_TRANSCRIPT_ENRICHMENT_ENABLED') {
+    void (async () => {
+      const enabled = payload?.enabled === true;
+      semanticEpoch += 1;
+      conceptExtractionEpoch += 1;
+      semanticRefreshInFlight.clear();
+      conceptExtractionRefreshInFlight = null;
+      lastRankMemo = null;
+      await setStorage(STORAGE_KEYS.TRANSCRIPT_ENRICHMENT_ENABLED, enabled);
+      await semanticEmbeddingCache.clear();
+      semanticFeatureCacheMemory = null;
+      semanticFeatureCacheMemoryRevision += 1;
+      await chrome.storage.local.remove([
+        STORAGE_KEYS.SEMANTIC_FEATURE_CACHE,
+        STORAGE_KEYS.SEMANTIC_DIAGNOSTICS,
+        STORAGE_KEYS.CONCEPT_EXTRACTION_DIAGNOSTICS,
+      ]);
+      await setStorage(STORAGE_KEYS.TRANSCRIPT_ENRICHMENT_DIAGNOSTICS, {
+        status: 'configured',
+        enabled,
+        generatedAt: new Date().toISOString(),
+      });
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+          type: 'PERSONAL_ALGORITHM_CHANGED',
+          payload: { reason: 'transcript_enrichment' },
+        }).catch(() => undefined)
+        : undefined));
+      sendResponse({ ok: true, enabled });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update transcript enrichment.',
+    }));
+    return true;
+  }
+
   if (type === 'SET_SEMANTIC_MODEL_MODE') {
     void (async () => {
       const semanticModelMode: SemanticModelMode = payload?.semanticModelMode === 'neural' ? 'neural' : 'hash';
@@ -4199,7 +4236,21 @@ const handleRuntimeMessage = (
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
       getStorage<DurableSemanticModeCatalog | null>(STORAGE_KEYS.DURABLE_MODE_CATALOG, null),
       getStorage<Record<string, unknown> | null>(STORAGE_KEYS.DURABLE_MODE_DIAGNOSTICS, null),
-    ]).then(([diagnostics, conceptMaterialization, conceptExtraction, conceptModelStatus, durableModes, durableModeDiagnostics]) => {
+      getStorage<Record<string, unknown> | null>(STORAGE_KEYS.TRANSCRIPT_ENRICHMENT_DIAGNOSTICS, null),
+      getStorage<Record<string, TranscriptEnrichmentRecord>>(STORAGE_KEYS.TRANSCRIPT_ENRICHMENT_CACHE, {}),
+      getStorage<boolean>(STORAGE_KEYS.TRANSCRIPT_ENRICHMENT_ENABLED, false),
+    ]).then(([
+      diagnostics,
+      conceptMaterialization,
+      conceptExtraction,
+      conceptModelStatus,
+      durableModes,
+      durableModeDiagnostics,
+      transcriptDiagnostics,
+      transcriptCache,
+      transcriptEnabled,
+    ]) => {
+      const transcriptRecords = Object.values(transcriptCache);
       sendResponse({
         ok: true,
         diagnostics,
@@ -4208,6 +4259,13 @@ const handleRuntimeMessage = (
         conceptModelStatus,
         durableModes,
         durableModeDiagnostics,
+        transcriptEnrichment: {
+          enabled: transcriptEnabled,
+          diagnostics: transcriptDiagnostics,
+          cacheSize: transcriptRecords.length,
+          available: transcriptRecords.filter((record) => record.status === 'available').length,
+          unavailable: transcriptRecords.filter((record) => record.status === 'unavailable').length,
+        },
       });
     }).catch((error) => sendResponse({
       ok: false,
