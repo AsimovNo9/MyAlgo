@@ -304,6 +304,25 @@ Required invariants:
 Compare the baseline local hash provider against the opt-in `mixedbread-ai/mxbai-embed-xsmall-v1` q8 local neural provider using the fixed replay fixture, and benchmark the DeBERTa verifier separately on its deliberate q8 WASM path. Measure rank-order agreement/quality, mode separation, first-run latency, cached latency, memory, model/package size, and multilingual behavior. Do not promote a neural model based only on benchmark reputation; validate it against MyAlgo candidate/graph data.
 
 
+## Hybrid candidate↔graph verification validation (PR #237)
+
+Validate the combined local model path separately from metadata concept extraction:
+
+1. mxbai remains the candidate↔graph retriever and produces the same clear high-confidence graph matches without invoking DeBERTa;
+2. only non-taxonomy graph matches that are moderate in absolute similarity or close to an independent runner-up enter NLI verification;
+3. one semantic slice sends at most four candidates and at most three graph labels per candidate to DeBERTa;
+4. accepted ambiguous labels remain score-bearing and record verifier model/pipeline provenance;
+5. rejected ambiguous labels are absent from `semantic_graph_matches` before durable-mode affinity construction and deterministic scoring;
+6. explicit lexical support is unaffected by DeBERTa rejection because lexical and embedding evidence remain separate score paths;
+7. if all ambiguous specific matches are rejected, semantic graph similarity contributes no embedding-backed score for that candidate;
+8. verifier failure preserves the embedding result, records fallback provenance, and does not turn a local model outage into a ranking outage;
+9. semantic-feature cache identity changes with the combined pipeline so pre-verifier cached graph matches cannot be silently reused;
+10. compare precision/abstention, rank changes, verifier invocation rate, WASM latency, and memory against the embedding-only baseline before changing thresholds.
+
+Fresh-state bootstrap must not depend on manual page reloads. After Delete all local data, re-enable local neural semantics, collect History evidence, and open Home once. The asynchronous semantic scheduler must continue bounded drain passes after first paint until the current semantic slice and interaction-supported concept-verifier queue are caught up or the hard background work budget is exhausted. Repeated browser refreshes may trigger additional work but must not be the mechanism required for modes to emerge.
+
+For this validation, confirm `GET_SEMANTIC_DIAGNOSTICS` progresses across background passes, `conceptExtraction.pending` decreases without reloading the page, and `durableModeDiagnostics.activeModeCount` can become non-zero once the normal support thresholds are met.
+
 ## Post-#213 category/mode and Home-stability validation (#214)
 
 Live review after PR #213 exposed two distinct failure classes that must be evaluated separately.
@@ -864,7 +883,10 @@ PR #231 merged the read-only graph explorer and the expanded Why-this lifecycle/
 - structural relations and retained content identity do not earn recommendation score merely because they exist in the graph;
 - retained-history explanation uses concrete prior interactions and specific creator/topic/concept bridges, not generic taxonomy as causal evidence;
 - live graph Network/Lineage views stay read-only and preserve graph revision/counts while navigating, filtering, focusing, and zooming;
-- semantic/topic groups and durable modes remain distinct presentation concepts;
+- provisional semantic topic clusters and durable groups remain distinct presentation concepts: graph content prefers a matching durable group when one exists, while unmatched semantic clustering is labelled **Topic cluster** and is never implied to be selectable/persistent;
+- the graph's durable-group overlay dropdown and the Groups selector are sourced from the same durable mode catalog, so every graph cluster labelled **Group** must correspond to a catalog entry shown in those controls;
+- retained content listed in a durable mode member's `supportContentIds` stays spatially inside that durable **Group** cluster even if transient semantic-feature cache entries are missing or rotate; the durable catalog, not cache affinity, is the visual-membership source of truth;
+- durable Group boundaries remain visibly drawn in the Network view and durable-group members are prioritized ahead of ungrouped nodes when the graph exceeds the visual node cap;
 - discovered durable groups are searchable and multi-select; selected groups remain pinned/retained through reclustering until explicitly deselected;
 - multiple selected groups share a bounded mode-score budget and clear cross-category conflicts abstain rather than leak score mass.
 

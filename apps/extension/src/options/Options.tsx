@@ -311,10 +311,11 @@ export function Options() {
       return;
     }
     try {
-      const view = buildGraphInspectorView(response.state, response.semanticContext ?? []);
+      const durableCatalog = response.durableModeCatalog ?? null;
+      const view = buildGraphInspectorView(response.state, response.semanticContext ?? [], durableCatalog);
       setGraphInspector(view);
       setGraphInspectorSource('live');
-      setDurableModeCatalog(response.durableModeCatalog ?? null);
+      setDurableModeCatalog(durableCatalog);
       setActiveModeId(response.activeModeId ?? 'default');
       setGraphModeId('all');
       setGraphFocusOnly(true);
@@ -772,13 +773,15 @@ export function Options() {
         </label>
         <p>
           When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
-          for semantic similarity and DeBERTa-v3-xsmall NLI for bounded zero-shot concept verification. Candidate text, verified
-          concepts, graph state, embeddings, and inference stay local. The installed extension does not download
+          for candidate↔graph semantic retrieval and DeBERTa-v3-xsmall NLI for bounded zero-shot verification of metadata concepts
+          plus ambiguous graph matches. Clear high-confidence embedding matches skip DeBERTa. Candidate text, verified concepts,
+          graph state, embeddings, and inference stay local. The installed extension does not download
           model files at runtime. Embeddings prefer WebGPU and fall back to local WebAssembly CPU inference when needed.
           The concept verifier deliberately uses q8 WebAssembly CPU inference, which is independent of the embedding batch slider.
-          Concept verification remains asynchronous and falls back to the existing metadata materializer only when verification fails.
+          Metadata concept verification remains asynchronous. For ambiguous graph matches, verifier failure preserves the embedding
+          result with explicit fallback provenance instead of failing ranking.
         </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + WASM concept verification)' : 'Deterministic baseline'}</p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + bounded WASM NLI verification)' : 'Deterministic baseline'}</p>
         <div style={{ marginTop: 16 }}>
           <label htmlFor="semantic-neural-batch-size">
             WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
@@ -861,10 +864,12 @@ export function Options() {
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
         <h2>Personal Algorithm Graph explorer</h2>
         <p>
-          Explore the current local graph visually, search stable graph IDs, switch between durable mode overlays,
-          and inspect exact retained evidence. Live snapshots also use retained semantic affinities to cluster content by
-          its strongest durable mode or semantic topic without creating synthetic graph edges. Selecting a live node or
-          relationship also exposes revisioned Reduce / Prefer / Mute controls. Offline pasted snapshots remain read-only.
+          Explore the current local graph visually, search stable graph IDs, switch between durable group overlays,
+          and inspect exact retained evidence. Live snapshots place content into its strongest durable group when one exists;
+          otherwise they may show a provisional semantic topic cluster. Topic clusters are visual derived context only and do
+          not appear in the Groups selector or durable-group dropdown until repeated retained support promotes them into a
+          durable group. Selecting a live node or relationship also exposes revisioned Reduce / Prefer / Mute controls.
+          Offline pasted snapshots remain read-only.
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
@@ -948,7 +953,7 @@ export function Options() {
                 </p>
 
                 <label htmlFor="graph-mode-overlay">
-                  <strong>Mode overlay</strong>
+                  <strong>Durable group overlay</strong>
                   <select
                     id="graph-mode-overlay"
                     value={graphModeId}

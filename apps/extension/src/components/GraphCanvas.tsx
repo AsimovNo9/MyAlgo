@@ -313,6 +313,7 @@ export function GraphCanvas({
     const prioritized = [...candidateNodes]
       .sort((left, right) => (
         Number(priorityIds.has(right.id)) - Number(priorityIds.has(left.id))
+        || Number(right.semanticClusterKind === 'mode') - Number(left.semanticClusterKind === 'mode')
         || compareNodePriority(left, right, degreeByNode, memberIds, connectedIds)
       ))
       .slice(0, capacity);
@@ -652,7 +653,7 @@ export function GraphCanvas({
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value / 1.18))}>−</button>
           <button type="button" onClick={resetView}>Reset</button>
           {focusedSemanticClusterId ? (
-            <button type="button" onClick={() => setFocusedSemanticClusterId(null)}>All groups</button>
+            <button type="button" onClick={() => setFocusedSemanticClusterId(null)}>All clusters</button>
           ) : null}
         </div>
       ) : null}
@@ -680,7 +681,7 @@ export function GraphCanvas({
                 key={cluster.id}
                 role="button"
                 tabIndex={0}
-                aria-label={`Focus semantic group ${cluster.label}`}
+                aria-label={`Focus ${cluster.kind === 'mode' ? 'durable group' : 'topic cluster'} ${cluster.label}`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -703,11 +704,11 @@ export function GraphCanvas({
                   cy={cluster.y}
                   r={cluster.radius}
                   fill={cluster.kind === 'mode' ? '#1e293b' : '#0f2530'}
-                  fillOpacity={focused ? 0.34 : 0.2}
+                  fillOpacity={focused ? 0.4 : cluster.kind === 'mode' ? 0.3 : 0.16}
                   stroke={focused ? '#facc15' : cluster.kind === 'mode' ? '#f59e0b' : '#22d3ee'}
-                  strokeWidth={focused ? 3 : 1.5}
-                  strokeOpacity={focused ? 0.95 : 0.5}
-                  strokeDasharray={focused ? undefined : '6 5'}
+                  strokeWidth={focused ? 3.5 : cluster.kind === 'mode' ? 2.5 : 1.25}
+                  strokeOpacity={focused ? 0.98 : cluster.kind === 'mode' ? 0.82 : 0.42}
+                  strokeDasharray={focused || cluster.kind === 'mode' ? undefined : '6 5'}
                 />
                 <text
                   x={cluster.x}
@@ -718,7 +719,7 @@ export function GraphCanvas({
                   fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
                   pointerEvents="none"
                 >
-                  {cluster.kind === 'mode' ? 'Mode' : 'Topic'} · {cluster.label} · {cluster.count}
+                  {cluster.kind === 'mode' ? 'Group' : 'Topic cluster'} · {cluster.label} · {cluster.count}
                 </text>
               </g>
             );

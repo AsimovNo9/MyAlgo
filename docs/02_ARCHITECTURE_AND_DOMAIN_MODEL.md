@@ -434,12 +434,14 @@ Keep these three concepts separate:
 2. **Content classification** describes the candidate itself. UI labels such as `Learning` may be shown only when candidate metadata supports that classification with sufficient confidence.
 3. **Semantic enrichment** is rebuildable derived data. Text embeddings may improve candidate↔goal/topic similarity and retrieval expansion, but do not become canonical graph truth.
 
-The launch semantic stack now has two distinct local model roles:
+The launch semantic stack has two local model roles that are now combined at one bounded decision boundary:
 
-- the packaged DeBERTa zero-shot verifier filters bounded metadata topic candidates and may abstain with an empty verified set;
-- the packaged mxbai embedding encoder supplies rebuildable candidate↔graph semantic similarity.
+- the packaged mxbai embedding encoder supplies rebuildable candidate↔graph semantic similarity and retrieves the strongest graph concepts;
+- the packaged DeBERTa zero-shot verifier still filters bounded metadata topic candidates, and PR #237 also verifies only ambiguous/moderate non-taxonomy candidate↔graph matches before those embedding matches become score-bearing semantic affinities.
 
-Neither model output is canonical preference state. Verified labels still pass through the evidence-backed #218 materializer, while embeddings remain derived enrichment.
+Clear high-confidence embedding matches skip DeBERTa. Ambiguous verification is capped per semantic slice; verifier rejection removes only the uncertain embedding match, while explicit lexical support remains independent. Verifier failure preserves the embedding path with explicit fallback provenance rather than failing ranking.
+
+Neither model output is canonical preference state. Verified metadata labels still pass through the evidence-backed #218 materializer, while embeddings and NLI-verified graph matches remain rebuildable derived enrichment.
 
 PR #223/#221 implements the derived canonicalization layer over the materialized topic/concept graph. Deterministic aliases are reconciled first; the existing local embeddings may then group high-similarity inferred nodes only when lexical compatibility or shared graph support grounds the assignment. Original graph nodes/evidence remain inspectable, explicit/user-authored distinctions are protected from similarity-only merging, and broad `content_type` taxonomy stays distinguishable from specific interests. Scoring consumes one bounded contribution per canonical neighbourhood and reconciles lexical plus embedding evidence instead of independently adding duplicate paths. Durable mode clusters remain downstream #214 work over these canonical concepts.
 

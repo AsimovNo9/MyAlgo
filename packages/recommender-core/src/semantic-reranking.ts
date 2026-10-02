@@ -43,6 +43,12 @@ export type SemanticRerankingDiagnostics = {
   modeNodeCount: number;
   canonicalConceptCount: number;
   canonicalMergedNodeCount: number;
+  graphVerificationRequested: number;
+  graphVerificationVerified: number;
+  graphVerificationRejected: number;
+  graphVerificationBackend: string | null;
+  graphVerificationModelVersion: string | null;
+  graphVerificationFallbackReason: string | null;
 };
 
 export type SemanticRerankingResult<T extends RecommendationCandidate> = {
@@ -63,11 +69,54 @@ export type SemanticRerankingResult<T extends RecommendationCandidate> = {
       source_node_ids?: string[];
       taxonomy_only?: boolean;
       pipeline_id?: string;
+      verification_status?: 'not_required' | 'verified' | 'fallback';
+      verification_model_version?: string;
+      verification_pipeline_id?: string;
     }>;
   }>;
   modeProfile: SemanticModeProfile;
   diagnostics: SemanticRerankingDiagnostics;
 };
+
+export const SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID = 'embedding-nli-graph-verifier-v1';
+
+export type SemanticGraphVerificationInput = {
+  text: string;
+  labels: string[];
+};
+
+export type SemanticGraphMatchVerifier = {
+  readonly modelId: string;
+  readonly modelVersion: string;
+  verify(items: readonly SemanticGraphVerificationInput[]): Promise<{
+    concepts: string[][];
+    backend: string;
+  }>;
+};
+
+const normalizeVerificationLabel = (value: string): string =>
+  value.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US');
+
+export function shouldVerifySemanticGraphMatches(
+  matches: readonly { node_label: string; similarity: number; taxonomy_only?: boolean }[],
+  options: {
+    minimumSimilarity?: number;
+    clearSimilarity?: number;
+    minimumMargin?: number;
+  } = {},
+): boolean {
+  const minimumSimilarity = Math.max(0, Math.min(1, options.minimumSimilarity ?? 0.35));
+  const clearSimilarity = Math.max(minimumSimilarity, Math.min(1, options.clearSimilarity ?? 0.72));
+  const minimumMargin = Math.max(0, Math.min(1, options.minimumMargin ?? 0.08));
+  const specific = matches
+    .filter((match) => !match.taxonomy_only && Number.isFinite(match.similarity) && match.similarity >= minimumSimilarity)
+    .sort((left, right) => right.similarity - left.similarity || left.node_label.localeCompare(right.node_label));
+  const strongest = specific[0];
+  if (!strongest) return false;
+  const runnerUp = specific[1]?.similarity ?? 0;
+  return strongest.similarity < clearSimilarity
+    || strongest.similarity - runnerUp < minimumMargin;
+}
 
 const hashToken = (value: string, seed: number): number => {
   let hash = seed >>> 0;
@@ -155,6 +204,17 @@ export function buildCandidateEmbeddingText(candidate: RecommendationCandidate):
     candidate.channel_name ?? '',
   ].map(normalizeText).filter(Boolean);
   return [...new Set(parts)].join(' | ').slice(0, 6000);
+}
+
+export function buildSemanticGraphVerificationText(candidate: RecommendationCandidate): string {
+  const title = normalizeText(candidate.title).slice(0, 220);
+  const description = normalizeText(candidate.description ?? '').slice(0, 700);
+  const category = normalizeText(candidate.content_type ?? '').slice(0, 80);
+  return [
+    title,
+    description,
+    category ? `Category: ${category}` : '',
+  ].filter(Boolean).join('\n');
 }
 
 export function buildGraphNodeEmbeddingText(
@@ -320,6 +380,12 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   options: {
     maxGraphNodes?: number;
     minimumModeNodeSimilarity?: number;
+    graphMatchVerifier?: SemanticGraphMatchVerifier;
+    maxGraphVerificationItems?: number;
+    maxGraphVerificationLabels?: number;
+    graphVerificationMinimumSimilarity?: number;
+    graphVerificationClearSimilarity?: number;
+    graphVerificationMinimumMargin?: number;
     onEmbeddingPhase?: (
       phase: 'graph_embeddings' | 'mode_seed' | 'candidate_embeddings' | 'embedding_cache_flush',
       inputCount: number,
@@ -435,7 +501,7 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
   ));
   const categorySourceConcepts = categoryConcepts.length > 0 ? categoryConcepts : canonicalConcepts;
 
-  const enriched = candidates.map((candidate, index) => {
+  const prepared = candidates.map((candidate, index) => {
     const embedding = candidateEmbeddings.records[index]?.embedding ?? [];
     const rankedCategories = categorySourceConcepts
       .map((concept) => ({
@@ -457,7 +523,6 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       entry.category,
       Number(entry.similarity.toFixed(4)),
     ])) as Record<SemanticCategoryId, number>;
-    const category = classifySemanticCategory(categoryScores);
     const graphMatches = canonicalConcepts
       .map((concept) => {
         const similarity = positiveSimilarity(
@@ -488,20 +553,146 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       ))
       .slice(0, 3);
 
+    return {
+      candidate,
+      embedding,
+      categoryScores,
+      initialCategory: classifySemanticCategory(categoryScores),
+      graphMatches,
+    };
+  });
+
+  type VerificationPlan = {
+    candidateIndex: number;
+    labels: string[];
+    labelKeys: Set<string>;
+  };
+  const verificationPlans: VerificationPlan[] = [];
+  const maxVerificationItems = Math.max(1, Math.min(4, Math.floor(options.maxGraphVerificationItems ?? 4)));
+  const maxVerificationLabels = Math.max(1, Math.min(4, Math.floor(options.maxGraphVerificationLabels ?? 3)));
+
+  if (options.graphMatchVerifier) {
+    for (let candidateIndex = 0; candidateIndex < prepared.length; candidateIndex += 1) {
+      const item = prepared[candidateIndex];
+      if (!shouldVerifySemanticGraphMatches(item.graphMatches, {
+        minimumSimilarity: options.graphVerificationMinimumSimilarity,
+        clearSimilarity: options.graphVerificationClearSimilarity,
+        minimumMargin: options.graphVerificationMinimumMargin,
+      })) continue;
+
+      const labels = [...new Set(
+        item.graphMatches
+          .filter((match) => !match.taxonomy_only)
+          .map((match) => match.node_label.trim())
+          .filter(Boolean),
+      )].slice(0, maxVerificationLabels);
+      if (labels.length === 0) continue;
+      verificationPlans.push({
+        candidateIndex,
+        labels,
+        labelKeys: new Set(labels.map(normalizeVerificationLabel)),
+      });
+    }
+  }
+  if (verificationPlans.length > maxVerificationItems) {
+    throw new Error(
+      `Semantic graph verification planned ${verificationPlans.length} candidates; caller limit is ${maxVerificationItems}. Reduce the semantic slice so ambiguous matches are never silently cached without verification.`,
+    );
+  }
+
+  const verificationAcceptedByCandidate = new Map<number, Set<string>>();
+  let graphVerificationBackend: string | null = null;
+  let graphVerificationFallbackReason: string | null = null;
+  let graphVerificationVerified = 0;
+  let graphVerificationRejected = 0;
+
+  if (options.graphMatchVerifier && verificationPlans.length > 0) {
+    try {
+      const result = await options.graphMatchVerifier.verify(verificationPlans.map((plan) => ({
+        text: buildSemanticGraphVerificationText(prepared[plan.candidateIndex].candidate),
+        labels: plan.labels,
+      })));
+      if (result.concepts.length !== verificationPlans.length) {
+        throw new Error(
+          `Semantic graph verifier returned ${result.concepts.length} results for ${verificationPlans.length} requests.`,
+        );
+      }
+      graphVerificationBackend = result.backend;
+      verificationPlans.forEach((plan, planIndex) => {
+        const accepted = new Set(
+          (result.concepts[planIndex] ?? []).map(normalizeVerificationLabel),
+        );
+        verificationAcceptedByCandidate.set(plan.candidateIndex, accepted);
+        graphVerificationVerified += plan.labels.filter((label) => accepted.has(normalizeVerificationLabel(label))).length;
+        graphVerificationRejected += plan.labels.filter((label) => !accepted.has(normalizeVerificationLabel(label))).length;
+      });
+    } catch (error) {
+      graphVerificationFallbackReason = error instanceof Error
+        ? error.message
+        : 'Semantic graph verification failed.';
+    }
+  }
+
+  const planByCandidate = new Map(verificationPlans.map((plan) => [plan.candidateIndex, plan]));
+  const verificationModelVersion = options.graphMatchVerifier
+    ? `${options.graphMatchVerifier.modelId}@${options.graphMatchVerifier.modelVersion}`
+    : null;
+
+  const enriched = prepared.map((item, index) => {
+    const plan = planByCandidate.get(index);
+    const accepted = verificationAcceptedByCandidate.get(index);
+    const verificationSucceeded = Boolean(plan && accepted);
+    const verificationFellBack = Boolean(plan && !accepted && graphVerificationFallbackReason);
+
+    const graphMatches = item.graphMatches
+      .filter((match) => {
+        if (!plan || !verificationSucceeded) return true;
+        const key = normalizeVerificationLabel(match.node_label);
+        return !plan.labelKeys.has(key) || accepted!.has(key);
+      })
+      .map((match) => {
+        const key = normalizeVerificationLabel(match.node_label);
+        const planned = Boolean(plan?.labelKeys.has(key));
+        return {
+          ...match,
+          verification_status: planned
+            ? verificationSucceeded ? 'verified' as const : verificationFellBack ? 'fallback' as const : 'not_required' as const
+            : 'not_required' as const,
+          verification_model_version: planned && verificationModelVersion
+            ? verificationModelVersion
+            : undefined,
+          verification_pipeline_id: planned
+            ? SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID
+            : undefined,
+        };
+      });
+
     const graphSimilarity = graphMatches.length > 0
       ? graphMatches.reduce((sum, match) => sum + match.rankingWeight, 0)
         / graphMatches.reduce((sum, match) => sum + match.canonicalWeight, 0)
-      : positiveSimilarity(embedding, graphCentroid);
+      : verificationSucceeded
+        ? 0
+        : positiveSimilarity(item.embedding, graphCentroid);
+
+    let category = item.initialCategory;
+    if (
+      verificationSucceeded
+      && category.category
+      && plan?.labelKeys.has(normalizeVerificationLabel(category.category))
+      && !accepted!.has(normalizeVerificationLabel(category.category))
+    ) {
+      category = { category: null, confidence: 0 };
+    }
 
     return {
-      ...candidate,
+      ...item.candidate,
       semantic_similarity: graphSimilarity,
       semantic_graph_similarity: graphSimilarity,
-      semantic_mode_similarity: positiveSimilarity(embedding, modeCentroid),
+      semantic_mode_similarity: positiveSimilarity(item.embedding, modeCentroid),
       semantic_model_version: semanticModelVersion,
       semantic_category: category.category,
       semantic_category_confidence: category.confidence,
-      semantic_category_scores: categoryScores,
+      semantic_category_scores: item.categoryScores,
       semantic_graph_matches: graphMatches.map((match) => ({
         node_id: match.node_id,
         node_label: match.node_label,
@@ -511,6 +702,9 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
         source_node_ids: match.source_node_ids,
         taxonomy_only: match.taxonomy_only,
         pipeline_id: match.pipeline_id,
+        verification_status: match.verification_status,
+        verification_model_version: match.verification_model_version,
+        verification_pipeline_id: match.verification_pipeline_id,
       })),
     };
   });
@@ -530,6 +724,12 @@ export async function enrichCandidatesWithSemanticReranking<T extends Recommenda
       modeNodeCount: Object.keys(modeProfile.node_weights).length,
       canonicalConceptCount: canonical.diagnostics.canonicalConceptCount,
       canonicalMergedNodeCount: canonical.diagnostics.mergedNodeCount,
+      graphVerificationRequested: verificationPlans.length,
+      graphVerificationVerified,
+      graphVerificationRejected,
+      graphVerificationBackend,
+      graphVerificationModelVersion: verificationModelVersion,
+      graphVerificationFallbackReason,
     },
   };
 }
