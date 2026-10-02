@@ -167,7 +167,7 @@ Possible enrichment later:
 - title
 - description
 - tags/category
-- transcript where legitimately available
+- optional bounded YouTube caption excerpts where legitimately available (#238; derived semantic input only, not graph evidence)
 - thumbnail vision
 - bounded comment sampling
 - local embeddings
@@ -519,3 +519,12 @@ The ranking critical path never waits for new embedding computation. A rank uses
 When semantic mode similarity exists, it replaces the older heuristic mode score rather than stacking with it. Candidate classification remains separate and may still drive descriptive UI labels such as Learning.
 
 A future neural provider should run in an off-main-rank worker/offscreen inference context with WebGPU when available and a bounded CPU/WASM fallback. Switching provider/model versions invalidates only derived caches; it never rewrites graph/evidence truth.
+
+
+### Optional transcript-derived semantic enrichment (#238)
+
+The first transcript slice reuses the canonical YouTube watch-page enrichment boundary. When the user explicitly enables **local neural semantics** and the separate **YouTube captions** experiment, the connector discovers English caption tracks from the watch-page player response and requests the selected track from a YouTube-owned `/api/timedtext` endpoint. Manual English captions are preferred over ASR captions. No Whisper/speech-to-text model ships in this slice.
+
+The extension stores at most a bounded 2,400-character normalized excerpt per video, sampled from the beginning, middle, and end, in a dedicated derived cache capped at 160 records with a 24-hour availability refresh. The excerpt is joined transiently into mxbai embedding and DeBERTa verification inputs. It is never copied into Personal Algorithm evidence, graph state, the candidate reservoir, or deterministic lexical scoring. Semantic features record only input provenance such as `metadata + transcript`, caption source, language, and auto-generated status.
+
+Transcript absence is an abstention, not an error. Metadata-only semantics remain the fallback, caption acquisition stays asynchronous, and full local-data deletion removes the caption cache. Disabling the experiment stops new caption acquisition while retaining the cache until explicit deletion.
