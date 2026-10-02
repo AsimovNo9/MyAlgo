@@ -252,6 +252,44 @@ test('unchanged mode membership does not bump the durable revision', () => {
   assert.equal(replay.catalog.modes[0].revision, 1);
 });
 
+test('user-edited effective membership does not bump semantic revision or change mode identity', () => {
+  const state = fixtureState();
+  const clustered = buildDurableSemanticModeClusters(state);
+  const first = reconcileDurableSemanticModes(
+    null,
+    clustered.proposals,
+    state.graph.currentRevision,
+    '2026-09-27T20:00:00.000Z',
+  );
+  const original = first.catalog.modes[0];
+  const configuredCatalog = {
+    ...first.catalog,
+    modes: first.catalog.modes.map((mode) => (
+      mode.id === original.id
+        ? {
+            ...mode,
+            inferredMembers: mode.inferredMembers ?? mode.members,
+            members: mode.members.slice(1),
+          }
+        : mode
+    )),
+  };
+
+  const replay = reconcileDurableSemanticModes(
+    configuredCatalog,
+    clustered.proposals,
+    state.graph.currentRevision,
+    '2026-09-27T20:30:00.000Z',
+  );
+
+  assert.equal(replay.catalog.modes[0].id, original.id);
+  assert.equal(replay.catalog.modes[0].revision, original.revision);
+  assert.deepEqual(
+    replay.catalog.modes[0].inferredMembers.map((member) => member.canonicalId),
+    original.members.map((member) => member.canonicalId),
+  );
+});
+
 test('unsupported modes become dormant instead of losing their stable identity', () => {
   const state = fixtureState();
   const clustered = buildDurableSemanticModeClusters(state);
