@@ -980,3 +980,8 @@ Validate metadata-only and caption-assisted runs against the same replay/browser
 10. compare semantic precision/abstention and rank deltas on vague titles, sparse descriptions, lectures, podcasts/interviews, news/commentary and misleading description boilerplate before enabling by default.
 
 Browser validation should inspect `GET_SEMANTIC_DIAGNOSTICS`: `transcriptEnrichment.enabled`, cache counts, and `diagnostics.transcriptAssistedCandidateCount`. Why-this on an assisted candidate must say `metadata + YouTube captions`. Search a distinctive caption phrase in `personal-algorithm-state`, candidate pool, and video store: it must be absent outside the dedicated transcript cache.
+
+
+### Current-card self-exposure regression
+
+For any scored Home candidate, create repeated retained `youtube/home_dom` exposure records for that candidate and attach them to inferred creator/topic/concept edges. Required result: those records do not make the inferred node score-bearing for that same candidate, do not appear in matched-path evidence counts, and do not appear under **Exact evidence used**. Add independent support from another video or a prior interaction and verify the supported node can contribute again without reintroducing the current-card exposure IDs. This protects Why-this from circular explanations such as `current video ↔ topic · N evidence items` where all N records are merely repeated observations of the same card.
