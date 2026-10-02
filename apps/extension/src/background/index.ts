@@ -2435,6 +2435,23 @@ async function rankLocalCandidates(
   }
 
   const feed = ranked.map(({ trace, ...item }) => {
+    const passiveSelfExposureIds = new Set(
+      state.evidence
+        .filter((record) => {
+          const evidence = record.evidence;
+          return (
+            evidence.kind === 'exposure'
+            && evidence.content.source === 'youtube'
+            && evidence.content.externalId === item.external_id
+            && evidence.provenance.mechanism === 'home_dom'
+          );
+        })
+        .map((record) => record.id),
+    );
+    const explanationEvidenceIds = (evidenceIds: readonly string[]): string[] => (
+      evidenceIds.filter((evidenceId) => !passiveSelfExposureIds.has(evidenceId))
+    );
+
     const groundedModeContributions = trace.modeContributions
       .filter((contribution) => (
         contribution.modeId
@@ -2468,7 +2485,7 @@ async function rankLocalCandidates(
             label: contribution.label,
             value: contribution.value,
             sourceIds: contribution.sourceIds ?? [],
-            evidenceIds: contribution.evidenceIds,
+            evidenceIds: explanationEvidenceIds(contribution.evidenceIds),
           })),
         }
       : null;
@@ -2478,7 +2495,7 @@ async function rankLocalCandidates(
       nodeIds: path.nodeIds,
       nodeLabels: path.nodeIds.map((nodeId) => nodeLabelById.get(nodeId) ?? nodeId),
       edgeIds: path.edgeIds,
-      evidenceIds: path.evidenceIds,
+      evidenceIds: explanationEvidenceIds(path.evidenceIds),
     }));
 
     const allScoringContributions = [
@@ -2504,7 +2521,7 @@ async function rankLocalCandidates(
         ...(contribution.modeId ? { modeId: contribution.modeId } : {}),
         ...(Number.isInteger(contribution.modeRevision) ? { modeRevision: contribution.modeRevision } : {}),
         ...(contribution.canonicalId ? { canonicalId: contribution.canonicalId } : {}),
-        evidenceIds: contribution.evidenceIds,
+        evidenceIds: explanationEvidenceIds(contribution.evidenceIds),
       }));
 
     const historyEvidenceIds = new Set<string>();
@@ -2644,6 +2661,7 @@ async function rankLocalCandidates(
     for (const match of historyMatches) referencedEvidenceIds.add(match.evidenceId);
 
     const evidenceRecords = [...referencedEvidenceIds]
+      .filter((evidenceId) => !passiveSelfExposureIds.has(evidenceId))
       .map((evidenceId) => evidenceById.get(evidenceId))
       .filter((record): record is NonNullable<typeof record> => Boolean(record))
       .map((record) => {
