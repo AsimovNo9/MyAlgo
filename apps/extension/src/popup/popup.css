@@ -182,7 +182,11 @@ body {
 }
 
 .myalgo-popup .myalgo-chip-row {
-  justify-content: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
 }
@@ -221,4 +225,188 @@ body {
   display: block;
   margin-left: auto;
   margin-right: auto;
+}
+
+
+/* Compact popup refinement: one scroll surface, high-contrast bubbles. */
+html,
+body,
+.myalgo-popup {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.myalgo-popup::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.myalgo-popup {
+  color: #f5f9ff;
+}
+
+.myalgo-popup > p {
+  margin: 10px 2px;
+  line-height: 1.45;
+  color: #d7e3f2;
+}
+
+.myalgo-popup fieldset,
+.myalgo-popup section {
+  padding: 14px;
+  text-align: left;
+  background: #0b2037;
+  border-color: rgba(125, 170, 235, 0.34);
+}
+
+.myalgo-popup legend {
+  padding: 0 5px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.myalgo-popup .myalgo-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.myalgo-popup .myalgo-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 36px;
+  width: auto;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #526d8e !important;
+  border-radius: 999px;
+  background: #122a46 !important;
+  color: #f5f9ff !important;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  box-shadow: none;
+}
+
+.myalgo-popup .myalgo-toggle-chip:hover:not(:disabled) {
+  border-color: #8ab4ee !important;
+  background: #17375c !important;
+}
+
+.myalgo-popup .myalgo-toggle-chip[aria-pressed="true"] {
+  border-color: #73a9ff !important;
+  background: #1d4f91 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.myalgo-popup .myalgo-toggle-chip-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 2px solid #b8cae0;
+  background: transparent;
+}
+
+.myalgo-popup .myalgo-toggle-chip[aria-pressed="true"] .myalgo-toggle-chip-dot {
+  border-color: #ffffff;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(115, 169, 255, 0.24);
+}
+
+.myalgo-popup .myalgo-toggle-chip:disabled {
+  border-color: #43566f !important;
+  background: #142237 !important;
+  color: #c1cede !important;
+  opacity: 0.78;
+}
+
+.myalgo-popup .myalgo-interest-chip {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #526d8e !important;
+  border-radius: 999px;
+  background: #122a46 !important;
+  color: #f5f9ff !important;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.myalgo-popup .myalgo-interest-chip:hover:not(:disabled) {
+  border-color: #8ab4ee !important;
+  background: #17375c !important;
+}
+
+.myalgo-popup .myalgo-interest-chip[aria-pressed="true"] {
+  border-color: #73a9ff !important;
+  background: #1d4f91 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.myalgo-popup .myalgo-chip-row--interests {
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 2px 0 0;
+}
+
+.myalgo-popup .myalgo-interest-search {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 10px 0;
+  padding: 9px 10px;
+  border: 1px solid #526d8e;
+  border-radius: 10px;
+  background: #081a2e;
+  color: #ffffff;
+}
+
+.myalgo-popup .myalgo-interest-search::placeholder {
+  color: #b5c6da;
+  opacity: 1;
+}
+
+.myalgo-popup summary {
+  color: #f5f9ff;
+  font-weight: 800;
+}
+
+.myalgo-popup .myalgo-popup-actions {
+  margin-top: 14px;
+}
+
+.myalgo-popup .myalgo-popup-actions button,
+.myalgo-popup .myalgo-popup-primary {
+  min-height: 42px;
+  border-color: #5f87bd !important;
+  background: #153354 !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+.myalgo-popup .myalgo-popup-primary {
+  background: #184a87 !important;
+  border-color: #73a9ff !important;
+}
+
+.myalgo-popup .myalgo-popup-actions button:hover:not(:disabled),
+.myalgo-popup .myalgo-popup-primary:hover:not(:disabled) {
+  background: #205d9f !important;
 }
