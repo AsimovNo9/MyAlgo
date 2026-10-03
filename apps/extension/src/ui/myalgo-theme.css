@@ -1,0 +1,30 @@
+:root {
+  --myalgo-bg: #07111f;
+  --myalgo-bg-elevated: #0b1728;
+  --myalgo-panel: rgba(13, 27, 46, 0.92);
+  --myalgo-panel-soft: rgba(15, 31, 52, 0.76);
+  --myalgo-border: rgba(96, 165, 250, 0.22);
+  --myalgo-border-strong: rgba(96, 165, 250, 0.46);
+  --myalgo-text: #e5eefc;
+  --myalgo-text-muted: #9fb0c7;
+  --myalgo-blue: #60a5fa;
+  --myalgo-blue-strong: #3b82f6;
+  --myalgo-amber: #fbbf24;
+  --myalgo-amber-soft: rgba(251, 191, 36, 0.14);
+  --myalgo-green: #4ade80;
+  --myalgo-rose: #f43f5e;
+  --myalgo-danger: #ef4444;
+  --myalgo-radius-sm: 10px;
+  --myalgo-radius-md: 14px;
+  --myalgo-radius-lg: 18px;
+  --myalgo-shadow: 0 18px 50px rgba(2, 8, 23, 0.32);
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
