@@ -795,6 +795,16 @@ async function getHistoryClusterOwnershipContext(): Promise<{
   };
 }
 
+async function projectStateWithCurrentHistoryOwnership(
+  state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportState']>>,
+  inspection = false,
+) {
+  const { catalog, ownership } = await getHistoryClusterOwnershipContext();
+  return inspection
+    ? projectHistoryOwnershipForInspection(state, catalog, ownership)
+    : projectHistoryOwnershipForScoring(state, catalog, ownership);
+}
+
 async function reconcileStoredHistoryEvidence(): Promise<void> {
   const startedAt = performance.now();
   console.info('[MyAlgo] history reconciliation started');
@@ -1814,12 +1824,13 @@ async function refreshSemanticConceptGraph(
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [initialState, initialCandidatePoolRaw, semanticModelMode, conceptModelStatus] = await Promise.all([
+  const [rawInitialState, initialCandidatePoolRaw, semanticModelMode, conceptModelStatus] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
     getSemanticModelMode(),
     getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
   ]);
+  const initialState = await projectStateWithCurrentHistoryOwnership(rawInitialState);
   const initialCandidatePool = await hydrateCandidatesWithTranscript(initialCandidatePoolRaw);
   const conceptStatusUpdatedAt = typeof conceptModelStatus?.updatedAt === 'string'
     ? Date.parse(conceptModelStatus.updatedAt)
@@ -1839,12 +1850,15 @@ async function refreshSemanticConceptGraph(
   // Generation may take long enough for evidence/candidate state to advance.
   // Concept cache entries remain valid by input hash/model identity, but graph
   // reconciliation must always use a fresh post-generation snapshot.
-  const [state, candidatePoolRaw] = generationEnabled
+  const [rawState, candidatePoolRaw] = generationEnabled
     ? await Promise.all([
         personalAlgorithmStore.exportState(),
         getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
       ])
-    : [initialState, initialCandidatePoolRaw];
+    : [rawInitialState, initialCandidatePoolRaw];
+  const state = generationEnabled
+    ? await projectStateWithCurrentHistoryOwnership(rawState)
+    : initialState;
   const candidatePool = generationEnabled
     ? await hydrateCandidatesWithTranscript(candidatePoolRaw)
     : initialCandidatePool;
@@ -1882,7 +1896,9 @@ async function refreshSemanticConceptGraph(
     semanticRefreshInFlight.clear();
   }
 
-  const modeState = await personalAlgorithmStore.exportState();
+  const modeState = await projectStateWithCurrentHistoryOwnership(
+    await personalAlgorithmStore.exportState(),
+  );
   const durableModes = await refreshDurableModeCatalog(modeState);
 
   const diagnostics = {
@@ -1930,7 +1946,9 @@ async function refreshSemanticScoreFeatures(
   }
   const semanticInputCandidates = await hydrateCandidatesWithTranscript(candidates);
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
-  const state = await personalAlgorithmStore.exportState();
+  const state = await projectStateWithCurrentHistoryOwnership(
+    await personalAlgorithmStore.exportState(),
+  );
   const durableModeCatalog = await refreshDurableModeCatalog(state);
   const [activeModeId, storedActiveModeIds] = await Promise.all([
     getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
