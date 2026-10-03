@@ -3197,6 +3197,7 @@ const handleRuntimeMessage = (
       pinned?: boolean;
       memberAction?: 'add' | 'remove' | 'reset';
       memberCanonicalId?: string;
+      clusterIds?: string[];
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
@@ -3598,6 +3599,114 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'GET_HISTORY_CLUSTER_OWNERSHIP') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const selected = new Set(ownership.selectedClusterIds);
+      const includedHistoryCount = ownership.selectionMode === 'all'
+        ? catalog.historyCount
+        : catalog.clusters
+          .filter((cluster) => selected.has(cluster.id))
+          .reduce((sum, cluster) => sum + cluster.size, 0);
+      sendResponse({
+        ok: true,
+        catalog,
+        ownership,
+        includedHistoryCount,
+        excludedHistoryCount: Math.max(0, catalog.historyCount - includedHistoryCount),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to load history clusters.',
+    }));
+    return true;
+  }
+
+  if (type === 'SET_HISTORY_CLUSTER_SELECTION') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const requestedIds = Array.isArray(payload?.clusterIds)
+        ? payload.clusterIds.filter((id): id is string => typeof id === 'string')
+        : null;
+      let next = ownership;
+      if (requestedIds == null) {
+        next = includeAllHistoryClusters(ownership);
+      } else {
+        const available = new Set(catalog.clusters.map((cluster) => cluster.id));
+        const invalid = requestedIds.find((id) => !available.has(id));
+        if (invalid) {
+          sendResponse({ ok: false, error: 'A selected history cluster is no longer available.' });
+          return;
+        }
+        next = selectHistoryClusters(ownership, requestedIds);
+      }
+      await setStorage(STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP, next);
+      lastRankMemo = null;
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'HISTORY_CLUSTER_OWNERSHIP_CHANGED',
+            payload: {
+              revision: next.currentRevision,
+              selectionMode: next.selectionMode,
+              selectedClusterIds: next.selectedClusterIds,
+            },
+          }).catch(() => undefined)
+        : undefined));
+
+      void refreshSemanticConceptGraph(false).catch((error) => {
+        console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
+      });
+
+      sendResponse({ ok: true, catalog, ownership: next });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update history cluster selection.',
+    }));
+    return true;
+  }
+
+  if (type === 'UNDO_HISTORY_CLUSTER_SELECTION') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const undone = undoHistoryClusterOwnership(ownership);
+      await setStorage(STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP, undone.state);
+      lastRankMemo = null;
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'HISTORY_CLUSTER_OWNERSHIP_CHANGED',
+            payload: {
+              revision: undone.state.currentRevision,
+              selectionMode: undone.state.selectionMode,
+              selectedClusterIds: undone.state.selectedClusterIds,
+            },
+          }).catch(() => undefined)
+        : undefined));
+      void refreshSemanticConceptGraph(false).catch((error) => {
+        console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
+      });
+      sendResponse({
+        ok: true,
+        catalog,
+        ownership: undone.state,
+        reverted: undone.reverted,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to undo history cluster selection.',
+    }));
+    return true;
+  }
+
   if (type === 'PERSONAL_ALGORITHM_INSPECT') {
     void Promise.all([
       personalAlgorithmStore.exportState(),
@@ -3605,8 +3714,19 @@ const handleRuntimeMessage = (
       getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
       getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
       getSemanticFeatureCacheCached(),
+      getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+      getStorage<HistoryClusterOwnershipState>(
+        STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+        createEmptyHistoryClusterOwnership(),
+      ),
     ])
-      .then(([state, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache]) => {
+      .then(([rawState, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache, historyClusterCatalog, rawHistoryOwnership]) => {
+        const historyClusterOwnership = normalizeHistoryClusterOwnership(rawHistoryOwnership);
+        const state = projectHistoryOwnershipForInspection(
+          rawState,
+          historyClusterCatalog,
+          historyClusterOwnership,
+        );
         const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
         const latestSemanticByExternalId = new Map<string, SemanticFeatureRecord>();
         Object.values(semanticFeatureCache)
@@ -3627,6 +3747,8 @@ const handleRuntimeMessage = (
           durableModeCatalog,
           activeModeId,
           activeModeIds,
+          historyClusterCatalog,
+          historyClusterOwnership,
           semanticContext: [...latestSemanticByExternalId.values()].map((record) => ({
             externalId: record.externalId,
             category: record.category,
@@ -4750,6 +4872,7 @@ const handleRuntimeMessage = (
         merged: evidence.length,
       });
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
+      await refreshHistoryClusterCatalog(evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const nonHistoryEvents = existingEvents.filter((event) => !(event.kind === 'watched' && event.source === 'history'));
