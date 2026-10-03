@@ -229,7 +229,10 @@ export function Popup() {
 
   if (!disclosureAccepted) {
     return (
-      <main style={{ minWidth: 300, maxWidth: 360, padding: 16, fontFamily: 'sans-serif' }}>
+      <main className="myalgo-popup">
+        <div className="myalgo-popup-header">
+          <div className="myalgo-brand">My<span>Algo</span></div>
+        </div>
         <h2 style={{ marginTop: 0 }}>Before MyAlgo observes YouTube</h2>
         <p><strong>Disclosure v{PRIVACY_DISCLOSURE_VERSION}</strong></p>
         <p>MyAlgo observes {PRIVACY_DISCLOSURE.pages.toLowerCase()}.</p>
@@ -238,15 +241,20 @@ export function Popup() {
         <p>{PRIVACY_DISCLOSURE.deletion}.</p>
         <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
         <button type="button" onClick={() => void handleOpenOptions()} style={{ marginLeft: 8 }}>Review settings</button>
-        {lastError ? <p style={{ color: '#b91c1c' }}>{lastError}</p> : null}
+        {lastError ? <p className="myalgo-popup-error">{lastError}</p> : null}
       </main>
     );
   }
 
   return (
-    <main style={{ minWidth: 260, padding: 16, fontFamily: 'sans-serif' }}>
-      <h2 style={{ marginTop: 0 }}>Personal Algorithm</h2>
-      <div style={{
+    <main className="myalgo-popup">
+      <div className="myalgo-popup-header">
+        <div>
+          <div className="myalgo-brand">My<span>Algo</span></div>
+          <div style={{ marginTop: 2, color: '#9fb0c7', fontSize: 11 }}>Tune what shapes your YouTube feed</div>
+        </div>
+      </div>
+      <div className="myalgo-popup-status" style={{
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
@@ -261,7 +269,12 @@ export function Popup() {
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: enabled ? '#22c55e' : '#9ca3af', display: 'inline-block' }} />
         {enabled ? 'Enabled' : 'Paused'}
       </div>
-      <p>Selected groups: <strong>{selectedModeIds.length === 0 ? 'All' : mode}</strong></p>
+      <section>
+        <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4, color: '#f8fbff' }}>Your interests</div>
+        <div style={{ fontSize: 12, color: '#9fb0c7' }}>
+          {selectedModeIds.length === 0 ? 'All interests can influence the feed' : <><strong>{mode}</strong> currently shapes the feed</>}
+        </div>
+      </section>
       <p style={{ marginTop: -6, fontSize: 12 }}>
         {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active
         {' · '}{durableModeCatalog?.modes.length ?? 0} retained durable modes
@@ -356,7 +369,7 @@ export function Popup() {
           </p>
         </div>
       </fieldset>
-      {lastError ? <p style={{ color: '#b91c1c', maxWidth: 260 }}>Last feed error: {lastError}</p> : null}
+      {lastError ? <p className="myalgo-popup-error">Last feed error: {lastError}</p> : null}
       <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
       <section style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Selected groups</div>
@@ -433,8 +446,8 @@ export function Popup() {
           </div>
         </details>
       </section>
-      <button onClick={() => void handleOpenOptions()} style={{ marginTop: 12 }}>
-        Open options
+      <button className="myalgo-popup-primary" onClick={() => void handleOpenOptions()}>
+        Open MyAlgo settings
       </button>
     </main>
   );
