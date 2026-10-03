@@ -113,11 +113,11 @@ export const normalizeHistoryClusterOwnership = (value: unknown): HistoryCluster
       .map((entry) => ({
         ...entry,
         before: {
-          selectionMode: entry.before?.selectionMode === 'selected' ? 'selected' : 'all',
+          selectionMode: (entry.before?.selectionMode === 'selected' ? 'selected' : 'all') as 'all' | 'selected',
           selectedClusterIds: cleanIds(entry.before?.selectedClusterIds),
         },
         after: {
-          selectionMode: entry.after?.selectionMode === 'selected' ? 'selected' : 'all',
+          selectionMode: (entry.after?.selectionMode === 'selected' ? 'selected' : 'all') as 'all' | 'selected',
           selectedClusterIds: cleanIds(entry.after?.selectedClusterIds),
         },
         revertsRevision: Number.isInteger(entry.revertsRevision) ? entry.revertsRevision : null,
