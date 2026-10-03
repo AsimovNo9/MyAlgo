@@ -1,6 +1,6 @@
 import React from 'react';
 import { buildDurableModeOptions, summarizeFeed, type FeedSummary } from '../lib/extension-helpers';
-import type { DurableSemanticModeCatalog, FeedItem, FeedSourceFilters, RetrievalDiagnostics, RetrievalSettings } from '@repo/shared-types';
+import type { DurableSemanticModeCatalog, FeedItem, FeedSourceFilters, RetrievalSettings } from '@repo/shared-types';
 import { PRIVACY_DISCLOSURE, PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 
 const defaultSourceFilters: FeedSourceFilters = {
@@ -16,27 +16,7 @@ const defaultRetrievalSettings: RetrievalSettings = {
   webSearchEnabled: false,
 };
 
-const emptyRetrievalDiagnostics: RetrievalDiagnostics = {
-  lastRssSyncAt: null,
-  nextRssAllowedAt: null,
-  rssChannelsConsidered: 0,
-  rssFeedsSucceeded: 0,
-  rssFeedsFailed: 0,
-  rssCandidatesFetched: 0,
-  rssCandidatesAdded: 0,
-  rssCandidatesDeduplicated: 0,
-  rssConsecutiveFailures: 0,
-  lastWebSearchAt: null,
-  nextWebSearchAllowedAt: null,
-  webSearchPlansAttempted: 0,
-  webSearchPlansSucceeded: 0,
-  webSearchCandidatesFetched: 0,
-  webSearchCandidatesAdded: 0,
-  webSearchCandidatesDeduplicated: 0,
-  webSearchConsecutiveFailures: 0,
-  modeSupply: null,
-  lastError: null,
-};
+
 
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [], categories: [] };
 
@@ -53,12 +33,11 @@ export function Popup() {
   const [disclosureAccepted, setDisclosureAccepted] = React.useState(false);
   const [sourceFilters, setSourceFilters] = React.useState<FeedSourceFilters>(defaultSourceFilters);
   const [retrievalSettings, setRetrievalSettings] = React.useState<RetrievalSettings>(defaultRetrievalSettings);
-  const [retrievalDiagnostics, setRetrievalDiagnostics] = React.useState<RetrievalDiagnostics>(emptyRetrievalDiagnostics);
   const [retrievalBusy, setRetrievalBusy] = React.useState(false);
   const [feedSummary, setFeedSummary] = React.useState<FeedSummary>(emptyFeedSummary);
 
   React.useEffect(() => {
-    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-active-mode-id', 'personal-algorithm-active-mode-ids', 'personal-algorithm-durable-mode-catalog', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-retrieval-diagnostics', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
+    chrome.storage.local.get(['personal-algorithm-mode', 'personal-algorithm-active-mode-id', 'personal-algorithm-active-mode-ids', 'personal-algorithm-durable-mode-catalog', 'personal-algorithm-feed-replacement-percent', 'personal-algorithm-feed-cache', 'personal-algorithm-enabled', 'personal-algorithm-source-filters', 'personal-algorithm-retrieval-settings', 'personal-algorithm-last-error', 'personal-algorithm-privacy-disclosure-accepted-version']).then((result) => {
       const storedMode = (result['personal-algorithm-mode'] as string) ?? 'Default';
       const catalog = (result['personal-algorithm-durable-mode-catalog'] as DurableSemanticModeCatalog | undefined) ?? null;
       const storedModeId = (result['personal-algorithm-active-mode-id'] as string | undefined)
@@ -81,7 +60,6 @@ export function Popup() {
       setSourceFilters({ ...defaultSourceFilters, ...(result['personal-algorithm-source-filters'] as FeedSourceFilters | undefined) });
       const nextRetrievalSettings = { ...defaultRetrievalSettings, ...(result['personal-algorithm-retrieval-settings'] as RetrievalSettings | undefined) };
       setRetrievalSettings(nextRetrievalSettings);
-      setRetrievalDiagnostics({ ...emptyRetrievalDiagnostics, ...(result['personal-algorithm-retrieval-diagnostics'] as RetrievalDiagnostics | undefined) });
       setLastError(result['personal-algorithm-last-error'] as string | null);
     });
   }, []);
@@ -159,13 +137,12 @@ export function Popup() {
       const response = await chrome.runtime.sendMessage({
         type: 'SET_RETRIEVAL_SETTINGS',
         payload: { retrievalSettings: nextSettings },
-      }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
+      }) as { ok?: boolean; error?: string };
       if (!response?.ok) {
         setRetrievalSettings(previousSettings);
         setLastError(response?.error ?? 'Unable to update retrieval settings.');
         return false;
       }
-      if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
       setLastError(null);
       return true;
     } finally {
@@ -184,22 +161,6 @@ export function Popup() {
     });
   };
 
-  const handleRefreshRetrieval = async () => {
-    setRetrievalBusy(true);
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'REFRESH_RETRIEVAL',
-      }) as { ok?: boolean; error?: string; diagnostics?: RetrievalDiagnostics };
-      if (!response?.ok) {
-        setLastError(response?.error ?? 'Unable to refresh retrieval.');
-        return;
-      }
-      if (response.diagnostics) setRetrievalDiagnostics(response.diagnostics);
-      setLastError(null);
-    } finally {
-      setRetrievalBusy(false);
-    }
-  };
 
   const handleOpenOptions = async () => {
     try {
@@ -276,22 +237,16 @@ export function Popup() {
         </div>
       </section>
       <p style={{ marginTop: -6, fontSize: 12 }}>
-        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active
-        {' · '}{durableModeCatalog?.modes.length ?? 0} retained durable modes
-        {' · '}graph revision {durableModeCatalog?.graphRevision ?? '—'}
+        {durableModeCatalog?.modes.filter((entry) => entry.active).length ?? 0} active interests
+        {' · '}{feedCount} ready videos
       </p>
-      <p>Status: <strong>{enabled ? 'Active' : 'Paused'}</strong></p>
-      <p>Cached feed items: <strong>{feedCount}</strong></p>
-      <p>Feed mix: <strong>{feedSummary.subscribedCount} subscribed</strong> · <strong>{feedSummary.discoveredCount} discovered</strong></p>
+      <p>Feed sources: <strong>{feedSummary.subscribedCount} from subscriptions</strong> · <strong>{feedSummary.discoveredCount} found by MyAlgo</strong></p>
       {feedSummary.topTopics.length > 0 ? (
         <p>Top topics: {feedSummary.topTopics.map((entry) => `${entry.topic} (${entry.count})`).join(', ')}</p>
       ) : null}
-      {feedSummary.categories.length > 0 ? (
-        <p>Inferred video categories: {feedSummary.categories.map((entry) => `${entry.category} (${entry.count})`).join(', ')}</p>
-      ) : null}
       <fieldset>
-        <legend>Feed controls</legend>
-        <label htmlFor="feed-replacement-percent">MyAlgo feed replacement: <strong>{feedReplacementPercent}%</strong></label>
+        <legend>Feed mix</legend>
+        <label htmlFor="feed-replacement-percent">Use MyAlgo for <strong>{feedReplacementPercent}%</strong> of eligible Home slots</label>
         <input
           id="feed-replacement-percent"
           type="range"
@@ -307,17 +262,9 @@ export function Popup() {
         />
         <p style={{ margin: '4px 0 10px', fontSize: 12 }}>
           {activeModeId === 'default'
-            ? '0 keeps native recommendations; 100 tries to fill every safe Home slot from MyAlgo\'s scored pool. Unfilled slots keep their native card.'
-            : 'For a durable mode, the slider requests mode coverage across eligible Home slots. MyAlgo uses exact or strongly relevant mode candidates only; if supply is short, unmatched native cards stay until mode refresh/discovery finds more relevant replacements.'}
+            ? '0 keeps YouTube as-is. Higher values let MyAlgo replace more eligible cards when it has a good match.'
+            : 'Higher values ask MyAlgo to show more from your selected interests. If it cannot find a good match, the YouTube card stays.'}
         </p>
-        {retrievalDiagnostics.modeSupply?.modeId === activeModeId ? (
-          <p role="status" style={{ margin: '4px 0 10px', fontSize: 12 }}>
-            Mode supply: <strong>{retrievalDiagnostics.modeSupply.nativeModeSupply}/{retrievalDiagnostics.modeSupply.requestedModeSlots} native</strong>
-            {' · '}<strong>{retrievalDiagnostics.modeSupply.poolModeSupply} pool</strong>
-            {' · '}<strong>{retrievalDiagnostics.modeSupply.fulfilledModeSlots} fulfilled</strong>
-            {retrievalDiagnostics.modeSupply.shortfall > 0 ? ' · native shortfall' : ''}
-          </p>
-        ) : null}
         <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>
         <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
@@ -325,54 +272,33 @@ export function Popup() {
         <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide Playables</label>
       </fieldset>
       <fieldset>
-        <legend>Candidate discovery</legend>
+        <legend>Find new videos</legend>
+        <p style={{ margin: '0 0 10px', fontSize: 12 }}>
+          MyAlgo refreshes automatically when YouTube loads and when you change interests.
+        </p>
         <label>
           <input
             type="checkbox"
             checked={retrievalSettings.rssEnabled}
             disabled={retrievalBusy}
             onChange={(event) => void handleRetrievalChange(event.target.checked)}
-          /> Enable RSS discovery
+          /> From channels you watch
         </label>
-        <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
-          Uses recently observed YouTube channel IDs to fetch bounded YouTube RSS updates. Retrieved items are candidates only; retrieval is not preference evidence.
-        </p>
-        <button
-          type="button"
-          disabled={(!retrievalSettings.rssEnabled && !retrievalSettings.webSearchEnabled) || retrievalBusy}
-          onClick={() => void handleRefreshRetrieval()}
-        >
-          {retrievalBusy ? 'Refreshing…' : 'Refresh discovery'}
-        </button>
-        <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-          RSS: {retrievalDiagnostics.rssCandidatesAdded} added · {retrievalDiagnostics.rssCandidatesDeduplicated} deduplicated · {retrievalDiagnostics.rssFeedsSucceeded}/{retrievalDiagnostics.rssChannelsConsidered} feeds succeeded
-        </p>
-        {retrievalDiagnostics.lastError ? (
-          <p role="status" style={{ margin: '6px 0 0', maxWidth: 280, fontSize: 12 }}>
-            {retrievalDiagnostics.lastError}
-          </p>
-        ) : null}
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e7eb' }}>
-          <label style={{ display: 'block', marginTop: 4 }}>
-            <input
-              type="checkbox"
-              checked={retrievalSettings.webSearchEnabled === true}
-              disabled={retrievalBusy}
-              onChange={(event) => void handleWebSearchChange(event.target.checked)}
-            /> Enable web discovery
-          </label>
-          <p style={{ margin: '6px 0', maxWidth: 280, fontSize: 12 }}>
-            MyAlgo automatically searches YouTube from your graph goal/topics plus the active mode; there is no search box. Returned video IDs are passed through the normal YouTube enrichment layer before local scoring.
-          </p>
-          <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-            Search: {retrievalDiagnostics.webSearchCandidatesAdded ?? 0} added · {retrievalDiagnostics.webSearchCandidatesDeduplicated ?? 0} deduplicated · {retrievalDiagnostics.webSearchPlansSucceeded ?? 0}/{retrievalDiagnostics.webSearchPlansAttempted ?? 0} plans succeeded
-          </p>
-        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={retrievalSettings.webSearchEnabled === true}
+            disabled={retrievalBusy}
+            onChange={(event) => void handleWebSearchChange(event.target.checked)}
+          /> From YouTube search
+        </label>
       </fieldset>
       {lastError ? <p className="myalgo-popup-error">Last feed error: {lastError}</p> : null}
-      <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause extension' : 'Activate extension'}</button>
+      <div className="myalgo-popup-actions">
+        <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause MyAlgo' : 'Turn on MyAlgo'}</button>
+      </div>
       <section style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Selected groups</div>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Interests used for this feed</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
@@ -409,14 +335,14 @@ export function Popup() {
         </div>
         <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-            Browse groups ({Math.max(0, modeOptions.length - 1)})
+            Browse interests ({Math.max(0, modeOptions.length - 1)})
           </summary>
           <input
             type="search"
             value={modeSearch}
             onChange={(event) => setModeSearch(event.target.value)}
-            placeholder="Search groups"
-            aria-label="Search groups"
+            placeholder="Search interests"
+            aria-label="Search interests"
             style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: 7 }}
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 180, overflowY: 'auto' }}>
@@ -441,7 +367,7 @@ export function Popup() {
               );
             })}
             {searchableModeOptions.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#64748b' }}>No matching groups.</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>No matching interests.</span>
             ) : null}
           </div>
         </details>
