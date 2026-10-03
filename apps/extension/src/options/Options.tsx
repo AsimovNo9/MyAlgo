@@ -622,6 +622,25 @@ export function Options() {
       || option.label.toLowerCase().includes(normalizedModeSearch)
       || option.id.toLowerCase().includes(normalizedModeSearch))
   ));
+  const normalizedHistoryClusterSearch = historyClusterSearch.trim().toLowerCase();
+  const selectedHistoryClusterIds = new Set(
+    historyClusterOwnership?.selectionMode === 'selected'
+      ? historyClusterOwnership.selectedClusterIds
+      : historyClusterCatalog?.clusters.map((cluster) => cluster.id) ?? [],
+  );
+  const visibleHistoryClusters = [...(historyClusterCatalog?.clusters ?? [])]
+    .filter((cluster) => (
+      !normalizedHistoryClusterSearch
+      || cluster.label.toLowerCase().includes(normalizedHistoryClusterSearch)
+      || cluster.keywords.some((keyword) => keyword.toLowerCase().includes(normalizedHistoryClusterSearch))
+      || cluster.creatorLabels.some((creator) => creator.toLowerCase().includes(normalizedHistoryClusterSearch))
+    ))
+    .sort((left, right) => (
+      Number(selectedHistoryClusterIds.has(right.id)) - Number(selectedHistoryClusterIds.has(left.id))
+      || right.size - left.size
+      || left.label.localeCompare(right.label)
+    ));
+
   const effectiveGraphInspector = graphInspector && graphInspectorSource === 'live'
     ? applyDurableModeLabelsToGraphInspector(graphInspector, durableModeCatalog)
     : graphInspector;
@@ -1105,6 +1124,87 @@ export function Options() {
           >
             Open YouTube History
           </button>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>History ownership</h2>
+        <p>
+          MyAlgo derives local content clusters from retained YouTube History so shared-account activity can be reviewed explicitly.
+          Choosing clusters changes which History evidence influences graph reconstruction and scoring; it does not delete the excluded History records.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            aria-pressed={historyClusterOwnership?.selectionMode !== 'selected'}
+            onClick={() => void handleHistoryClusterSelection(null)}
+          >
+            All retained History
+          </button>
+          <button type="button" onClick={() => void handleUndoHistoryClusterSelection()}>
+            Undo History ownership
+          </button>
+          <button type="button" onClick={() => void refreshHistoryClusterOwnership()}>
+            Refresh clusters
+          </button>
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            revision {historyClusterOwnership?.currentRevision ?? 0}
+          </span>
+        </div>
+        <label htmlFor="history-cluster-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
+          Search History clusters
+        </label>
+        <input
+          id="history-cluster-search"
+          type="search"
+          value={historyClusterSearch}
+          onChange={(event) => setHistoryClusterSearch(event.target.value)}
+          placeholder="Search topics or creators"
+          style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
+        />
+        {historyClusterCatalog?.clusters.length ? (
+          <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+            {visibleHistoryClusters.map((cluster) => {
+              const selected = selectedHistoryClusterIds.has(cluster.id);
+              return (
+                <button
+                  key={cluster.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => void handleToggleHistoryCluster(cluster.id)}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    border: selected ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: selected ? '#dbeafe' : '#fff',
+                    textAlign: 'left',
+                  }}
+                >
+                  <strong>{cluster.label}</strong>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                    {cluster.size} retained video{cluster.size === 1 ? '' : 's'}
+                    {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
+                    {cluster.id}
+                  </div>
+                </button>
+              );
+            })}
+            {visibleHistoryClusters.length === 0 ? <span>No matching History clusters.</span> : null}
+          </div>
+        ) : (
+          <p style={{ color: '#64748b' }}>
+            No History clusters yet. Enable History observation and visit YouTube History, then refresh clusters.
+          </p>
+        )}
+        {historyClusterOwnership?.selectionMode === 'selected' ? (
+          <p style={{ marginBottom: 0 }}>
+            <strong>{historyClusterOwnership.selectedClusterIds.length}</strong> cluster(s) currently influence MyAlgo.
+            Unselected retained History remains stored locally and can be re-included or forgotten separately.
+          </p>
+        ) : (
+          <p style={{ marginBottom: 0 }}>All retained History currently influences MyAlgo.</p>
         )}
       </section>
 
