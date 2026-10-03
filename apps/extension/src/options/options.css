@@ -32,18 +32,18 @@ body {
 }
 
 .myalgo-options button {
-  border: 1px solid rgba(148, 163, 184, 0.32);
+  border: 1px solid rgba(148, 163, 184, 0.46) !important;
   border-radius: 10px;
-  background: rgba(15, 31, 52, 0.86);
-  color: var(--myalgo-text);
+  background: #12263f !important;
+  color: #f8fbff !important;
   padding: 8px 11px;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
 .myalgo-options button:hover:not(:disabled) {
-  border-color: rgba(96, 165, 250, 0.72);
-  background: rgba(30, 64, 175, 0.28);
+  border-color: rgba(147, 197, 253, 0.92) !important;
+  background: #193a63 !important;
 }
 
 .myalgo-options button:active:not(:disabled) {
@@ -63,10 +63,33 @@ body {
 .myalgo-options input,
 .myalgo-options select,
 .myalgo-options textarea {
-  border: 1px solid rgba(148, 163, 184, 0.30);
+  border: 1px solid rgba(148, 163, 184, 0.48);
   border-radius: 9px;
-  background: #0a1626;
-  color: var(--myalgo-text);
+  background: #07182a;
+  color: #f8fbff;
+}
+
+.myalgo-options input::placeholder,
+.myalgo-options textarea::placeholder {
+  color: #9fb2ca;
+  opacity: 1;
+}
+
+.myalgo-options button[aria-pressed="true"] {
+  border-color: #93c5fd !important;
+  background: #1e40af !important;
+  color: #f8fbff !important;
+}
+
+.myalgo-options button[aria-pressed="false"] {
+  background: #12263f !important;
+  color: #edf4ff !important;
+}
+
+.myalgo-options button:disabled {
+  color: #aebed2 !important;
+  background: #172235 !important;
+  opacity: 0.8;
 }
 
 .myalgo-options > section {
@@ -119,7 +142,7 @@ body {
 .myalgo-options .myalgo-hero p {
   max-width: 720px;
   margin: 9px 0 0;
-  color: var(--myalgo-text-muted);
+  color: #c8d5e6;
   font-size: 15px;
 }
 
@@ -198,7 +221,7 @@ body {
 }
 
 .myalgo-options .myalgo-muted {
-  color: var(--myalgo-text-muted) !important;
+  color: #c1cfe0 !important;
 }
 
 .myalgo-options .myalgo-control-grid {
@@ -239,7 +262,7 @@ body {
   border: 1px solid rgba(96, 165, 250, 0.28);
   border-radius: 12px;
   background: rgba(30, 64, 175, 0.14);
-  color: #dbeafe;
+  color: #eff6ff;
 }
 
 @media (max-width: 760px) {
@@ -250,4 +273,23 @@ body {
   .myalgo-options .myalgo-control-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+.myalgo-options small,
+.myalgo-options details p,
+.myalgo-options section > p {
+  color: #c8d5e6;
+}
+
+.myalgo-options code {
+  color: #bfdbfe;
+}
+
+.myalgo-options summary {
+  color: #e8f1ff;
+}
+
+.myalgo-options [role="status"] {
+  color: #eff6ff;
 }
