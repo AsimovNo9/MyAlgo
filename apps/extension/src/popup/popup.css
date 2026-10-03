@@ -209,3 +209,16 @@ body {
 .myalgo-popup summary {
   overflow-wrap: anywhere;
 }
+
+
+.myalgo-popup > button:not(.myalgo-popup-primary) {
+  display: block;
+  width: 100%;
+  margin: 8px 0 0 !important;
+}
+
+.myalgo-popup > .myalgo-popup-primary {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
