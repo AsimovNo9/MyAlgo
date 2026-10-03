@@ -20,6 +20,28 @@ const defaultRetrievalSettings: RetrievalSettings = {
 
 const emptyFeedSummary: FeedSummary = { subscribedCount: 0, discoveredCount: 0, topTopics: [], categories: [] };
 
+type ToggleChipProps = {
+  active: boolean;
+  label: string;
+  disabled?: boolean;
+  onToggle: () => void;
+};
+
+function ToggleChip({ active, label, disabled = false, onToggle }: ToggleChipProps) {
+  return (
+    <button
+      type="button"
+      className="myalgo-toggle-chip"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onToggle}
+    >
+      <span className="myalgo-toggle-chip-dot" aria-hidden="true" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export function Popup() {
   const [mode, setMode] = React.useState('Default');
   const [activeModeId, setActiveModeId] = React.useState('default');
@@ -262,33 +284,53 @@ export function Popup() {
             ? '0 keeps YouTube as-is. Higher values let MyAlgo replace more eligible cards when it has a good match.'
             : 'Higher values ask MyAlgo to show more from your selected interests. If it cannot find a good match, the YouTube card stays.'}
         </p>
-        <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Only subscriptions</label>
-        <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide videos found by MyAlgo</label>
-        <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
-        <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
-        <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide games</label>
+        <div className="myalgo-toggle-row" aria-label="Feed filters">
+          <ToggleChip
+            active={sourceFilters.subscribedOnly}
+            label="Subscriptions only"
+            onToggle={() => void handleFilterChange('subscribedOnly', !sourceFilters.subscribedOnly)}
+          />
+          <ToggleChip
+            active={!sourceFilters.includeDiscovery}
+            label="Hide MyAlgo finds"
+            onToggle={() => void handleFilterChange('includeDiscovery', sourceFilters.includeDiscovery ? false : true)}
+          />
+          <ToggleChip
+            active={!sourceFilters.includeShorts}
+            label="Hide Shorts"
+            onToggle={() => void handleFilterChange('includeShorts', sourceFilters.includeShorts ? false : true)}
+          />
+          <ToggleChip
+            active={!sourceFilters.includeLive}
+            label="Hide live"
+            onToggle={() => void handleFilterChange('includeLive', sourceFilters.includeLive ? false : true)}
+          />
+          <ToggleChip
+            active={!sourceFilters.includePlayables}
+            label="Hide games"
+            onToggle={() => void handleFilterChange('includePlayables', sourceFilters.includePlayables ? false : true)}
+          />
+        </div>
       </fieldset>
       <fieldset>
         <legend>Find new videos</legend>
         <p style={{ margin: '0 0 10px', fontSize: 12 }}>
           MyAlgo refreshes automatically when YouTube loads and when you change interests.
         </p>
-        <label>
-          <input
-            type="checkbox"
-            checked={retrievalSettings.rssEnabled}
+        <div className="myalgo-toggle-row" aria-label="Automatic discovery sources">
+          <ToggleChip
+            active={retrievalSettings.rssEnabled}
+            label="Channels you watch"
             disabled={retrievalBusy}
-            onChange={(event) => void handleRetrievalChange(event.target.checked)}
-          /> From channels you watch
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={retrievalSettings.webSearchEnabled === true}
+            onToggle={() => void handleRetrievalChange(!retrievalSettings.rssEnabled)}
+          />
+          <ToggleChip
+            active={retrievalSettings.webSearchEnabled === true}
+            label="YouTube search"
             disabled={retrievalBusy}
-            onChange={(event) => void handleWebSearchChange(event.target.checked)}
-          /> From YouTube search
-        </label>
+            onToggle={() => void handleWebSearchChange(retrievalSettings.webSearchEnabled !== true)}
+          />
+        </div>
       </fieldset>
       {lastError ? <p className="myalgo-popup-error">Something went wrong: {lastError}</p> : null}
       <div className="myalgo-popup-actions">
@@ -296,18 +338,12 @@ export function Popup() {
       </div>
       <section style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Interests used for this feed</div>
-        <div className="myalgo-chip-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="myalgo-chip-row">
           <button
             type="button"
             onClick={() => void handleSetMode('default')}
             aria-pressed={selectedModeIds.length === 0}
-            style={{
-              borderRadius: 999,
-              padding: '6px 10px',
-              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
-              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
-              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
-            }}
+            className="myalgo-interest-chip"
           >
             All
           </button>
@@ -317,14 +353,8 @@ export function Popup() {
               type="button"
               onClick={() => void handleSetMode(option.id)}
               aria-pressed="true"
-              title="Click to deselect"
-              style={{
-                borderRadius: 999,
-                padding: '6px 10px',
-                border: '2px solid #2563eb',
-                background: '#dbeafe',
-                fontWeight: 700,
-              }}
+              title="Click to stop using"
+              className="myalgo-interest-chip"
             >
               {option.label}{option.active ? '' : ' · retained'}
             </button>
@@ -340,9 +370,9 @@ export function Popup() {
             onChange={(event) => setModeSearch(event.target.value)}
             placeholder="Search interests"
             aria-label="Search interests"
-            style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: 7 }}
+            className="myalgo-interest-search"
           />
-          <div className="myalgo-chip-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 180, overflowY: 'auto' }}>
+          <div className="myalgo-chip-row myalgo-chip-row--interests">
             {searchableModeOptions.map((option) => {
               const pressed = selectedModeIds.includes(option.id);
               return (
@@ -351,13 +381,7 @@ export function Popup() {
                   type="button"
                   onClick={() => void handleSetMode(option.id)}
                   aria-pressed={pressed}
-                  style={{
-                    borderRadius: 999,
-                    padding: '6px 10px',
-                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
-                    background: pressed ? '#dbeafe' : '#fff',
-                    fontWeight: pressed ? 700 : 500,
-                  }}
+                  className="myalgo-interest-chip"
                 >
                   {option.label}{option.active ? '' : ' (retained)'}
                 </button>
