@@ -1533,7 +1533,8 @@ export function Options() {
                       <span>{graphGroupCoverage.durableGroupedContentCount} / {graphGroupCoverage.contentCount} content items in durable groups</span>
                       <span>{graphGroupCoverage.topicClusteredContentCount} in provisional topic clusters</span>
                       <span>{graphGroupCoverage.ungroupedContentCount} not yet grouped</span>
-                      <span>{graphGroupCoverage.structuralNodeCount} structural nodes (creators, concepts, topics, objectives) — these are not expected to belong to a content group</span>
+                      <span>{graphGroupCoverage.associatedCreatorCount} creator{graphGroupCoverage.associatedCreatorCount === 1 ? '' : 's'} associated with the strongest group represented by their content</span>
+                      <span>{graphGroupCoverage.unassociatedStructuralNodeCount} other structural node{graphGroupCoverage.unassociatedStructuralNodeCount === 1 ? '' : 's'} (creators without grouped content, concepts, topics, objectives) outside content groups</span>
                     </div>
                   </div>
                 ) : null}
