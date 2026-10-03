@@ -13,6 +13,10 @@ import {
 } from '../lib/extension-helpers';
 import { GraphCanvas } from '../components/GraphCanvas';
 import type { DurableSemanticModeCatalog } from '@repo/shared-types';
+import type {
+  HistoryClusterCatalog,
+  HistoryClusterOwnershipState,
+} from '../lib/history-cluster-ownership';
 
 export function Options() {
   const [mode, setMode] = React.useState('Default');
@@ -24,6 +28,9 @@ export function Options() {
   const [modeConfigRevision, setModeConfigRevision] = React.useState(0);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
+  const [historyClusterCatalog, setHistoryClusterCatalog] = React.useState<HistoryClusterCatalog | null>(null);
+  const [historyClusterOwnership, setHistoryClusterOwnership] = React.useState<HistoryClusterOwnershipState | null>(null);
+  const [historyClusterSearch, setHistoryClusterSearch] = React.useState('');
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
   const [transcriptEnrichmentEnabled, setTranscriptEnrichmentEnabled] = React.useState(false);
@@ -111,6 +118,15 @@ export function Options() {
       setNeuralBatchSize(Number.isFinite(storedBatchSize) ? Math.max(1, Math.min(16, Math.floor(storedBatchSize))) : 1);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
     });
+    void chrome.runtime.sendMessage({ type: 'GET_HISTORY_CLUSTER_OWNERSHIP' }).then((response: {
+      ok?: boolean;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    }) => {
+      if (!response?.ok) return;
+      setHistoryClusterCatalog(response.catalog ?? null);
+      setHistoryClusterOwnership(response.ownership ?? null);
+    }).catch(() => undefined);
     const handleStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== 'local') return;
       const change = changes['personal-algorithm-semantic-model-status'];
@@ -164,6 +180,9 @@ export function Options() {
     }
     setDisclosureAccepted(false);
     setHistoryObservationEnabled(false);
+    setHistoryClusterCatalog(null);
+    setHistoryClusterOwnership(null);
+    setHistoryClusterSearch('');
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
     setTranscriptEnrichmentEnabled(false);
@@ -319,6 +338,72 @@ export function Options() {
   const handleHistoryObservationChange = async (enabled: boolean) => {
     setHistoryObservationEnabled(enabled);
     await chrome.storage.local.set({ 'personal-algorithm-history-observation-enabled': enabled });
+  };
+
+  const refreshHistoryClusterOwnership = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_HISTORY_CLUSTER_OWNERSHIP' }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to load history clusters.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+  };
+
+  const handleHistoryClusterSelection = async (clusterIds: string[] | null) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_HISTORY_CLUSTER_SELECTION',
+      payload: clusterIds == null ? {} : { clusterIds },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update history cluster ownership.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+    setStatus(
+      response.ownership?.selectionMode === 'all'
+        ? `All retained History influences MyAlgo. History ownership r${response.ownership.currentRevision}.`
+        : `${response.ownership?.selectedClusterIds.length ?? 0} History cluster(s) influence MyAlgo. Retained excluded History was not deleted. History ownership r${response.ownership?.currentRevision ?? 0}.`,
+    );
+  };
+
+  const handleToggleHistoryCluster = async (clusterId: string) => {
+    const selected = new Set(historyClusterOwnership?.selectionMode === 'selected'
+      ? historyClusterOwnership.selectedClusterIds
+      : historyClusterCatalog?.clusters.map((cluster) => cluster.id) ?? []);
+    if (selected.has(clusterId)) selected.delete(clusterId);
+    else selected.add(clusterId);
+    await handleHistoryClusterSelection([...selected]);
+  };
+
+  const handleUndoHistoryClusterSelection = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'UNDO_HISTORY_CLUSTER_SELECTION' }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+      reverted?: { action?: string } | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to undo History ownership.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+    setStatus(response.reverted
+      ? `History ownership edit undone. Revision ${response.ownership?.currentRevision ?? 0}.`
+      : 'There is no History ownership edit to undo.');
   };
 
   const handleHomeObservationChange = async (enabled: boolean) => {
