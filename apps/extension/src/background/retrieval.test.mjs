@@ -525,7 +525,7 @@ test('YouTube caption enrichment is opt-in and metadata succeeds without a capti
   assert.equal(result.transcript_diagnostics, null);
 });
 
-test('YouTube caption enrichment prefers iOS InnerTube over the PoToken-gated WEB track', async () => {
+test('YouTube caption enrichment prefers current Android InnerTube over the PoToken-gated WEB track', async () => {
   const calls = [];
   const fetcher = async (url, options = {}) => {
     calls.push({ url, options });
@@ -544,7 +544,8 @@ test('YouTube caption enrichment prefers iOS InnerTube over the PoToken-gated WE
     }
     if (url.includes('/youtubei/v1/player')) {
       const body = JSON.parse(options.body);
-      assert.equal(body.context.client.clientName, 'IOS');
+      assert.equal(body.context.client.clientName, 'ANDROID');
+      assert.equal(body.context.client.clientVersion, '20.37.42');
       assert.equal(body.videoId, 'abc123DEF45');
       return new Response(JSON.stringify({
         captions: {
@@ -558,7 +559,7 @@ test('YouTube caption enrichment prefers iOS InnerTube over the PoToken-gated WE
         },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    assert.match(url, /client=ios/);
+    assert.match(url, /client=android/);
     return new Response(JSON.stringify({
       events: [{ segs: [{ utf8: 'Actual spoken CRDT content' }] }],
     }), { status: 200 });
@@ -573,23 +574,23 @@ test('YouTube caption enrichment prefers iOS InnerTube over the PoToken-gated WE
   assert.equal(calls.length, 3);
   assert.equal(calls.some((call) => (
     call.url.includes('/youtubei/v1/player')
-    && JSON.parse(call.options.body).context.client.clientName === 'ANDROID'
+    && JSON.parse(call.options.body).context.client.clientName === 'IOS'
   )), false);
   assert.deepEqual(result.transcript, {
     text: 'Actual spoken CRDT content',
     language: 'en',
     source: 'youtube_caption_track',
     auto_generated: false,
-    acquisition_strategy: 'innertube_ios',
+    acquisition_strategy: 'innertube_android',
   });
   assert.deepEqual(result.transcript_diagnostics, {
     attempted: true,
-    strategy: 'innertube_ios',
+    strategy: 'innertube_android',
     reason: 'available',
   });
 });
 
-test('YouTube caption enrichment falls back from iOS to Android InnerTube', async () => {
+test('YouTube caption enrichment falls back from Android to current iOS InnerTube', async () => {
   const clients = [];
   const fetcher = async (url, options = {}) => {
     if (url.includes('/watch?')) {
@@ -603,7 +604,7 @@ test('YouTube caption enrichment falls back from iOS to Android InnerTube', asyn
     if (url.includes('/youtubei/v1/player')) {
       const body = JSON.parse(options.body);
       clients.push(body.context.client.clientName);
-      if (body.context.client.clientName === 'IOS') {
+      if (body.context.client.clientName === 'ANDROID') {
         return new Response(JSON.stringify({ captions: { playerCaptionsTracklistRenderer: { captionTracks: [] } } }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -622,7 +623,7 @@ test('YouTube caption enrichment falls back from iOS to Android InnerTube', asyn
         },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    return new Response('<transcript><text start="0">Android fallback words</text></transcript>', {
+    return new Response('<transcript><text start="0">iOS fallback words</text></transcript>', {
       status: 200,
     });
   };
@@ -633,10 +634,48 @@ test('YouTube caption enrichment falls back from iOS to Android InnerTube', asyn
     { includeTranscript: true },
   );
 
-  assert.deepEqual(clients, ['IOS', 'ANDROID']);
-  assert.equal(result.transcript?.text, 'Android fallback words');
+  assert.deepEqual(clients, ['ANDROID', 'IOS']);
+  assert.equal(result.transcript?.text, 'iOS fallback words');
   assert.equal(result.transcript?.auto_generated, true);
-  assert.equal(result.transcript?.acquisition_strategy, 'innertube_android');
+  assert.equal(result.transcript?.acquisition_strategy, 'innertube_ios');
+});
+
+test('YouTube caption enrichment exposes player HTTP failures and current client identities', async () => {
+  const clients = [];
+  const fetcher = async (url, options = {}) => {
+    if (url.includes('/watch?')) {
+      return new Response(`<script>
+        ytcfg.set({"INNERTUBE_API_KEY":"test-inner-key"});
+        var ytInitialPlayerResponse = {
+          "videoDetails":{"title":"Captioned","isLiveContent":false}
+        };
+      </script>`, { status: 200 });
+    }
+    if (url.includes('/youtubei/v1/player')) {
+      const body = JSON.parse(options.body);
+      clients.push({
+        name: body.context.client.clientName,
+        version: body.context.client.clientVersion,
+      });
+      return new Response('FAILED_PRECONDITION', { status: 400 });
+    }
+    throw new Error('Unexpected timedtext request');
+  };
+
+  const result = await enrichYoutubeCandidate(
+    { external_id: 'abc123DEF45', title: 'Thin' },
+    fetcher,
+    { includeTranscript: true },
+  );
+
+  assert.deepEqual(clients, [
+    { name: 'ANDROID', version: '20.37.42' },
+    { name: 'IOS', version: '21.02.3' },
+  ]);
+  assert.equal(result.transcript, null);
+  assert.equal(result.transcript_diagnostics?.reason, 'player_request_failed');
+  assert.match(result.transcript_diagnostics?.detail ?? '', /innertube_android:http_400:FAILED_PRECONDITION/);
+  assert.match(result.transcript_diagnostics?.detail ?? '', /innertube_ios:http_400:FAILED_PRECONDITION/);
 });
 
 test('YouTube caption enrichment reports empty timedtext payloads instead of indistinguishable unavailable', async () => {
