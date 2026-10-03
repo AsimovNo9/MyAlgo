@@ -1448,7 +1448,11 @@ const needsTranscriptRefresh = (
   record: TranscriptEnrichmentRecord | undefined,
   nowMs: number,
 ): boolean => {
-  if (!record || record.pipelineVersion !== TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION) return true;
+  if (
+    !record
+    || record.pipelineVersion !== TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION
+    || (record.status === 'unavailable' && !record.failureReason)
+  ) return true;
   const checkedAt = Date.parse(record.checkedAt);
   return !Number.isFinite(checkedAt) || nowMs - checkedAt > TRANSCRIPT_REFRESH_MS;
 };
