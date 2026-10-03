@@ -609,7 +609,7 @@ const renderExplanationContent = (
 
     const historyHeading = document.createElement('div');
     historyHeading.textContent = 'Past videos supporting this';
-    historyHeading.style.cssText = 'position:absolute;left:50%;top:64%;transform:translateX(-50%);color:#94a3b8;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
+    historyHeading.style.cssText = 'position:absolute;left:50%;top:64%;transform:translateX(-50%);color:#b9c9dc;font:700 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
     graph.appendChild(historyHeading);
 
     const visibleHistory = view.historyMatches.slice(0, 3);
@@ -686,7 +686,7 @@ const renderExplanationContent = (
 
     const note = document.createElement('div');
     note.textContent = 'Scroll to inspect retained prior videos. This is scorer attribution, not a probability estimate.';
-    note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+    note.style.cssText = 'margin-top:4px;color:#b9c9dc;font:500 10px/1.3 Roboto,Arial,sans-serif;';
     history.appendChild(note);
 
     const historyList = document.createElement('div');
@@ -711,7 +711,7 @@ const renderExplanationContent = (
         match.interaction === 'watched' ? 'Watched before' : match.interaction,
         matchedBy ? `supports via ${matchedBy}` : null,
       ].filter(Boolean).join(' · ');
-      meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;';
+      meta.style.cssText = 'margin-top:2px;color:#b9c9dc;font:500 10px/1.3 Roboto,Arial,sans-serif;';
       row.appendChild(meta);
       historyList.appendChild(row);
     }
@@ -731,7 +731,7 @@ const renderExplanationContent = (
 
     const note = document.createElement('div');
     note.textContent = 'These are retained records referenced by this explanation. Forget deletes one exact record and cannot be reversed by graph Undo/Restore.';
-    note.style.cssText = 'margin-top:4px;color:#94a3b8;font:500 10px/1.35 Roboto,Arial,sans-serif;';
+    note.style.cssText = 'margin-top:4px;color:#b9c9dc;font:500 10px/1.35 Roboto,Arial,sans-serif;';
     evidenceSection.appendChild(note);
 
     const evidenceList = document.createElement('div');
@@ -754,13 +754,13 @@ const renderExplanationContent = (
         : 'surfaced';
       const meta = document.createElement('div');
       meta.textContent = `${kindLabel} · ${evidence.connector}/${evidence.mechanism} · confidence ${evidence.confidence.toFixed(2)} · ${new Date(evidence.observedAt).toLocaleString()}`;
-      meta.style.cssText = 'margin-top:2px;color:#94a3b8;font:500 10px/1.3 Roboto,Arial,sans-serif;overflow-wrap:anywhere;';
+      meta.style.cssText = 'margin-top:2px;color:#b9c9dc;font:500 10px/1.3 Roboto,Arial,sans-serif;overflow-wrap:anywhere;';
       detail.appendChild(meta);
 
       const id = document.createElement('div');
       id.textContent = evidence.evidenceId;
       id.title = evidence.evidenceId;
-      id.style.cssText = 'margin-top:2px;color:#64748b;font:500 9px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      id.style.cssText = 'margin-top:2px;color:#aebed2;font:600 9px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       detail.appendChild(id);
       row.appendChild(detail);
 
@@ -833,7 +833,7 @@ const renderExplanationContent = (
   contributions.style.cssText = 'padding:0 14px;';
   if (view.contributions.length === 0) {
     const empty = document.createElement('div');
-    empty.style.cssText = 'padding:10px 0;color:#94a3b8;border-bottom:1px solid #303030;font:500 11px/1.4 Roboto,Arial,sans-serif;';
+    empty.style.cssText = 'padding:10px 0;color:#b9c9dc;border-bottom:1px solid #303030;font:500 11px/1.4 Roboto,Arial,sans-serif;';
     empty.textContent = activeDurableMode && isProvisionalDurableModeRelevantItem(item, activeDurableMode)
       ? 'No exact editable graph contribution is available yet. This replacement currently qualifies through provisional semantic mode matching.'
       : 'No exact editable graph contribution is available for this item yet.';
@@ -869,7 +869,7 @@ const renderExplanationContent = (
       inspect.textContent = 'Inspect';
       inspect.disabled = true;
       inspect.title = 'This contribution is aggregated or has no direct graph target.';
-      inspect.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.5;';
+      inspect.style.cssText = 'padding:3px 9px;border:1px solid #64748b;border-radius:999px;background:transparent;color:#f8fafc;font:600 11px/1.2 Roboto,Arial,sans-serif;opacity:.78;';
       actions.appendChild(inspect);
     } else {
       const controlOptions = [
@@ -973,7 +973,7 @@ const renderExplanationContent = (
     itemFeedback.appendChild(feedbackControls);
     const feedbackNote = document.createElement('div');
     feedbackNote.textContent = 'Use these when no exact graph term exists yet. Video feedback affects ranking; graph-term controls remain separate.';
-    feedbackNote.style.cssText = 'margin-top:6px;color:#94a3b8;font:500 10px/1.35 Roboto,Arial,sans-serif;';
+    feedbackNote.style.cssText = 'margin-top:6px;color:#b9c9dc;font:500 10px/1.35 Roboto,Arial,sans-serif;';
     itemFeedback.appendChild(feedbackNote);
     shell.appendChild(itemFeedback);
   }
