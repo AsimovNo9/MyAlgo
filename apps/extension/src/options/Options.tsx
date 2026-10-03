@@ -754,34 +754,37 @@ export function Options() {
     : [];
 
   return (
-    <main style={{ maxWidth: 1240, margin: '0 auto', padding: 24, fontFamily: 'sans-serif', color: '#0f172a' }}>
-      <h1>Personal Algorithm settings</h1>
+    <main className="myalgo-options">
+      <header className="myalgo-hero">
+        <div className="myalgo-section-kicker">MyAlgo settings</div>
+        <h1>Tune your <em>personal algorithm</em></h1>
+        <p>
+          Choose the interests and History that should shape your recommendations. Advanced graph and evidence tools stay available when you want exact provenance.
+        </p>
+        <nav className="myalgo-jump-nav" aria-label="Settings sections">
+          <a href="#your-interests">Your interests</a>
+          <a href="#history-influence">History influence</a>
+          <a href="#recommendation-controls">Recommendation controls</a>
+          <a href="#advanced-graph">Advanced graph & evidence</a>
+          <a href="#technical-settings">Technical & privacy</a>
+        </nav>
+      </header>
 
-      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Privacy disclosure</h2>
-        <p><strong>Version {PRIVACY_DISCLOSURE_VERSION}</strong> · {disclosureAccepted ? 'Accepted' : 'Acceptance required before observation'}</p>
-        <p>MyAlgo observes {PRIVACY_DISCLOSURE.pages.toLowerCase()} and records {PRIVACY_DISCLOSURE.data}.</p>
-        <p>Purpose: {PRIVACY_DISCLOSURE.purpose}.</p>
-        <p>Storage: {PRIVACY_DISCLOSURE.storage}. Transfer: {PRIVACY_DISCLOSURE.transfer}.</p>
-        <p>Control: {PRIVACY_DISCLOSURE.deletion}.</p>
-        {!disclosureAccepted ? (
-          <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
-        ) : null}
-        <p><a href="https://github.com/AsimovNo9/MyAlgo/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">Read the privacy policy</a></p>
-        {status ? <p role="status">{status}</p> : null}
-      </section>
 
-      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+      <section id="your-interests" style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">Tune your feed</div>
         <h2 style={{ marginTop: 0 }}>Your interests</h2>
         <p>
           These are the recurring interests MyAlgo currently recognizes. You can choose what you want to use for your feed
           without editing the graph underneath.
         </p>
         {interestCards.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+          <div className="myalgo-interest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
             {interestCards.map((interest) => (
               <article
                 key={`interest:${interest.id}`}
+                className="myalgo-interest-card"
+                data-selected={interest.selected}
                 style={{
                   padding: 14,
                   borderRadius: 12,
@@ -792,13 +795,13 @@ export function Options() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div>
                     <strong style={{ fontSize: 16 }}>{interest.label}</strong>
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#b9c9dc' }}>
                       {interest.memberCount} signal{interest.memberCount === 1 ? '' : 's'}
                       {' · '}{interest.supportCount} supporting video{interest.supportCount === 1 ? '' : 's'}
                       {!interest.active ? ' · retained' : ''}
                     </div>
                   </div>
-                  <span style={{
+                  <span className="myalgo-interest-status" style={{
                     borderRadius: 999,
                     padding: '3px 7px',
                     fontSize: 11,
@@ -809,7 +812,7 @@ export function Options() {
                   </span>
                 </div>
                 {interest.memberLabels.length > 0 ? (
-                  <p style={{ margin: '10px 0', fontSize: 13, color: '#475569' }}>
+                  <p style={{ margin: '10px 0', fontSize: 13, color: '#c8d5e6' }}>
                     {interest.memberLabels.join(' · ')}
                   </p>
                 ) : null}
@@ -823,7 +826,7 @@ export function Options() {
                 </div>
                 <details style={{ marginTop: 10 }}>
                   <summary style={{ cursor: 'pointer' }}>Why MyAlgo sees this</summary>
-                  <p style={{ fontSize: 12, color: '#64748b', marginBottom: 0 }}>
+                  <p style={{ fontSize: 12, color: '#b9c9dc', marginBottom: 0 }}>
                     This interest is built from repeated local semantic signals and their supporting retained videos.
                     Open Advanced group management below to rename it or edit its exact members.
                   </p>
@@ -832,407 +835,14 @@ export function Options() {
             ))}
           </div>
         ) : (
-          <p style={{ color: '#64748b' }}>
+          <p style={{ color: '#b9c9dc' }}>
             No durable interests yet. As repeated evidence accumulates, MyAlgo will surface stable interests here.
           </p>
         )}
       </section>
 
-      <section style={{ marginBottom: 24 }}>
-        <h2>Advanced group management</h2>
-        <p>
-          Use this section when you want exact control over group selection, names, retained ownership, or membership.
-          The simpler Your interests cards above are enough for normal feed tuning.
-        </p>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            aria-pressed={selectedModeIds.length === 0}
-            onClick={() => void handleModeChange('default')}
-            style={{
-              borderRadius: 999,
-              padding: '7px 11px',
-              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
-              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
-              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
-            }}
-          >
-            All
-          </button>
-          {selectedModeOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed="true"
-              title="Click to deselect"
-              onClick={() => void handleModeChange(option.id)}
-              style={{
-                borderRadius: 999,
-                padding: '7px 11px',
-                border: '2px solid #2563eb',
-                background: '#dbeafe',
-                fontWeight: 700,
-              }}
-            >
-              {option.label}{option.active ? '' : ' · retained'}
-            </button>
-          ))}
-        </div>
-
-        <details style={{ marginTop: 14 }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-            Browse discovered groups ({Math.max(0, modeOptions.length - 1)})
-          </summary>
-          <label htmlFor="mode-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
-            Search groups
-          </label>
-          <input
-            id="mode-search"
-            type="search"
-            value={modeSearch}
-            onChange={(event) => setModeSearch(event.target.value)}
-            placeholder="Search by group name"
-            style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
-          />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
-            {searchableModeOptions.map((option) => {
-              const pressed = selectedModeIds.includes(option.id);
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={pressed}
-                  onClick={() => void handleModeChange(option.id)}
-                  style={{
-                    borderRadius: 999,
-                    padding: '7px 11px',
-                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
-                    background: pressed ? '#dbeafe' : '#fff',
-                    fontWeight: pressed ? 700 : 500,
-                  }}
-                >
-                  {option.label}{option.active ? '' : ' (retained)'}
-                </button>
-              );
-            })}
-            {searchableModeOptions.length === 0 ? <span>No matching groups.</span> : null}
-          </div>
-        </details>
-        <details style={{ marginTop: 14 }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-            Manage group ownership · config r{modeConfigRevision}
-          </summary>
-          <p>
-            Rename, pin, and member edits are durable user-owned overlays. Pinning is independent of whether a group is currently selected for the feed.
-            Undo reverses the latest ownership edit without changing retained evidence or the reconciler-owned inferred label/membership.
-          </p>
-          <button type="button" onClick={() => void handleUndoModeConfig()}>
-            Undo last group edit
-          </button>
-          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-            {searchableModeOptions.map((option) => (
-              <div
-                key={`manage:${option.id}`}
-                style={{ padding: 10, border: '1px solid #cbd5e1', borderRadius: 10 }}
-              >
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <div>
-                    <strong>{option.label}</strong>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      {option.active ? 'active' : 'dormant'} · semantic r{option.revision ?? '?'} · {option.pinned ? 'pinned' : 'not pinned'}
-                    </div>
-                    {option.inferredLabel && option.inferredLabel !== option.label ? (
-                      <div style={{ fontSize: 12, color: '#64748b' }}>Inferred name: {option.inferredLabel}</div>
-                    ) : null}
-                  </div>
-                  <button type="button" onClick={() => void handlePinMode(option.id, !option.pinned)}>
-                    {option.pinned ? 'Unpin' : 'Pin'}
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    aria-label={`Rename ${option.label}`}
-                    value={modeNameDrafts[option.id] ?? ''}
-                    placeholder={option.label}
-                    maxLength={80}
-                    onChange={(event) => setModeNameDrafts((current) => ({
-                      ...current,
-                      [option.id]: event.target.value,
-                    }))}
-                    style={{ flex: '1 1 240px', minWidth: 180, padding: 7 }}
-                  />
-                  <button type="button" onClick={() => void handleRenameMode(option.id, option.inferredLabel)}>
-                    Save name
-                  </button>
-                  {option.inferredLabel && option.label !== option.inferredLabel ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModeNameDrafts((current) => ({ ...current, [option.id]: '' }));
-                        void handleRenameMode(option.id, option.inferredLabel, null);
-                      }}
-                    >
-                      Reset name
-                    </button>
-                  ) : null}
-                </div>
-                {(() => {
-                  const configuredMode = durableModeCatalog?.modes.find((entry) => entry.id === option.id);
-                  if (!configuredMode) return null;
-                  const inferredMembers = configuredMode.inferredMembers ?? configuredMode.members;
-                  const inferredIds = new Set(inferredMembers.map((member) => member.canonicalId));
-                  const effectiveIds = new Set(configuredMode.members.map((member) => member.canonicalId));
-                  const membershipEdited = (
-                    configuredMode.members.length !== inferredMembers.length
-                    || configuredMode.members.some((member) => !inferredIds.has(member.canonicalId))
-                    || inferredMembers.some((member) => !effectiveIds.has(member.canonicalId))
-                  );
-                  const availableMembers = discoveredModeMemberPool.filter((member) => !effectiveIds.has(member.canonicalId));
-                  return (
-                    <details style={{ marginTop: 10 }}>
-                      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
-                        Members ({configuredMode.members.length}{membershipEdited ? ' · edited' : ''})
-                      </summary>
-                      <p style={{ fontSize: 12, color: '#64748b' }}>
-                        Membership edits change this group lens only. They do not delete evidence, graph nodes, or the reconciler-owned inferred membership.
-                      </p>
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {configuredMode.members.map((member) => (
-                          <div
-                            key={member.canonicalId}
-                            style={{
-                              display: 'flex',
-                              gap: 8,
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '6px 8px',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: 8,
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <strong>{member.label}</strong>
-                              <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere' }}>
-                                {member.canonicalId}{inferredIds.has(member.canonicalId) ? ' · inferred' : ' · user-added'}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleModeMembershipChange(option.id, 'remove', member.canonicalId)}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                        {configuredMode.members.length === 0 ? (
-                          <span style={{ fontSize: 12, color: '#64748b' }}>No effective members. Add one below or reset inferred membership.</span>
-                        ) : null}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                        <select
-                          aria-label={`Add member to ${option.label}`}
-                          value={modeMemberDrafts[option.id] ?? ''}
-                          onChange={(event) => setModeMemberDrafts((current) => ({
-                            ...current,
-                            [option.id]: event.target.value,
-                          }))}
-                          style={{ flex: '1 1 260px', minWidth: 220, padding: 7 }}
-                        >
-                          <option value="">Choose discovered member…</option>
-                          {availableMembers.map((member) => (
-                            <option key={member.canonicalId} value={member.canonicalId}>
-                              {member.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!modeMemberDrafts[option.id]}
-                          onClick={() => {
-                            const memberId = modeMemberDrafts[option.id];
-                            if (memberId) void handleModeMembershipChange(option.id, 'add', memberId);
-                          }}
-                        >
-                          Add member
-                        </button>
-                        {membershipEdited ? (
-                          <button type="button" onClick={() => void handleModeMembershipChange(option.id, 'reset')}>
-                            Reset members
-                          </button>
-                        ) : null}
-                      </div>
-                    </details>
-                  );
-                })()}
-              </div>
-            ))}
-          </div>
-        </details>
-        <p>
-          Groups are discovered from retained semantic graph support. Repeated standalone interests can become groups once supported
-          by at least two retained videos; parent/child reclustering does not silently clear a user selection.
-        </p>
-      </section>
-
-      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Muted graph terms</h2>
-        <p>
-          Mute is a hard Personal Algorithm suppression. Muted terms remain visible here until you explicitly unmute them;
-          unmuting removes only the mute control and does not delete retained history or graph evidence.
-        </p>
-        {graphInspectorSource !== 'live' ? (
-          <button type="button" onClick={() => void handleLoadLiveGraph()}>
-            Load muted terms
-          </button>
-        ) : mutedGraphControls.length === 0 ? (
-          <p>No graph terms are currently muted.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
-            {mutedGraphControls.map((control) => (
-              <div
-                key={control.id}
-                style={{
-                  display: 'flex',
-                  gap: 10,
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: 10,
-                  border: '1px solid #cbd5e1',
-                  borderRadius: 10,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <strong>{control.targetLabel}</strong>
-                  <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere' }}>
-                    {control.targetKind} · {control.targetId}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleRemoveGraphControl(control.targetKind, control.targetId)}
-                >
-                  Unmute
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2>Local-first MVP</h2>
-        <p>Observation, feed controls, and recorded interactions stay in this browser until optional sync is introduced.</p>
-      </section>
-
-      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Local semantic model</h2>
-        <label>
-          <input
-            type="checkbox"
-            checked={semanticModelMode === 'neural'}
-            disabled={!disclosureAccepted}
-            onChange={(event) => void handleSemanticModelChange(event.target.checked)}
-          />
-          Use local neural semantics
-        </label>
-        <p>
-          When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
-          for candidate↔graph semantic retrieval and DeBERTa-v3-xsmall NLI for bounded zero-shot verification of metadata concepts
-          plus ambiguous graph matches. Clear high-confidence embedding matches skip DeBERTa. Candidate text, verified concepts,
-          graph state, embeddings, and inference stay local. The installed extension does not download
-          model files at runtime. Embeddings prefer WebGPU and fall back to local WebAssembly CPU inference when needed.
-          The concept verifier deliberately uses q8 WebAssembly CPU inference, which is independent of the embedding batch slider.
-          Metadata concept verification remains asynchronous. For ambiguous graph matches, verifier failure preserves the embedding
-          result with explicit fallback provenance instead of failing ranking.
-        </p>
-        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + bounded WASM NLI verification)' : 'Deterministic baseline'}</p>
-        <div style={{ marginTop: 16, padding: 12, border: '1px solid #cbd5e1', borderRadius: 10 }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={transcriptEnrichmentEnabled}
-              disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
-              onChange={(event) => void handleTranscriptEnrichmentChange(event.target.checked)}
-            />
-            Use YouTube captions for local semantic enrichment
-          </label>
-          <p style={{ marginBottom: 0 }}>
-            Experimental and off by default. When a video exposes an English caption track, MyAlgo requests it from a
-            YouTube-owned caption endpoint, keeps a bounded beginning/middle/end excerpt locally, and uses that excerpt only
-            as additional input to the packaged mxbai/DeBERTa semantic pipeline. Captions do not become exact preference
-            evidence and are not added to deterministic lexical scoring. Disabling stops new caption acquisition; Delete all
-            local MyAlgo data clears the retained caption cache. This slice does not ship Whisper or another speech-to-text model.
-          </p>
-        </div>
-        <div style={{ marginTop: 16 }}>
-          <label htmlFor="semantic-neural-batch-size">
-            WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
-          </label>
-          <input
-            id="semantic-neural-batch-size"
-            type="range"
-            min="1"
-            max="16"
-            step="1"
-            value={neuralBatchSize}
-            disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
-            onChange={(event) => void handleNeuralBatchSizeChange(Number(event.target.value))}
-            style={{ display: 'block', width: '100%', marginTop: 8 }}
-          />
-          <p style={{ marginTop: 6 }}>
-            Higher values process more embedding texts per WebGPU inference call and can drain embedding work faster,
-            but use more GPU memory. Start at 2–4 on older GPUs and increase only while inference remains stable.
-            This slider does not change concept verification. The DeBERTa verifier runs on its own bounded q8 WASM CPU path.
-          </p>
-        </div>
-
-        {semanticModelStatus ? (
-          <p role="status">
-            <strong>Embedding model:</strong> {semanticModelStatus.status ?? 'unknown'}
-            {typeof semanticModelStatus.progress === 'number' ? ` · ${semanticModelStatus.progress.toFixed(1)}%` : ''}
-            {semanticModelStatus.backend ? ` · ${semanticModelStatus.backend}` : ''}
-            {semanticModelStatus.file ? ` · ${semanticModelStatus.file}` : ''}
-          </p>
-        ) : null}
-        {conceptModelStatus ? (
-          <p role="status">
-            <strong>Concept model:</strong> {conceptModelStatus.status ?? 'unknown'}
-            {typeof conceptModelStatus.progress === 'number' ? ` · ${conceptModelStatus.progress.toFixed(1)}%` : ''}
-            {conceptModelStatus.backend ? ` · ${conceptModelStatus.backend}` : ''}
-            {conceptModelStatus.file ? ` · ${conceptModelStatus.file}` : ''}
-            {typeof conceptModelStatus.item === 'number' && typeof conceptModelStatus.itemCount === 'number'
-              ? ` · item ${conceptModelStatus.item}/${conceptModelStatus.itemCount}`
-              : ''}
-            {conceptModelStatus.error ? ` · ${conceptModelStatus.error}` : ''}
-          </p>
-        ) : null}
-      </section>
-
-      <section style={{ marginTop: 24 }}>
-        <h2>Experimental history bootstrap</h2>
-        <label>
-          <input
-            type="checkbox"
-            checked={historyObservationEnabled}
-            onChange={(event) => void handleHistoryObservationChange(event.target.checked)}
-          />
-          Read visible YouTube History items to build local evidence
-        </label>
-        <p>When enabled, MyAlgo stores visible video IDs, titles, creators, displayed history timestamps, and page provenance only in this browser. You can disable this at any time; no history is sent to a server.</p>
-        {historyObservationEnabled && (
-          <button
-            type="button"
-            onClick={() => window.open('https://www.youtube.com/feed/history', '_blank', 'noopener,noreferrer')}
-            style={{ marginTop: 12, padding: '8px 12px' }}
-          >
-            Open YouTube History
-          </button>
-        )}
-      </section>
-
-      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+      <section id="history-influence" style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">History influence</div>
         <h2 style={{ marginTop: 0 }}>What should your History teach MyAlgo?</h2>
         <p>
           MyAlgo found these areas in your retained YouTube History. Choose the ones that should shape recommendations.
@@ -1252,7 +862,7 @@ export function Options() {
           <button type="button" onClick={() => void refreshHistoryClusterOwnership()}>
             Refresh clusters
           </button>
-          <span style={{ fontSize: 12, color: '#64748b' }}>
+          <span style={{ fontSize: 12, color: '#b9c9dc' }}>
             revision {historyClusterOwnership?.currentRevision ?? 0}
           </span>
         </div>
@@ -1268,13 +878,14 @@ export function Options() {
           style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
         />
         {historyClusterCatalog?.clusters.length ? (
-          <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+          <div className="myalgo-history-grid" style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
             {visibleHistoryClusters.map((cluster) => {
               const selected = selectedHistoryClusterIds.has(cluster.id);
               return (
                 <button
                   key={cluster.id}
                   type="button"
+                  className="myalgo-history-card"
                   aria-pressed={selected}
                   onClick={() => void handleToggleHistoryCluster(cluster.id)}
                   style={{
@@ -1286,12 +897,12 @@ export function Options() {
                   }}
                 >
                   <strong>{cluster.label}</strong>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 12, color: '#b9c9dc', marginTop: 3 }}>
                     {selected ? 'Used for recommendations' : 'Not used for recommendations'}
                     {' · '}{cluster.size} retained video{cluster.size === 1 ? '' : 's'}
                     {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
                   </div>
-                  <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 11, color: '#b9c9dc', overflowWrap: 'anywhere', marginTop: 2 }}>
                     {cluster.id}
                   </div>
                 </button>
@@ -1300,7 +911,7 @@ export function Options() {
             {visibleHistoryClusters.length === 0 ? <span>No matching History clusters.</span> : null}
           </div>
         ) : (
-          <p style={{ color: '#64748b' }}>
+          <p style={{ color: '#b9c9dc' }}>
             No History clusters yet. Enable History observation and visit YouTube History, then refresh clusters.
           </p>
         )}
@@ -1314,20 +925,32 @@ export function Options() {
         )}
       </section>
 
-      <section style={{ marginTop: 24 }}>
-        <h2>Experimental Home context</h2>
-        <label>
-          <input
-            type="checkbox"
-            checked={homeObservationEnabled}
-            onChange={(event) => void handleHomeObservationChange(event.target.checked)}
-          />
-          Record visible YouTube Home recommendations as context
-        </label>
-        <p>When enabled, MyAlgo stores visible video IDs, titles, creators, position, section, and observation time only in this browser. A surfaced recommendation is not treated as a preference; clicks and later history matches are recorded separately.</p>
+
+      <section id="recommendation-controls">
+        <div className="myalgo-section-kicker">Direct corrections</div>
+        <h2 style={{ marginTop: 0 }}>Recommendation controls</h2>
+        <p>
+          Use these controls from Why-this or the Advanced graph when you want to directly correct MyAlgo. They keep the existing revisioned graph semantics and Undo/Restore behavior.
+        </p>
+        <div className="myalgo-control-grid">
+          <div className="myalgo-control-card" data-tone="prefer">
+            <strong>Prefer</strong>
+            <span className="myalgo-muted">Show more content connected to the selected signal.</span>
+          </div>
+          <div className="myalgo-control-card" data-tone="reduce">
+            <strong>Reduce</strong>
+            <span className="myalgo-muted">Lower the influence of the selected signal without deleting evidence.</span>
+          </div>
+          <div className="myalgo-control-card" data-tone="mute">
+            <strong>Mute</strong>
+            <span className="myalgo-muted">Stop the selected signal from influencing recommendations until unmuted.</span>
+          </div>
+        </div>
       </section>
 
-      <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+
+      <section id="advanced-graph" style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+        <div className="myalgo-section-kicker">Inspect the model underneath</div>
         <h2>Advanced graph & evidence</h2>
         <p>
           You do not need this view to tune MyAlgo. It is the transparent inspection layer for people who want to see exactly
@@ -1874,6 +1497,433 @@ export function Options() {
           </div>
         ) : null}
       </section>
+
+
+      <section style={{ marginBottom: 24 }}>
+        <h2>Advanced group management</h2>
+        <p>
+          Use this section when you want exact control over group selection, names, retained ownership, or membership.
+          The simpler Your interests cards above are enough for normal feed tuning.
+        </p>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            aria-pressed={selectedModeIds.length === 0}
+            onClick={() => void handleModeChange('default')}
+            style={{
+              borderRadius: 999,
+              padding: '7px 11px',
+              border: selectedModeIds.length === 0 ? '2px solid #2563eb' : '1px solid #94a3b8',
+              background: selectedModeIds.length === 0 ? '#dbeafe' : '#fff',
+              fontWeight: selectedModeIds.length === 0 ? 700 : 500,
+            }}
+          >
+            All
+          </button>
+          {selectedModeOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed="true"
+              title="Click to deselect"
+              onClick={() => void handleModeChange(option.id)}
+              style={{
+                borderRadius: 999,
+                padding: '7px 11px',
+                border: '2px solid #2563eb',
+                background: '#dbeafe',
+                fontWeight: 700,
+              }}
+            >
+              {option.label}{option.active ? '' : ' · retained'}
+            </button>
+          ))}
+        </div>
+
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Browse discovered groups ({Math.max(0, modeOptions.length - 1)})
+          </summary>
+          <label htmlFor="mode-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
+            Search groups
+          </label>
+          <input
+            id="mode-search"
+            type="search"
+            value={modeSearch}
+            onChange={(event) => setModeSearch(event.target.value)}
+            placeholder="Search by group name"
+            style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
+            {searchableModeOptions.map((option) => {
+              const pressed = selectedModeIds.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={pressed}
+                  onClick={() => void handleModeChange(option.id)}
+                  style={{
+                    borderRadius: 999,
+                    padding: '7px 11px',
+                    border: pressed ? '2px solid #2563eb' : '1px solid #94a3b8',
+                    background: pressed ? '#dbeafe' : '#fff',
+                    fontWeight: pressed ? 700 : 500,
+                  }}
+                >
+                  {option.label}{option.active ? '' : ' (retained)'}
+                </button>
+              );
+            })}
+            {searchableModeOptions.length === 0 ? <span>No matching groups.</span> : null}
+          </div>
+        </details>
+        <details style={{ marginTop: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+            Manage group ownership · config r{modeConfigRevision}
+          </summary>
+          <p>
+            Rename, pin, and member edits are durable user-owned overlays. Pinning is independent of whether a group is currently selected for the feed.
+            Undo reverses the latest ownership edit without changing retained evidence or the reconciler-owned inferred label/membership.
+          </p>
+          <button type="button" onClick={() => void handleUndoModeConfig()}>
+            Undo last group edit
+          </button>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {searchableModeOptions.map((option) => (
+              <div
+                key={`manage:${option.id}`}
+                style={{ padding: 10, border: '1px solid #cbd5e1', borderRadius: 10 }}
+              >
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div>
+                    <strong>{option.label}</strong>
+                    <div style={{ fontSize: 12, color: '#b9c9dc' }}>
+                      {option.active ? 'active' : 'dormant'} · semantic r{option.revision ?? '?'} · {option.pinned ? 'pinned' : 'not pinned'}
+                    </div>
+                    {option.inferredLabel && option.inferredLabel !== option.label ? (
+                      <div style={{ fontSize: 12, color: '#b9c9dc' }}>Inferred name: {option.inferredLabel}</div>
+                    ) : null}
+                  </div>
+                  <button type="button" onClick={() => void handlePinMode(option.id, !option.pinned)}>
+                    {option.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    aria-label={`Rename ${option.label}`}
+                    value={modeNameDrafts[option.id] ?? ''}
+                    placeholder={option.label}
+                    maxLength={80}
+                    onChange={(event) => setModeNameDrafts((current) => ({
+                      ...current,
+                      [option.id]: event.target.value,
+                    }))}
+                    style={{ flex: '1 1 240px', minWidth: 180, padding: 7 }}
+                  />
+                  <button type="button" onClick={() => void handleRenameMode(option.id, option.inferredLabel)}>
+                    Save name
+                  </button>
+                  {option.inferredLabel && option.label !== option.inferredLabel ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModeNameDrafts((current) => ({ ...current, [option.id]: '' }));
+                        void handleRenameMode(option.id, option.inferredLabel, null);
+                      }}
+                    >
+                      Reset name
+                    </button>
+                  ) : null}
+                </div>
+                {(() => {
+                  const configuredMode = durableModeCatalog?.modes.find((entry) => entry.id === option.id);
+                  if (!configuredMode) return null;
+                  const inferredMembers = configuredMode.inferredMembers ?? configuredMode.members;
+                  const inferredIds = new Set(inferredMembers.map((member) => member.canonicalId));
+                  const effectiveIds = new Set(configuredMode.members.map((member) => member.canonicalId));
+                  const membershipEdited = (
+                    configuredMode.members.length !== inferredMembers.length
+                    || configuredMode.members.some((member) => !inferredIds.has(member.canonicalId))
+                    || inferredMembers.some((member) => !effectiveIds.has(member.canonicalId))
+                  );
+                  const availableMembers = discoveredModeMemberPool.filter((member) => !effectiveIds.has(member.canonicalId));
+                  return (
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                        Members ({configuredMode.members.length}{membershipEdited ? ' · edited' : ''})
+                      </summary>
+                      <p style={{ fontSize: 12, color: '#b9c9dc' }}>
+                        Membership edits change this group lens only. They do not delete evidence, graph nodes, or the reconciler-owned inferred membership.
+                      </p>
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {configuredMode.members.map((member) => (
+                          <div
+                            key={member.canonicalId}
+                            style={{
+                              display: 'flex',
+                              gap: 8,
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 8px',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 8,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <strong>{member.label}</strong>
+                              <div style={{ fontSize: 11, color: '#b9c9dc', overflowWrap: 'anywhere' }}>
+                                {member.canonicalId}{inferredIds.has(member.canonicalId) ? ' · inferred' : ' · user-added'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleModeMembershipChange(option.id, 'remove', member.canonicalId)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        {configuredMode.members.length === 0 ? (
+                          <span style={{ fontSize: 12, color: '#b9c9dc' }}>No effective members. Add one below or reset inferred membership.</span>
+                        ) : null}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                        <select
+                          aria-label={`Add member to ${option.label}`}
+                          value={modeMemberDrafts[option.id] ?? ''}
+                          onChange={(event) => setModeMemberDrafts((current) => ({
+                            ...current,
+                            [option.id]: event.target.value,
+                          }))}
+                          style={{ flex: '1 1 260px', minWidth: 220, padding: 7 }}
+                        >
+                          <option value="">Choose discovered member…</option>
+                          {availableMembers.map((member) => (
+                            <option key={member.canonicalId} value={member.canonicalId}>
+                              {member.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!modeMemberDrafts[option.id]}
+                          onClick={() => {
+                            const memberId = modeMemberDrafts[option.id];
+                            if (memberId) void handleModeMembershipChange(option.id, 'add', memberId);
+                          }}
+                        >
+                          Add member
+                        </button>
+                        {membershipEdited ? (
+                          <button type="button" onClick={() => void handleModeMembershipChange(option.id, 'reset')}>
+                            Reset members
+                          </button>
+                        ) : null}
+                      </div>
+                    </details>
+                  );
+                })()}
+              </div>
+            ))}
+          </div>
+        </details>
+        <p>
+          Groups are discovered from retained semantic graph support. Repeated standalone interests can become groups once supported
+          by at least two retained videos; parent/child reclustering does not silently clear a user selection.
+        </p>
+      </section>
+
+      <section id="technical-settings" className="myalgo-technical" style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">Technical & privacy</div>
+        <h2 style={{ marginTop: 0 }}>Privacy disclosure</h2>
+        <p><strong>Version {PRIVACY_DISCLOSURE_VERSION}</strong> · {disclosureAccepted ? 'Accepted' : 'Acceptance required before observation'}</p>
+        <p>MyAlgo observes {PRIVACY_DISCLOSURE.pages.toLowerCase()} and records {PRIVACY_DISCLOSURE.data}.</p>
+        <p>Purpose: {PRIVACY_DISCLOSURE.purpose}.</p>
+        <p>Storage: {PRIVACY_DISCLOSURE.storage}. Transfer: {PRIVACY_DISCLOSURE.transfer}.</p>
+        <p>Control: {PRIVACY_DISCLOSURE.deletion}.</p>
+        {!disclosureAccepted ? (
+          <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
+        ) : null}
+        <p><a href="https://github.com/AsimovNo9/MyAlgo/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">Read the privacy policy</a></p>
+        {status ? <p className="myalgo-status-banner" role="status">{status}</p> : null}
+      </section>
+
+
+      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Muted graph terms</h2>
+        <p>
+          Mute is a hard Personal Algorithm suppression. Muted terms remain visible here until you explicitly unmute them;
+          unmuting removes only the mute control and does not delete retained history or graph evidence.
+        </p>
+        {graphInspectorSource !== 'live' ? (
+          <button type="button" onClick={() => void handleLoadLiveGraph()}>
+            Load muted terms
+          </button>
+        ) : mutedGraphControls.length === 0 ? (
+          <p>No graph terms are currently muted.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {mutedGraphControls.map((control) => (
+              <div
+                key={control.id}
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 10,
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <strong>{control.targetLabel}</strong>
+                  <div style={{ fontSize: 12, color: '#b9c9dc', overflowWrap: 'anywhere' }}>
+                    {control.targetKind} · {control.targetId}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveGraphControl(control.targetKind, control.targetId)}
+                >
+                  Unmute
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2>Local-first MVP</h2>
+        <p>Observation, feed controls, and recorded interactions stay in this browser until optional sync is introduced.</p>
+      </section>
+
+      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Local semantic model</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={semanticModelMode === 'neural'}
+            disabled={!disclosureAccepted}
+            onChange={(event) => void handleSemanticModelChange(event.target.checked)}
+          />
+          Use local neural semantics
+        </label>
+        <p>
+          When enabled, MyAlgo uses two models packaged with this extension build: mixedbread-ai/mxbai-embed-xsmall-v1
+          for candidate↔graph semantic retrieval and DeBERTa-v3-xsmall NLI for bounded zero-shot verification of metadata concepts
+          plus ambiguous graph matches. Clear high-confidence embedding matches skip DeBERTa. Candidate text, verified concepts,
+          graph state, embeddings, and inference stay local. The installed extension does not download
+          model files at runtime. Embeddings prefer WebGPU and fall back to local WebAssembly CPU inference when needed.
+          The concept verifier deliberately uses q8 WebAssembly CPU inference, which is independent of the embedding batch slider.
+          Metadata concept verification remains asynchronous. For ambiguous graph matches, verifier failure preserves the embedding
+          result with explicit fallback provenance instead of failing ranking.
+        </p>
+        <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + bounded WASM NLI verification)' : 'Deterministic baseline'}</p>
+        <div style={{ marginTop: 16, padding: 12, border: '1px solid #cbd5e1', borderRadius: 10 }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={transcriptEnrichmentEnabled}
+              disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
+              onChange={(event) => void handleTranscriptEnrichmentChange(event.target.checked)}
+            />
+            Use YouTube captions for local semantic enrichment
+          </label>
+          <p style={{ marginBottom: 0 }}>
+            Experimental and off by default. When a video exposes an English caption track, MyAlgo requests it from a
+            YouTube-owned caption endpoint, keeps a bounded beginning/middle/end excerpt locally, and uses that excerpt only
+            as additional input to the packaged mxbai/DeBERTa semantic pipeline. Captions do not become exact preference
+            evidence and are not added to deterministic lexical scoring. Disabling stops new caption acquisition; Delete all
+            local MyAlgo data clears the retained caption cache. This slice does not ship Whisper or another speech-to-text model.
+          </p>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <label htmlFor="semantic-neural-batch-size">
+            WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>
+          </label>
+          <input
+            id="semantic-neural-batch-size"
+            type="range"
+            min="1"
+            max="16"
+            step="1"
+            value={neuralBatchSize}
+            disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
+            onChange={(event) => void handleNeuralBatchSizeChange(Number(event.target.value))}
+            style={{ display: 'block', width: '100%', marginTop: 8 }}
+          />
+          <p style={{ marginTop: 6 }}>
+            Higher values process more embedding texts per WebGPU inference call and can drain embedding work faster,
+            but use more GPU memory. Start at 2–4 on older GPUs and increase only while inference remains stable.
+            This slider does not change concept verification. The DeBERTa verifier runs on its own bounded q8 WASM CPU path.
+          </p>
+        </div>
+
+        {semanticModelStatus ? (
+          <p role="status">
+            <strong>Embedding model:</strong> {semanticModelStatus.status ?? 'unknown'}
+            {typeof semanticModelStatus.progress === 'number' ? ` · ${semanticModelStatus.progress.toFixed(1)}%` : ''}
+            {semanticModelStatus.backend ? ` · ${semanticModelStatus.backend}` : ''}
+            {semanticModelStatus.file ? ` · ${semanticModelStatus.file}` : ''}
+          </p>
+        ) : null}
+        {conceptModelStatus ? (
+          <p role="status">
+            <strong>Concept model:</strong> {conceptModelStatus.status ?? 'unknown'}
+            {typeof conceptModelStatus.progress === 'number' ? ` · ${conceptModelStatus.progress.toFixed(1)}%` : ''}
+            {conceptModelStatus.backend ? ` · ${conceptModelStatus.backend}` : ''}
+            {conceptModelStatus.file ? ` · ${conceptModelStatus.file}` : ''}
+            {typeof conceptModelStatus.item === 'number' && typeof conceptModelStatus.itemCount === 'number'
+              ? ` · item ${conceptModelStatus.item}/${conceptModelStatus.itemCount}`
+              : ''}
+            {conceptModelStatus.error ? ` · ${conceptModelStatus.error}` : ''}
+          </p>
+        ) : null}
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Experimental history bootstrap</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={historyObservationEnabled}
+            onChange={(event) => void handleHistoryObservationChange(event.target.checked)}
+          />
+          Read visible YouTube History items to build local evidence
+        </label>
+        <p>When enabled, MyAlgo stores visible video IDs, titles, creators, displayed history timestamps, and page provenance only in this browser. You can disable this at any time; no history is sent to a server.</p>
+        {historyObservationEnabled && (
+          <button
+            type="button"
+            onClick={() => window.open('https://www.youtube.com/feed/history', '_blank', 'noopener,noreferrer')}
+            style={{ marginTop: 12, padding: '8px 12px' }}
+          >
+            Open YouTube History
+          </button>
+        )}
+      </section>
+
+
+
+      <section style={{ marginTop: 24 }}>
+        <h2>Experimental Home context</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={homeObservationEnabled}
+            onChange={(event) => void handleHomeObservationChange(event.target.checked)}
+          />
+          Record visible YouTube Home recommendations as context
+        </label>
+        <p>When enabled, MyAlgo stores visible video IDs, titles, creators, position, section, and observation time only in this browser. A surfaced recommendation is not treated as a preference; clicks and later history matches are recorded separately.</p>
+      </section>
+
 
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
         <h2>Delete local data</h2>

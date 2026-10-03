@@ -1,5 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '../ui/myalgo-theme.css';
+import './options.css';
 import { Options } from './Options';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

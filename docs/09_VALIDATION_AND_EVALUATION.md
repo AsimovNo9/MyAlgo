@@ -1032,3 +1032,19 @@ Creator placement is a derived graph-explanation aid, not durable group membersh
 6. user-facing durable group renames propagate to both primary creator placement labels and secondary association labels;
 7. creator associations never mutate durable group membership, inferred mode revisions, retained evidence, or scorer inputs;
 8. single-group creators remain visually simple and creators without grouped content remain ordinary structural nodes.
+
+
+## UI refinement validation (#244)
+
+Validate the polished product surface without changing recommendation semantics:
+
+1. Options opens with the primary journey ordered as Your interests → History influence → Recommendation controls → Advanced graph/evidence before technical/privacy settings;
+2. interest and History cards preserve existing selection/pin/ownership behavior while using the refined dark visual system;
+3. the compact popup preserves feed replacement, source filters, retrieval controls, selected groups, pause/activate, and Settings navigation;
+4. native and replacement Why-this panels show an explicit close button;
+5. Escape closes the currently open Why-this panel and restores focus to the originating Why-this trigger when that trigger still exists;
+6. Dismiss mirrors close behavior and does not mutate ranking state;
+7. body-level explanation portals continue to survive YouTube renderer cloning/recycling and cleanup rules;
+8. Prefer / Reduce / Mute / video feedback / Forget / Undo / Restore behavior remains semantically unchanged;
+9. GraphCanvas visual grammar remains creator amber, content blue, selected rose/red, search white, durable group amber, provisional topic cyan, and ungrouped neutral;
+10. keyboard focus is visible on primary Options, popup, and Why-this controls.
