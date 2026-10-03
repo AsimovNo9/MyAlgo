@@ -286,29 +286,29 @@ export function Popup() {
         </p>
         <div className="myalgo-toggle-row" aria-label="Feed filters">
           <ToggleChip
-            active={sourceFilters.subscribedOnly}
+            active={sourceFilters.subscribedOnly === true}
             label="Subscriptions only"
-            onToggle={() => void handleFilterChange('subscribedOnly', !sourceFilters.subscribedOnly)}
+            onToggle={() => void handleFilterChange('subscribedOnly', sourceFilters.subscribedOnly !== true)}
           />
           <ToggleChip
-            active={!sourceFilters.includeDiscovery}
+            active={sourceFilters.includeDiscovery === false}
             label="Hide MyAlgo finds"
-            onToggle={() => void handleFilterChange('includeDiscovery', sourceFilters.includeDiscovery ? false : true)}
+            onToggle={() => void handleFilterChange('includeDiscovery', sourceFilters.includeDiscovery === false)}
           />
           <ToggleChip
-            active={!sourceFilters.includeShorts}
+            active={sourceFilters.includeShorts === false}
             label="Hide Shorts"
-            onToggle={() => void handleFilterChange('includeShorts', sourceFilters.includeShorts ? false : true)}
+            onToggle={() => void handleFilterChange('includeShorts', sourceFilters.includeShorts === false)}
           />
           <ToggleChip
-            active={!sourceFilters.includeLive}
+            active={sourceFilters.includeLive === false}
             label="Hide live"
-            onToggle={() => void handleFilterChange('includeLive', sourceFilters.includeLive ? false : true)}
+            onToggle={() => void handleFilterChange('includeLive', sourceFilters.includeLive === false)}
           />
           <ToggleChip
-            active={!sourceFilters.includePlayables}
+            active={sourceFilters.includePlayables === false}
             label="Hide games"
-            onToggle={() => void handleFilterChange('includePlayables', sourceFilters.includePlayables ? false : true)}
+            onToggle={() => void handleFilterChange('includePlayables', sourceFilters.includePlayables === false)}
           />
         </div>
       </fieldset>
@@ -319,10 +319,10 @@ export function Popup() {
         </p>
         <div className="myalgo-toggle-row" aria-label="Automatic discovery sources">
           <ToggleChip
-            active={retrievalSettings.rssEnabled}
+            active={retrievalSettings.rssEnabled === true}
             label="Channels you watch"
             disabled={retrievalBusy}
-            onToggle={() => void handleRetrievalChange(!retrievalSettings.rssEnabled)}
+            onToggle={() => void handleRetrievalChange(retrievalSettings.rssEnabled !== true)}
           />
           <ToggleChip
             active={retrievalSettings.webSearchEnabled === true}
