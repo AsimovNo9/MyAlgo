@@ -688,6 +688,15 @@ export async function enrichYoutubeCandidate(
     let transcript: ProviderEnrichmentResult['transcript'] = null;
     let transcriptDiagnostics: ProviderEnrichmentResult['transcript_diagnostics'] = null;
 
+    if (options.includeTranscript === true && rich.isLive) {
+      transcriptDiagnostics = {
+        attempted: false,
+        strategy: null,
+        reason: 'live_video',
+        detail: 'Caption enrichment is skipped for live videos.',
+      };
+    }
+
     if (options.includeTranscript === true && !rich.isLive) {
       const apiKey = extractYoutubeInnertubeApiKey(html);
       let sawEnglishTrack = false;
