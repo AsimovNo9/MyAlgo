@@ -3659,9 +3659,11 @@ const handleRuntimeMessage = (
           }).catch(() => undefined)
         : undefined));
 
-      void refreshSemanticConceptGraph(false).catch((error) => {
+      try {
+        await refreshSemanticConceptGraph(false);
+      } catch (error) {
         console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
-      });
+      }
 
       sendResponse({ ok: true, catalog, ownership: next });
     })().catch((error) => sendResponse({
@@ -3691,9 +3693,11 @@ const handleRuntimeMessage = (
             },
           }).catch(() => undefined)
         : undefined));
-      void refreshSemanticConceptGraph(false).catch((error) => {
+      try {
+        await refreshSemanticConceptGraph(false);
+      } catch (error) {
         console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
-      });
+      }
       sendResponse({
         ok: true,
         catalog,
