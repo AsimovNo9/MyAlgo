@@ -146,6 +146,18 @@ export function Options() {
         const config = modeConfigChange.newValue as { currentRevision?: number } | undefined;
         setModeConfigRevision(Number.isInteger(config?.currentRevision) ? Number(config?.currentRevision) : 0);
       }
+      const historyClusterCatalogChange = changes['personal-algorithm-history-cluster-catalog'];
+      if (historyClusterCatalogChange) {
+        setHistoryClusterCatalog(
+          (historyClusterCatalogChange.newValue as HistoryClusterCatalog | undefined) ?? null,
+        );
+      }
+      const historyClusterOwnershipChange = changes['personal-algorithm-history-cluster-ownership'];
+      if (historyClusterOwnershipChange) {
+        setHistoryClusterOwnership(
+          (historyClusterOwnershipChange.newValue as HistoryClusterOwnershipState | undefined) ?? null,
+        );
+      }
       const activeModeChange = changes['personal-algorithm-active-mode-id'];
       if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
       const activeModeIdsChange = changes['personal-algorithm-active-mode-ids'];
