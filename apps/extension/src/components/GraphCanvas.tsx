@@ -126,8 +126,11 @@ const resolveLineageCollisions = (positioned: Map<string, PositionedNode>): void
   for (const node of nodes) positioned.set(node.id, node);
 };
 
+const SELECTED_NODE_COLOR = '#f43f5e';
+const SEARCH_MATCH_COLOR = '#f8fafc';
+
 const nodeFill = (kind: string, selected: boolean, modeMember: boolean): string => {
-  if (selected) return '#facc15';
+  if (selected) return SELECTED_NODE_COLOR;
   if (modeMember) return '#f59e0b';
   switch (kind) {
     case 'concept':
@@ -267,6 +270,8 @@ export function GraphCanvas({
             focusedSemanticClusterId === UNGROUPED_CONTENT_CLUSTER_ID
               ? node.kind === 'content' && !node.semanticClusterId
               : node.semanticClusterId === focusedSemanticClusterId
+                || (node.kind === 'creator'
+                  && node.semanticClusterAssociations?.some((association) => association.id === focusedSemanticClusterId))
           ))
           .map((node) => node.id),
       );
@@ -628,6 +633,26 @@ export function GraphCanvas({
       resolveLineageCollisions(positioned);
     }
 
+    const semanticClusterById = new Map(semanticClusters.map((cluster) => [cluster.id, cluster]));
+    const creatorBridges = [...positioned.values()]
+      .filter((node) => node.kind === 'creator' && (node.semanticClusterAssociations?.length ?? 0) > 1)
+      .flatMap((node) => (
+        (node.semanticClusterAssociations ?? [])
+          .filter((association) => (
+            association.id !== node.semanticClusterId
+            && association.affinity >= 0.12
+            && semanticClusterById.has(association.id)
+          ))
+          .map((association) => ({
+            creatorId: node.id,
+            primaryClusterId: node.semanticClusterId,
+            clusterId: association.id,
+            label: association.label,
+            affinity: association.affinity,
+            contentCount: association.contentCount,
+          }))
+      ));
+
     return {
       nodes: [...positioned.values()],
       edges: visibleEdges,
@@ -636,6 +661,7 @@ export function GraphCanvas({
       focusIsActive,
       hiddenIsolatedCreatorCount,
       semanticClusters,
+      creatorBridges,
     };
   }, [compact, edges, focusOnly, focusedSemanticClusterId, layoutMode, modeOverlay, nodes, searchQuery, selectedEdgeId, selectedNodeId]);
 
@@ -808,7 +834,34 @@ export function GraphCanvas({
               </g>
             );
           }) : null}
-          {layout.edges.map((edge) => {
+          {!compact && layoutMode === 'network' ? layout.creatorBridges.map((bridge) => {
+            const creator = layout.nodeById.get(bridge.creatorId);
+            const cluster = layout.semanticClusters.find((entry) => entry.id === bridge.clusterId);
+            if (!creator || !cluster) return null;
+            const highlighted = selectedNodeId === bridge.creatorId
+              || focusedSemanticClusterId === bridge.clusterId
+              || focusedSemanticClusterId === bridge.primaryClusterId;
+            if (!highlighted) return null;
+            return (
+              <line
+                key={`creator-bridge:${bridge.creatorId}:${bridge.clusterId}`}
+                x1={creator.x}
+                y1={creator.y}
+                x2={cluster.x}
+                y2={cluster.y}
+                stroke="#fbbf24"
+                strokeWidth={1 + bridge.affinity * 2}
+                strokeOpacity={0.32 + bridge.affinity * 0.38}
+                strokeDasharray="5 5"
+                pointerEvents="none"
+              >
+                <title>
+                  {creator.label} also spans {bridge.label} · {Math.round(bridge.affinity * 100)}% visual affinity · {bridge.contentCount} connected video{bridge.contentCount === 1 ? '' : 's'}
+                </title>
+              </line>
+            );
+          }) : null}
+                    {layout.edges.map((edge) => {
             const source = layout.nodeById.get(edge.sourceNodeId);
             const target = layout.nodeById.get(edge.targetNodeId);
             if (!source || !target) return null;
@@ -910,11 +963,26 @@ export function GraphCanvas({
                     pointerEvents="all"
                   />
                 ) : null}
+                {node.kind === 'creator' && (node.semanticClusterAssociations?.length ?? 0) > 1 ? (
+                  <circle
+                    r={radius + 4}
+                    fill="none"
+                    stroke="#fbbf24"
+                    strokeWidth="1.5"
+                    strokeOpacity={dimmed ? 0.2 : 0.75}
+                    strokeDasharray="3 3"
+                    pointerEvents="none"
+                  >
+                    <title>
+                      {node.label} spans {node.semanticClusterAssociations?.length ?? 0} content groups
+                    </title>
+                  </circle>
+                ) : null}
                 {(selected || node.searchMatch) ? (
                   <circle
                     r={radius + 7}
                     fill="none"
-                    stroke={selected ? '#facc15' : '#f8fafc'}
+                    stroke={selected ? SELECTED_NODE_COLOR : SEARCH_MATCH_COLOR}
                     strokeWidth="2"
                     strokeOpacity="0.8"
                   />
@@ -928,7 +996,7 @@ export function GraphCanvas({
                       height="34"
                       rx="5"
                       fill="#111827"
-                      stroke={selected ? '#facc15' : node.provenance === 'explicit' ? '#f8fafc' : '#334155'}
+                      stroke={selected ? SELECTED_NODE_COLOR : node.provenance === 'explicit' ? '#f8fafc' : '#334155'}
                       strokeWidth={selected ? 2.5 : 1.4}
                     />
                     <image
@@ -952,7 +1020,12 @@ export function GraphCanvas({
                     stroke={node.provenance === 'explicit' ? '#f8fafc' : '#0f172a'}
                     strokeWidth={node.provenance === 'explicit' ? 1.8 : 1}
                   >
-                    <title>{node.label} · {node.kind} · {node.provenance}</title>
+                    <title>
+                      {node.label} · {node.kind} · {node.provenance}
+                      {node.kind === 'creator' && node.semanticClusterAssociations?.length
+                        ? ` · primary ${node.semanticClusterAssociations[0]?.label ?? node.semanticClusterLabel ?? '—'} ${Math.round((node.semanticClusterAssociations[0]?.affinity ?? node.semanticClusterAffinity ?? 0) * 100)}%${node.semanticClusterAssociations.length > 1 ? ` · spans ${node.semanticClusterAssociations.length} groups` : ''}`
+                        : ''}
+                    </title>
                   </circle>
                 )}
                 {showLabel ? (
@@ -1014,7 +1087,11 @@ export function GraphCanvas({
                 {label}
               </span>
             ))}
-            <span>white ring = explicit · filled dark ring = inferred</span>
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', border: `2px solid ${SELECTED_NODE_COLOR}` }} />
+              selected
+            </span>
+            <span>white ring = explicit · white halo = search match · filled dark ring = inferred</span>
           </div>
         </>
       ) : null}

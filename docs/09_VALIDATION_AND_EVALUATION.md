@@ -1018,3 +1018,17 @@ Validate the post-ownership UX separately from underlying semantic correctness:
 6. content with no semantic assignment appears in a labelled Not yet grouped region rather than looking accidentally omitted;
 7. Lineage layout resolves thumbnail/label collisions deterministically while keeping related items near their original creator/level;
 8. selecting or focusing a group still works after collision resolution and all existing graph controls/evidence inspection remain available.
+
+
+## Mixed creator group-affinity validation (#178 follow-up)
+
+Creator placement is a derived graph-explanation aid, not durable group membership:
+
+1. a creator inherits an ordered visual affinity distribution from grouped content connected by `created_by` edges;
+2. the strongest aggregate group controls primary Network placement while all secondary groups remain inspectable;
+3. creator affinity is normalized across represented grouped content and reports the number of connected videos contributing to each group;
+4. a creator with multiple non-trivial associations is visually marked as multi-group and can show secondary bridge lines when selected or when a related group is focused;
+5. focusing a secondary group includes creators associated with that group even when it is not their primary placement;
+6. user-facing durable group renames propagate to both primary creator placement labels and secondary association labels;
+7. creator associations never mutate durable group membership, inferred mode revisions, retained evidence, or scorer inputs;
+8. single-group creators remain visually simple and creators without grouped content remain ordinary structural nodes.

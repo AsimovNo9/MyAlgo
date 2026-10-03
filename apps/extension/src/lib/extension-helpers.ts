@@ -231,6 +231,14 @@ export type GraphInspectorNode = {
   semanticClusterLabel: string | null;
   semanticClusterKind: 'mode' | 'topic' | null;
   semanticClusterAffinity: number | null;
+  /** Derived visual associations. Creators may span several groups without becoming durable members. */
+  semanticClusterAssociations?: Array<{
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    affinity: number;
+    contentCount: number;
+  }>;
 };
 
 export type GraphInspectorEdge = {
@@ -512,19 +520,28 @@ export function buildGraphInspectorView(
       const candidates = [...(creatorClusterStats.get(node.id)?.values() ?? [])];
       if (candidates.length === 0) return node;
       const totalScore = candidates.reduce((sum, entry) => sum + entry.score, 0);
-      const strongest = candidates.sort((left, right) => (
+      const ordered = candidates.sort((left, right) => (
         right.score - left.score
         || right.contentCount - left.contentCount
         || Number(right.kind === 'mode') - Number(left.kind === 'mode')
         || left.label.localeCompare(right.label)
         || left.id.localeCompare(right.id)
-      ))[0]!;
+      ));
+      const strongest = ordered[0]!;
+      const semanticClusterAssociations = ordered.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        kind: entry.kind,
+        affinity: totalScore > 0 ? entry.score / totalScore : 0,
+        contentCount: entry.contentCount,
+      }));
       return {
         ...node,
         semanticClusterId: strongest.id,
         semanticClusterLabel: strongest.label,
         semanticClusterKind: strongest.kind,
         semanticClusterAffinity: totalScore > 0 ? strongest.score / totalScore : 0,
+        semanticClusterAssociations,
       };
     })
     .sort((left, right) => (
@@ -609,6 +626,7 @@ export type GraphGroupCoverage = {
   structuralNodeCount: number;
   associatedCreatorCount: number;
   unassociatedStructuralNodeCount: number;
+  multiGroupCreatorCount: number;
   durableGroupCount: number;
   topicClusterCount: number;
   groups: Array<{
@@ -627,6 +645,9 @@ export function summarizeGraphGroupCoverage(view: GraphInspectorView): GraphGrou
     node.kind === 'creator' && Boolean(node.semanticClusterId)
   )).length;
   const unassociatedStructuralNodeCount = structuralNodeCount - associatedCreatorCount;
+  const multiGroupCreatorCount = structuralNodes.filter((node) => (
+    node.kind === 'creator' && (node.semanticClusterAssociations?.length ?? 0) > 1
+  )).length;
   const groups = new Map<string, {
     id: string;
     label: string;
@@ -674,6 +695,7 @@ export function summarizeGraphGroupCoverage(view: GraphInspectorView): GraphGrou
     structuralNodeCount,
     associatedCreatorCount,
     unassociatedStructuralNodeCount,
+    multiGroupCreatorCount,
     durableGroupCount: orderedGroups.filter((group) => group.kind === 'mode').length,
     topicClusterCount: orderedGroups.filter((group) => group.kind === 'topic').length,
     groups: orderedGroups,
@@ -688,17 +710,35 @@ export function applyDurableModeLabelsToGraphInspector(
   const labelByModeId = new Map(catalog.modes.map((mode) => [mode.id, mode.label]));
   let changed = false;
   const nodes = view.nodes.map((node) => {
-    if (node.semanticClusterKind !== 'mode' || !node.semanticClusterId) return node;
-    const modeId = node.semanticClusterId.startsWith('mode:')
-      ? node.semanticClusterId.slice('mode:'.length)
-      : node.semanticClusterId;
-    const label = labelByModeId.get(modeId);
-    if (!label || label === node.semanticClusterLabel) return node;
-    changed = true;
-    return {
-      ...node,
-      semanticClusterLabel: label,
-    };
+    let next = node;
+    if (node.semanticClusterKind === 'mode' && node.semanticClusterId) {
+      const modeId = node.semanticClusterId.startsWith('mode:')
+        ? node.semanticClusterId.slice('mode:'.length)
+        : node.semanticClusterId;
+      const label = labelByModeId.get(modeId);
+      if (label && label !== node.semanticClusterLabel) {
+        changed = true;
+        next = { ...next, semanticClusterLabel: label };
+      }
+    }
+    if (node.semanticClusterAssociations?.length) {
+      let associationChanged = false;
+      const semanticClusterAssociations = node.semanticClusterAssociations.map((association) => {
+        if (association.kind !== 'mode') return association;
+        const modeId = association.id.startsWith('mode:')
+          ? association.id.slice('mode:'.length)
+          : association.id;
+        const label = labelByModeId.get(modeId);
+        if (!label || label === association.label) return association;
+        associationChanged = true;
+        return { ...association, label };
+      });
+      if (associationChanged) {
+        changed = true;
+        next = { ...next, semanticClusterAssociations };
+      }
+    }
+    return next;
   });
   return changed ? { ...view, nodes } : view;
 }

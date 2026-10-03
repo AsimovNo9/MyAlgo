@@ -1534,6 +1534,7 @@ export function Options() {
                       <span>{graphGroupCoverage.topicClusteredContentCount} in provisional topic clusters</span>
                       <span>{graphGroupCoverage.ungroupedContentCount} not yet grouped</span>
                       <span>{graphGroupCoverage.associatedCreatorCount} creator{graphGroupCoverage.associatedCreatorCount === 1 ? '' : 's'} associated with the strongest group represented by their content</span>
+                      <span>{graphGroupCoverage.multiGroupCreatorCount} creator{graphGroupCoverage.multiGroupCreatorCount === 1 ? '' : 's'} span multiple groups and are shown as bridges rather than exclusive members</span>
                       <span>{graphGroupCoverage.unassociatedStructuralNodeCount} other structural node{graphGroupCoverage.unassociatedStructuralNodeCount === 1 ? '' : 's'} (creators without grouped content, concepts, topics, objectives) outside content groups</span>
                     </div>
                   </div>
@@ -1642,6 +1643,36 @@ export function Options() {
                             {selectedGraphNode.confidence == null ? '' : ` · confidence ${selectedGraphNode.confidence.toFixed(2)}`}
                           </p>
                           <code style={{ color: '#93c5fd', overflowWrap: 'anywhere' }}>{selectedGraphNode.id}</code>
+                          {selectedGraphNode.kind === 'creator' && selectedGraphNode.semanticClusterAssociations?.length ? (
+                            <div style={{ marginTop: 10, padding: 10, border: '1px solid #334155', borderRadius: 9 }}>
+                              <strong>Content-group associations</strong>
+                              <p style={{ margin: '5px 0 8px', color: '#94a3b8', fontSize: 11 }}>
+                                Derived from this creator&apos;s connected videos for graph placement only. This does not make the creator a durable group member.
+                              </p>
+                              <div style={{ display: 'grid', gap: 6 }}>
+                                {selectedGraphNode.semanticClusterAssociations.map((association, index) => (
+                                  <div
+                                    key={association.id}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto',
+                                      gap: 10,
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    <span>
+                                      {index === 0 ? <strong>{association.label}</strong> : association.label}
+                                      <span style={{ color: '#94a3b8', fontSize: 11 }}>
+                                        {' · '}{association.contentCount} video{association.contentCount === 1 ? '' : 's'}
+                                        {index === 0 ? ' · primary placement' : ' · secondary bridge'}
+                                      </span>
+                                    </span>
+                                    <strong>{Math.round(association.affinity * 100)}%</strong>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           {graphInspectorSource === 'live' && selectedGraphNode.kind !== 'content' ? (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
                               <button type="button" onClick={() => void handleGraphControl('node', selectedGraphNode.id, 'reduce')}>Reduce</button>
