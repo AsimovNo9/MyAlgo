@@ -795,7 +795,7 @@ export function Options() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div>
                     <strong style={{ fontSize: 16 }}>{interest.label}</strong>
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#b9c9dc' }}>
                       {interest.memberCount} signal{interest.memberCount === 1 ? '' : 's'}
                       {' · '}{interest.supportCount} supporting video{interest.supportCount === 1 ? '' : 's'}
                       {!interest.active ? ' · retained' : ''}
@@ -812,7 +812,7 @@ export function Options() {
                   </span>
                 </div>
                 {interest.memberLabels.length > 0 ? (
-                  <p style={{ margin: '10px 0', fontSize: 13, color: '#475569' }}>
+                  <p style={{ margin: '10px 0', fontSize: 13, color: '#c8d5e6' }}>
                     {interest.memberLabels.join(' · ')}
                   </p>
                 ) : null}
@@ -826,7 +826,7 @@ export function Options() {
                 </div>
                 <details style={{ marginTop: 10 }}>
                   <summary style={{ cursor: 'pointer' }}>Why MyAlgo sees this</summary>
-                  <p style={{ fontSize: 12, color: '#64748b', marginBottom: 0 }}>
+                  <p style={{ fontSize: 12, color: '#b9c9dc', marginBottom: 0 }}>
                     This interest is built from repeated local semantic signals and their supporting retained videos.
                     Open Advanced group management below to rename it or edit its exact members.
                   </p>
@@ -835,7 +835,7 @@ export function Options() {
             ))}
           </div>
         ) : (
-          <p style={{ color: '#64748b' }}>
+          <p style={{ color: '#b9c9dc' }}>
             No durable interests yet. As repeated evidence accumulates, MyAlgo will surface stable interests here.
           </p>
         )}
@@ -862,7 +862,7 @@ export function Options() {
           <button type="button" onClick={() => void refreshHistoryClusterOwnership()}>
             Refresh clusters
           </button>
-          <span style={{ fontSize: 12, color: '#64748b' }}>
+          <span style={{ fontSize: 12, color: '#b9c9dc' }}>
             revision {historyClusterOwnership?.currentRevision ?? 0}
           </span>
         </div>
@@ -897,12 +897,12 @@ export function Options() {
                   }}
                 >
                   <strong>{cluster.label}</strong>
-                  <div className="myalgo-muted" style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 12, color: '#b9c9dc', marginTop: 3 }}>
                     {selected ? 'Used for recommendations' : 'Not used for recommendations'}
                     {' · '}{cluster.size} retained video{cluster.size === 1 ? '' : 's'}
                     {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
                   </div>
-                  <div className="myalgo-muted" style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 11, color: '#b9c9dc', overflowWrap: 'anywhere', marginTop: 2 }}>
                     {cluster.id}
                   </div>
                 </button>
@@ -911,7 +911,7 @@ export function Options() {
             {visibleHistoryClusters.length === 0 ? <span>No matching History clusters.</span> : null}
           </div>
         ) : (
-          <p style={{ color: '#64748b' }}>
+          <p style={{ color: '#b9c9dc' }}>
             No History clusters yet. Enable History observation and visit YouTube History, then refresh clusters.
           </p>
         )}
@@ -1600,11 +1600,11 @@ export function Options() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                   <div>
                     <strong>{option.label}</strong>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                    <div style={{ fontSize: 12, color: '#b9c9dc' }}>
                       {option.active ? 'active' : 'dormant'} · semantic r{option.revision ?? '?'} · {option.pinned ? 'pinned' : 'not pinned'}
                     </div>
                     {option.inferredLabel && option.inferredLabel !== option.label ? (
-                      <div style={{ fontSize: 12, color: '#64748b' }}>Inferred name: {option.inferredLabel}</div>
+                      <div style={{ fontSize: 12, color: '#b9c9dc' }}>Inferred name: {option.inferredLabel}</div>
                     ) : null}
                   </div>
                   <button type="button" onClick={() => void handlePinMode(option.id, !option.pinned)}>
@@ -1656,7 +1656,7 @@ export function Options() {
                       <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
                         Members ({configuredMode.members.length}{membershipEdited ? ' · edited' : ''})
                       </summary>
-                      <p style={{ fontSize: 12, color: '#64748b' }}>
+                      <p style={{ fontSize: 12, color: '#b9c9dc' }}>
                         Membership edits change this group lens only. They do not delete evidence, graph nodes, or the reconciler-owned inferred membership.
                       </p>
                       <div style={{ display: 'grid', gap: 6 }}>
@@ -1675,7 +1675,7 @@ export function Options() {
                           >
                             <div style={{ minWidth: 0 }}>
                               <strong>{member.label}</strong>
-                              <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere' }}>
+                              <div style={{ fontSize: 11, color: '#b9c9dc', overflowWrap: 'anywhere' }}>
                                 {member.canonicalId}{inferredIds.has(member.canonicalId) ? ' · inferred' : ' · user-added'}
                               </div>
                             </div>
@@ -1688,7 +1688,7 @@ export function Options() {
                           </div>
                         ))}
                         {configuredMode.members.length === 0 ? (
-                          <span style={{ fontSize: 12, color: '#64748b' }}>No effective members. Add one below or reset inferred membership.</span>
+                          <span style={{ fontSize: 12, color: '#b9c9dc' }}>No effective members. Add one below or reset inferred membership.</span>
                         ) : null}
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
@@ -1782,7 +1782,7 @@ export function Options() {
               >
                 <div style={{ minWidth: 0 }}>
                   <strong>{control.targetLabel}</strong>
-                  <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere' }}>
+                  <div style={{ fontSize: 12, color: '#b9c9dc', overflowWrap: 'anywhere' }}>
                     {control.targetKind} · {control.targetId}
                   </div>
                 </div>
