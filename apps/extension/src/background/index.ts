@@ -116,6 +116,7 @@ type TranscriptEnrichmentRecord = {
   acquisitionStrategy: 'innertube_ios' | 'innertube_android' | 'watch_page' | null;
   failureReason:
     | 'invalid_video_id'
+    | 'live_video'
     | 'missing_innertube_api_key'
     | 'no_english_caption_track'
     | 'player_request_failed'
