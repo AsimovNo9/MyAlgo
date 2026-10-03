@@ -14,7 +14,7 @@ import { buildLocalFeedbackSignals, getLocalScoringDiagnostics, scoreLocalCandid
 import { applyDurableModeToRetrievalProfile, applyModeToRetrievalProfile, buildCandidateEmbeddingText, buildCandidateModeAffinities, buildCanonicalSemanticConcepts, buildDurableSemanticModeClusters, buildGraphRetrievalProfile, buildGraphRetrievalRevision, buildRecommendationQueryPlans, buildSemanticConceptMaterialization, buildConceptVerificationInput, conceptExtractionInputHash, CONCEPT_EXTRACTION_MODEL_ID, CONCEPT_EXTRACTION_MODEL_VERSION, CONCEPT_EXTRACTION_PIPELINE_VERSION, DURABLE_MODE_AFFINITY_PIPELINE_ID, DURABLE_SEMANTIC_MODE_PIPELINE_ID, enrichCandidatesWithSemanticReranking, reconcileDurableSemanticModes, resolveDurableMode, semanticInputHash, SEMANTIC_CONCEPT_MATERIALIZER_ID, SEMANTIC_GRAPH_VERIFICATION_PIPELINE_ID } from '@repo/recommender-core';
 import { PRIVACY_DISCLOSURE_VERSION, isPrivacyDisclosureAccepted } from '../lib/privacy';
 import { acquireWebSearchCandidates, isRetrievalAllowed, mergeCandidateAcquisitionHistory, nextRssAllowedAt, nextWebSearchAllowedAt, reconcileModeSupplyForSelection, selectWebSearchPlans, shouldRefreshObservedCandidate } from './retrieval';
-import { buildYoutubeRssFeedUrl, isYoutubeSearchBlockedError, isYoutubeVideoId, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
+import { buildYoutubeRssFeedUrl, enrichYoutubeCandidate, isYoutubeSearchBlockedError, isYoutubeVideoId, needsYoutubeMetadataRefresh, parseYoutubeRssFeed, selectYoutubeRssChannelIds } from '../connectors/youtube-acquisition';
 import { createChromeEmbeddingCache } from '../lib/semantic-embedding-cache';
 import { createOffscreenEmbeddingProvider, semanticProviderIdentity, type SemanticModelMode } from '../lib/semantic-embedding-provider';
 import { createLocalConceptExtractionProvider } from '../lib/concept-extraction-provider';
@@ -122,6 +122,7 @@ type TranscriptEnrichmentRecord = {
     | 'caption_payload_empty'
     | 'caption_request_failed'
     | null;
+  failureDetail: string | null;
   checkedAt: string;
 };
 
@@ -241,7 +242,7 @@ const MAX_SEMANTIC_FEATURE_CACHE = 600;
 const MAX_CONCEPT_EXTRACTION_CACHE = 600;
 const MAX_TRANSCRIPT_ENRICHMENT_CACHE = 160;
 const TRANSCRIPT_REFRESH_MS = 24 * 60 * 60 * 1000;
-const TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION = 'youtube-caption-innertube-v2';
+const TRANSCRIPT_ENRICHMENT_PIPELINE_VERSION = 'youtube-caption-page-origin-v3';
 const MAX_CONCEPT_EXTRACTIONS_PER_REFRESH = 2;
 const MAX_NEURAL_CANDIDATES_PER_REFRESH = 8;
 const MAX_HYBRID_CANDIDATES_PER_REFRESH = 4;
@@ -748,6 +749,75 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   });
 }
 
+const youtubePageOriginFetch: typeof fetch = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> => {
+  const rawUrl = input instanceof Request
+    ? input.url
+    : input instanceof URL
+      ? input.toString()
+      : String(input);
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return fetch(input, init);
+  }
+
+  const host = url.hostname.toLowerCase();
+  const pageOriginEligible = (
+    (host === 'youtube.com' || host.endsWith('.youtube.com'))
+    && ['/youtubei/v1/player', '/api/timedtext'].includes(url.pathname)
+  );
+  if (!pageOriginEligible) return fetch(input, init);
+
+  try {
+    const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+    const tab = tabs.find((candidate) => candidate.active && candidate.id)
+      ?? tabs.find((candidate) => candidate.id);
+    if (!tab?.id) return fetch(input, init);
+
+    const headers = new Headers(init?.headers);
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: 'YOUTUBE_PROVIDER_FETCH',
+      payload: {
+        url: url.toString(),
+        method: init?.method === 'POST' ? 'POST' : 'GET',
+        headers: {
+          'Content-Type': headers.get('Content-Type') ?? '',
+          'Accept-Language': headers.get('Accept-Language') ?? '',
+        },
+        body: typeof init?.body === 'string' ? init.body : null,
+      },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      response?: {
+        ok: boolean;
+        status: number;
+        statusText: string;
+        text: string;
+      };
+    };
+
+    if (!response?.ok || !response.response) {
+      throw new Error(response?.error ?? 'YouTube page-origin provider fetch failed.');
+    }
+    return new Response(response.response.text, {
+      status: response.response.status,
+      statusText: response.response.statusText,
+      headers: {
+        'Content-Type': url.pathname === '/youtubei/v1/player'
+          ? 'application/json'
+          : 'text/plain; charset=utf-8',
+      },
+    });
+  } catch {
+    return fetch(input, init);
+  }
+};
+
 async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]> {
   if (candidates.length === 0) return [];
   const [existing, transcriptEnabled, transcriptCache] = await Promise.all([
@@ -781,9 +851,13 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
   } | null> => {
     const acquisition = youtubeConnector.acquisition;
     if (!acquisition) return null;
-    const enriched = await acquisition.enrich(candidate, {
-      includeTranscript: transcriptEnabled,
-    });
+    const enriched = transcriptEnabled
+      ? await enrichYoutubeCandidate(
+          candidate,
+          youtubePageOriginFetch,
+          { includeTranscript: true },
+        )
+      : await acquisition.enrich(candidate, { includeTranscript: false });
     if (!enriched) {
       metadataEnrichmentFailureUntil.set(
         candidate.external_id,
@@ -823,6 +897,9 @@ async function enrichVideos(candidates: PageCandidate[]): Promise<VideoRecord[]>
               : transcriptDiagnostics?.reason && transcriptDiagnostics.reason !== 'available'
                 ? transcriptDiagnostics.reason
                 : null,
+            failureDetail: transcript?.text?.trim()
+              ? null
+              : transcriptDiagnostics?.detail?.slice(0, 360) ?? null,
             checkedAt,
           }
         : null,
