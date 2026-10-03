@@ -222,6 +222,7 @@ export const undoHistoryClusterOwnership = (
 export const buildHistoryClusterCatalog = (
   history: readonly HistoryEvidence[],
   generatedAt = new Date().toISOString(),
+  previousCatalog: HistoryClusterCatalog | null = null,
 ): HistoryClusterCatalog => {
   const items = history
     .filter((item) => item?.externalId && item.title)
@@ -303,7 +304,7 @@ export const buildHistoryClusterCatalog = (
   const overflow = grouped.slice(23).flat();
   if (remainder.length > 0 || overflow.length > 0) primary.push([...remainder, ...overflow]);
 
-  const clusters = primary.map((group, clusterIndex): HistoryCluster => {
+  const provisionalClusters = primary.map((group, clusterIndex): HistoryCluster => {
     const externalIds = [...new Set(group.map((entry) => entry.item.externalId))].sort();
     const creators = [...new Set(group
       .map((entry) => entry.item.creator?.trim() ?? '')
@@ -334,6 +335,39 @@ export const buildHistoryClusterCatalog = (
       keywords,
       size: externalIds.length,
     };
+  });
+
+  const previous = (previousCatalog?.pipelineId === HISTORY_CLUSTER_PIPELINE_ID
+    ? previousCatalog.clusters
+    : []
+  ).map((cluster) => ({
+    cluster,
+    ids: new Set(cluster.externalIds),
+  }));
+  const usedPreviousIds = new Set<string>();
+  const clusters = provisionalClusters.map((cluster) => {
+    const currentIds = new Set(cluster.externalIds);
+    const best = previous
+      .filter((entry) => !usedPreviousIds.has(entry.cluster.id))
+      .map((entry) => {
+        let overlap = 0;
+        for (const id of currentIds) if (entry.ids.has(id)) overlap += 1;
+        const unionSize = new Set([...currentIds, ...entry.ids]).size;
+        return {
+          cluster: entry.cluster,
+          overlap,
+          jaccard: unionSize > 0 ? overlap / unionSize : 0,
+        };
+      })
+      .filter((entry) => entry.overlap > 0 && entry.jaccard >= 0.5)
+      .sort((left, right) => (
+        right.jaccard - left.jaccard
+        || right.overlap - left.overlap
+        || left.cluster.id.localeCompare(right.cluster.id)
+      ))[0];
+    if (!best) return cluster;
+    usedPreviousIds.add(best.cluster.id);
+    return { ...cluster, id: best.cluster.id };
   });
 
   return {
