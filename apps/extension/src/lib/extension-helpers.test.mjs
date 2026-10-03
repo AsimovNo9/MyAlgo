@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDurableModeLabelsToGraphInspector, buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
+import { applyDurableModeLabelsToGraphInspector, buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed, summarizeGraphGroupCoverage } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -85,6 +85,65 @@ test('buildDurableModeOptions uses persisted stable mode IDs instead of feed cat
   );
 });
 
+
+test('graph group coverage distinguishes durable groups, provisional topics, ungrouped content, and structural nodes', () => {
+  const view = {
+    schemaVersion: 3,
+    graphRevision: 9,
+    evidenceCount: 4,
+    forgottenEvidenceCount: 0,
+    nodeCount: 5,
+    edgeCount: 0,
+    nodesByKind: [],
+    edgesByRelation: [],
+    nodes: [
+      {
+        id: 'content:a', label: 'A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'a', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'mode:mode:a', semanticClusterLabel: 'Programming', semanticClusterKind: 'mode', semanticClusterAffinity: 0.9,
+      },
+      {
+        id: 'content:b', label: 'B', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'b', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'mode:mode:a', semanticClusterLabel: 'Programming', semanticClusterKind: 'mode', semanticClusterAffinity: 0.7,
+      },
+      {
+        id: 'content:c', label: 'C', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'c', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'topic:music', semanticClusterLabel: 'Music', semanticClusterKind: 'topic', semanticClusterAffinity: 0.5,
+      },
+      {
+        id: 'content:d', label: 'D', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'd', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: null, semanticClusterLabel: null, semanticClusterKind: null, semanticClusterAffinity: null,
+      },
+      {
+        id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 2,
+        contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null,
+        semanticClusterId: null, semanticClusterLabel: null, semanticClusterKind: null, semanticClusterAffinity: null,
+      },
+    ],
+    edges: [],
+    controls: [],
+    revisions: [],
+  };
+
+  assert.deepEqual(summarizeGraphGroupCoverage(view), {
+    contentCount: 4,
+    durableGroupedContentCount: 2,
+    topicClusteredContentCount: 1,
+    ungroupedContentCount: 1,
+    structuralNodeCount: 1,
+    associatedCreatorCount: 0,
+    unassociatedStructuralNodeCount: 1,
+    durableGroupCount: 1,
+    topicClusterCount: 1,
+    groups: [
+      { id: 'mode:mode:a', label: 'Programming', kind: 'mode', count: 2 },
+      { id: 'topic:music', label: 'Music', kind: 'topic', count: 1 },
+    ],
+  });
+});
 
 test('graph inspector mode cluster labels follow user-facing durable group labels', () => {
   const view = {
@@ -255,6 +314,87 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
     contentLabel: 'Video A',
   }]);
   assert.equal(view.revisions[0].revision, 7);
+});
+
+test('graph inspector derives creator group affinity from the content they create', () => {
+  const state = {
+    schemaVersion: 3,
+    evidence: [],
+    forgottenEvidence: [],
+    graph: {
+      currentRevision: 5,
+      userEdits: [],
+      revisions: [],
+      controls: [],
+      nodes: [
+        {
+          id: 'content:youtube:a', kind: 'content', label: 'A',
+          content: { source: 'youtube', externalId: 'a' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'content:youtube:b', kind: 'content', label: 'B',
+          content: { source: 'youtube', externalId: 'b' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'content:youtube:c', kind: 'content', label: 'C',
+          content: { source: 'youtube', externalId: 'c' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'creator:youtube:x', kind: 'creator', label: 'Creator X',
+          provenance: 'inferred', confidence: 1, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          id: 'created:a', sourceNodeId: 'content:youtube:a', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'created:b', sourceNodeId: 'content:youtube:b', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'created:c', sourceNodeId: 'content:youtube:c', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+      ],
+    },
+  };
+  const semantic = [
+    {
+      externalId: 'a', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:software', label: 'Software engineering', affinity: 0.9 }],
+    },
+    {
+      externalId: 'b', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:software', label: 'Software engineering', affinity: 0.8 }],
+    },
+    {
+      externalId: 'c', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:music', label: 'Music', affinity: 0.7 }],
+    },
+  ];
+
+  const view = buildGraphInspectorView(state, semantic);
+  const creator = view.nodes.find((node) => node.id === 'creator:youtube:x');
+  assert.equal(creator.semanticClusterId, 'mode:mode:software');
+  assert.equal(creator.semanticClusterLabel, 'Software engineering');
+  assert.equal(creator.semanticClusterKind, 'mode');
+  assert.ok(creator.semanticClusterAffinity > 0.7);
+
+  const coverage = summarizeGraphGroupCoverage(view);
+  assert.equal(coverage.associatedCreatorCount, 1);
+  assert.equal(coverage.unassociatedStructuralNodeCount, 0);
 });
 
 test('graph inspector anchors retained content to durable catalog groups even without cached mode affinity', () => {

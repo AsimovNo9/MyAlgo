@@ -370,7 +370,7 @@ export function buildGraphInspectorView(
     };
   };
 
-  const nodes = state.graph.nodes
+  const baseNodes = state.graph.nodes
     .map((node) => {
       const metadata = node.attributes?.metadata && typeof node.attributes.metadata === 'object'
         ? node.attributes.metadata as {
@@ -474,6 +474,65 @@ export function buildGraphInspectorView(
       || left.id.localeCompare(right.id)
     ));
 
+  const baseNodeById = new Map(baseNodes.map((node) => [node.id, node]));
+  const creatorClusterStats = new Map<string, Map<string, {
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    score: number;
+    contentCount: number;
+  }>>();
+  for (const edge of state.graph.edges) {
+    if (edge.relation !== 'created_by') continue;
+    const content = baseNodeById.get(edge.sourceNodeId);
+    const creator = baseNodeById.get(edge.targetNodeId);
+    if (
+      content?.kind !== 'content'
+      || creator?.kind !== 'creator'
+      || !content.semanticClusterId
+      || !content.semanticClusterLabel
+      || !content.semanticClusterKind
+    ) continue;
+    const byCluster = creatorClusterStats.get(creator.id) ?? new Map();
+    const current = byCluster.get(content.semanticClusterId);
+    const contribution = Math.max(0.1, Number(content.semanticClusterAffinity ?? 1));
+    byCluster.set(content.semanticClusterId, {
+      id: content.semanticClusterId,
+      label: content.semanticClusterLabel,
+      kind: content.semanticClusterKind,
+      score: (current?.score ?? 0) + contribution,
+      contentCount: (current?.contentCount ?? 0) + 1,
+    });
+    creatorClusterStats.set(creator.id, byCluster);
+  }
+
+  const nodes = baseNodes
+    .map((node) => {
+      if (node.kind !== 'creator') return node;
+      const candidates = [...(creatorClusterStats.get(node.id)?.values() ?? [])];
+      if (candidates.length === 0) return node;
+      const totalScore = candidates.reduce((sum, entry) => sum + entry.score, 0);
+      const strongest = candidates.sort((left, right) => (
+        right.score - left.score
+        || right.contentCount - left.contentCount
+        || Number(right.kind === 'mode') - Number(left.kind === 'mode')
+        || left.label.localeCompare(right.label)
+        || left.id.localeCompare(right.id)
+      ))[0]!;
+      return {
+        ...node,
+        semanticClusterId: strongest.id,
+        semanticClusterLabel: strongest.label,
+        semanticClusterKind: strongest.kind,
+        semanticClusterAffinity: totalScore > 0 ? strongest.score / totalScore : 0,
+      };
+    })
+    .sort((left, right) => (
+      left.kind.localeCompare(right.kind)
+      || left.label.localeCompare(right.label)
+      || left.id.localeCompare(right.id)
+    ));
+
   const edges = state.graph.edges
     .map((edge) => ({
       id: edge.id,
@@ -539,6 +598,85 @@ export function buildGraphInspectorView(
         reason: revision.reason,
         createdAt: revision.createdAt,
       })),
+  };
+}
+
+export type GraphGroupCoverage = {
+  contentCount: number;
+  durableGroupedContentCount: number;
+  topicClusteredContentCount: number;
+  ungroupedContentCount: number;
+  structuralNodeCount: number;
+  associatedCreatorCount: number;
+  unassociatedStructuralNodeCount: number;
+  durableGroupCount: number;
+  topicClusterCount: number;
+  groups: Array<{
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    count: number;
+  }>;
+};
+
+export function summarizeGraphGroupCoverage(view: GraphInspectorView): GraphGroupCoverage {
+  const contentNodes = view.nodes.filter((node) => node.kind === 'content');
+  const structuralNodes = view.nodes.filter((node) => node.kind !== 'content');
+  const structuralNodeCount = structuralNodes.length;
+  const associatedCreatorCount = structuralNodes.filter((node) => (
+    node.kind === 'creator' && Boolean(node.semanticClusterId)
+  )).length;
+  const unassociatedStructuralNodeCount = structuralNodeCount - associatedCreatorCount;
+  const groups = new Map<string, {
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    count: number;
+  }>();
+
+  let durableGroupedContentCount = 0;
+  let topicClusteredContentCount = 0;
+  let ungroupedContentCount = 0;
+
+  for (const node of contentNodes) {
+    if (!node.semanticClusterId || !node.semanticClusterLabel || !node.semanticClusterKind) {
+      ungroupedContentCount += 1;
+      continue;
+    }
+    if (node.semanticClusterKind === 'mode') durableGroupedContentCount += 1;
+    else topicClusteredContentCount += 1;
+
+    const current = groups.get(node.semanticClusterId);
+    if (current) {
+      current.count += 1;
+    } else {
+      groups.set(node.semanticClusterId, {
+        id: node.semanticClusterId,
+        label: node.semanticClusterLabel,
+        kind: node.semanticClusterKind,
+        count: 1,
+      });
+    }
+  }
+
+  const orderedGroups = [...groups.values()].sort((left, right) => (
+    Number(right.kind === 'mode') - Number(left.kind === 'mode')
+    || right.count - left.count
+    || left.label.localeCompare(right.label)
+    || left.id.localeCompare(right.id)
+  ));
+
+  return {
+    contentCount: contentNodes.length,
+    durableGroupedContentCount,
+    topicClusteredContentCount,
+    ungroupedContentCount,
+    structuralNodeCount,
+    associatedCreatorCount,
+    unassociatedStructuralNodeCount,
+    durableGroupCount: orderedGroups.filter((group) => group.kind === 'mode').length,
+    topicClusterCount: orderedGroups.filter((group) => group.kind === 'topic').length,
+    groups: orderedGroups,
   };
 }
 

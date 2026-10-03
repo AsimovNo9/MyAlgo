@@ -7,6 +7,7 @@ import {
   buildGraphInspectorView,
   buildGraphModeOverlay,
   parseGraphInspectorExport,
+  summarizeGraphGroupCoverage,
   type ContentExplanation,
   type GraphInspectorSemanticContext,
   type GraphInspectorView,
@@ -627,6 +628,28 @@ export function Options() {
   const selectedModeOptions = modeOptions.filter((option) => (
     option.id !== 'default' && selectedModeIds.includes(option.id)
   ));
+  const interestCards = modeOptions
+    .filter((option) => option.id !== 'default')
+    .map((option) => {
+      const configuredMode = durableModeCatalog?.modes.find((entry) => entry.id === option.id) ?? null;
+      const supportContentIds = new Set(
+        configuredMode?.members.flatMap((member) => member.supportContentIds) ?? [],
+      );
+      return {
+        ...option,
+        selected: selectedModeIds.includes(option.id),
+        memberCount: configuredMode?.members.length ?? 0,
+        supportCount: supportContentIds.size,
+        memberLabels: (configuredMode?.members ?? []).slice(0, 4).map((member) => member.label),
+      };
+    })
+    .sort((left, right) => (
+      Number(right.selected) - Number(left.selected)
+      || Number(right.pinned) - Number(left.pinned)
+      || Number(right.active) - Number(left.active)
+      || right.supportCount - left.supportCount
+      || left.label.localeCompare(right.label)
+    ));
   const normalizedModeSearch = modeSearch.trim().toLowerCase();
   const searchableModeOptions = modeOptions.filter((option) => (
     option.id !== 'default'
@@ -656,6 +679,9 @@ export function Options() {
   const effectiveGraphInspector = graphInspector && graphInspectorSource === 'live'
     ? applyDurableModeLabelsToGraphInspector(graphInspector, durableModeCatalog)
     : graphInspector;
+  const graphGroupCoverage = effectiveGraphInspector
+    ? summarizeGraphGroupCoverage(effectiveGraphInspector)
+    : null;
   const normalizedGraphQuery = graphQuery.trim().toLowerCase();
   const filteredGraphNodes = (effectiveGraphInspector?.nodes ?? []).filter((node) => (
     !normalizedGraphQuery
@@ -745,11 +771,78 @@ export function Options() {
         {status ? <p role="status">{status}</p> : null}
       </section>
 
-      <section style={{ marginBottom: 24 }}>
-        <h2>Modes / groups</h2>
+      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Your interests</h2>
         <p>
-          Selected groups stay pinned even if a later graph refresh makes them dormant or discovers a broader parent group.
-          Deselect a pinned bubble explicitly to remove it from the active feed intent.
+          These are the recurring interests MyAlgo currently recognizes. You can choose what you want to use for your feed
+          without editing the graph underneath.
+        </p>
+        {interestCards.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+            {interestCards.map((interest) => (
+              <article
+                key={`interest:${interest.id}`}
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  border: interest.selected ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  background: interest.selected ? '#eff6ff' : '#fff',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <div>
+                    <strong style={{ fontSize: 16 }}>{interest.label}</strong>
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                      {interest.memberCount} signal{interest.memberCount === 1 ? '' : 's'}
+                      {' · '}{interest.supportCount} supporting video{interest.supportCount === 1 ? '' : 's'}
+                      {!interest.active ? ' · retained' : ''}
+                    </div>
+                  </div>
+                  <span style={{
+                    borderRadius: 999,
+                    padding: '3px 7px',
+                    fontSize: 11,
+                    background: interest.selected ? '#dbeafe' : '#f1f5f9',
+                    color: interest.selected ? '#1d4ed8' : '#475569',
+                  }}>
+                    {interest.selected ? 'Used for feed' : 'Available'}
+                  </span>
+                </div>
+                {interest.memberLabels.length > 0 ? (
+                  <p style={{ margin: '10px 0', fontSize: 13, color: '#475569' }}>
+                    {interest.memberLabels.join(' · ')}
+                  </p>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => void handleModeChange(interest.id)}>
+                    {interest.selected ? 'Stop using for feed' : 'Use for feed'}
+                  </button>
+                  <button type="button" onClick={() => void handlePinMode(interest.id, !interest.pinned)}>
+                    {interest.pinned ? 'Allow to fade' : 'Keep this interest'}
+                  </button>
+                </div>
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: 'pointer' }}>Why MyAlgo sees this</summary>
+                  <p style={{ fontSize: 12, color: '#64748b', marginBottom: 0 }}>
+                    This interest is built from repeated local semantic signals and their supporting retained videos.
+                    Open Advanced group management below to rename it or edit its exact members.
+                  </p>
+                </details>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: '#64748b' }}>
+            No durable interests yet. As repeated evidence accumulates, MyAlgo will surface stable interests here.
+          </p>
+        )}
+      </section>
+
+      <section style={{ marginBottom: 24 }}>
+        <h2>Advanced group management</h2>
+        <p>
+          Use this section when you want exact control over group selection, names, retained ownership, or membership.
+          The simpler Your interests cards above are enough for normal feed tuning.
         </p>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Selected</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1140,10 +1233,10 @@ export function Options() {
       </section>
 
       <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>History ownership</h2>
+        <h2 style={{ marginTop: 0 }}>What should your History teach MyAlgo?</h2>
         <p>
-          MyAlgo derives local content clusters from retained YouTube History so shared-account activity can be reviewed explicitly.
-          Choosing clusters changes which History evidence influences graph reconstruction and scoring; it does not delete the excluded History records.
+          MyAlgo found these areas in your retained YouTube History. Choose the ones that should shape recommendations.
+          Turning one off does not delete that History; it only stops that cluster from teaching MyAlgo.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
@@ -1151,10 +1244,10 @@ export function Options() {
             aria-pressed={historyClusterOwnership?.selectionMode !== 'selected'}
             onClick={() => void handleHistoryClusterSelection(null)}
           >
-            All retained History
+            Use all retained History
           </button>
           <button type="button" onClick={() => void handleUndoHistoryClusterSelection()}>
-            Undo History ownership
+            Undo last History choice
           </button>
           <button type="button" onClick={() => void refreshHistoryClusterOwnership()}>
             Refresh clusters
@@ -1164,14 +1257,14 @@ export function Options() {
           </span>
         </div>
         <label htmlFor="history-cluster-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
-          Search History clusters
+          Find an area of History
         </label>
         <input
           id="history-cluster-search"
           type="search"
           value={historyClusterSearch}
           onChange={(event) => setHistoryClusterSearch(event.target.value)}
-          placeholder="Search topics or creators"
+          placeholder="Search topics, creators, or activities"
           style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
         />
         {historyClusterCatalog?.clusters.length ? (
@@ -1194,7 +1287,8 @@ export function Options() {
                 >
                   <strong>{cluster.label}</strong>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-                    {cluster.size} retained video{cluster.size === 1 ? '' : 's'}
+                    {selected ? 'Used for recommendations' : 'Not used for recommendations'}
+                    {' · '}{cluster.size} retained video{cluster.size === 1 ? '' : 's'}
                     {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
                   </div>
                   <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
@@ -1234,9 +1328,11 @@ export function Options() {
       </section>
 
       <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
-        <h2>Personal Algorithm Graph explorer</h2>
+        <h2>Advanced graph & evidence</h2>
         <p>
-          Explore the current local graph visually, search stable graph IDs, switch between durable group overlays,
+          You do not need this view to tune MyAlgo. It is the transparent inspection layer for people who want to see exactly
+          how interests, evidence, creators, concepts, and recommendations connect. Explore the current local graph visually,
+          search stable graph IDs, switch between durable group overlays,
           and inspect exact retained evidence. Live snapshots place content into its strongest durable group when one exists;
           otherwise they may show a provisional semantic topic cluster. Topic clusters are visual derived context only and do
           not appear in the Groups selector or durable-group dropdown until repeated retained support promotes them into a
@@ -1429,6 +1525,19 @@ export function Options() {
                       : `${graphModeOverlay.memberNodeIds.length} exact member nodes · ${graphModeOverlay.connectedNodeIds.length} connected nodes · ${graphModeOverlay.connectedEdgeIds.length} connecting edges`}
                   </div>
                 </div>
+
+                {graphGroupCoverage ? (
+                  <div style={{ marginTop: 14, padding: 10, border: '1px solid #334155', borderRadius: 10, color: '#cbd5e1' }}>
+                    <strong>Content grouping coverage</strong>
+                    <div style={{ marginTop: 6, display: 'grid', gap: 3, fontSize: 12 }}>
+                      <span>{graphGroupCoverage.durableGroupedContentCount} / {graphGroupCoverage.contentCount} content items in durable groups</span>
+                      <span>{graphGroupCoverage.topicClusteredContentCount} in provisional topic clusters</span>
+                      <span>{graphGroupCoverage.ungroupedContentCount} not yet grouped</span>
+                      <span>{graphGroupCoverage.associatedCreatorCount} creator{graphGroupCoverage.associatedCreatorCount === 1 ? '' : 's'} associated with the strongest group represented by their content</span>
+                      <span>{graphGroupCoverage.unassociatedStructuralNodeCount} other structural node{graphGroupCoverage.unassociatedStructuralNodeCount === 1 ? '' : 's'} (creators without grouped content, concepts, topics, objectives) outside content groups</span>
+                    </div>
+                  </div>
+                ) : null}
 
                 <details style={{ marginTop: 14 }}>
                   <summary>Graph summary</summary>
