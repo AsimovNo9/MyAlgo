@@ -71,6 +71,7 @@ let replacementBindingRevision = 0;
 let lastReplacementInvalidationReason: ReplacementRerankReason | 'initial' = 'initial';
 let navigationInvalidationPending = false;
 let explanationPanelSequence = 0;
+let explanationKeyboardHandlerBound = false;
 const stableReplacementBySourceId = new Map<string, {
   candidateId: string;
   item: RankedFeedItem;
@@ -331,10 +332,33 @@ const setExplanationPanelOpen = (panel: HTMLElement, open: boolean) => {
   trigger?.setAttribute('aria-expanded', String(open));
 };
 
+const closeExplanationPanel = (panel: HTMLElement, restoreFocus = false) => {
+  const trigger = getExplanationTrigger(panel);
+  setExplanationPanelOpen(panel, false);
+  if (restoreFocus && trigger?.isConnected) {
+    window.requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+  }
+};
+
+const ensureExplanationKeyboardHandler = () => {
+  if (explanationKeyboardHandlerBound) return;
+  explanationKeyboardHandlerBound = true;
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const openPanel = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-personal-algorithm-explanation-panel]'),
+    ).find((panel) => !panel.hidden);
+    if (!openPanel) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeExplanationPanel(openPanel, true);
+  }, true);
+};
+
 const closeOtherExplanationPanels = (keep: HTMLElement) => {
   document.querySelectorAll<HTMLElement>('[data-personal-algorithm-explanation-panel]').forEach((panel) => {
     if (panel === keep || panel.hidden) return;
-    setExplanationPanelOpen(panel, false);
+    closeExplanationPanel(panel, false);
   });
 };
 
@@ -350,7 +374,10 @@ const createExplanationPortal = (
   panel.dataset.personalAlgorithmExplanationPanel = kind;
   panel.dataset.personalAlgorithmExplanationTriggerId = trigger.id;
   panel.hidden = true;
-  panel.style.cssText = 'position:fixed;z-index:2147483646;overflow:auto;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:#171717;color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 12px 40px rgba(0,0,0,.65);';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Why this recommendation');
+  panel.style.cssText = 'position:fixed;z-index:2147483646;overflow:auto;border:1px solid rgba(96,165,250,.35);border-radius:16px;background:linear-gradient(180deg,#0d1b2e,#091522);color:#f8fafc;font:500 12px/1.45 Roboto,Arial,sans-serif;white-space:normal;box-shadow:0 18px 48px rgba(2,8,23,.62);';
+  ensureExplanationKeyboardHandler();
   panel.addEventListener('pointerdown', (event) => event.stopPropagation());
   panel.addEventListener('click', (event) => event.stopPropagation());
   trigger.setAttribute('aria-controls', panel.id);
@@ -436,10 +463,10 @@ const renderExplanationContent = (
   container.style.overflow = 'auto';
 
   const shell = document.createElement('div');
-  shell.style.cssText = 'display:block;background:#171717;color:#f8fafc;font:500 12px/1.4 Roboto,Arial,sans-serif;';
+  shell.style.cssText = 'display:block;background:transparent;color:#f8fafc;font:500 12px/1.4 Roboto,Arial,sans-serif;';
 
   const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #353535;';
+  header.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 14px 12px;border-bottom:1px solid rgba(148,163,184,.16);background:rgba(15,31,52,.44);';
   const identity = document.createElement('div');
   identity.style.cssText = 'min-width:0;';
   const title = document.createElement('div');
@@ -455,6 +482,17 @@ const renderExplanationContent = (
   header.appendChild(identity);
   const headerMeta = document.createElement('div');
   headerMeta.style.cssText = 'display:flex;align-items:center;gap:6px;flex:0 0 auto;';
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.dataset.personalAlgorithmExplanationClose = 'true';
+  closeButton.setAttribute('aria-label', 'Close Why this explanation');
+  closeButton.textContent = '×';
+  closeButton.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin-left:2px;padding:0;border:1px solid rgba(96,165,250,.42);border-radius:999px;background:rgba(15,31,52,.92);color:#f8fafc;font:500 25px/1 Roboto,Arial,sans-serif;cursor:pointer;box-shadow:0 5px 16px rgba(2,8,23,.28);';
+  closeButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeExplanationPanel(container, true);
+  });
   const categoryLabel = getContentPresentationLabel(item);
   if (categoryLabel) {
     const chip = document.createElement('span');
@@ -467,11 +505,12 @@ const renderExplanationContent = (
   score.setAttribute('aria-label', view.scoreLine);
   score.style.cssText = 'flex:0 0 auto;padding:5px 9px;border-radius:999px;background:#0f172a;color:#fff;font:700 12px/1 Roboto,Arial,sans-serif;';
   headerMeta.appendChild(score);
+  headerMeta.appendChild(closeButton);
   header.appendChild(headerMeta);
   shell.appendChild(header);
 
   const presentation = document.createElement('div');
-  presentation.style.cssText = 'padding:9px 14px;border-bottom:1px solid #303030;background:#101010;color:#cbd5e1;font:600 11px/1.35 Roboto,Arial,sans-serif;';
+  presentation.style.cssText = 'padding:10px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:rgba(8,21,36,.72);color:#cbd5e1;font:600 11px/1.35 Roboto,Arial,sans-serif;';
   const panelKind = container.dataset.personalAlgorithmExplanationPanel === 'replacement'
     ? 'replacement'
     : 'native';
@@ -969,6 +1008,21 @@ const renderExplanationContent = (
   }
   details.appendChild(detailBody);
   footer.appendChild(details);
+
+  const dismissRow = document.createElement('div');
+  dismissRow.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;';
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.textContent = 'Dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss Why this explanation');
+  dismiss.style.cssText = 'padding:5px 8px;border:0;background:transparent;color:#93c5fd;font:600 11px/1.2 Roboto,Arial,sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:2px;';
+  dismiss.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeExplanationPanel(container, true);
+  });
+  dismissRow.appendChild(dismiss);
+  footer.appendChild(dismissRow);
 
   shell.appendChild(footer);
 
