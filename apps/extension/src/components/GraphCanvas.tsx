@@ -37,6 +37,8 @@ type SemanticClusterLayout = {
   y: number;
   radius: number;
   count: number;
+  contentCount: number;
+  creatorCount: number;
 };
 
 const WIDTH = 1000;
@@ -502,11 +504,18 @@ export function GraphCanvas({
       const semanticGroupById = new Map<string, GraphInspectorNode[]>();
       if (!compact) {
         for (const node of prioritized) {
-          if (node.kind !== 'content') continue;
-          const clusterId = node.semanticClusterId ?? UNGROUPED_CONTENT_CLUSTER_ID;
-          const group = semanticGroupById.get(clusterId) ?? [];
-          group.push(node);
-          semanticGroupById.set(clusterId, group);
+          if (node.kind === 'content') {
+            const clusterId = node.semanticClusterId ?? UNGROUPED_CONTENT_CLUSTER_ID;
+            const group = semanticGroupById.get(clusterId) ?? [];
+            group.push(node);
+            semanticGroupById.set(clusterId, group);
+            continue;
+          }
+          if (node.kind === 'creator' && node.semanticClusterId) {
+            const group = semanticGroupById.get(node.semanticClusterId) ?? [];
+            group.push(node);
+            semanticGroupById.set(node.semanticClusterId, group);
+          }
         }
       }
 
@@ -533,6 +542,8 @@ export function GraphCanvas({
         const radius = Math.min(maxCellRadius, Math.max(50, 40 + Math.sqrt(count) * 13));
         const representative = group[0]!;
         const ungrouped = clusterId === UNGROUPED_CONTENT_CLUSTER_ID;
+        const contentCount = group.filter((node) => node.kind === 'content').length;
+        const creatorCount = group.filter((node) => node.kind === 'creator').length;
         semanticClusters.push({
           id: clusterId,
           label: ungrouped ? 'Not yet grouped' : representative.semanticClusterLabel ?? clusterId,
@@ -541,6 +552,8 @@ export function GraphCanvas({
           y: centerY,
           radius,
           count,
+          contentCount,
+          creatorCount,
         });
 
         const sorted = [...group].sort((left, right) => (
@@ -554,9 +567,11 @@ export function GraphCanvas({
           clusteredNodeIds.add(node.id);
           const nodeAngle = ((hashString(clusterId) % 360) / 180) * Math.PI + index * goldenAngle;
           const affinity = Math.max(0, Math.min(1, Number(node.semanticClusterAffinity ?? 0)));
-          const spiralRadius = index === 0
-            ? 0
-            : Math.min(radius - 15, 20 + Math.sqrt(index) * 20 + (1 - affinity) * 6);
+          const spiralRadius = node.kind === 'creator'
+            ? Math.min(radius - 18, 14 + Math.sqrt(index) * 12)
+            : index === 0
+              ? 0
+              : Math.min(radius - 15, 22 + Math.sqrt(index) * 20 + (1 - affinity) * 6);
           const searchMatch = Boolean(normalizedQuery) && (
             node.label.toLowerCase().includes(normalizedQuery)
             || node.id.toLowerCase().includes(normalizedQuery)
@@ -788,7 +803,7 @@ export function GraphCanvas({
                   fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : cluster.kind === 'ungrouped' ? '#cbd5e1' : '#67e8f9'}
                   pointerEvents="none"
                 >
-                  {cluster.kind === 'mode' ? 'Group' : cluster.kind === 'ungrouped' ? 'Not yet grouped' : 'Topic cluster'} · {cluster.label} · {cluster.count}
+                  {cluster.kind === 'mode' ? 'Group' : cluster.kind === 'ungrouped' ? 'Not yet grouped' : 'Topic cluster'} · {cluster.label} · {cluster.contentCount} video{cluster.contentCount === 1 ? '' : 's'}{cluster.creatorCount > 0 ? ` · ${cluster.creatorCount} creator${cluster.creatorCount === 1 ? '' : 's'}` : ''}
                 </text>
               </g>
             );
