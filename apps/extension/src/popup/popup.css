@@ -11,10 +11,11 @@ body {
 
 .myalgo-popup {
   box-sizing: border-box;
-  min-width: 330px !important;
-  width: 360px;
+  min-width: 320px !important;
+  width: 348px;
   max-width: 100vw;
   padding: 14px !important;
+  overflow-x: hidden;
   color: var(--myalgo-text);
   background:
     radial-gradient(circle at 96% 0%, rgba(59, 130, 246, 0.12), transparent 13rem),
@@ -37,20 +38,29 @@ body {
 
 .myalgo-popup fieldset,
 .myalgo-popup section {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 10px 0 0;
   padding: 12px;
   border: 1px solid rgba(96, 165, 250, 0.18);
   border-radius: 13px;
   background: rgba(13, 27, 46, 0.74);
+  overflow-wrap: anywhere;
 }
 
 .myalgo-popup button {
+  box-sizing: border-box;
+  max-width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.46);
   border-radius: 9px;
   background: #12263f;
   color: #f8fbff;
   padding: 8px 10px;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .myalgo-popup button:hover:not(:disabled) {
@@ -75,9 +85,10 @@ body {
 .myalgo-popup .myalgo-popup-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 10px;
   margin-bottom: 10px;
+  text-align: center;
 }
 
 .myalgo-popup .myalgo-brand {
@@ -91,8 +102,10 @@ body {
 }
 
 .myalgo-popup .myalgo-popup-status {
-  display: inline-flex !important;
-  margin: 0 !important;
+  display: flex !important;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 10px !important;
   padding: 6px 9px !important;
   font-size: 11px;
 }
@@ -135,4 +148,64 @@ body {
   color: #aebed2;
   background: #172235;
   opacity: 0.82;
+}
+
+
+.myalgo-popup fieldset > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  margin-top: 7px;
+  line-height: 1.35;
+}
+
+.myalgo-popup fieldset > label:first-of-type {
+  margin-top: 4px;
+}
+
+.myalgo-popup input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.myalgo-popup input[type="range"] {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100%;
+  margin: 8px 0 4px;
+}
+
+.myalgo-popup details {
+  width: 100%;
+  min-width: 0;
+}
+
+.myalgo-popup .myalgo-chip-row {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.myalgo-popup .myalgo-chip-row > * {
+  max-width: 100%;
+}
+
+.myalgo-popup .myalgo-popup-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.myalgo-popup .myalgo-popup-actions button,
+.myalgo-popup .myalgo-popup-primary {
+  width: 100%;
+}
+
+.myalgo-popup p,
+.myalgo-popup label,
+.myalgo-popup legend,
+.myalgo-popup summary {
+  overflow-wrap: anywhere;
 }
