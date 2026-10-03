@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDurableModeLabelsToGraphInspector, buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed } from './extension-helpers.ts';
+import { applyDurableModeLabelsToGraphInspector, buildDurableModeOptions, buildExplanationGraphView, buildGraphInspectorView, buildGraphModeOverlay, parseGraphInspectorExport, summarizeFeed, summarizeGraphGroupCoverage } from './extension-helpers.ts';
 
 test('summarizeFeed counts sources and ranks topics for visible items only', () => {
   const summary = summarizeFeed([
@@ -85,6 +85,63 @@ test('buildDurableModeOptions uses persisted stable mode IDs instead of feed cat
   );
 });
 
+
+test('graph group coverage distinguishes durable groups, provisional topics, ungrouped content, and structural nodes', () => {
+  const view = {
+    schemaVersion: 3,
+    graphRevision: 9,
+    evidenceCount: 4,
+    forgottenEvidenceCount: 0,
+    nodeCount: 5,
+    edgeCount: 0,
+    nodesByKind: [],
+    edgesByRelation: [],
+    nodes: [
+      {
+        id: 'content:a', label: 'A', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'a', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'mode:mode:a', semanticClusterLabel: 'Programming', semanticClusterKind: 'mode', semanticClusterAffinity: 0.9,
+      },
+      {
+        id: 'content:b', label: 'B', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'b', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'mode:mode:a', semanticClusterLabel: 'Programming', semanticClusterKind: 'mode', semanticClusterAffinity: 0.7,
+      },
+      {
+        id: 'content:c', label: 'C', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'c', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: 'topic:music', semanticClusterLabel: 'Music', semanticClusterKind: 'topic', semanticClusterAffinity: 0.5,
+      },
+      {
+        id: 'content:d', label: 'D', kind: 'content', provenance: 'explicit', confidence: null, supportCount: 1,
+        contentSource: 'youtube', contentExternalId: 'd', creatorName: null, thumbnailUrl: null,
+        semanticClusterId: null, semanticClusterLabel: null, semanticClusterKind: null, semanticClusterAffinity: null,
+      },
+      {
+        id: 'creator:a', label: 'Creator A', kind: 'creator', provenance: 'inferred', confidence: 1, supportCount: 2,
+        contentSource: null, contentExternalId: null, creatorName: null, thumbnailUrl: null,
+        semanticClusterId: null, semanticClusterLabel: null, semanticClusterKind: null, semanticClusterAffinity: null,
+      },
+    ],
+    edges: [],
+    controls: [],
+    revisions: [],
+  };
+
+  assert.deepEqual(summarizeGraphGroupCoverage(view), {
+    contentCount: 4,
+    durableGroupedContentCount: 2,
+    topicClusteredContentCount: 1,
+    ungroupedContentCount: 1,
+    structuralNodeCount: 1,
+    durableGroupCount: 1,
+    topicClusterCount: 1,
+    groups: [
+      { id: 'mode:mode:a', label: 'Programming', kind: 'mode', count: 2 },
+      { id: 'topic:music', label: 'Music', kind: 'topic', count: 1 },
+    ],
+  });
+});
 
 test('graph inspector mode cluster labels follow user-facing durable group labels', () => {
   const view = {
