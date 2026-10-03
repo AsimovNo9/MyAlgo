@@ -232,11 +232,12 @@ PR #223/#221 through PR #231 are merged. Canonical semantic regions, durable mod
 3. **Complete core semantics — #155 / PR #234 evidence provenance + Forget.** Exact retained evidence deletion is browser validated; minimal deletion intent survives restart/rebuild, staging payloads are purged, re-observation of the same stable record is rejected, and #154 Undo/Restore original cannot resurrect forgotten evidence.
 4. **Complete — #153 / PR #235 evidence-action integration.** Feed-card Why-this exposes exact retained records only, exact-record Forget is browser validated, and refreshed explanations reconcile to the post-delete trace/graph revision.
 5. **Complete ownership foundation — #161 / PRs #236 + #239.** Rename, pin, and effective membership overlays are browser validated with preserved inferred identity/membership and revisioned Undo.
-6. **Active P2 — #178 history-cluster ownership + approachable editing UX.** Ownership, friendly interest controls, complete group coverage, and collision-safe graph layout are established. Current refinement makes creator associations non-exclusive and inspectable when their content spans several groups.
-7. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks.
-8. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
-9. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
-10. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
+6. **Complete — #178 / PRs #241–#243 history ownership and group UX.** Explicit History influence, approachable interest controls, complete group coverage, collision-safe layouts, creator group affinity, and distinct visual selection grammar are merged.
+7. **Active P2 — #244 approachable editing UX.** Refine Options, the toolbar popup, and Why-this around progressive disclosure and a subtle dark MyAlgo visual system without changing scoring/evidence/ownership semantics.
+8. **P2 — #169 + #211 release hardening.** Finish signed-out/offline validation and long-session/infinite-scroll/service-worker-restart stress, including detached-DOM checks after #244 browser validation.
+9. **P3 — #158 explicit user-created graph nodes.** Add user-created interests/concepts/creators/formats after mutation/undo semantics are proven.
+10. **P3/P4 — #159 counterfactual replay.** Preview graph edits against a fixed local candidate/evidence snapshot once real edits exist.
+11. **Later — #163/#164/#165/#166.** Portability, optional sync, paid-value validation, and a second connector.
 
 
 ## Phase 1 scope discipline
