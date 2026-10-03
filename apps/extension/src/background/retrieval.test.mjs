@@ -551,7 +551,7 @@ test('YouTube caption enrichment prefers current Android InnerTube over the PoTo
         captions: {
           playerCaptionsTracklistRenderer: {
             captionTracks: [{
-              baseUrl: 'https://www.youtube.com/api/timedtext?v=abc123DEF45&lang=en&client=ios',
+              baseUrl: 'https://www.youtube.com/api/timedtext?v=abc123DEF45&lang=en&client=android',
               languageCode: 'en',
               name: { simpleText: 'English' },
             }],
