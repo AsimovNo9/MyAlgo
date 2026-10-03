@@ -469,6 +469,10 @@ const renderExplanationContent = (
   header.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 14px 12px;border-bottom:1px solid rgba(148,163,184,.16);background:rgba(15,31,52,.44);';
   const identity = document.createElement('div');
   identity.style.cssText = 'min-width:0;';
+  const whyLabel = document.createElement('div');
+  whyLabel.textContent = 'Why this?';
+  whyLabel.style.cssText = 'margin-bottom:4px;color:#93c5fd;font:800 10px/1.2 Roboto,Arial,sans-serif;text-transform:uppercase;letter-spacing:.08em;';
+  identity.appendChild(whyLabel);
   const title = document.createElement('div');
   title.textContent = item.title?.trim() || 'This video';
   title.style.cssText = 'font:700 15px/1.25 Roboto,Arial,sans-serif;color:#fff;white-space:normal;';
