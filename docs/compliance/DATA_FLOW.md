@@ -148,7 +148,7 @@ explicit transcript-enrichment toggle + local neural semantics
         ↓
 canonical youtube.com/watch page
         ↓ provider config / INNERTUBE_API_KEY
-bounded YouTube-owned player request (iOS → Android fallback)
+bounded YouTube-owned player request (Android → iOS fallback, executed through active YouTube page context)
         ↓ caption-track discovery
 YouTube-owned /api/timedtext request (English track, manual preferred)
         ↓
