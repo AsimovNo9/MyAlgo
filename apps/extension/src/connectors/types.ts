@@ -58,6 +58,7 @@ export type ProviderTranscriptEnrichmentDiagnostics = {
     | 'caption_payload_empty'
     | 'caption_request_failed'
     | null;
+  detail?: string | null;
 };
 
 export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
