@@ -542,6 +542,76 @@ export function buildGraphInspectorView(
   };
 }
 
+export type GraphGroupCoverage = {
+  contentCount: number;
+  durableGroupedContentCount: number;
+  topicClusteredContentCount: number;
+  ungroupedContentCount: number;
+  structuralNodeCount: number;
+  durableGroupCount: number;
+  topicClusterCount: number;
+  groups: Array<{
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    count: number;
+  }>;
+};
+
+export function summarizeGraphGroupCoverage(view: GraphInspectorView): GraphGroupCoverage {
+  const contentNodes = view.nodes.filter((node) => node.kind === 'content');
+  const structuralNodeCount = view.nodes.length - contentNodes.length;
+  const groups = new Map<string, {
+    id: string;
+    label: string;
+    kind: 'mode' | 'topic';
+    count: number;
+  }>();
+
+  let durableGroupedContentCount = 0;
+  let topicClusteredContentCount = 0;
+  let ungroupedContentCount = 0;
+
+  for (const node of contentNodes) {
+    if (!node.semanticClusterId || !node.semanticClusterLabel || !node.semanticClusterKind) {
+      ungroupedContentCount += 1;
+      continue;
+    }
+    if (node.semanticClusterKind === 'mode') durableGroupedContentCount += 1;
+    else topicClusteredContentCount += 1;
+
+    const current = groups.get(node.semanticClusterId);
+    if (current) {
+      current.count += 1;
+    } else {
+      groups.set(node.semanticClusterId, {
+        id: node.semanticClusterId,
+        label: node.semanticClusterLabel,
+        kind: node.semanticClusterKind,
+        count: 1,
+      });
+    }
+  }
+
+  const orderedGroups = [...groups.values()].sort((left, right) => (
+    Number(right.kind === 'mode') - Number(left.kind === 'mode')
+    || right.count - left.count
+    || left.label.localeCompare(right.label)
+    || left.id.localeCompare(right.id)
+  ));
+
+  return {
+    contentCount: contentNodes.length,
+    durableGroupedContentCount,
+    topicClusteredContentCount,
+    ungroupedContentCount,
+    structuralNodeCount,
+    durableGroupCount: orderedGroups.filter((group) => group.kind === 'mode').length,
+    topicClusterCount: orderedGroups.filter((group) => group.kind === 'topic').length,
+    groups: orderedGroups,
+  };
+}
+
 export function applyDurableModeLabelsToGraphInspector(
   view: GraphInspectorView,
   catalog: DurableSemanticModeCatalog | null | undefined,
