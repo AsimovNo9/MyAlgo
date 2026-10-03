@@ -1436,6 +1436,72 @@ async function refreshWebSearchCandidates(
   return { diagnostics: persistedDiagnostics, changed: addedCount > 0 };
 }
 
+const AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS = 30_000;
+let automaticDiscoveryInFlight: Promise<void> | null = null;
+let lastAutomaticDiscoveryAttemptAt = 0;
+let lastAutomaticDiscoveryIntentKey = '';
+
+const refreshDiscoveryAutomatically = (
+  reason: 'youtube_load' | 'mode_change' | 'extension_enabled' | 'metadata_enriched' | 'mode_membership',
+  options: {
+    forceWebSearch?: boolean;
+    modeOverride?: string;
+    intentKey?: string;
+  } = {},
+): Promise<void> => {
+  const now = Date.now();
+  const forceWebSearch = options.forceWebSearch === true;
+  const intentKey = options.intentKey ?? '';
+  const sameForcedIntent = forceWebSearch
+    && intentKey
+    && intentKey === lastAutomaticDiscoveryIntentKey
+    && now - lastAutomaticDiscoveryAttemptAt < AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS;
+
+  if (sameForcedIntent) return Promise.resolve();
+  if (!forceWebSearch && now - lastAutomaticDiscoveryAttemptAt < AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS) {
+    return automaticDiscoveryInFlight ?? Promise.resolve();
+  }
+  if (automaticDiscoveryInFlight) return automaticDiscoveryInFlight;
+
+  lastAutomaticDiscoveryAttemptAt = now;
+  if (forceWebSearch && intentKey) lastAutomaticDiscoveryIntentKey = intentKey;
+
+  automaticDiscoveryInFlight = (async () => {
+    const settings = await getStorage<RetrievalSettings>(
+      STORAGE_KEYS.RETRIEVAL_SETTINGS,
+      DEFAULT_RETRIEVAL_SETTINGS,
+    );
+    let changed = false;
+
+    if (settings.rssEnabled) {
+      const rssRefresh = await refreshRssCandidates(false);
+      changed = changed || rssRefresh.changed;
+    }
+    if (settings.webSearchEnabled) {
+      const searchRefresh = await refreshWebSearchCandidates(
+        forceWebSearch,
+        options.modeOverride,
+      );
+      changed = changed || searchRefresh.changed;
+    }
+
+    if (changed) await notifyPersonalAlgorithmChanged('retrieval');
+    console.info('[MyAlgo] automatic discovery check', {
+      reason,
+      rssEnabled: settings.rssEnabled,
+      webSearchEnabled: settings.webSearchEnabled,
+      forceWebSearch,
+      changed,
+    });
+  })().catch((error) => {
+    console.warn('[MyAlgo] automatic discovery refresh failed', { reason, error });
+  }).finally(() => {
+    automaticDiscoveryInFlight = null;
+  });
+
+  return automaticDiscoveryInFlight;
+};
+
 const ensureHistoryReconciled = (): Promise<void> => {
   if (historyReconciliationReady) return historyReconciliationReady;
   historyReconciliationReady = reconcileStoredHistoryEvidence().catch((error) => {
@@ -4061,6 +4127,10 @@ const handleRuntimeMessage = (
           elapsedMs: Math.round(performance.now() - rankStartedAt),
         });
 
+        // Discovery is event-driven and never blocks first paint. Repeated DOM
+        // reranks hit the in-memory throttle plus persisted RSS/search cooldowns.
+        void refreshDiscoveryAutomatically('youtube_load');
+
         // Cache persistence is not presentation work. Persist only when the
         // presentation materially changes, and batch related keys into one
         // chrome.storage transaction to reduce serialization/IPC churn.
@@ -4158,6 +4228,11 @@ const handleRuntimeMessage = (
         void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
           if (enrichedCandidates.length === 0) return;
           await mergeCandidatePool(enrichedCandidates);
+          void refreshRssCandidates(false).then(async (refresh) => {
+            if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
+          }).catch((error) => {
+            console.warn('[MyAlgo] metadata-driven RSS refresh failed', error);
+          });
           if (senderTabId) {
             await chrome.tabs.sendMessage(senderTabId, {
               type: 'YOUTUBE_METADATA_ENRICHED',
@@ -4268,6 +4343,11 @@ const handleRuntimeMessage = (
 
       const updatedMode = configuredCatalog.modes.find((entry) => entry.id === modeId) ?? null;
       if (payload?.memberAction && updatedMode && selectedModeIds.includes(modeId)) {
+        void refreshDiscoveryAutomatically('mode_membership', {
+          forceWebSearch: true,
+          modeOverride: selectedModes.map((entry) => entry.label).join(' ') || updatedMode.label,
+          intentKey: selectedModes.map((entry) => `${entry.id}:r${entry.revision}:${entry.members.map((member) => member.canonicalId).join(',')}`).sort().join('|'),
+        });
         void refreshSelectedModeSemantics({
           modeId: updatedMode.id,
           label: updatedMode.label,
@@ -4440,12 +4520,14 @@ const handleRuntimeMessage = (
         });
       }
 
-      if (settings.webSearchEnabled && selectedModes.length > 0) {
-        const combinedIntent = selectedModes.map((entry) => entry.label).join(' ');
-        void refreshWebSearchCandidates(true, combinedIntent).then(async (refresh) => {
-          if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
-        }).catch((error) => console.warn('[MyAlgo] mode-driven web search refresh failed', error));
-      }
+      const combinedIntent = selectedModes.length > 0
+        ? selectedModes.map((entry) => entry.label).join(' ')
+        : 'Default';
+      void refreshDiscoveryAutomatically('mode_change', {
+        forceWebSearch: settings.webSearchEnabled,
+        modeOverride: combinedIntent,
+        intentKey: selectedModes.map((entry) => `${entry.id}:r${entry.revision}`).sort().join('|') || 'default',
+      });
 
       sendResponse({
         ok: true,
@@ -4466,6 +4548,7 @@ const handleRuntimeMessage = (
     }
     void (async () => {
       await setStorage(STORAGE_KEYS.ENABLED, enabled);
+      if (enabled) void refreshDiscoveryAutomatically('extension_enabled');
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled } }).catch(() => undefined)
