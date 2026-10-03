@@ -2400,7 +2400,7 @@ async function rankLocalCandidates(
   mode: string,
 ): Promise<LocalFeedItem[]> {
   const [
-    state,
+    rawState,
     feedbackEvents,
     legacyActiveModeId,
     storedActiveModeIds,
@@ -2409,6 +2409,8 @@ async function rankLocalCandidates(
     semanticFeatureCache,
     videoStore,
     candidatePoolIndex,
+    historyClusterCatalog,
+    rawHistoryClusterOwnership,
   ] = await Promise.all([
     personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
@@ -2425,7 +2427,17 @@ async function rankLocalCandidates(
     getSemanticFeatureCacheCached(),
     getVideoStoreCached(),
     getCandidatePoolIndexCached(),
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
   ]);
+  const historyClusterOwnership = normalizeHistoryClusterOwnership(rawHistoryClusterOwnership);
+  const historyClusterSignature = historyOwnershipSignature(
+    historyClusterCatalog,
+    historyClusterOwnership,
+  );
   const activeModeIds = [...new Set(
     (storedActiveModeIds.length > 0
       ? storedActiveModeIds
@@ -2452,11 +2464,12 @@ async function rankLocalCandidates(
   const durableModeSignature = durableModeCatalogSignature(durableModeCatalog);
   if (
     lastRankMemo
-    && lastRankMemo.state === state
+    && lastRankMemo.state === rawState
     && lastRankMemo.mode === mode
     && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
     && lastRankMemo.activeModeSignature === activeModeSignature
     && lastRankMemo.durableModeSignature === durableModeSignature
+    && lastRankMemo.historyOwnershipSignature === historyClusterSignature
     && lastRankMemo.feedbackSignature === feedbackSignature
     && lastRankMemo.candidateIdsSignature === candidateIdsSignature
     && lastRankMemo.candidatePoolRevision === candidatePoolMemoryRevision
@@ -2465,6 +2478,12 @@ async function rankLocalCandidates(
   ) {
     return lastRankMemo.feed;
   }
+
+  const state = projectHistoryOwnershipForScoring(
+    rawState,
+    historyClusterCatalog,
+    historyClusterOwnership,
+  );
 
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
@@ -2918,11 +2937,12 @@ async function rankLocalCandidates(
   });
 
   lastRankMemo = {
-    state,
+    state: rawState,
     mode,
     sourceFiltersSignature,
     activeModeSignature,
     durableModeSignature,
+    historyOwnershipSignature: historyClusterSignature,
     feedbackSignature,
     candidateIdsSignature,
     candidatePoolRevision: candidatePoolMemoryRevision,
