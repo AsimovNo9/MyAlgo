@@ -32,7 +32,7 @@ type PositionedNode = GraphInspectorNode & {
 type SemanticClusterLayout = {
   id: string;
   label: string;
-  kind: 'mode' | 'topic';
+  kind: 'mode' | 'topic' | 'ungrouped';
   x: number;
   y: number;
   radius: number;
@@ -68,6 +68,60 @@ const kindRing = (kind: string): number => {
     default:
       return 2;
   }
+};
+
+const UNGROUPED_CONTENT_CLUSTER_ID = '__myalgo_ungrouped_content__';
+
+const clamp = (value: number, minimum: number, maximum: number): number => (
+  Math.max(minimum, Math.min(maximum, value))
+);
+
+const lineageNodeFootprint = (node: PositionedNode): { halfWidth: number; halfHeight: number } => {
+  if (node.kind === 'content' && node.thumbnailUrl) {
+    return { halfWidth: 40, halfHeight: 27 };
+  }
+  const labelWidth = node.kind === 'content'
+    ? 0
+    : Math.min(210, Math.max(36, node.label.length * 6.4));
+  return {
+    halfWidth: 18 + labelWidth / 2,
+    halfHeight: 18,
+  };
+};
+
+const resolveLineageCollisions = (positioned: Map<string, PositionedNode>): void => {
+  const nodes = [...positioned.values()]
+    .map((node) => ({ ...node }))
+    .sort((left, right) => left.y - right.y || left.x - right.x || left.id.localeCompare(right.id));
+
+  for (let pass = 0; pass < 10; pass += 1) {
+    let moved = false;
+    for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
+      const left = nodes[leftIndex]!;
+      const leftBox = lineageNodeFootprint(left);
+      for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
+        const right = nodes[rightIndex]!;
+        const rightBox = lineageNodeFootprint(right);
+        const requiredX = leftBox.halfWidth + rightBox.halfWidth + 12;
+        const requiredY = leftBox.halfHeight + rightBox.halfHeight + 10;
+        const dx = right.x - left.x;
+        const dy = right.y - left.y;
+        if (Math.abs(dx) >= requiredX || Math.abs(dy) >= requiredY) continue;
+
+        const direction = dx === 0
+          ? (left.id.localeCompare(right.id) <= 0 ? 1 : -1)
+          : Math.sign(dx);
+        const push = (requiredX - Math.abs(dx)) / 2 + 3;
+        left.x = clamp(left.x - direction * push, 42, WIDTH - 42);
+        right.x = clamp(right.x + direction * push, 42, WIDTH - 42);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  positioned.clear();
+  for (const node of nodes) positioned.set(node.id, node);
 };
 
 const nodeFill = (kind: string, selected: boolean, modeMember: boolean): string => {
@@ -207,7 +261,11 @@ export function GraphCanvas({
     if (focusedSemanticClusterId) {
       const clusterContentIds = new Set(
         nodes
-          .filter((node) => node.semanticClusterId === focusedSemanticClusterId)
+          .filter((node) => (
+            focusedSemanticClusterId === UNGROUPED_CONTENT_CLUSTER_ID
+              ? node.kind === 'content' && !node.semanticClusterId
+              : node.semanticClusterId === focusedSemanticClusterId
+          ))
           .map((node) => node.id),
       );
       for (const nodeId of clusterContentIds) focusNodeIds.add(nodeId);
@@ -444,32 +502,41 @@ export function GraphCanvas({
       const semanticGroupById = new Map<string, GraphInspectorNode[]>();
       if (!compact) {
         for (const node of prioritized) {
-          if (node.kind !== 'content' || !node.semanticClusterId || !node.semanticClusterLabel || !node.semanticClusterKind) continue;
-          const group = semanticGroupById.get(node.semanticClusterId) ?? [];
+          if (node.kind !== 'content') continue;
+          const clusterId = node.semanticClusterId ?? UNGROUPED_CONTENT_CLUSTER_ID;
+          const group = semanticGroupById.get(clusterId) ?? [];
           group.push(node);
-          semanticGroupById.set(node.semanticClusterId, group);
+          semanticGroupById.set(clusterId, group);
         }
       }
 
       const semanticGroups = [...semanticGroupById.entries()]
-        .sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]))
-        .slice(0, 8);
+        .sort((left, right) => (
+          Number(left[0] === UNGROUPED_CONTENT_CLUSTER_ID) - Number(right[0] === UNGROUPED_CONTENT_CLUSTER_ID)
+          || right[1].length - left[1].length
+          || left[0].localeCompare(right[0])
+        ));
       const clusteredNodeIds = new Set<string>();
+      const columns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(semanticGroups.length * 1.35))));
+      const rows = Math.max(1, Math.ceil(semanticGroups.length / columns));
+      const cellWidth = (WIDTH - 80) / columns;
+      const cellHeight = (HEIGHT - 120) / rows;
+
       semanticGroups.forEach(([clusterId, group], clusterIndex) => {
         const count = group.length;
         if (count === 0) return;
-        const angle = semanticGroups.length === 1
-          ? -Math.PI / 2
-          : -Math.PI / 2 + (Math.PI * 2 * clusterIndex) / semanticGroups.length;
-        const centerRadius = semanticGroups.length === 1 ? 0 : semanticGroups.length <= 4 ? 205 : 245;
-        const centerX = CENTER_X + Math.cos(angle) * centerRadius;
-        const centerY = CENTER_Y + Math.sin(angle) * centerRadius;
-        const radius = Math.max(62, Math.min(128, 48 + Math.sqrt(count) * 18));
-        const representative = group[0];
+        const column = clusterIndex % columns;
+        const row = Math.floor(clusterIndex / columns);
+        const centerX = 40 + cellWidth * (column + 0.5);
+        const centerY = 70 + cellHeight * (row + 0.5);
+        const maxCellRadius = Math.max(42, Math.min(cellWidth, cellHeight) / 2 - 18);
+        const radius = Math.min(maxCellRadius, Math.max(50, 40 + Math.sqrt(count) * 13));
+        const representative = group[0]!;
+        const ungrouped = clusterId === UNGROUPED_CONTENT_CLUSTER_ID;
         semanticClusters.push({
           id: clusterId,
-          label: representative.semanticClusterLabel ?? clusterId,
-          kind: representative.semanticClusterKind ?? 'topic',
+          label: ungrouped ? 'Not yet grouped' : representative.semanticClusterLabel ?? clusterId,
+          kind: ungrouped ? 'ungrouped' : representative.semanticClusterKind ?? 'topic',
           x: centerX,
           y: centerY,
           radius,
@@ -482,16 +549,14 @@ export function GraphCanvas({
           || left.label.localeCompare(right.label)
           || left.id.localeCompare(right.id)
         ));
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5));
         sorted.forEach((node, index) => {
           clusteredNodeIds.add(node.id);
-          const ringIndex = Math.floor(Math.sqrt(index));
-          const itemsBeforeRing = ringIndex * ringIndex;
-          const indexInRing = index - itemsBeforeRing;
-          const itemsInRing = Math.max(1, ringIndex * 2 + 1);
-          const nodeAngle = ((hashString(clusterId) % 360) / 180) * Math.PI
-            + (Math.PI * 2 * indexInRing) / itemsInRing;
+          const nodeAngle = ((hashString(clusterId) % 360) / 180) * Math.PI + index * goldenAngle;
           const affinity = Math.max(0, Math.min(1, Number(node.semanticClusterAffinity ?? 0)));
-          const nodeRadius = index === 0 ? 10 : Math.min(radius - 14, 22 + ringIndex * 25 + (1 - affinity) * 14);
+          const spiralRadius = index === 0
+            ? 0
+            : Math.min(radius - 15, 20 + Math.sqrt(index) * 20 + (1 - affinity) * 6);
           const searchMatch = Boolean(normalizedQuery) && (
             node.label.toLowerCase().includes(normalizedQuery)
             || node.id.toLowerCase().includes(normalizedQuery)
@@ -499,8 +564,8 @@ export function GraphCanvas({
           );
           positioned.set(node.id, {
             ...node,
-            x: centerX + Math.cos(nodeAngle) * nodeRadius,
-            y: centerY + Math.sin(nodeAngle) * nodeRadius,
+            x: centerX + Math.cos(nodeAngle) * spiralRadius,
+            y: centerY + Math.sin(nodeAngle) * spiralRadius,
             degree: degreeByNode.get(node.id) ?? 0,
             modeMember: memberIds.has(node.id),
             modeConnected: connectedIds.has(node.id),
@@ -542,6 +607,10 @@ export function GraphCanvas({
           });
         });
       }
+    }
+
+    if (layoutMode === 'lineage' && !compact) {
+      resolveLineageCollisions(positioned);
     }
 
     return {
@@ -681,7 +750,7 @@ export function GraphCanvas({
                 key={cluster.id}
                 role="button"
                 tabIndex={0}
-                aria-label={`Focus ${cluster.kind === 'mode' ? 'durable group' : 'topic cluster'} ${cluster.label}`}
+                aria-label={`Focus ${cluster.kind === 'mode' ? 'durable group' : cluster.kind === 'ungrouped' ? 'not yet grouped content' : 'topic cluster'} ${cluster.label}`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -703,11 +772,11 @@ export function GraphCanvas({
                   cx={cluster.x}
                   cy={cluster.y}
                   r={cluster.radius}
-                  fill={cluster.kind === 'mode' ? '#1e293b' : '#0f2530'}
-                  fillOpacity={focused ? 0.4 : cluster.kind === 'mode' ? 0.3 : 0.16}
-                  stroke={focused ? '#facc15' : cluster.kind === 'mode' ? '#f59e0b' : '#22d3ee'}
+                  fill={cluster.kind === 'mode' ? '#1e293b' : cluster.kind === 'ungrouped' ? '#1f2937' : '#0f2530'}
+                  fillOpacity={focused ? 0.4 : cluster.kind === 'mode' ? 0.3 : cluster.kind === 'ungrouped' ? 0.18 : 0.16}
+                  stroke={focused ? '#facc15' : cluster.kind === 'mode' ? '#f59e0b' : cluster.kind === 'ungrouped' ? '#94a3b8' : '#22d3ee'}
                   strokeWidth={focused ? 3.5 : cluster.kind === 'mode' ? 2.5 : 1.25}
-                  strokeOpacity={focused ? 0.98 : cluster.kind === 'mode' ? 0.82 : 0.42}
+                  strokeOpacity={focused ? 0.98 : cluster.kind === 'mode' ? 0.82 : cluster.kind === 'ungrouped' ? 0.6 : 0.42}
                   strokeDasharray={focused || cluster.kind === 'mode' ? undefined : '6 5'}
                 />
                 <text
@@ -716,10 +785,10 @@ export function GraphCanvas({
                   textAnchor="middle"
                   fontSize="12"
                   fontWeight="700"
-                  fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : '#67e8f9'}
+                  fill={focused ? '#fde68a' : cluster.kind === 'mode' ? '#fbbf24' : cluster.kind === 'ungrouped' ? '#cbd5e1' : '#67e8f9'}
                   pointerEvents="none"
                 >
-                  {cluster.kind === 'mode' ? 'Group' : 'Topic cluster'} · {cluster.label} · {cluster.count}
+                  {cluster.kind === 'mode' ? 'Group' : cluster.kind === 'ungrouped' ? 'Not yet grouped' : 'Topic cluster'} · {cluster.label} · {cluster.count}
                 </text>
               </g>
             );
