@@ -3416,6 +3416,7 @@ const handleRuntimeMessage = (
       });
       privacyDisclosureAccepted = true;
       privacyDisclosureReady = Promise.resolve(true);
+      void refreshDiscoveryAutomatically('extension_enabled');
       const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
       await Promise.all(tabs.map((tab) => tab.id
         ? chrome.tabs.sendMessage(tab.id, { type: 'EXTENSION_ENABLED', payload: { enabled: true } }).catch(() => undefined)
@@ -4342,12 +4343,19 @@ const handleRuntimeMessage = (
         : undefined));
 
       const updatedMode = configuredCatalog.modes.find((entry) => entry.id === modeId) ?? null;
-      if (payload?.memberAction && updatedMode && selectedModeIds.includes(modeId)) {
+      const selectedIntentChanged = Boolean(
+        updatedMode
+        && selectedModeIds.includes(modeId)
+        && (payload?.memberAction || Object.prototype.hasOwnProperty.call(payload ?? {}, 'label')),
+      );
+      if (selectedIntentChanged && updatedMode) {
         void refreshDiscoveryAutomatically('mode_membership', {
           forceWebSearch: true,
           modeOverride: selectedModes.map((entry) => entry.label).join(' ') || updatedMode.label,
-          intentKey: selectedModes.map((entry) => `${entry.id}:r${entry.revision}:${entry.members.map((member) => member.canonicalId).join(',')}`).sort().join('|'),
+          intentKey: selectedModes.map((entry) => `${entry.id}:${entry.label}:r${entry.revision}:${entry.members.map((member) => member.canonicalId).join(',')}`).sort().join('|'),
         });
+      }
+      if (payload?.memberAction && updatedMode && selectedModeIds.includes(modeId)) {
         void refreshSelectedModeSemantics({
           modeId: updatedMode.id,
           label: updatedMode.label,
@@ -4422,6 +4430,14 @@ const handleRuntimeMessage = (
           },
         }).catch(() => undefined)
         : undefined));
+
+      if (selectedModes.length > 0) {
+        void refreshDiscoveryAutomatically('mode_membership', {
+          forceWebSearch: true,
+          modeOverride: selectedModes.map((entry) => entry.label).join(' '),
+          intentKey: selectedModes.map((entry) => `${entry.id}:${entry.label}:r${entry.revision}:${entry.members.map((member) => member.canonicalId).join(',')}`).sort().join('|'),
+        });
+      }
 
       sendResponse({
         ok: true,
