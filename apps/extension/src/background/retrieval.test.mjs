@@ -506,6 +506,31 @@ test('YouTube player-response caption parser reads provider-neutral track metada
   }]);
 });
 
+test('YouTube caption enrichment marks live videos as intentionally skipped', async () => {
+  const calls = [];
+  const fetcher = async (url) => {
+    calls.push(url);
+    return new Response(`<script>var ytInitialPlayerResponse = {
+      "videoDetails":{"title":"Live now","isLiveContent":true}
+    };</script>`, { status: 200 });
+  };
+
+  const result = await enrichYoutubeCandidate(
+    { external_id: 'abc123DEF45', title: 'Live now' },
+    fetcher,
+    { includeTranscript: true },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(result.transcript, null);
+  assert.deepEqual(result.transcript_diagnostics, {
+    attempted: false,
+    strategy: null,
+    reason: 'live_video',
+    detail: 'Caption enrichment is skipped for live videos.',
+  });
+});
+
 test('YouTube caption enrichment is opt-in and metadata succeeds without a caption request', async () => {
   const calls = [];
   const fetcher = async (url) => {
