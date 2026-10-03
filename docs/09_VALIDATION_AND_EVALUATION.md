@@ -1004,3 +1004,17 @@ Validate history ownership as explicit model input, not deletion or hidden ident
 8. selecting zero clusters is valid and means retained History contributes no history_dom watch evidence while non-History evidence remains active;
 9. full local reset clears cluster catalog and ownership state;
 10. repeated ordinary reranks retain the warm memo path; only raw state, cluster catalog identity, or ownership revision changes invalidate it.
+
+
+## Interest UX and graph coverage refinement (#178 follow-up)
+
+Validate the post-ownership UX separately from underlying semantic correctness:
+
+1. Your interests presents durable groups as human-readable cards with feed-use and retention controls; normal tuning does not require opening the graph;
+2. History ownership uses recommendation-language states (used / not used) and states explicitly that exclusion does not delete History;
+3. Advanced graph/evidence reports durable-grouped content, provisional-topic content, not-yet-grouped content, and structural nodes separately;
+4. structural creator/concept/topic/objective nodes are never counted as missing group assignments;
+5. every semantic cluster present in the rendered content set gets a visible cluster region; there is no top-eight cluster truncation;
+6. content with no semantic assignment appears in a labelled Not yet grouped region rather than looking accidentally omitted;
+7. Lineage layout resolves thumbnail/label collisions deterministically while keeping related items near their original creator/level;
+8. selecting or focusing a group still works after collision resolution and all existing graph controls/evidence inspection remain available.
