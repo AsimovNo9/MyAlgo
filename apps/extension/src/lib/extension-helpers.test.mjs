@@ -136,6 +136,7 @@ test('graph group coverage distinguishes durable groups, provisional topics, ung
     structuralNodeCount: 1,
     associatedCreatorCount: 0,
     unassociatedStructuralNodeCount: 1,
+    multiGroupCreatorCount: 0,
     durableGroupCount: 1,
     topicClusterCount: 1,
     groups: [
@@ -170,6 +171,22 @@ test('graph inspector mode cluster labels follow user-facing durable group label
       semanticClusterLabel: 'Distributed systems',
       semanticClusterKind: 'mode',
       semanticClusterAffinity: 0.8,
+      semanticClusterAssociations: [
+        {
+          id: 'mode:mode:inferred:v1:systems',
+          label: 'Distributed systems',
+          kind: 'mode',
+          affinity: 0.8,
+          contentCount: 4,
+        },
+        {
+          id: 'topic:music',
+          label: 'Music',
+          kind: 'topic',
+          affinity: 0.2,
+          contentCount: 1,
+        },
+      ],
     }],
     edges: [],
     controls: [],
@@ -198,7 +215,10 @@ test('graph inspector mode cluster labels follow user-facing durable group label
   const relabeled = applyDurableModeLabelsToGraphInspector(view, catalog);
   assert.equal(relabeled.nodes[0].semanticClusterLabel, 'Deep work');
   assert.equal(relabeled.nodes[0].semanticClusterId, 'mode:mode:inferred:v1:systems');
+  assert.equal(relabeled.nodes[0].semanticClusterAssociations[0].label, 'Deep work');
+  assert.equal(relabeled.nodes[0].semanticClusterAssociations[1].label, 'Music');
   assert.equal(view.nodes[0].semanticClusterLabel, 'Distributed systems');
+  assert.equal(view.nodes[0].semanticClusterAssociations[0].label, 'Distributed systems');
 });
 
 test('summarizeFeed discovers recurring mode categories from soft semantic scores without forcing badges', () => {
@@ -391,10 +411,23 @@ test('graph inspector derives creator group affinity from the content they creat
   assert.equal(creator.semanticClusterLabel, 'Software engineering');
   assert.equal(creator.semanticClusterKind, 'mode');
   assert.ok(creator.semanticClusterAffinity > 0.7);
+  assert.deepEqual(
+    creator.semanticClusterAssociations.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      contentCount: entry.contentCount,
+    })),
+    [
+      { id: 'mode:mode:software', label: 'Software engineering', contentCount: 2 },
+      { id: 'mode:mode:music', label: 'Music', contentCount: 1 },
+    ],
+  );
+  assert.ok(creator.semanticClusterAssociations[0].affinity > creator.semanticClusterAssociations[1].affinity);
 
   const coverage = summarizeGraphGroupCoverage(view);
   assert.equal(coverage.associatedCreatorCount, 1);
   assert.equal(coverage.unassociatedStructuralNodeCount, 0);
+  assert.equal(coverage.multiGroupCreatorCount, 1);
 });
 
 test('graph inspector anchors retained content to durable catalog groups even without cached mode affinity', () => {
