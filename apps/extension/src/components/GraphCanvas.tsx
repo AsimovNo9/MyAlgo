@@ -126,8 +126,11 @@ const resolveLineageCollisions = (positioned: Map<string, PositionedNode>): void
   for (const node of nodes) positioned.set(node.id, node);
 };
 
+const SELECTED_NODE_COLOR = '#f43f5e';
+const SEARCH_MATCH_COLOR = '#f8fafc';
+
 const nodeFill = (kind: string, selected: boolean, modeMember: boolean): string => {
-  if (selected) return '#facc15';
+  if (selected) return SELECTED_NODE_COLOR;
   if (modeMember) return '#f59e0b';
   switch (kind) {
     case 'concept':
@@ -979,7 +982,7 @@ export function GraphCanvas({
                   <circle
                     r={radius + 7}
                     fill="none"
-                    stroke={selected ? '#facc15' : '#f8fafc'}
+                    stroke={selected ? SELECTED_NODE_COLOR : SEARCH_MATCH_COLOR}
                     strokeWidth="2"
                     strokeOpacity="0.8"
                   />
@@ -993,7 +996,7 @@ export function GraphCanvas({
                       height="34"
                       rx="5"
                       fill="#111827"
-                      stroke={selected ? '#facc15' : node.provenance === 'explicit' ? '#f8fafc' : '#334155'}
+                      stroke={selected ? SELECTED_NODE_COLOR : node.provenance === 'explicit' ? '#f8fafc' : '#334155'}
                       strokeWidth={selected ? 2.5 : 1.4}
                     />
                     <image
@@ -1084,7 +1087,11 @@ export function GraphCanvas({
                 {label}
               </span>
             ))}
-            <span>white ring = explicit · filled dark ring = inferred</span>
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', border: `2px solid ${SELECTED_NODE_COLOR}` }} />
+              selected
+            </span>
+            <span>white ring = explicit · white halo = search match · filled dark ring = inferred</span>
           </div>
         </>
       ) : null}
