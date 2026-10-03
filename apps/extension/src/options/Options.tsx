@@ -754,10 +754,24 @@ export function Options() {
     : [];
 
   return (
-    <main style={{ maxWidth: 1240, margin: '0 auto', padding: 24, fontFamily: 'sans-serif', color: '#0f172a' }}>
-      <h1>Personal Algorithm settings</h1>
+    <main className="myalgo-options">
+      <header className="myalgo-hero">
+        <div className="myalgo-section-kicker">MyAlgo settings</div>
+        <h1>Tune your <em>personal algorithm</em></h1>
+        <p>
+          Choose the interests and History that should shape your recommendations. Advanced graph and evidence tools stay available when you want exact provenance.
+        </p>
+        <nav className="myalgo-jump-nav" aria-label="Settings sections">
+          <a href="#your-interests">Your interests</a>
+          <a href="#history-influence">History influence</a>
+          <a href="#recommendation-controls">Recommendation controls</a>
+          <a href="#advanced-graph">Advanced graph & evidence</a>
+          <a href="#technical-settings">Technical & privacy</a>
+        </nav>
+      </header>
 
-      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+      <section id="technical-settings" className="myalgo-technical" style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">Technical & privacy</div>
         <h2 style={{ marginTop: 0 }}>Privacy disclosure</h2>
         <p><strong>Version {PRIVACY_DISCLOSURE_VERSION}</strong> · {disclosureAccepted ? 'Accepted' : 'Acceptance required before observation'}</p>
         <p>MyAlgo observes {PRIVACY_DISCLOSURE.pages.toLowerCase()} and records {PRIVACY_DISCLOSURE.data}.</p>
@@ -768,20 +782,23 @@ export function Options() {
           <button type="button" onClick={() => void handleAcceptDisclosure()}>Accept and enable MyAlgo</button>
         ) : null}
         <p><a href="https://github.com/AsimovNo9/MyAlgo/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">Read the privacy policy</a></p>
-        {status ? <p role="status">{status}</p> : null}
+        {status ? <p className="myalgo-status-banner" role="status">{status}</p> : null}
       </section>
 
-      <section style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+      <section id="your-interests" style={{ marginBottom: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">Tune your feed</div>
         <h2 style={{ marginTop: 0 }}>Your interests</h2>
         <p>
           These are the recurring interests MyAlgo currently recognizes. You can choose what you want to use for your feed
           without editing the graph underneath.
         </p>
         {interestCards.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+          <div className="myalgo-interest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
             {interestCards.map((interest) => (
               <article
                 key={`interest:${interest.id}`}
+                className="myalgo-interest-card"
+                data-selected={interest.selected}
                 style={{
                   padding: 14,
                   borderRadius: 12,
@@ -798,7 +815,7 @@ export function Options() {
                       {!interest.active ? ' · retained' : ''}
                     </div>
                   </div>
-                  <span style={{
+                  <span className="myalgo-interest-status" style={{
                     borderRadius: 999,
                     padding: '3px 7px',
                     fontSize: 11,
@@ -1232,7 +1249,8 @@ export function Options() {
         )}
       </section>
 
-      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+      <section id="history-influence" style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <div className="myalgo-section-kicker">History influence</div>
         <h2 style={{ marginTop: 0 }}>What should your History teach MyAlgo?</h2>
         <p>
           MyAlgo found these areas in your retained YouTube History. Choose the ones that should shape recommendations.
@@ -1268,13 +1286,14 @@ export function Options() {
           style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
         />
         {historyClusterCatalog?.clusters.length ? (
-          <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+          <div className="myalgo-history-grid" style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
             {visibleHistoryClusters.map((cluster) => {
               const selected = selectedHistoryClusterIds.has(cluster.id);
               return (
                 <button
                   key={cluster.id}
                   type="button"
+                  className="myalgo-history-card"
                   aria-pressed={selected}
                   onClick={() => void handleToggleHistoryCluster(cluster.id)}
                   style={{
@@ -1286,12 +1305,12 @@ export function Options() {
                   }}
                 >
                   <strong>{cluster.label}</strong>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
                     {selected ? 'Used for recommendations' : 'Not used for recommendations'}
                     {' · '}{cluster.size} retained video{cluster.size === 1 ? '' : 's'}
                     {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
                   </div>
-                  <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
+                  <div className="myalgo-muted" style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
                     {cluster.id}
                   </div>
                 </button>
@@ -1314,6 +1333,28 @@ export function Options() {
         )}
       </section>
 
+      <section id="recommendation-controls">
+        <div className="myalgo-section-kicker">Direct corrections</div>
+        <h2 style={{ marginTop: 0 }}>Recommendation controls</h2>
+        <p>
+          Use these controls from Why-this or the Advanced graph when you want to directly correct MyAlgo. They keep the existing revisioned graph semantics and Undo/Restore behavior.
+        </p>
+        <div className="myalgo-control-grid">
+          <div className="myalgo-control-card" data-tone="prefer">
+            <strong>Prefer</strong>
+            <span className="myalgo-muted">Show more content connected to the selected signal.</span>
+          </div>
+          <div className="myalgo-control-card" data-tone="reduce">
+            <strong>Reduce</strong>
+            <span className="myalgo-muted">Lower the influence of the selected signal without deleting evidence.</span>
+          </div>
+          <div className="myalgo-control-card" data-tone="mute">
+            <strong>Mute</strong>
+            <span className="myalgo-muted">Stop the selected signal from influencing recommendations until unmuted.</span>
+          </div>
+        </div>
+      </section>
+
       <section style={{ marginTop: 24 }}>
         <h2>Experimental Home context</h2>
         <label>
@@ -1327,7 +1368,8 @@ export function Options() {
         <p>When enabled, MyAlgo stores visible video IDs, titles, creators, position, section, and observation time only in this browser. A surfaced recommendation is not treated as a preference; clicks and later history matches are recorded separately.</p>
       </section>
 
-      <section style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+      <section id="advanced-graph" style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #cbd5e1' }}>
+        <div className="myalgo-section-kicker">Inspect the model underneath</div>
         <h2>Advanced graph & evidence</h2>
         <p>
           You do not need this view to tune MyAlgo. It is the transparent inspection layer for people who want to see exactly
