@@ -212,7 +212,7 @@ export function Popup() {
       <div className="myalgo-popup-header">
         <div>
           <div className="myalgo-brand">My<span>Algo</span></div>
-          <div style={{ marginTop: 2, color: '#9fb0c7', fontSize: 11 }}>Tune what shapes your YouTube feed</div>
+          <div style={{ marginTop: 2, color: '#c5d2e3', fontSize: 11 }}>Tune what shapes your YouTube feed</div>
         </div>
       </div>
       <div className="myalgo-popup-status" style={{
@@ -232,7 +232,7 @@ export function Popup() {
       </div>
       <section>
         <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4, color: '#f8fbff' }}>Your interests</div>
-        <div style={{ fontSize: 12, color: '#9fb0c7' }}>
+        <div style={{ fontSize: 12, color: '#c5d2e3' }}>
           {selectedModeIds.length === 0 ? 'All interests can influence the feed' : <><strong>{mode}</strong> currently shapes the feed</>}
         </div>
       </section>
@@ -241,9 +241,6 @@ export function Popup() {
         {' · '}{feedCount} ready videos
       </p>
       <p>Feed sources: <strong>{feedSummary.subscribedCount} from subscriptions</strong> · <strong>{feedSummary.discoveredCount} found by MyAlgo</strong></p>
-      {feedSummary.topTopics.length > 0 ? (
-        <p>Top topics: {feedSummary.topTopics.map((entry) => `${entry.topic} (${entry.count})`).join(', ')}</p>
-      ) : null}
       <fieldset>
         <legend>Feed mix</legend>
         <label htmlFor="feed-replacement-percent">Use MyAlgo for <strong>{feedReplacementPercent}%</strong> of eligible Home slots</label>
@@ -265,11 +262,11 @@ export function Popup() {
             ? '0 keeps YouTube as-is. Higher values let MyAlgo replace more eligible cards when it has a good match.'
             : 'Higher values ask MyAlgo to show more from your selected interests. If it cannot find a good match, the YouTube card stays.'}
         </p>
-        <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Subscribed only</label>
-        <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide discovery</label>
+        <label><input type="checkbox" checked={sourceFilters.subscribedOnly} onChange={(event) => void handleFilterChange('subscribedOnly', event.target.checked)} /> Only subscriptions</label>
+        <label><input type="checkbox" checked={!sourceFilters.includeDiscovery} onChange={(event) => void handleFilterChange('includeDiscovery', !event.target.checked)} /> Hide videos found by MyAlgo</label>
         <label><input type="checkbox" checked={!sourceFilters.includeShorts} onChange={(event) => void handleFilterChange('includeShorts', !event.target.checked)} /> Hide Shorts</label>
         <label><input type="checkbox" checked={!sourceFilters.includeLive} onChange={(event) => void handleFilterChange('includeLive', !event.target.checked)} /> Hide live</label>
-        <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide Playables</label>
+        <label><input type="checkbox" checked={!sourceFilters.includePlayables} onChange={(event) => void handleFilterChange('includePlayables', !event.target.checked)} /> Hide games</label>
       </fieldset>
       <fieldset>
         <legend>Find new videos</legend>
@@ -293,13 +290,13 @@ export function Popup() {
           /> From YouTube search
         </label>
       </fieldset>
-      {lastError ? <p className="myalgo-popup-error">Last feed error: {lastError}</p> : null}
+      {lastError ? <p className="myalgo-popup-error">Something went wrong: {lastError}</p> : null}
       <div className="myalgo-popup-actions">
         <button onClick={() => void handleToggleEnabled()}>{enabled ? 'Pause MyAlgo' : 'Turn on MyAlgo'}</button>
       </div>
       <section style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Interests used for this feed</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="myalgo-chip-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => void handleSetMode('default')}
@@ -345,7 +342,7 @@ export function Popup() {
             aria-label="Search interests"
             style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: 7 }}
           />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 180, overflowY: 'auto' }}>
+          <div className="myalgo-chip-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 180, overflowY: 'auto' }}>
             {searchableModeOptions.map((option) => {
               const pressed = selectedModeIds.includes(option.id);
               return (
@@ -367,7 +364,7 @@ export function Popup() {
               );
             })}
             {searchableModeOptions.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#64748b' }}>No matching interests.</span>
+              <span style={{ fontSize: 12, color: '#b9c9dc' }}>No matching interests.</span>
             ) : null}
           </div>
         </details>
