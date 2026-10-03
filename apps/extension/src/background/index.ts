@@ -26,6 +26,18 @@ import {
   updateDurableModeUserConfig,
   type DurableModeUserConfigState,
 } from '../lib/durable-mode-user-config';
+import {
+  buildHistoryClusterCatalog,
+  createEmptyHistoryClusterOwnership,
+  includeAllHistoryClusters,
+  normalizeHistoryClusterOwnership,
+  projectHistoryOwnershipForInspection,
+  projectHistoryOwnershipForScoring,
+  selectHistoryClusters,
+  undoHistoryClusterOwnership,
+  type HistoryClusterCatalog,
+  type HistoryClusterOwnershipState,
+} from '../lib/history-cluster-ownership';
 
 type PageCandidate = {
   external_id: string;
@@ -542,6 +554,7 @@ let lastRankMemo: {
   sourceFiltersSignature: string;
   activeModeSignature: string;
   durableModeSignature: string;
+  historyOwnershipSignature: string;
   feedbackSignature: string;
   candidateIdsSignature: string;
   candidatePoolRevision: number;
@@ -719,6 +732,69 @@ async function purgeConcreteEvidencePayload(evidenceId: string): Promise<{
   };
 }
 
+const historyOwnershipSignature = (
+  catalog: HistoryClusterCatalog | null | undefined,
+  ownershipInput: HistoryClusterOwnershipState | null | undefined,
+): string => {
+  const ownership = normalizeHistoryClusterOwnership(ownershipInput);
+  return JSON.stringify({
+    pipelineId: catalog?.pipelineId ?? null,
+    clusterIds: (catalog?.clusters ?? []).map((cluster) => cluster.id).sort(),
+    revision: ownership.currentRevision,
+    selectionMode: ownership.selectionMode,
+    selectedClusterIds: [...ownership.selectedClusterIds].sort(),
+  });
+};
+
+async function refreshHistoryClusterCatalog(
+  historyInput?: HistoryEvidence[],
+): Promise<{
+  catalog: HistoryClusterCatalog;
+  ownership: HistoryClusterOwnershipState;
+}> {
+  const [history, previousCatalog, rawOwnership] = await Promise.all([
+    historyInput
+      ? Promise.resolve(historyInput)
+      : getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []),
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
+  ]);
+  const catalog = buildHistoryClusterCatalog(history, new Date().toISOString(), previousCatalog);
+  const ownership = normalizeHistoryClusterOwnership(rawOwnership);
+  const availableIds = new Set(catalog.clusters.map((cluster) => cluster.id));
+  const normalizedOwnership = ownership.selectionMode === 'selected'
+    ? {
+        ...ownership,
+        selectedClusterIds: ownership.selectedClusterIds.filter((id) => availableIds.has(id)),
+      }
+    : ownership;
+  await setStorageBatch({
+    [STORAGE_KEYS.HISTORY_CLUSTER_CATALOG]: catalog,
+    [STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP]: normalizedOwnership,
+  });
+  return { catalog, ownership: normalizedOwnership };
+}
+
+async function getHistoryClusterOwnershipContext(): Promise<{
+  catalog: HistoryClusterCatalog | null;
+  ownership: HistoryClusterOwnershipState;
+}> {
+  const [catalog, rawOwnership] = await Promise.all([
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
+  ]);
+  return {
+    catalog,
+    ownership: normalizeHistoryClusterOwnership(rawOwnership),
+  };
+}
+
 async function reconcileStoredHistoryEvidence(): Promise<void> {
   const startedAt = performance.now();
   console.info('[MyAlgo] history reconciliation started');
@@ -743,6 +819,7 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   }));
 
   const result = await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
+  await refreshHistoryClusterCatalog(historyEvidence);
   console.info('[MyAlgo] history reconciliation complete', {
     removed: result.removed,
     upserted: result.upserted,
