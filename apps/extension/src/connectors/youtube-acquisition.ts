@@ -28,26 +28,27 @@ export const isYoutubeVideoId = (value: string): boolean => /^[A-Za-z0-9_-]{11}$
 const INNERTUBE_PLAYER_ENDPOINT = 'https://www.youtube.com/youtubei/v1/player';
 const INNERTUBE_TRANSCRIPT_CLIENTS = [
   {
-    strategy: 'innertube_ios' as const,
-    client: {
-      hl: 'en',
-      gl: 'GB',
-      clientName: 'IOS',
-      clientVersion: '19.45.4',
-      deviceMake: 'Apple',
-      deviceModel: 'iPhone16,2',
-      osName: 'iPhone',
-      osVersion: '18.1.0.22B83',
-    },
-  },
-  {
     strategy: 'innertube_android' as const,
     client: {
       hl: 'en',
       gl: 'GB',
       clientName: 'ANDROID',
-      clientVersion: '20.10.38',
+      clientVersion: '20.37.42',
       androidSdkVersion: 34,
+      userAgent: 'com.google.android.youtube/20.37.42 (Linux; U; Android 14) gzip',
+    },
+  },
+  {
+    strategy: 'innertube_ios' as const,
+    client: {
+      hl: 'en',
+      gl: 'GB',
+      clientName: 'IOS',
+      clientVersion: '21.02.3',
+      deviceMake: 'Apple',
+      deviceModel: 'iPhone16,2',
+      osName: 'iPhone',
+      osVersion: '18.3.2.22D82',
     },
   },
 ] as const;
@@ -572,12 +573,20 @@ const fetchWithTimeout = async (
   }
 };
 
+type InnerTubeCaptionTrackResult = {
+  tracks: YouTubeCaptionTrack[] | null;
+  detail: string | null;
+};
+
+const compactFailureDetail = (value: string): string =>
+  normalizeTranscriptText(value).slice(0, 180);
+
 async function fetchInnertubeCaptionTracksForClient(
   videoId: string,
   apiKey: string,
   fetcher: typeof fetch,
   client: (typeof INNERTUBE_TRANSCRIPT_CLIENTS)[number],
-): Promise<YouTubeCaptionTrack[] | null> {
+): Promise<InnerTubeCaptionTrackResult> {
   try {
     const url = new URL(INNERTUBE_PLAYER_ENDPOINT);
     url.searchParams.set('key', apiKey);
@@ -595,10 +604,54 @@ async function fetchInnertubeCaptionTracksForClient(
         racyCheckOk: true,
       }),
     });
-    if (!response.ok) return null;
-    return extractYoutubeCaptionTracksFromPlayerResponse(await response.json());
-  } catch {
-    return null;
+    const body = await response.text();
+    if (!response.ok) {
+      return {
+        tracks: null,
+        detail: compactFailureDetail(
+          `${client.strategy}:http_${response.status}${body ? `:${body}` : ''}`,
+        ),
+      };
+    }
+
+    let player: unknown;
+    try {
+      player = JSON.parse(body);
+    } catch {
+      return {
+        tracks: null,
+        detail: compactFailureDetail(`${client.strategy}:invalid_json`),
+      };
+    }
+
+    if (isJsonObject(player) && isJsonObject(player.playabilityStatus)) {
+      const status = typeof player.playabilityStatus.status === 'string'
+        ? player.playabilityStatus.status
+        : '';
+      const reason = typeof player.playabilityStatus.reason === 'string'
+        ? player.playabilityStatus.reason
+        : '';
+      if (status && status !== 'OK') {
+        return {
+          tracks: null,
+          detail: compactFailureDetail(
+            `${client.strategy}:playability_${status}${reason ? `:${reason}` : ''}`,
+          ),
+        };
+      }
+    }
+
+    return {
+      tracks: extractYoutubeCaptionTracksFromPlayerResponse(player),
+      detail: null,
+    };
+  } catch (error) {
+    return {
+      tracks: null,
+      detail: compactFailureDetail(
+        `${client.strategy}:fetch_error:${error instanceof Error ? error.message : String(error)}`,
+      ),
+    };
   }
 }
 
@@ -642,21 +695,23 @@ export async function enrichYoutubeCandidate(
       let sawPlayerRequestFailure = false;
       let sawCaptionRequestFailure = false;
       let sawEmptyCaptionPayload = false;
+      const playerFailureDetails: string[] = [];
 
       if (apiKey) {
         for (const client of INNERTUBE_TRANSCRIPT_CLIENTS) {
-          const tracks = await fetchInnertubeCaptionTracksForClient(
+          const playerResult = await fetchInnertubeCaptionTracksForClient(
             videoId,
             apiKey,
             fetcher,
             client,
           );
-          if (tracks == null) {
+          if (playerResult.tracks == null) {
             sawPlayerRequestFailure = true;
+            if (playerResult.detail) playerFailureDetails.push(playerResult.detail);
             continue;
           }
           sawPlayerResponse = true;
-          const track = selectYoutubeCaptionTrack(tracks);
+          const track = selectYoutubeCaptionTrack(playerResult.tracks);
           if (!track) continue;
           sawEnglishTrack = true;
           try {
@@ -729,6 +784,9 @@ export async function enrichYoutubeCandidate(
                   : sawCaptionRequestFailure
                     ? 'caption_request_failed'
                     : 'player_request_failed',
+          detail: playerFailureDetails.length > 0
+            ? playerFailureDetails.join(' | ').slice(0, 360)
+            : null,
         };
       }
     }
