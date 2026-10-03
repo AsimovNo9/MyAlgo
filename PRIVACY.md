@@ -71,7 +71,7 @@ The project audits the built extension package for common secret/token patterns.
 
 ## Changes to data practices
 
-The privacy disclosure is versioned. Disclosure **v6** is the current floor and adds locally derived concept verification using a second packaged neural model. Disclosure v5 covered the packaged neural embedding-provider boundary; v4 covered local semantic embedding/similarity processing before that provider was introduced. Both current neural models/runtime assets are packaged with the extension and the installed extension has no model-host download boundary. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
+The privacy disclosure is versioned. Disclosure **v7** is the current floor and adds locally derived concept verification using a second packaged neural model. Disclosure v5 covered the packaged neural embedding-provider boundary; v4 covered local semantic embedding/similarity processing before that provider was introduced. Both current neural models/runtime assets are packaged with the extension and the installed extension has no model-host download boundary. A material change to what MyAlgo observes or derives, why it uses the data, where it sends the data, or who receives it requires a new disclosure version and renewed affirmative acceptance before the changed collection begins.
 
 Optional sync, cloud enrichment, or a new connector is therefore not covered by the current acceptance.
 
@@ -82,3 +82,8 @@ MyAlgo's use of information received through Chrome extension capabilities will 
 ## Contact and policy source
 
 The implementation and this policy are maintained in the MyAlgo project repository. Before Chrome Web Store publication, the developer must provide a working public URL for this policy in the Developer Dashboard and keep that URL current.
+
+
+## Optional YouTube caption enrichment
+
+When the user separately enables **YouTube caption enrichment** together with local neural semantics, MyAlgo uses the canonical YouTube watch page to obtain provider configuration, may ask YouTube's provider-owned non-WEB player interface for caption-track metadata, and requests the selected track from a YouTube-owned caption endpoint. In the browser extension these provider requests are executed through the already-open YouTube page context so they use YouTube's normal page origin/session; response parsing, bounded retention, and all model inference remain local to MyAlgo. MyAlgo keeps only a bounded normalized excerpt (up to 2,400 characters, sampled from the beginning, middle, and end) in a separate local derived cache. Caption text is used only as additional input to the packaged local semantic models; it is not stored as Personal Algorithm evidence, does not enter deterministic lexical scoring, and is not sent to a MyAlgo server or model host. The experiment is off by default. Disabling it stops new caption acquisition; **Delete all local MyAlgo data** clears the caption cache and setting.

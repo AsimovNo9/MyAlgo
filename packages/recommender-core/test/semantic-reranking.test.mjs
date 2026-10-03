@@ -113,6 +113,35 @@ test('graph verifier premise uses bounded content evidence without embedding top
   );
 });
 
+test('candidate semantic inputs include transcript excerpts with explicit provenance', async () => {
+  const transcriptCandidate = {
+    external_id: 'transcript-video',
+    title: 'A vague title',
+    description: 'Minimal description',
+    semantic_transcript: 'Distributed systems CRDT architecture implementation',
+    semantic_transcript_source: 'youtube_caption_track',
+    semantic_transcript_language: 'en',
+    semantic_transcript_auto_generated: false,
+  };
+
+  assert.match(buildCandidateEmbeddingText(transcriptCandidate), /Transcript excerpt: Distributed systems CRDT architecture implementation/);
+  assert.match(buildSemanticGraphVerificationText(transcriptCandidate), /Transcript excerpt: Distributed systems CRDT architecture implementation/);
+
+  const result = await enrichCandidatesWithSemanticReranking(
+    state,
+    [transcriptCandidate],
+    'CRDTs and local-first software',
+    provider,
+    createMemoryEmbeddingCache(),
+  );
+  assert.deepEqual(result.candidates[0].semantic_input_sources, ['metadata', 'transcript']);
+  assert.equal(result.diagnostics.transcriptAssistedCandidateCount, 1);
+  assert.ok(result.candidates[0].semantic_graph_matches.length > 0);
+  assert.deepEqual(result.candidates[0].semantic_graph_matches[0].input_sources, ['metadata', 'transcript']);
+  assert.equal(result.candidates[0].semantic_graph_matches[0].transcript_source, 'youtube_caption_track');
+  assert.equal(result.candidates[0].semantic_graph_matches[0].transcript_language, 'en');
+});
+
 test('semantic input hashes and cache keys are stable but model-version scoped', () => {
   const first = semanticInputHash('same input');
   const second = semanticInputHash('same input');

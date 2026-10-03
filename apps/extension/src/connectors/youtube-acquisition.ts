@@ -2,10 +2,16 @@ import type {
   CandidateAcquisitionProvenance,
   RecommendationCandidate,
 } from '@repo/shared-types';
-import { extractYouTubeVideoId, extractYouTubeWatchMetadataFromHtml } from '../content-scripts/youtube-dom.ts';
+import {
+  extractYouTubeCaptionTracksFromHtml,
+  extractYouTubeVideoId,
+  extractYouTubeWatchMetadataFromHtml,
+  type YouTubeCaptionTrack,
+} from '../content-scripts/youtube-dom.ts';
 import type {
   ProviderAcquisitionConnector,
   ProviderEnrichmentInput,
+  ProviderEnrichmentOptions,
   ProviderEnrichmentResult,
   WebSearchProvider,
   WebSearchRequest,
@@ -16,6 +22,191 @@ export const MAX_RSS_CHANNELS_PER_REFRESH = 6;
 export const MAX_RSS_ITEMS_PER_CHANNEL = 8;
 
 export const YOUTUBE_SEARCH_BLOCKED_ERROR_CODE = 'YOUTUBE_SEARCH_BLOCKED';
+export const MAX_YOUTUBE_TRANSCRIPT_CHARS = 2400;
+export const isYoutubeVideoId = (value: string): boolean => /^[A-Za-z0-9_-]{11}$/.test(value.trim());
+
+const INNERTUBE_PLAYER_ENDPOINT = 'https://www.youtube.com/youtubei/v1/player';
+const INNERTUBE_TRANSCRIPT_CLIENTS = [
+  {
+    strategy: 'innertube_android' as const,
+    client: {
+      hl: 'en',
+      gl: 'GB',
+      clientName: 'ANDROID',
+      clientVersion: '20.37.42',
+      androidSdkVersion: 34,
+      userAgent: 'com.google.android.youtube/20.37.42 (Linux; U; Android 14) gzip',
+    },
+  },
+  {
+    strategy: 'innertube_ios' as const,
+    client: {
+      hl: 'en',
+      gl: 'GB',
+      clientName: 'IOS',
+      clientVersion: '21.02.3',
+      deviceMake: 'Apple',
+      deviceModel: 'iPhone16,2',
+      osName: 'iPhone',
+      osVersion: '18.3.2.22D82',
+    },
+  },
+] as const;
+
+const normalizeTranscriptText = (value: string): string =>
+  value.replace(/\s+/g, ' ').trim();
+
+export function boundYoutubeTranscriptText(
+  value: string,
+  maxChars = MAX_YOUTUBE_TRANSCRIPT_CHARS,
+): string {
+  const normalized = normalizeTranscriptText(value);
+  const limit = Math.max(300, Math.min(6000, Math.floor(maxChars)));
+  if (normalized.length <= limit) return normalized;
+
+  const sliceSize = Math.max(100, Math.floor(limit / 3));
+  const middleStart = Math.max(
+    sliceSize,
+    Math.floor((normalized.length - sliceSize) / 2),
+  );
+  const parts = [
+    normalized.slice(0, sliceSize),
+    normalized.slice(middleStart, middleStart + sliceSize),
+    normalized.slice(-sliceSize),
+  ].map((part) => part.trim()).filter(Boolean);
+  return parts.join(' … ').slice(0, limit);
+}
+
+const decodeCaptionText = (value: string): string => value
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&#39;/g, "'")
+  .replace(/&#(\d+);/g, (_match, code) => {
+    const value = Number(code);
+    return Number.isInteger(value) && value > 0 && value <= 0x10ffff
+      ? String.fromCodePoint(value)
+      : ' ';
+  });
+
+export function parseYoutubeTranscriptPayload(payload: string): string {
+  const trimmed = payload.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      events?: Array<{ segs?: Array<{ utf8?: string }> }>;
+    };
+    if (Array.isArray(parsed.events)) {
+      const text = parsed.events
+        .flatMap((event) => Array.isArray(event.segs) ? event.segs : [])
+        .map((segment) => typeof segment.utf8 === 'string' ? segment.utf8 : '')
+        .join(' ');
+      return boundYoutubeTranscriptText(decodeCaptionText(text));
+    }
+  } catch {
+    // Fall through to the legacy timed-text XML representation.
+  }
+
+  const text = [...trimmed.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/gi)]
+    .map((match) => decodeCaptionText(match[1] ?? ''))
+    .join(' ');
+  return boundYoutubeTranscriptText(text);
+}
+
+export function extractYoutubeInnertubeApiKey(html: string): string | null {
+  const patterns = [
+    /"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/,
+    /INNERTUBE_API_KEY\s*[:=]\s*["']([^"']+)["']/,
+  ];
+  for (const pattern of patterns) {
+    const value = html.match(pattern)?.[1]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+const captionTrackNameFromPlayer = (value: unknown): string | null => {
+  if (!isJsonObject(value)) return null;
+  if (typeof value.simpleText === 'string') return normalizeTranscriptText(value.simpleText) || null;
+  if (!Array.isArray(value.runs)) return null;
+  const text = value.runs
+    .map((run) => isJsonObject(run) && typeof run.text === 'string' ? run.text : '')
+    .join('');
+  return normalizeTranscriptText(text) || null;
+};
+
+export function extractYoutubeCaptionTracksFromPlayerResponse(
+  player: unknown,
+): YouTubeCaptionTrack[] {
+  if (!isJsonObject(player)) return [];
+  const captions = player.captions;
+  if (!isJsonObject(captions)) return [];
+  const renderer = captions.playerCaptionsTracklistRenderer;
+  if (!isJsonObject(renderer) || !Array.isArray(renderer.captionTracks)) return [];
+
+  const seen = new Set<string>();
+  return renderer.captionTracks.flatMap((value): YouTubeCaptionTrack[] => {
+    if (!isJsonObject(value)) return [];
+    const baseUrl = typeof value.baseUrl === 'string' ? value.baseUrl.trim() : '';
+    const languageCode = typeof value.languageCode === 'string' ? value.languageCode.trim() : '';
+    if (!baseUrl || !languageCode) return [];
+    const key = `${languageCode}:${baseUrl}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const kind = typeof value.kind === 'string' ? value.kind.trim() || null : null;
+    return [{
+      baseUrl,
+      languageCode,
+      name: captionTrackNameFromPlayer(value.name),
+      kind,
+      autoGenerated: kind === 'asr',
+    }];
+  });
+}
+
+export function selectYoutubeCaptionTrack(
+  tracks: readonly YouTubeCaptionTrack[],
+  preferredLanguage = 'en',
+): YouTubeCaptionTrack | null {
+  const language = preferredLanguage.trim().toLowerCase();
+  const eligible = tracks
+    .filter((track) => track.languageCode.toLowerCase().startsWith(language))
+    .sort((left, right) => (
+      Number(left.autoGenerated) - Number(right.autoGenerated)
+      || left.languageCode.localeCompare(right.languageCode)
+      || (left.name ?? '').localeCompare(right.name ?? '')
+    ));
+  return eligible[0] ?? null;
+}
+
+const normalizeYoutubeCaptionUrl = (baseUrl: string): string | null => {
+  try {
+    const url = new URL(baseUrl);
+    const host = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:') return null;
+    if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return null;
+    if (url.pathname !== '/api/timedtext') return null;
+    url.searchParams.set('fmt', 'json3');
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
+async function fetchYoutubeCaptionTranscript(
+  track: YouTubeCaptionTrack,
+  fetcher: typeof fetch,
+): Promise<string> {
+  const url = normalizeYoutubeCaptionUrl(track.baseUrl);
+  if (!url) return '';
+  const response = await fetchWithTimeout(url, 5000, fetcher);
+  if (!response.ok) return '';
+  return parseYoutubeTranscriptPayload(await response.text());
+}
+
 
 export function isYoutubeSearchBlockedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
@@ -364,15 +555,17 @@ const fetchWithTimeout = async (
   url: string,
   timeoutMs = 7000,
   fetcher: typeof fetch = fetch,
+  init: RequestInit = {},
 ): Promise<Response> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetcher(url, {
-      method: 'GET',
-      credentials: 'omit',
-      cache: 'no-store',
-      redirect: 'manual',
+      method: init.method ?? 'GET',
+      credentials: init.credentials ?? 'omit',
+      cache: init.cache ?? 'no-store',
+      redirect: init.redirect ?? 'manual',
+      ...init,
       signal: controller.signal,
     });
   } finally {
@@ -380,20 +573,236 @@ const fetchWithTimeout = async (
   }
 };
 
+type InnerTubeCaptionTrackResult = {
+  tracks: YouTubeCaptionTrack[] | null;
+  detail: string | null;
+};
+
+const compactFailureDetail = (value: string): string =>
+  normalizeTranscriptText(value).slice(0, 180);
+
+async function fetchInnertubeCaptionTracksForClient(
+  videoId: string,
+  apiKey: string,
+  fetcher: typeof fetch,
+  client: (typeof INNERTUBE_TRANSCRIPT_CLIENTS)[number],
+): Promise<InnerTubeCaptionTrackResult> {
+  try {
+    const url = new URL(INNERTUBE_PLAYER_ENDPOINT);
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('prettyPrint', 'false');
+    const response = await fetchWithTimeout(url.toString(), 5000, fetcher, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': 'en-GB,en;q=0.9',
+      },
+      body: JSON.stringify({
+        context: { client: client.client },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+    });
+    const body = await response.text();
+    if (!response.ok) {
+      return {
+        tracks: null,
+        detail: compactFailureDetail(
+          `${client.strategy}:http_${response.status}${body ? `:${body}` : ''}`,
+        ),
+      };
+    }
+
+    let player: unknown;
+    try {
+      player = JSON.parse(body);
+    } catch {
+      return {
+        tracks: null,
+        detail: compactFailureDetail(`${client.strategy}:invalid_json`),
+      };
+    }
+
+    if (isJsonObject(player) && isJsonObject(player.playabilityStatus)) {
+      const status = typeof player.playabilityStatus.status === 'string'
+        ? player.playabilityStatus.status
+        : '';
+      const reason = typeof player.playabilityStatus.reason === 'string'
+        ? player.playabilityStatus.reason
+        : '';
+      if (status && status !== 'OK') {
+        return {
+          tracks: null,
+          detail: compactFailureDetail(
+            `${client.strategy}:playability_${status}${reason ? `:${reason}` : ''}`,
+          ),
+        };
+      }
+    }
+
+    return {
+      tracks: extractYoutubeCaptionTracksFromPlayerResponse(player),
+      detail: null,
+    };
+  } catch (error) {
+    return {
+      tracks: null,
+      detail: compactFailureDetail(
+        `${client.strategy}:fetch_error:${error instanceof Error ? error.message : String(error)}`,
+      ),
+    };
+  }
+}
+
 export async function enrichYoutubeCandidate(
   candidate: ProviderEnrichmentInput,
   fetcher: typeof fetch = fetch,
+  options: ProviderEnrichmentOptions = {},
 ): Promise<ProviderEnrichmentResult | null> {
+  const videoId = candidate.external_id.trim();
+  if (!isYoutubeVideoId(videoId)) {
+    return {
+      ...candidate,
+      transcript: null,
+      transcript_diagnostics: options.includeTranscript === true
+        ? {
+            attempted: false,
+            strategy: null,
+            reason: 'invalid_video_id',
+          }
+        : null,
+    };
+  }
+
   try {
     const response = await fetchWithTimeout(
-      `https://www.youtube.com/watch?v=${encodeURIComponent(candidate.external_id)}`,
+      `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
       7000,
       fetcher,
     );
     if (!response.ok) return null;
-    const rich = extractYouTubeWatchMetadataFromHtml(await response.text());
+    const html = await response.text();
+    const rich = extractYouTubeWatchMetadataFromHtml(html);
+
+    let transcript: ProviderEnrichmentResult['transcript'] = null;
+    let transcriptDiagnostics: ProviderEnrichmentResult['transcript_diagnostics'] = null;
+
+    if (options.includeTranscript === true && rich.isLive) {
+      transcriptDiagnostics = {
+        attempted: false,
+        strategy: null,
+        reason: 'live_video',
+        detail: 'Caption enrichment is skipped for live videos.',
+      };
+    }
+
+    if (options.includeTranscript === true && !rich.isLive) {
+      const apiKey = extractYoutubeInnertubeApiKey(html);
+      let sawEnglishTrack = false;
+      let sawPlayerResponse = false;
+      let sawPlayerRequestFailure = false;
+      let sawCaptionRequestFailure = false;
+      let sawEmptyCaptionPayload = false;
+      const playerFailureDetails: string[] = [];
+
+      if (apiKey) {
+        for (const client of INNERTUBE_TRANSCRIPT_CLIENTS) {
+          const playerResult = await fetchInnertubeCaptionTracksForClient(
+            videoId,
+            apiKey,
+            fetcher,
+            client,
+          );
+          if (playerResult.tracks == null) {
+            sawPlayerRequestFailure = true;
+            if (playerResult.detail) playerFailureDetails.push(playerResult.detail);
+            continue;
+          }
+          sawPlayerResponse = true;
+          const track = selectYoutubeCaptionTrack(playerResult.tracks);
+          if (!track) continue;
+          sawEnglishTrack = true;
+          try {
+            const text = await fetchYoutubeCaptionTranscript(track, fetcher);
+            if (text) {
+              transcript = {
+                text,
+                language: track.languageCode,
+                source: 'youtube_caption_track',
+                auto_generated: track.autoGenerated,
+                acquisition_strategy: client.strategy,
+              };
+              transcriptDiagnostics = {
+                attempted: true,
+                strategy: client.strategy,
+                reason: 'available',
+              };
+              break;
+            }
+            sawEmptyCaptionPayload = true;
+          } catch {
+            sawCaptionRequestFailure = true;
+          }
+        }
+      }
+
+      // The WEB/watch-page URL is retained only as a last-resort fallback for
+      // videos not currently PoToken-gated. Current YouTube commonly returns an
+      // empty 200 body here, so do not prefer it over non-WEB InnerTube clients.
+      if (!transcript && !sawEnglishTrack) {
+        const track = selectYoutubeCaptionTrack(extractYouTubeCaptionTracksFromHtml(html));
+        if (track) {
+          sawEnglishTrack = true;
+          try {
+            const text = await fetchYoutubeCaptionTranscript(track, fetcher);
+            if (text) {
+              transcript = {
+                text,
+                language: track.languageCode,
+                source: 'youtube_caption_track',
+                auto_generated: track.autoGenerated,
+                acquisition_strategy: 'watch_page',
+              };
+              transcriptDiagnostics = {
+                attempted: true,
+                strategy: 'watch_page',
+                reason: 'available',
+              };
+            } else {
+              sawEmptyCaptionPayload = true;
+            }
+          } catch {
+            sawCaptionRequestFailure = true;
+          }
+        }
+      }
+
+      if (!transcriptDiagnostics) {
+        transcriptDiagnostics = {
+          attempted: true,
+          strategy: null,
+          reason: !apiKey
+            ? 'missing_innertube_api_key'
+            : !sawPlayerResponse && sawPlayerRequestFailure
+              ? 'player_request_failed'
+              : !sawEnglishTrack
+                ? 'no_english_caption_track'
+                : sawEmptyCaptionPayload
+                  ? 'caption_payload_empty'
+                  : sawCaptionRequestFailure
+                    ? 'caption_request_failed'
+                    : 'player_request_failed',
+          detail: playerFailureDetails.length > 0
+            ? playerFailureDetails.join(' | ').slice(0, 360)
+            : null,
+        };
+      }
+    }
+
     return {
       ...candidate,
+      external_id: videoId,
       title: rich.title ?? candidate.title,
       channel_name: rich.channelName ?? candidate.channel_name ?? null,
       channel_id: rich.channelId ?? candidate.channel_id ?? null,
@@ -406,6 +815,8 @@ export async function enrichYoutubeCandidate(
       is_short: candidate.is_short ?? false,
       is_live: candidate.is_live === true || rich.isLive,
       view_count: rich.viewCount,
+      transcript,
+      transcript_diagnostics: transcriptDiagnostics,
     };
   } catch {
     return null;
@@ -414,5 +825,5 @@ export async function enrichYoutubeCandidate(
 
 export const youtubeAcquisition: ProviderAcquisitionConnector = {
   search: createYoutubeSearchPageProvider(),
-  enrich: enrichYoutubeCandidate,
+  enrich: (candidate, options) => enrichYoutubeCandidate(candidate, fetch, options),
 };

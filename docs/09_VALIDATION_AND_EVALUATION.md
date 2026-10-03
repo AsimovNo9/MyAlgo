@@ -296,7 +296,7 @@ Required invariants:
 9. ranking traces expose semantic graph/mode contributions exactly;
 10. no candidate gains preference weight merely because it came from search or RSS.
 11. full local-data deletion clears persisted and in-memory embedding/semantic feature state, and stale in-flight semantic work cannot repopulate deleted caches;
-12. upgrading to disclosure v6 requires renewed affirmative acceptance before observation/ranking resumes;
+12. upgrading to disclosure v7 requires renewed affirmative acceptance before observation/ranking resumes; prior v6 acceptance is insufficient because optional caption enrichment adds a new locally retained data category;
 13. semantic embedding requests execute through the offscreen semantic Worker in production;
 14. the production artifact contains the pinned mxbai embedding model and DeBERTa `nli-deberta-v3-xsmall` verifier/tokenizer assets plus local ONNX runtime assets; neural mode loads only packaged assets, reports readiness status, performs no model-host request at runtime, and never sends candidate text, verified concept labels, graph state, history, feedback, embeddings, or traces outside the extension;
 15. mxbai embedding execution prefers WebGPU and can fall back to local WASM/hash behavior without blocking first paint; the DeBERTa verifier deliberately runs q8 WASM in its bounded asynchronous slice. Neither path may block canonical graph/evidence updates.
@@ -962,3 +962,29 @@ For effective membership editing, validate the user-owned overlay separately fro
 6. active-mode scoring and Why-this grounding use effective members after the edit; membership changes invalidate the mode-affinity catalog signature and trigger bounded semantic refresh for an affected selected mode;
 7. graph mode focus/Network/Lineage use the effective member list while the inferred baseline remains inspectable/resettable;
 8. member removal never deletes evidence or graph nodes, and full local reset clears all ownership membership edits.
+
+
+## Local transcript enrichment validation (#238)
+
+Validate metadata-only and caption-assisted runs against the same replay/browser examples. Required invariants:
+
+1. the experiment is off by default and requires both current disclosure acceptance and local neural semantics;
+2. disabled mode issues no caption-track/timed-text request;
+3. valid 11-character YouTube IDs only enter transcript acquisition; pseudo IDs derived from ads/playables such as `title:...` make no transcript network request and are removed from the transcript cache;
+4. caption acquisition prefers current Android InnerTube, falls back to current iOS, and uses the WEB/watch-page caption URL only when non-WEB clients expose no English track; player/timed-text requests execute through the active YouTube page context rather than the extension-worker origin;
+5. eligible English captions prefer manual over auto-generated tracks; non-English-only or missing captions abstain to metadata-only semantics;
+6. retained transcript text is normalized, at most 2,400 characters, sampled across beginning/middle/end, stored only in the dedicated cache, and the cache is bounded to 160 records;
+7. cache entries expose acquisition strategy, failure reason, and bounded failure detail; `caption_payload_empty` is distinct from `no_english_caption_track`, `live_video`, and `player_request_failed`, and player failures preserve HTTP/playability context without retaining full provider payloads; live videos are an intentional abstention rather than an unexplained unavailable row;
+8. mxbai and DeBERTa input hashes change when the transcript excerpt changes, while transcript phrases never enter deterministic lexical scoring;
+9. Why-this identifies transcript-assisted semantic input and states that captions are not preference evidence;
+10. Personal Algorithm evidence/graph state, candidate reservoir, feed cache, and traces contain provenance only—not raw transcript text;
+11. caption fetch/parsing failure cannot fail metadata enrichment, ranking, or first paint;
+12. service-worker restart reuses the local caption cache; disabling stops new acquisition; full local-data deletion clears cache + toggle;
+13. compare semantic precision/abstention and rank deltas on vague titles, sparse descriptions, lectures, podcasts/interviews, news/commentary and misleading description boilerplate before enabling by default.
+
+Browser validation should inspect `GET_SEMANTIC_DIAGNOSTICS`: `transcriptEnrichment.enabled`, cache counts, and `diagnostics.transcriptAssistedCandidateCount`. Why-this on an assisted candidate must say `metadata + YouTube captions`. Search a distinctive caption phrase in `personal-algorithm-state`, candidate pool, and video store: it must be absent outside the dedicated transcript cache.
+
+
+### Current-card self-exposure regression
+
+For any scored Home candidate, create repeated retained `youtube/home_dom` exposure records for that candidate and attach them to inferred creator/topic/concept edges. Required result: those records do not make the inferred node score-bearing for that same candidate, do not appear in matched-path evidence counts, and do not appear under **Exact evidence used**. Add independent support from another video or a prior interaction and verify the supported node can contribute again without reintroducing the current-card exposure IDs. This protects Why-this from circular explanations such as `current video ↔ topic · N evidence items` where all N records are merely repeated observations of the same card.

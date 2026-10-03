@@ -333,7 +333,8 @@ For YouTube, the connector owns:
 - YouTube URL/video-ID normalization;
 - `web_search` candidate provenance construction;
 - YouTube RSS URL/parsing/channel selection;
-- canonical watch-page fetch/parsing for metadata enrichment.
+- canonical watch-page fetch/parsing for metadata enrichment;
+- optional caption-track discovery/timed-text parsing for bounded local semantic enrichment (#238).
 
 Generic retrieval/background orchestration owns only:
 - bounded query-plan execution;
@@ -349,3 +350,6 @@ The generic retrieval module must not import or encode provider renderer names, 
 PR #213 embeddings and PR #220 zero-shot concept verification do not extend the connector contract with model-specific semantics. Connectors continue to normalize identity, evidence, and candidate metadata. Rebuildable verifier outputs, embeddings, canonical semantic neighbourhoods, and graph/mode similarities are downstream derived features over normalized candidate metadata and Personal Algorithm Graph nodes. They remain model/pipeline/version/input keyed and must not create evidence or durable preference relationships merely because a classifier retained a label or two vectors are similar.
 
 When derived semantic state affects ranking, the deterministic scorer/trace remains the policy boundary. Canonical neighbourhoods may reconcile aliases/subtopics into one bounded semantic contribution while preserving the exact source graph nodes/evidence for explanation and replay.
+
+
+Transcript/caption text is connector-derived **semantic enrichment**, not normalized user evidence. The YouTube connector may return a bounded transcript enrichment payload only when explicitly requested by the caller. The background stores that payload in a separate disposable cache and joins it transiently into local model inputs. A connector implementation must not silently promote transcript text into `EvidenceRecord`, exact lexical scoring, graph edges, or candidate acquisition provenance.

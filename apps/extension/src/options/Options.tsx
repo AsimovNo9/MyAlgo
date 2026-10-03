@@ -26,6 +26,7 @@ export function Options() {
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
+  const [transcriptEnrichmentEnabled, setTranscriptEnrichmentEnabled] = React.useState(false);
   const [neuralBatchSize, setNeuralBatchSize] = React.useState(1);
   const [semanticModelStatus, setSemanticModelStatus] = React.useState<{
     status?: string;
@@ -80,6 +81,7 @@ export function Options() {
       'personal-algorithm-history-observation-enabled',
       'personal-algorithm-home-observation-enabled',
       'personal-algorithm-semantic-model-mode',
+      'personal-algorithm-transcript-enrichment-enabled',
       'personal-algorithm-semantic-model-status',
       'personal-algorithm-concept-model-status',
       'personal-algorithm-semantic-neural-batch-size',
@@ -102,6 +104,7 @@ export function Options() {
       setHistoryObservationEnabled(result['personal-algorithm-history-observation-enabled'] === true);
       setHomeObservationEnabled(result['personal-algorithm-home-observation-enabled'] === true);
       setSemanticModelMode(result['personal-algorithm-semantic-model-mode'] === 'neural' ? 'neural' : 'hash');
+      setTranscriptEnrichmentEnabled(result['personal-algorithm-transcript-enrichment-enabled'] === true);
       setSemanticModelStatus((result['personal-algorithm-semantic-model-status'] as typeof semanticModelStatus) ?? null);
       setConceptModelStatus((result['personal-algorithm-concept-model-status'] as typeof conceptModelStatus) ?? null);
       const storedBatchSize = Number(result['personal-algorithm-semantic-neural-batch-size'] ?? 1);
@@ -114,6 +117,8 @@ export function Options() {
       if (change) {
         setSemanticModelStatus((change.newValue as typeof semanticModelStatus) ?? null);
       }
+      const transcriptChange = changes['personal-algorithm-transcript-enrichment-enabled'];
+      if (transcriptChange) setTranscriptEnrichmentEnabled(transcriptChange.newValue === true);
       const conceptChange = changes['personal-algorithm-concept-model-status'];
       if (conceptChange) {
         setConceptModelStatus((conceptChange.newValue as typeof conceptModelStatus) ?? null);
@@ -161,6 +166,7 @@ export function Options() {
     setHistoryObservationEnabled(false);
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
+    setTranscriptEnrichmentEnabled(false);
     setSemanticModelStatus(null);
     setConceptModelStatus(null);
     setNeuralBatchSize(1);
@@ -318,6 +324,21 @@ export function Options() {
   const handleHomeObservationChange = async (enabled: boolean) => {
     setHomeObservationEnabled(enabled);
     await chrome.storage.local.set({ 'personal-algorithm-home-observation-enabled': enabled });
+  };
+
+  const handleTranscriptEnrichmentChange = async (enabled: boolean) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_TRANSCRIPT_ENRICHMENT_ENABLED',
+      payload: { enabled },
+    }) as { ok?: boolean; enabled?: boolean; error?: string };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to change transcript enrichment.');
+      return;
+    }
+    setTranscriptEnrichmentEnabled(response.enabled === true);
+    setStatus(response.enabled
+      ? 'YouTube caption enrichment enabled. Available English captions will be sampled locally on upcoming metadata refreshes.'
+      : 'YouTube caption enrichment disabled. Existing local caption cache remains until Delete all local MyAlgo data.');
   };
 
   const handleSemanticModelChange = async (enabled: boolean) => {
@@ -918,6 +939,24 @@ export function Options() {
           result with explicit fallback provenance instead of failing ranking.
         </p>
         <p><strong>Current semantic provider:</strong> {semanticModelMode === 'neural' ? 'Neural local (WebGPU embeddings + bounded WASM NLI verification)' : 'Deterministic baseline'}</p>
+        <div style={{ marginTop: 16, padding: 12, border: '1px solid #cbd5e1', borderRadius: 10 }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={transcriptEnrichmentEnabled}
+              disabled={!disclosureAccepted || semanticModelMode !== 'neural'}
+              onChange={(event) => void handleTranscriptEnrichmentChange(event.target.checked)}
+            />
+            Use YouTube captions for local semantic enrichment
+          </label>
+          <p style={{ marginBottom: 0 }}>
+            Experimental and off by default. When a video exposes an English caption track, MyAlgo requests it from a
+            YouTube-owned caption endpoint, keeps a bounded beginning/middle/end excerpt locally, and uses that excerpt only
+            as additional input to the packaged mxbai/DeBERTa semantic pipeline. Captions do not become exact preference
+            evidence and are not added to deterministic lexical scoring. Disabling stops new caption acquisition; Delete all
+            local MyAlgo data clears the retained caption cache. This slice does not ship Whisper or another speech-to-text model.
+          </p>
+        </div>
         <div style={{ marginTop: 16 }}>
           <label htmlFor="semantic-neural-batch-size">
             WebGPU embedding batch size: <strong>{neuralBatchSize}</strong>

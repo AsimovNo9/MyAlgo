@@ -480,6 +480,12 @@ const renderExplanationContent = (
     ? `Presentation: replaced a YouTube card · Source: ${view.sourceLabel}`
     : 'Presentation: native YouTube card reranked in place · Source: YouTube native page';
   presentation.appendChild(sourceLine);
+  if (view.semanticInputLine) {
+    const semanticInput = document.createElement('div');
+    semanticInput.style.marginTop = '3px';
+    semanticInput.textContent = view.semanticInputLine;
+    presentation.appendChild(semanticInput);
+  }
   if (activeDurableMode) {
     const exactModeMatch = isDurableModeGroundedItem(item, activeDurableMode);
     const provisionalModeMatch = !exactModeMatch
@@ -2476,8 +2482,67 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (nextFilters) applySourceFilters(nextFilters);
 });
 
+type YouTubeProviderFetchPayload = {
+  url?: string;
+  method?: 'GET' | 'POST';
+  headers?: Record<string, string>;
+  body?: string | null;
+};
+
+const fetchYoutubeProviderFromPage = async (
+  payload: YouTubeProviderFetchPayload,
+): Promise<{
+  ok: boolean;
+  status: number;
+  statusText: string;
+  text: string;
+}> => {
+  const requested = new URL(String(payload.url ?? ''), location.origin);
+  const host = requested.hostname.toLowerCase();
+  if (
+    requested.protocol !== 'https:'
+    || (host !== 'youtube.com' && !host.endsWith('.youtube.com'))
+    || !['/youtubei/v1/player', '/api/timedtext'].includes(requested.pathname)
+  ) {
+    throw new Error('Blocked non-YouTube provider fetch.');
+  }
+
+  const target = new URL(requested.pathname + requested.search, location.origin);
+  const headers = new Headers();
+  if (payload.headers?.['Content-Type']) {
+    headers.set('Content-Type', payload.headers['Content-Type']);
+  }
+  if (payload.headers?.['Accept-Language']) {
+    headers.set('Accept-Language', payload.headers['Accept-Language']);
+  }
+
+  const response = await fetch(target.toString(), {
+    method: payload.method === 'POST' ? 'POST' : 'GET',
+    headers,
+    body: payload.method === 'POST' ? payload.body ?? null : null,
+    credentials: 'include',
+    cache: 'no-store',
+    redirect: 'follow',
+  });
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    text: await response.text(),
+  };
+};
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!isCurrentInstance()) return;
+  if (message?.type === 'YOUTUBE_PROVIDER_FETCH') {
+    void fetchYoutubeProviderFromPage(message.payload ?? {})
+      .then((response) => sendResponse({ ok: true, response }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : 'YouTube provider fetch failed.',
+      }));
+    return true;
+  }
   if (message?.type === 'YOUTUBE_METADATA_ENRICHED') {
     if (extensionEnabled) triggerRank('metadata');
     return;

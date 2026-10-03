@@ -34,7 +34,7 @@
 - [x] Privacy policy source matches the local-only implementation
 - [x] Data inventory and local/remote boundary documented
 - [x] Retention/deletion semantics documented; full local-data deletion implemented
-- [ ] Revalidate clean-profile disclosure v6: prior v5 acceptance is rejected; production artifact contains both pinned neural model sets plus runtime assets; enabling local neural semantics performs no model-host/CDN request; deletion disables observation/retrieval and clears embedding, semantic-feature, and concept-verification caches
+- [ ] Revalidate clean-profile disclosure v7: prior v6 acceptance is rejected; production artifact contains both pinned neural model sets plus runtime assets; enabling local neural semantics performs no model-host/CDN request; deletion disables observation/retrieval and clears embedding, semantic-feature, and concept-verification caches
 - [x] YouTube API policy/repository boundary review completed in #168; no launch Data API integration found and CI guardrails added
 - [ ] Chrome Web Store listing + Privacy practices fields reconciled against release artifact
 - [ ] Stable public privacy-policy URL entered and verified in Developer Dashboard
@@ -43,6 +43,8 @@
 
 - [x] Local concept verification runtime validated (#219/#220): only interaction-supported candidates are queued, q8 WASM verification completes locally, explicit abstention is supported, cached verified labels replace raw keyword topics when present, and failure retains the metadata path
 - [x] Built artifact audit confirms both mxbai embedding and DeBERTa nli-deberta-v3-xsmall q8 assets are packaged locally
+
+- [ ] #238 transcript experiment browser validation: off by default; disabled mode performs no caption request; bounded caption cache/provenance work locally; metadata fallback survives missing captions; full reset clears captions; transcript phrases never enter graph evidence/candidate/feed stores; semantic-quality delta measured before default enablement
 
 ## P3 — Quality
 

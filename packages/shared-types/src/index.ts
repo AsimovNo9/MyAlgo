@@ -306,6 +306,9 @@ export interface SemanticGraphMatch {
   verification_status?: 'not_required' | 'verified' | 'fallback';
   verification_model_version?: string;
   verification_pipeline_id?: string;
+  input_sources?: Array<'metadata' | 'transcript'>;
+  transcript_source?: 'youtube_caption_track';
+  transcript_language?: string;
 }
 
 export interface CandidateSemanticFeatures {
@@ -390,6 +393,11 @@ export interface RecommendationCandidate {
   semantic_mode_similarity?: number | null;
   semantic_model_version?: string | null;
   semantic_graph_matches?: SemanticGraphMatch[];
+  semantic_input_sources?: Array<'metadata' | 'transcript'>;
+  semantic_transcript?: string | null;
+  semantic_transcript_source?: 'youtube_caption_track' | null;
+  semantic_transcript_language?: string | null;
+  semantic_transcript_auto_generated?: boolean | null;
   semantic_category?: SemanticCategoryId | null;
   semantic_category_confidence?: number | null;
   semantic_category_scores?: Partial<Record<SemanticCategoryId, number>>;

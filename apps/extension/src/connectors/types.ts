@@ -38,13 +38,46 @@ export type ProviderEnrichmentInput = {
   is_live?: boolean;
 };
 
+export type ProviderTranscriptEnrichment = {
+  text: string;
+  language: string;
+  source: 'youtube_caption_track';
+  auto_generated: boolean;
+  acquisition_strategy: 'innertube_ios' | 'innertube_android' | 'watch_page';
+};
+
+export type ProviderTranscriptEnrichmentDiagnostics = {
+  attempted: boolean;
+  strategy: 'innertube_ios' | 'innertube_android' | 'watch_page' | null;
+  reason:
+    | 'available'
+    | 'invalid_video_id'
+    | 'live_video'
+    | 'missing_innertube_api_key'
+    | 'no_english_caption_track'
+    | 'player_request_failed'
+    | 'caption_payload_empty'
+    | 'caption_request_failed'
+    | null;
+  detail?: string | null;
+};
+
 export type ProviderEnrichmentResult = ProviderEnrichmentInput & {
   view_count?: number | null;
+  transcript?: ProviderTranscriptEnrichment | null;
+  transcript_diagnostics?: ProviderTranscriptEnrichmentDiagnostics | null;
+};
+
+export type ProviderEnrichmentOptions = {
+  includeTranscript?: boolean;
 };
 
 export type ProviderAcquisitionConnector = {
   readonly search?: WebSearchProvider;
-  enrich(candidate: ProviderEnrichmentInput): Promise<ProviderEnrichmentResult | null>;
+  enrich(
+    candidate: ProviderEnrichmentInput,
+    options?: ProviderEnrichmentOptions,
+  ): Promise<ProviderEnrichmentResult | null>;
 };
 
 export type ProviderCapabilities = {

@@ -12,7 +12,8 @@ The semantic/runtime sequence through PR #229 and the trust/graph sequence throu
 4. **Active P2 — #161 durable-group ownership.** Rename/pin ownership is merged/browser validated in PR #236. Current work adds revisioned effective membership: remove inferred members from the lens, add existing discovered semantic members, reset to inferred membership, and undo without deleting graph/evidence state.
 5. **Next P2 — #178 history-cluster ownership.** Reuse the resulting ownership UX/versioning for explicit history-cluster inclusion/exclusion.
 6. **P2 — #169 + #211 release hardening.** Finish signed-out/offline behavior plus long-session/infinite-scroll/service-worker-restart and detached-DOM validation.
-7. **P3 — #158 explicit user-created graph nodes.** Add user-authored interests/concepts/creators/formats after edit/undo semantics are stable.
+7. **Active P3 — #238 local transcript enrichment.** Prefer YouTube caption tracks before speech-to-text; keep the path opt-in, local, bounded, separately cached, provenance-aware, and excluded from exact evidence/lexical scoring until replay + browser validation show measurable semantic value.
+8. **P3 — #158 explicit user-created graph nodes.** Add user-authored interests/concepts/creators/formats after edit/undo semantics are stable.
 8. **P3/P4 — #159 counterfactual replay.** Preview hypothetical edits against a fixed local snapshot after real graph editing exists.
 9. **Later — #163/#164/#165/#166 portability, optional sync, paid-value validation, and second connector.**
 
