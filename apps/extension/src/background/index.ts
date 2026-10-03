@@ -1457,11 +1457,16 @@ const refreshDiscoveryAutomatically = (
     && intentKey === lastAutomaticDiscoveryIntentKey
     && now - lastAutomaticDiscoveryAttemptAt < AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS;
 
-  if (sameForcedIntent) return Promise.resolve();
-  if (!forceWebSearch && now - lastAutomaticDiscoveryAttemptAt < AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS) {
-    return automaticDiscoveryInFlight ?? Promise.resolve();
+  if (sameForcedIntent) return automaticDiscoveryInFlight ?? Promise.resolve();
+  if (automaticDiscoveryInFlight) {
+    if (forceWebSearch) {
+      return automaticDiscoveryInFlight.then(() => refreshDiscoveryAutomatically(reason, options));
+    }
+    return automaticDiscoveryInFlight;
   }
-  if (automaticDiscoveryInFlight) return automaticDiscoveryInFlight;
+  if (!forceWebSearch && now - lastAutomaticDiscoveryAttemptAt < AUTOMATIC_DISCOVERY_MIN_INTERVAL_MS) {
+    return Promise.resolve();
+  }
 
   lastAutomaticDiscoveryAttemptAt = now;
   if (forceWebSearch && intentKey) lastAutomaticDiscoveryIntentKey = intentKey;
@@ -4229,11 +4234,6 @@ const handleRuntimeMessage = (
         void enrichVideos(incomingCandidates).then(async (enrichedCandidates) => {
           if (enrichedCandidates.length === 0) return;
           await mergeCandidatePool(enrichedCandidates);
-          void refreshRssCandidates(false).then(async (refresh) => {
-            if (refresh.changed) await notifyPersonalAlgorithmChanged('retrieval');
-          }).catch((error) => {
-            console.warn('[MyAlgo] metadata-driven RSS refresh failed', error);
-          });
           if (senderTabId) {
             await chrome.tabs.sendMessage(senderTabId, {
               type: 'YOUTUBE_METADATA_ENRICHED',
