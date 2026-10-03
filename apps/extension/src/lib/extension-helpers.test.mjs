@@ -134,6 +134,8 @@ test('graph group coverage distinguishes durable groups, provisional topics, ung
     topicClusteredContentCount: 1,
     ungroupedContentCount: 1,
     structuralNodeCount: 1,
+    associatedCreatorCount: 0,
+    unassociatedStructuralNodeCount: 1,
     durableGroupCount: 1,
     topicClusterCount: 1,
     groups: [
@@ -312,6 +314,87 @@ test('graph inspector summarizes nodes, edges, revisions, and supporting evidenc
     contentLabel: 'Video A',
   }]);
   assert.equal(view.revisions[0].revision, 7);
+});
+
+test('graph inspector derives creator group affinity from the content they create', () => {
+  const state = {
+    schemaVersion: 3,
+    evidence: [],
+    forgottenEvidence: [],
+    graph: {
+      currentRevision: 5,
+      userEdits: [],
+      revisions: [],
+      controls: [],
+      nodes: [
+        {
+          id: 'content:youtube:a', kind: 'content', label: 'A',
+          content: { source: 'youtube', externalId: 'a' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'content:youtube:b', kind: 'content', label: 'B',
+          content: { source: 'youtube', externalId: 'b' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'content:youtube:c', kind: 'content', label: 'C',
+          content: { source: 'youtube', externalId: 'c' },
+          provenance: 'explicit', confidence: null, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'creator:youtube:x', kind: 'creator', label: 'Creator X',
+          provenance: 'inferred', confidence: 1, attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+      ],
+      edges: [
+        {
+          id: 'created:a', sourceNodeId: 'content:youtube:a', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'created:b', sourceNodeId: 'content:youtube:b', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+        {
+          id: 'created:c', sourceNodeId: 'content:youtube:c', targetNodeId: 'creator:youtube:x',
+          relation: 'created_by', provenance: 'inferred', confidence: 1, evidenceIds: [], attributes: {},
+          createdAt: '2026-10-03T08:00:00.000Z', updatedAt: '2026-10-03T08:00:00.000Z',
+        },
+      ],
+    },
+  };
+  const semantic = [
+    {
+      externalId: 'a', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:software', label: 'Software engineering', affinity: 0.9 }],
+    },
+    {
+      externalId: 'b', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:software', label: 'Software engineering', affinity: 0.8 }],
+    },
+    {
+      externalId: 'c', category: null, categoryConfidence: 0, categoryScores: {}, graphMatches: [],
+      modeAffinities: [{ modeId: 'mode:music', label: 'Music', affinity: 0.7 }],
+    },
+  ];
+
+  const view = buildGraphInspectorView(state, semantic);
+  const creator = view.nodes.find((node) => node.id === 'creator:youtube:x');
+  assert.equal(creator.semanticClusterId, 'mode:mode:software');
+  assert.equal(creator.semanticClusterLabel, 'Software engineering');
+  assert.equal(creator.semanticClusterKind, 'mode');
+  assert.ok(creator.semanticClusterAffinity > 0.7);
+
+  const coverage = summarizeGraphGroupCoverage(view);
+  assert.equal(coverage.associatedCreatorCount, 1);
+  assert.equal(coverage.unassociatedStructuralNodeCount, 0);
 });
 
 test('graph inspector anchors retained content to durable catalog groups even without cached mode affinity', () => {
