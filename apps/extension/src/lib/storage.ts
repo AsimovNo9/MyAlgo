@@ -16,6 +16,8 @@ export const STORAGE_KEYS = {
   RETRIEVAL_SETTINGS: 'personal-algorithm-retrieval-settings',
   RETRIEVAL_DIAGNOSTICS: 'personal-algorithm-retrieval-diagnostics',
   HISTORY_EVIDENCE: 'personal-algorithm-history-evidence',
+  HISTORY_CLUSTER_CATALOG: 'personal-algorithm-history-cluster-catalog',
+  HISTORY_CLUSTER_OWNERSHIP: 'personal-algorithm-history-cluster-ownership',
   HISTORY_OBSERVATION_ENABLED: 'personal-algorithm-history-observation-enabled',
   HISTORY_METRICS: 'personal-algorithm-history-metrics',
   HOME_OBSERVATION_ENABLED: 'personal-algorithm-home-observation-enabled',

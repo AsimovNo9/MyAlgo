@@ -13,6 +13,10 @@ import {
 } from '../lib/extension-helpers';
 import { GraphCanvas } from '../components/GraphCanvas';
 import type { DurableSemanticModeCatalog } from '@repo/shared-types';
+import type {
+  HistoryClusterCatalog,
+  HistoryClusterOwnershipState,
+} from '../lib/history-cluster-ownership';
 
 export function Options() {
   const [mode, setMode] = React.useState('Default');
@@ -24,6 +28,9 @@ export function Options() {
   const [modeConfigRevision, setModeConfigRevision] = React.useState(0);
   const [durableModeCatalog, setDurableModeCatalog] = React.useState<DurableSemanticModeCatalog | null>(null);
   const [historyObservationEnabled, setHistoryObservationEnabled] = React.useState(false);
+  const [historyClusterCatalog, setHistoryClusterCatalog] = React.useState<HistoryClusterCatalog | null>(null);
+  const [historyClusterOwnership, setHistoryClusterOwnership] = React.useState<HistoryClusterOwnershipState | null>(null);
+  const [historyClusterSearch, setHistoryClusterSearch] = React.useState('');
   const [homeObservationEnabled, setHomeObservationEnabled] = React.useState(false);
   const [semanticModelMode, setSemanticModelMode] = React.useState<'hash' | 'neural'>('hash');
   const [transcriptEnrichmentEnabled, setTranscriptEnrichmentEnabled] = React.useState(false);
@@ -111,6 +118,15 @@ export function Options() {
       setNeuralBatchSize(Number.isFinite(storedBatchSize) ? Math.max(1, Math.min(16, Math.floor(storedBatchSize))) : 1);
       setDisclosureAccepted(isPrivacyDisclosureAccepted(result['personal-algorithm-privacy-disclosure-accepted-version']));
     });
+    void chrome.runtime.sendMessage({ type: 'GET_HISTORY_CLUSTER_OWNERSHIP' }).then((response: {
+      ok?: boolean;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    }) => {
+      if (!response?.ok) return;
+      setHistoryClusterCatalog(response.catalog ?? null);
+      setHistoryClusterOwnership(response.ownership ?? null);
+    }).catch(() => undefined);
     const handleStorageChanged = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
       if (areaName !== 'local') return;
       const change = changes['personal-algorithm-semantic-model-status'];
@@ -129,6 +145,18 @@ export function Options() {
       if (modeConfigChange) {
         const config = modeConfigChange.newValue as { currentRevision?: number } | undefined;
         setModeConfigRevision(Number.isInteger(config?.currentRevision) ? Number(config?.currentRevision) : 0);
+      }
+      const historyClusterCatalogChange = changes['personal-algorithm-history-cluster-catalog'];
+      if (historyClusterCatalogChange) {
+        setHistoryClusterCatalog(
+          (historyClusterCatalogChange.newValue as HistoryClusterCatalog | undefined) ?? null,
+        );
+      }
+      const historyClusterOwnershipChange = changes['personal-algorithm-history-cluster-ownership'];
+      if (historyClusterOwnershipChange) {
+        setHistoryClusterOwnership(
+          (historyClusterOwnershipChange.newValue as HistoryClusterOwnershipState | undefined) ?? null,
+        );
       }
       const activeModeChange = changes['personal-algorithm-active-mode-id'];
       if (activeModeChange) setActiveModeId((activeModeChange.newValue as string | undefined) ?? 'default');
@@ -164,6 +192,9 @@ export function Options() {
     }
     setDisclosureAccepted(false);
     setHistoryObservationEnabled(false);
+    setHistoryClusterCatalog(null);
+    setHistoryClusterOwnership(null);
+    setHistoryClusterSearch('');
     setHomeObservationEnabled(false);
     setSemanticModelMode('hash');
     setTranscriptEnrichmentEnabled(false);
@@ -319,6 +350,72 @@ export function Options() {
   const handleHistoryObservationChange = async (enabled: boolean) => {
     setHistoryObservationEnabled(enabled);
     await chrome.storage.local.set({ 'personal-algorithm-history-observation-enabled': enabled });
+  };
+
+  const refreshHistoryClusterOwnership = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_HISTORY_CLUSTER_OWNERSHIP' }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to load history clusters.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+  };
+
+  const handleHistoryClusterSelection = async (clusterIds: string[] | null) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'SET_HISTORY_CLUSTER_SELECTION',
+      payload: clusterIds == null ? {} : { clusterIds },
+    }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to update history cluster ownership.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+    setStatus(
+      response.ownership?.selectionMode === 'all'
+        ? `All retained History influences MyAlgo. History ownership r${response.ownership.currentRevision}.`
+        : `${response.ownership?.selectedClusterIds.length ?? 0} History cluster(s) influence MyAlgo. Retained excluded History was not deleted. History ownership r${response.ownership?.currentRevision ?? 0}.`,
+    );
+  };
+
+  const handleToggleHistoryCluster = async (clusterId: string) => {
+    const selected = new Set(historyClusterOwnership?.selectionMode === 'selected'
+      ? historyClusterOwnership.selectedClusterIds
+      : historyClusterCatalog?.clusters.map((cluster) => cluster.id) ?? []);
+    if (selected.has(clusterId)) selected.delete(clusterId);
+    else selected.add(clusterId);
+    await handleHistoryClusterSelection([...selected]);
+  };
+
+  const handleUndoHistoryClusterSelection = async () => {
+    const response = await chrome.runtime.sendMessage({ type: 'UNDO_HISTORY_CLUSTER_SELECTION' }) as {
+      ok?: boolean;
+      error?: string;
+      catalog?: HistoryClusterCatalog;
+      ownership?: HistoryClusterOwnershipState;
+      reverted?: { action?: string } | null;
+    };
+    if (!response?.ok) {
+      setStatus(response?.error ?? 'Unable to undo History ownership.');
+      return;
+    }
+    setHistoryClusterCatalog(response.catalog ?? null);
+    setHistoryClusterOwnership(response.ownership ?? null);
+    setStatus(response.reverted
+      ? `History ownership edit undone. Revision ${response.ownership?.currentRevision ?? 0}.`
+      : 'There is no History ownership edit to undo.');
   };
 
   const handleHomeObservationChange = async (enabled: boolean) => {
@@ -537,6 +634,25 @@ export function Options() {
       || option.label.toLowerCase().includes(normalizedModeSearch)
       || option.id.toLowerCase().includes(normalizedModeSearch))
   ));
+  const normalizedHistoryClusterSearch = historyClusterSearch.trim().toLowerCase();
+  const selectedHistoryClusterIds = new Set(
+    historyClusterOwnership?.selectionMode === 'selected'
+      ? historyClusterOwnership.selectedClusterIds
+      : historyClusterCatalog?.clusters.map((cluster) => cluster.id) ?? [],
+  );
+  const visibleHistoryClusters = [...(historyClusterCatalog?.clusters ?? [])]
+    .filter((cluster) => (
+      !normalizedHistoryClusterSearch
+      || cluster.label.toLowerCase().includes(normalizedHistoryClusterSearch)
+      || cluster.keywords.some((keyword) => keyword.toLowerCase().includes(normalizedHistoryClusterSearch))
+      || cluster.creatorLabels.some((creator) => creator.toLowerCase().includes(normalizedHistoryClusterSearch))
+    ))
+    .sort((left, right) => (
+      Number(selectedHistoryClusterIds.has(right.id)) - Number(selectedHistoryClusterIds.has(left.id))
+      || right.size - left.size
+      || left.label.localeCompare(right.label)
+    ));
+
   const effectiveGraphInspector = graphInspector && graphInspectorSource === 'live'
     ? applyDurableModeLabelsToGraphInspector(graphInspector, durableModeCatalog)
     : graphInspector;
@@ -1020,6 +1136,87 @@ export function Options() {
           >
             Open YouTube History
           </button>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24, padding: 16, border: '1px solid #cbd5e1', borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>History ownership</h2>
+        <p>
+          MyAlgo derives local content clusters from retained YouTube History so shared-account activity can be reviewed explicitly.
+          Choosing clusters changes which History evidence influences graph reconstruction and scoring; it does not delete the excluded History records.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            aria-pressed={historyClusterOwnership?.selectionMode !== 'selected'}
+            onClick={() => void handleHistoryClusterSelection(null)}
+          >
+            All retained History
+          </button>
+          <button type="button" onClick={() => void handleUndoHistoryClusterSelection()}>
+            Undo History ownership
+          </button>
+          <button type="button" onClick={() => void refreshHistoryClusterOwnership()}>
+            Refresh clusters
+          </button>
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            revision {historyClusterOwnership?.currentRevision ?? 0}
+          </span>
+        </div>
+        <label htmlFor="history-cluster-search" style={{ display: 'block', marginTop: 12, fontWeight: 600 }}>
+          Search History clusters
+        </label>
+        <input
+          id="history-cluster-search"
+          type="search"
+          value={historyClusterSearch}
+          onChange={(event) => setHistoryClusterSearch(event.target.value)}
+          placeholder="Search topics or creators"
+          style={{ width: '100%', maxWidth: 420, padding: 8, margin: '6px 0 12px' }}
+        />
+        {historyClusterCatalog?.clusters.length ? (
+          <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+            {visibleHistoryClusters.map((cluster) => {
+              const selected = selectedHistoryClusterIds.has(cluster.id);
+              return (
+                <button
+                  key={cluster.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => void handleToggleHistoryCluster(cluster.id)}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    border: selected ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: selected ? '#dbeafe' : '#fff',
+                    textAlign: 'left',
+                  }}
+                >
+                  <strong>{cluster.label}</strong>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                    {cluster.size} retained video{cluster.size === 1 ? '' : 's'}
+                    {cluster.creatorLabels.length > 0 ? ` · ${cluster.creatorLabels.join(', ')}` : ''}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', overflowWrap: 'anywhere', marginTop: 2 }}>
+                    {cluster.id}
+                  </div>
+                </button>
+              );
+            })}
+            {visibleHistoryClusters.length === 0 ? <span>No matching History clusters.</span> : null}
+          </div>
+        ) : (
+          <p style={{ color: '#64748b' }}>
+            No History clusters yet. Enable History observation and visit YouTube History, then refresh clusters.
+          </p>
+        )}
+        {historyClusterOwnership?.selectionMode === 'selected' ? (
+          <p style={{ marginBottom: 0 }}>
+            <strong>{historyClusterOwnership.selectedClusterIds.length}</strong> cluster(s) currently influence MyAlgo.
+            Unselected retained History remains stored locally and can be re-included or forgotten separately.
+          </p>
+        ) : (
+          <p style={{ marginBottom: 0 }}>All retained History currently influences MyAlgo.</p>
         )}
       </section>
 

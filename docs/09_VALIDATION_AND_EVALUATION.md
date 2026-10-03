@@ -988,3 +988,19 @@ Browser validation should inspect `GET_SEMANTIC_DIAGNOSTICS`: `transcriptEnrichm
 ### Current-card self-exposure regression
 
 For any scored Home candidate, create repeated retained `youtube/home_dom` exposure records for that candidate and attach them to inferred creator/topic/concept edges. Required result: those records do not make the inferred node score-bearing for that same candidate, do not appear in matched-path evidence counts, and do not appear under **Exact evidence used**. Add independent support from another video or a prior interaction and verify the supported node can contribute again without reintroducing the current-card exposure IDs. This protects Why-this from circular explanations such as `current video ↔ topic · N evidence items` where all N records are merely repeated observations of the same card.
+
+
+## History cluster ownership validation (#178)
+
+Validate history ownership as explicit model input, not deletion or hidden identity inference:
+
+1. retained YouTube History is partitioned locally into deterministic candidate clusters; cluster labels are descriptive only and never claim a cluster belongs to a particular person;
+2. incremental History scans preserve a cluster ID when membership overlap remains >= 0.5, so user selection survives ordinary reclustering;
+3. default state is All retained History; switching to selected clusters creates a history-ownership revision and excluded records remain retained locally;
+4. selecting/deselecting clusters changes the effective scoring evidence revision and graph edge support without writing Forget tombstones or deleting History payloads;
+5. semantic concept materialization and durable-mode refresh consume the effective history projection rather than excluded history evidence;
+6. live graph inspection keeps retained evidence payloads reviewable while graph relationships reflect the effective selected-cluster projection;
+7. Undo restores the immediately prior History ownership selection as a new ownership revision;
+8. selecting zero clusters is valid and means retained History contributes no history_dom watch evidence while non-History evidence remains active;
+9. full local reset clears cluster catalog and ownership state;
+10. repeated ordinary reranks retain the warm memo path; only raw state, cluster catalog identity, or ownership revision changes invalidate it.

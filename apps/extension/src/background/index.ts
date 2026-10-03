@@ -26,6 +26,18 @@ import {
   updateDurableModeUserConfig,
   type DurableModeUserConfigState,
 } from '../lib/durable-mode-user-config';
+import {
+  buildHistoryClusterCatalog,
+  createEmptyHistoryClusterOwnership,
+  includeAllHistoryClusters,
+  normalizeHistoryClusterOwnership,
+  projectHistoryOwnershipForInspection,
+  projectHistoryOwnershipForScoring,
+  selectHistoryClusters,
+  undoHistoryClusterOwnership,
+  type HistoryClusterCatalog,
+  type HistoryClusterOwnershipState,
+} from '../lib/history-cluster-ownership';
 
 type PageCandidate = {
   external_id: string;
@@ -542,6 +554,7 @@ let lastRankMemo: {
   sourceFiltersSignature: string;
   activeModeSignature: string;
   durableModeSignature: string;
+  historyOwnershipSignature: string;
   feedbackSignature: string;
   candidateIdsSignature: string;
   candidatePoolRevision: number;
@@ -719,6 +732,79 @@ async function purgeConcreteEvidencePayload(evidenceId: string): Promise<{
   };
 }
 
+const historyOwnershipSignature = (
+  catalog: HistoryClusterCatalog | null | undefined,
+  ownershipInput: HistoryClusterOwnershipState | null | undefined,
+): string => {
+  const ownership = normalizeHistoryClusterOwnership(ownershipInput);
+  return JSON.stringify({
+    pipelineId: catalog?.pipelineId ?? null,
+    clusterIds: (catalog?.clusters ?? []).map((cluster) => cluster.id).sort(),
+    revision: ownership.currentRevision,
+    selectionMode: ownership.selectionMode,
+    selectedClusterIds: [...ownership.selectedClusterIds].sort(),
+  });
+};
+
+async function refreshHistoryClusterCatalog(
+  historyInput?: HistoryEvidence[],
+): Promise<{
+  catalog: HistoryClusterCatalog;
+  ownership: HistoryClusterOwnershipState;
+}> {
+  const [history, previousCatalog, rawOwnership] = await Promise.all([
+    historyInput
+      ? Promise.resolve(historyInput)
+      : getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []),
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
+  ]);
+  const catalog = buildHistoryClusterCatalog(history, new Date().toISOString(), previousCatalog);
+  const ownership = normalizeHistoryClusterOwnership(rawOwnership);
+  const availableIds = new Set(catalog.clusters.map((cluster) => cluster.id));
+  const normalizedOwnership = ownership.selectionMode === 'selected'
+    ? {
+        ...ownership,
+        selectedClusterIds: ownership.selectedClusterIds.filter((id) => availableIds.has(id)),
+      }
+    : ownership;
+  await setStorageBatch({
+    [STORAGE_KEYS.HISTORY_CLUSTER_CATALOG]: catalog,
+    [STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP]: normalizedOwnership,
+  });
+  return { catalog, ownership: normalizedOwnership };
+}
+
+async function getHistoryClusterOwnershipContext(): Promise<{
+  catalog: HistoryClusterCatalog | null;
+  ownership: HistoryClusterOwnershipState;
+}> {
+  const [catalog, rawOwnership] = await Promise.all([
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
+  ]);
+  return {
+    catalog,
+    ownership: normalizeHistoryClusterOwnership(rawOwnership),
+  };
+}
+
+async function projectStateWithCurrentHistoryOwnership(
+  state: Awaited<ReturnType<LocalPersonalAlgorithmStore['exportState']>>,
+  inspection = false,
+) {
+  const { catalog, ownership } = await getHistoryClusterOwnershipContext();
+  return inspection
+    ? projectHistoryOwnershipForInspection(state, catalog, ownership)
+    : projectHistoryOwnershipForScoring(state, catalog, ownership);
+}
+
 async function reconcileStoredHistoryEvidence(): Promise<void> {
   const startedAt = performance.now();
   console.info('[MyAlgo] history reconciliation started');
@@ -743,6 +829,7 @@ async function reconcileStoredHistoryEvidence(): Promise<void> {
   }));
 
   const result = await personalAlgorithmStore.reconcileHistoryEvidence(normalizedInputs);
+  await refreshHistoryClusterCatalog(historyEvidence);
   console.info('[MyAlgo] history reconciliation complete', {
     removed: result.removed,
     upserted: result.upserted,
@@ -1737,12 +1824,13 @@ async function refreshSemanticConceptGraph(
   changed: boolean;
   diagnostics: Record<string, unknown>;
 }> {
-  const [initialState, initialCandidatePoolRaw, semanticModelMode, conceptModelStatus] = await Promise.all([
+  const [rawInitialState, initialCandidatePoolRaw, semanticModelMode, conceptModelStatus] = await Promise.all([
     personalAlgorithmStore.exportState(),
     getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
     getSemanticModelMode(),
     getStorage<Record<string, unknown> | null>(STORAGE_KEYS.CONCEPT_MODEL_STATUS, null),
   ]);
+  const initialState = await projectStateWithCurrentHistoryOwnership(rawInitialState);
   const initialCandidatePool = await hydrateCandidatesWithTranscript(initialCandidatePoolRaw);
   const conceptStatusUpdatedAt = typeof conceptModelStatus?.updatedAt === 'string'
     ? Date.parse(conceptModelStatus.updatedAt)
@@ -1762,12 +1850,15 @@ async function refreshSemanticConceptGraph(
   // Generation may take long enough for evidence/candidate state to advance.
   // Concept cache entries remain valid by input hash/model identity, but graph
   // reconciliation must always use a fresh post-generation snapshot.
-  const [state, candidatePoolRaw] = generationEnabled
+  const [rawState, candidatePoolRaw] = generationEnabled
     ? await Promise.all([
         personalAlgorithmStore.exportState(),
         getStorage<CandidatePoolItem[]>(STORAGE_KEYS.FEED_CANDIDATE_POOL, []),
       ])
-    : [initialState, initialCandidatePoolRaw];
+    : [rawInitialState, initialCandidatePoolRaw];
+  const state = generationEnabled
+    ? await projectStateWithCurrentHistoryOwnership(rawState)
+    : initialState;
   const candidatePool = generationEnabled
     ? await hydrateCandidatesWithTranscript(candidatePoolRaw)
     : initialCandidatePool;
@@ -1805,7 +1896,9 @@ async function refreshSemanticConceptGraph(
     semanticRefreshInFlight.clear();
   }
 
-  const modeState = await personalAlgorithmStore.exportState();
+  const modeState = await projectStateWithCurrentHistoryOwnership(
+    await personalAlgorithmStore.exportState(),
+  );
   const durableModes = await refreshDurableModeCatalog(modeState);
 
   const diagnostics = {
@@ -1853,7 +1946,9 @@ async function refreshSemanticScoreFeatures(
   }
   const semanticInputCandidates = await hydrateCandidatesWithTranscript(candidates);
   const conceptMaterialization = await refreshSemanticConceptGraph(allowConceptExtraction);
-  const state = await personalAlgorithmStore.exportState();
+  const state = await projectStateWithCurrentHistoryOwnership(
+    await personalAlgorithmStore.exportState(),
+  );
   const durableModeCatalog = await refreshDurableModeCatalog(state);
   const [activeModeId, storedActiveModeIds] = await Promise.all([
     getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
@@ -2323,7 +2418,7 @@ async function rankLocalCandidates(
   mode: string,
 ): Promise<LocalFeedItem[]> {
   const [
-    state,
+    rawState,
     feedbackEvents,
     legacyActiveModeId,
     storedActiveModeIds,
@@ -2332,6 +2427,8 @@ async function rankLocalCandidates(
     semanticFeatureCache,
     videoStore,
     candidatePoolIndex,
+    historyClusterCatalog,
+    rawHistoryClusterOwnership,
   ] = await Promise.all([
     personalAlgorithmStore.exportStateForRead(),
     getStorage<Array<{ kind: string; payload: unknown; recordedAt: string }>>(
@@ -2348,7 +2445,17 @@ async function rankLocalCandidates(
     getSemanticFeatureCacheCached(),
     getVideoStoreCached(),
     getCandidatePoolIndexCached(),
+    getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+    getStorage<HistoryClusterOwnershipState>(
+      STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+      createEmptyHistoryClusterOwnership(),
+    ),
   ]);
+  const historyClusterOwnership = normalizeHistoryClusterOwnership(rawHistoryClusterOwnership);
+  const historyClusterSignature = historyOwnershipSignature(
+    historyClusterCatalog,
+    historyClusterOwnership,
+  );
   const activeModeIds = [...new Set(
     (storedActiveModeIds.length > 0
       ? storedActiveModeIds
@@ -2375,11 +2482,12 @@ async function rankLocalCandidates(
   const durableModeSignature = durableModeCatalogSignature(durableModeCatalog);
   if (
     lastRankMemo
-    && lastRankMemo.state === state
+    && lastRankMemo.state === rawState
     && lastRankMemo.mode === mode
     && lastRankMemo.sourceFiltersSignature === sourceFiltersSignature
     && lastRankMemo.activeModeSignature === activeModeSignature
     && lastRankMemo.durableModeSignature === durableModeSignature
+    && lastRankMemo.historyOwnershipSignature === historyClusterSignature
     && lastRankMemo.feedbackSignature === feedbackSignature
     && lastRankMemo.candidateIdsSignature === candidateIdsSignature
     && lastRankMemo.candidatePoolRevision === candidatePoolMemoryRevision
@@ -2388,6 +2496,12 @@ async function rankLocalCandidates(
   ) {
     return lastRankMemo.feed;
   }
+
+  const state = projectHistoryOwnershipForScoring(
+    rawState,
+    historyClusterCatalog,
+    historyClusterOwnership,
+  );
 
   const feedbackSignals = buildLocalFeedbackSignals(
     feedbackEvents
@@ -2841,11 +2955,12 @@ async function rankLocalCandidates(
   });
 
   lastRankMemo = {
-    state,
+    state: rawState,
     mode,
     sourceFiltersSignature,
     activeModeSignature,
     durableModeSignature,
+    historyOwnershipSignature: historyClusterSignature,
     feedbackSignature,
     candidateIdsSignature,
     candidatePoolRevision: candidatePoolMemoryRevision,
@@ -3082,6 +3197,7 @@ const handleRuntimeMessage = (
       pinned?: boolean;
       memberAction?: 'add' | 'remove' | 'reset';
       memberCanonicalId?: string;
+      clusterIds?: string[];
       action?: 'reduce' | 'prefer' | 'mute';
     };
   };
@@ -3483,6 +3599,118 @@ const handleRuntimeMessage = (
     return true;
   }
 
+  if (type === 'GET_HISTORY_CLUSTER_OWNERSHIP') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const selected = new Set(ownership.selectedClusterIds);
+      const includedHistoryCount = ownership.selectionMode === 'all'
+        ? catalog.historyCount
+        : catalog.clusters
+          .filter((cluster) => selected.has(cluster.id))
+          .reduce((sum, cluster) => sum + cluster.size, 0);
+      sendResponse({
+        ok: true,
+        catalog,
+        ownership,
+        includedHistoryCount,
+        excludedHistoryCount: Math.max(0, catalog.historyCount - includedHistoryCount),
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to load history clusters.',
+    }));
+    return true;
+  }
+
+  if (type === 'SET_HISTORY_CLUSTER_SELECTION') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const requestedIds = Array.isArray(payload?.clusterIds)
+        ? payload.clusterIds.filter((id): id is string => typeof id === 'string')
+        : null;
+      let next = ownership;
+      if (requestedIds == null) {
+        next = includeAllHistoryClusters(ownership);
+      } else {
+        const available = new Set(catalog.clusters.map((cluster) => cluster.id));
+        const invalid = requestedIds.find((id) => !available.has(id));
+        if (invalid) {
+          sendResponse({ ok: false, error: 'A selected history cluster is no longer available.' });
+          return;
+        }
+        next = selectHistoryClusters(ownership, requestedIds);
+      }
+      await setStorage(STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP, next);
+      lastRankMemo = null;
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'HISTORY_CLUSTER_OWNERSHIP_CHANGED',
+            payload: {
+              revision: next.currentRevision,
+              selectionMode: next.selectionMode,
+              selectedClusterIds: next.selectedClusterIds,
+            },
+          }).catch(() => undefined)
+        : undefined));
+
+      try {
+        await refreshSemanticConceptGraph(false);
+      } catch (error) {
+        console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
+      }
+
+      sendResponse({ ok: true, catalog, ownership: next });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to update history cluster selection.',
+    }));
+    return true;
+  }
+
+  if (type === 'UNDO_HISTORY_CLUSTER_SELECTION') {
+    void (async () => {
+      const history = await getStorage<HistoryEvidence[]>(STORAGE_KEYS.HISTORY_EVIDENCE, []);
+      const { catalog, ownership } = await refreshHistoryClusterCatalog(history);
+      const undone = undoHistoryClusterOwnership(ownership);
+      await setStorage(STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP, undone.state);
+      lastRankMemo = null;
+      semanticEpoch += 1;
+      semanticRefreshInFlight.clear();
+      const tabs = await chrome.tabs.query({ url: [...youtubeConnector.pageUrlPatterns] });
+      await Promise.all(tabs.map((tab) => tab.id
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: 'HISTORY_CLUSTER_OWNERSHIP_CHANGED',
+            payload: {
+              revision: undone.state.currentRevision,
+              selectionMode: undone.state.selectionMode,
+              selectedClusterIds: undone.state.selectedClusterIds,
+            },
+          }).catch(() => undefined)
+        : undefined));
+      try {
+        await refreshSemanticConceptGraph(false);
+      } catch (error) {
+        console.warn('[MyAlgo] history ownership semantic reconciliation failed', error);
+      }
+      sendResponse({
+        ok: true,
+        catalog,
+        ownership: undone.state,
+        reverted: undone.reverted,
+      });
+    })().catch((error) => sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to undo history cluster selection.',
+    }));
+    return true;
+  }
+
   if (type === 'PERSONAL_ALGORITHM_INSPECT') {
     void Promise.all([
       personalAlgorithmStore.exportState(),
@@ -3490,8 +3718,19 @@ const handleRuntimeMessage = (
       getStorage<string>(STORAGE_KEYS.ACTIVE_MODE_ID, 'default'),
       getStorage<string[]>(STORAGE_KEYS.ACTIVE_MODE_IDS, []),
       getSemanticFeatureCacheCached(),
+      getStorage<HistoryClusterCatalog | null>(STORAGE_KEYS.HISTORY_CLUSTER_CATALOG, null),
+      getStorage<HistoryClusterOwnershipState>(
+        STORAGE_KEYS.HISTORY_CLUSTER_OWNERSHIP,
+        createEmptyHistoryClusterOwnership(),
+      ),
     ])
-      .then(([state, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache]) => {
+      .then(([rawState, durableModeCatalog, activeModeId, activeModeIds, semanticFeatureCache, historyClusterCatalog, rawHistoryOwnership]) => {
+        const historyClusterOwnership = normalizeHistoryClusterOwnership(rawHistoryOwnership);
+        const state = projectHistoryOwnershipForInspection(
+          rawState,
+          historyClusterCatalog,
+          historyClusterOwnership,
+        );
         const expectedModeCatalogSignature = durableModeCatalogSignature(durableModeCatalog);
         const latestSemanticByExternalId = new Map<string, SemanticFeatureRecord>();
         Object.values(semanticFeatureCache)
@@ -3512,6 +3751,8 @@ const handleRuntimeMessage = (
           durableModeCatalog,
           activeModeId,
           activeModeIds,
+          historyClusterCatalog,
+          historyClusterOwnership,
           semanticContext: [...latestSemanticByExternalId.values()].map((record) => ({
             externalId: record.externalId,
             category: record.category,
@@ -4635,6 +4876,7 @@ const handleRuntimeMessage = (
         merged: evidence.length,
       });
       await setStorage(STORAGE_KEYS.HISTORY_EVIDENCE, evidence);
+      await refreshHistoryClusterCatalog(evidence);
       await setStorage(STORAGE_KEYS.HISTORY_METRICS, payload?.metrics as HistoryObservationMetrics);
       const existingEvents = await getStorage<UserBehaviorObservation[]>(STORAGE_KEYS.SELECTION_EVENTS, []);
       const nonHistoryEvents = existingEvents.filter((event) => !(event.kind === 'watched' && event.source === 'history'));
